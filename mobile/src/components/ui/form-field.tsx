@@ -1,21 +1,28 @@
+import { forwardRef } from "react";
 import { StyleSheet, Text, TextInput, type TextInputProps } from "react-native";
 
 interface FormFieldProps extends TextInputProps {
   label: string;
 }
 
-export default function FormField({ label, ...inputProps }: FormFieldProps) {
+const FormField = forwardRef<TextInput, FormFieldProps>(function FormField(
+  { label, ...inputProps },
+  ref,
+) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
       <TextInput
+        ref={ref}
         placeholderTextColor="#8c9a86"
         style={styles.input}
         {...inputProps}
       />
     </>
   );
-}
+});
+
+export default FormField;
 
 const styles = StyleSheet.create({
   label: {

@@ -1,5 +1,6 @@
+import { useRef } from "react";
 import { Redirect, useRouter } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, TextInput, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import FormField from "../../components/ui/form-field";
@@ -17,6 +18,7 @@ import { initialRecordingSession, setRecordingSession } from "../../state/record
 
 export default function LoginScreen() {
   const router = useRouter();
+  const passwordInputRef = useRef<TextInput>(null);
   const credentials = useSessionStore((state) => state.credentials);
   const deviceId = useSessionStore((state) => state.deviceId);
   const identitySession = useSessionStore((state) => state.identitySession);
@@ -46,16 +48,12 @@ export default function LoginScreen() {
 
   return (
     <ScreenLayout>
-      <Text style={styles.title}>Trailbook</Text>
       <View style={styles.hero}>
-        <View style={styles.heroPhone}>
-          <View style={styles.heroScreen}>
-            <View style={styles.heroRoute} />
-            <View style={styles.heroPin} />
-            <View style={styles.heroDotTop} />
-            <View style={styles.heroDotBottom} />
-          </View>
-        </View>
+        <Image
+          resizeMode="contain"
+          source={require("../../../assets/login-screen.png")}
+          style={styles.heroImage}
+        />
       </View>
 
       <FormField
@@ -64,7 +62,9 @@ export default function LoginScreen() {
         keyboardType="email-address"
         label="User email"
         onChangeText={(email) => updateSessionCredentials({ email })}
+        onSubmitEditing={() => passwordInputRef.current?.focus()}
         placeholder="user@example.com"
+        returnKeyType="next"
         value={credentials.email}
       />
 
@@ -73,83 +73,33 @@ export default function LoginScreen() {
         autoCorrect={false}
         label="Password"
         onChangeText={(password) => updateSessionCredentials({ password })}
+        onSubmitEditing={() => void handleSignIn()}
         placeholder="temporary password"
+        ref={passwordInputRef}
+        returnKeyType="done"
         secureTextEntry
+        submitBehavior="submit"
         value={credentials.password}
       />
 
       <PrimaryButton disabled={!canSignIn} onPress={() => void handleSignIn()}>
-        Continue on This Device
+        Login
       </PrimaryButton>
     </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#1f2a1f",
-  },
   hero: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
-    paddingVertical: 8,
+    marginBottom: 20,
+    paddingVertical: 16,
+    borderRadius: 28,
+    backgroundColor: "#e3efe1",
   },
-  heroPhone: {
-    width: 154,
+  heroImage: {
+    width: 220,
     height: 220,
-    borderRadius: 32,
-    backgroundColor: "#243224",
-    padding: 12,
-    shadowColor: "#243224",
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 6,
-  },
-  heroScreen: {
-    flex: 1,
-    borderRadius: 22,
-    backgroundColor: "#eef4e7",
-    overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  heroRoute: {
-    position: "absolute",
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    borderWidth: 10,
-    borderColor: "#b8d3a8",
-    borderStyle: "dashed",
-  },
-  heroPin: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#d96c3f",
-    borderWidth: 6,
-    borderColor: "#fff7ef",
-  },
-  heroDotTop: {
-    position: "absolute",
-    top: 42,
-    right: 34,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#4f8f62",
-  },
-  heroDotBottom: {
-    position: "absolute",
-    bottom: 36,
-    left: 30,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#6c8fdd",
   },
 });
