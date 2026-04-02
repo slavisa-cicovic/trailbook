@@ -1,0 +1,9 @@
+{
+  "name": "@trailbook/web",
+  "private": true,
+  "scripts": {
+    "start": "echo \"Web app scaffold only. Next.js bootstrap is intentionally deferred.\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"Lint is not configured yet for web.\""
+  }
+}

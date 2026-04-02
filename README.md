@@ -22,4 +22,18 @@ Core principles:
 ## Repository status
 
 The repository is currently initialized with the expected top-level app structure.
-Implementation scaffolding for individual apps can be added incrementally.
+Implementation scaffolding for individual apps has started with a minimal foundation.
+
+## Current foundation
+
+- root npm workspaces for `mobile`, `web`, and `server`
+- minimal TypeScript configuration per app
+- mobile domain and local storage shape placeholders
+- web page and view separation for trip history review
+- server feature layout with DTO and service/controller boundaries
+
+## Notes
+
+- framework runtime dependencies are intentionally not installed yet
+- the current scaffold defines boundaries and naming, not production-ready app bootstrap
+- the next implementation steps should follow `docs/PLAN_02_mobile_recording.md` and `docs/PLAN_03_sync_design.md`

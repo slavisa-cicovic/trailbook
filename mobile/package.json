@@ -1,0 +1,9 @@
+{
+  "name": "@trailbook/mobile",
+  "private": true,
+  "scripts": {
+    "start": "echo \"Mobile app scaffold only. Expo or React Native bootstrap is intentionally deferred.\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"Lint is not configured yet for mobile.\""
+  }
+}
