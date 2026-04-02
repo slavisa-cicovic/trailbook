@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { Redirect } from "expo-router";
-import MapView, { Marker, type Region } from "react-native-maps";
+import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import RecordingControl from "../../components/recording/recording-control";
@@ -45,6 +45,11 @@ import {
   pickPhotosFromLibrary,
 } from "../../services/media/photo-picker.service";
 import {
+  appendTripPointIfUseful,
+  createTripPointForLocation,
+  getVisibleTripPointsForTrip,
+} from "../../services/trip-points/trip-points.service";
+import {
   markWaypointAttachmentDeleted,
   markWaypointDeleted,
 } from "../../services/trips/trips-management.service";
@@ -58,6 +63,7 @@ import {
   useRecordingStore,
 } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
 import {
   setWaypointAttachments,
   useWaypointAttachmentsStore,
@@ -69,6 +75,7 @@ export default function RecordingScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);
+  const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
@@ -93,6 +100,7 @@ export default function RecordingScreen() {
   const activeIdentitySession = identitySession;
   const activeTrip = trips.find((trip) => trip.localId === recordingSession.activeTripId) ?? null;
   const activeRecordingProfile = activeTrip?.recordingProfile ?? recordingSession.recordingProfile;
+  const activeTripPoints = activeTrip ? getVisibleTripPointsForTrip(tripPoints, activeTrip.localId) : [];
   const activeRecordingProfileLabel = getRecordingProfileLabel(activeRecordingProfile);
   const lastPoint = recordingSession.lastPointRecordedAt ?? "n/a";
   const activeTripCount = trips.filter((trip) => trip.endedAt === null).length;
@@ -187,12 +195,19 @@ export default function RecordingScreen() {
       return;
     }
 
+    if (!activeTrip) {
+      return;
+    }
+
     if (recordingSession.lastPointRecordedAt === currentLocation.recordedAt) {
       return;
     }
 
+    const nextTripPoint = createTripPointForLocation(activeTrip, currentLocation);
+
+    void setTripPoints(appendTripPointIfUseful(tripPoints, nextTripPoint));
     void setRecordingSession(updateRecordingLastPoint(recordingSession, currentLocation.recordedAt));
-  }, [currentLocation, recordingSession]);
+  }, [activeTrip, currentLocation, recordingSession, tripPoints]);
 
   async function handleStartRecording() {
     if (!activeIdentitySession) {
@@ -843,6 +858,18 @@ export default function RecordingScreen() {
             showsUserLocation={locationPermissionGranted === true}
             style={styles.map}
           >
+            {activeTripPoints.length > 1 ? (
+              <Polyline
+                coordinates={activeTripPoints.map((tripPoint) => ({
+                  latitude: tripPoint.latitude,
+                  longitude: tripPoint.longitude,
+                }))}
+                lineCap="round"
+                lineJoin="round"
+                strokeColor="#355035"
+                strokeWidth={4}
+              />
+            ) : null}
             <Marker
               coordinate={{
                 latitude: currentLocation.latitude,

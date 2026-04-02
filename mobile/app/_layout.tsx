@@ -9,6 +9,7 @@ import {
   useRecordingStore,
 } from "../src/state/recording-store";
 import { hydrateSessionStore, useSessionStore } from "../src/state/session-store";
+import { hydrateTripPointsStore, useTripPointsStore } from "../src/state/trip-points-store";
 import { getTripsStateSnapshot, hydrateTripsStore, useTripsStore } from "../src/state/trips-store";
 import {
   hydrateWaypointAttachmentsStore,
@@ -20,6 +21,7 @@ export default function RootLayout() {
   const sessionHydrated = useSessionStore((state) => state.hydrated);
   const recordingHydrated = useRecordingStore((state) => state.hydrated);
   const tripsHydrated = useTripsStore((state) => state.hydrated);
+  const tripPointsHydrated = useTripPointsStore((state) => state.hydrated);
   const waypointsHydrated = useWaypointsStore((state) => state.hydrated);
   const waypointAttachmentsHydrated = useWaypointAttachmentsStore((state) => state.hydrated);
 
@@ -29,6 +31,7 @@ export default function RootLayout() {
         hydrateSessionStore(),
         hydrateRecordingStore(),
         hydrateTripsStore(),
+        hydrateTripPointsStore(),
         hydrateWaypointsStore(),
         hydrateWaypointAttachmentsStore(),
       ]);
@@ -42,6 +45,7 @@ export default function RootLayout() {
     !sessionHydrated ||
     !recordingHydrated ||
     !tripsHydrated ||
+    !tripPointsHydrated ||
     !waypointsHydrated ||
     !waypointAttachmentsHydrated
   ) {

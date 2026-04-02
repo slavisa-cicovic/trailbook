@@ -4,10 +4,12 @@ import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
 import type { RecordingProfile } from "../../domain/trips";
 
 export interface CurrentLocationSnapshot {
+  accuracy: number | null;
+  altitude: number | null;
   latitude: number;
   longitude: number;
-  accuracy: number | null;
   recordedAt: string;
+  speed: number | null;
 }
 
 interface TrackingOptions {
@@ -18,10 +20,12 @@ interface TrackingOptions {
 
 function toSnapshot(location: Location.LocationObject): CurrentLocationSnapshot {
   return {
+    accuracy: location.coords.accuracy ?? null,
+    altitude: location.coords.altitude ?? null,
     latitude: location.coords.latitude,
     longitude: location.coords.longitude,
-    accuracy: location.coords.accuracy ?? null,
     recordedAt: new Date(location.timestamp).toISOString(),
+    speed: location.coords.speed ?? null,
   };
 }
 

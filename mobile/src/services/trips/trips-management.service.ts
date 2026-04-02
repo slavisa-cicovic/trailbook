@@ -1,6 +1,8 @@
-import type { RecordingProfile, Trip, Waypoint, WaypointAttachment } from "../../domain/trips";
+import type { RecordingProfile, Trip, TripPoint, Waypoint, WaypointAttachment } from "../../domain/trips";
+import { calculateTripDistanceMeters, getVisibleTripPointsForTrip } from "../trip-points/trip-points.service";
 
 export interface TripSummary {
+  distanceMeters: number;
   photoCount: number;
   trip: Trip;
   waypointCount: number;
@@ -15,10 +17,13 @@ export type TripDateFilter =
   | "last_year";
 
 export interface TripsAggregateSummary {
+  driveDistanceMeters: number;
   driveDurationMs: number;
   driveTripCount: number;
+  totalDistanceMeters: number;
   totalDurationMs: number;
   totalTripCount: number;
+  walkDistanceMeters: number;
   walkDurationMs: number;
   walkTripCount: number;
 }
@@ -101,30 +106,37 @@ export function filterTripsByDate(
   return trips.filter((trip) => new Date(trip.startedAt) >= threshold);
 }
 
-export function buildTripsAggregateSummary(trips: Trip[]): TripsAggregateSummary {
+export function buildTripsAggregateSummary(trips: Trip[], tripPoints: TripPoint[]): TripsAggregateSummary {
   return trips.reduce<TripsAggregateSummary>(
     (summary, trip) => {
       const durationMs = getTripDurationMs(trip);
       const isDrive = isDriveProfile(trip.recordingProfile);
+      const distanceMeters = calculateTripDistanceMeters(getVisibleTripPointsForTrip(tripPoints, trip.localId));
 
       summary.totalTripCount += 1;
       summary.totalDurationMs += durationMs;
+      summary.totalDistanceMeters += distanceMeters;
 
       if (isDrive) {
         summary.driveTripCount += 1;
         summary.driveDurationMs += durationMs;
+        summary.driveDistanceMeters += distanceMeters;
       } else {
         summary.walkTripCount += 1;
         summary.walkDurationMs += durationMs;
+        summary.walkDistanceMeters += distanceMeters;
       }
 
       return summary;
     },
     {
+      walkDistanceMeters: 0,
       walkDurationMs: 0,
       walkTripCount: 0,
+      driveDistanceMeters: 0,
       driveDurationMs: 0,
       driveTripCount: 0,
+      totalDistanceMeters: 0,
       totalDurationMs: 0,
       totalTripCount: 0,
     },
@@ -166,9 +178,11 @@ export function getVisibleAttachmentsForWaypoints(
 
 export function buildTripSummary(
   trip: Trip,
+  tripPoints: TripPoint[],
   waypoints: Waypoint[],
   attachments: WaypointAttachment[],
 ): TripSummary {
+  const orderedTripPoints = getVisibleTripPointsForTrip(tripPoints, trip.localId);
   const tripWaypoints = getVisibleWaypointsForTrip(waypoints, trip.localId);
   const tripAttachments = getVisibleAttachmentsForWaypoints(
     attachments,
@@ -176,6 +190,7 @@ export function buildTripSummary(
   );
 
   return {
+    distanceMeters: calculateTripDistanceMeters(orderedTripPoints),
     trip,
     waypointCount: tripWaypoints.length,
     photoCount: tripAttachments.length,

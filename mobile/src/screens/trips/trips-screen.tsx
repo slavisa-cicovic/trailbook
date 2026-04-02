@@ -36,9 +36,11 @@ import {
 } from "../../services/trips/trips-management.service";
 import { setRecordingSession } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { useTripPointsStore } from "../../state/trip-points-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
+import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
 
 interface PendingUndoState {
   tripLocalId: string;
@@ -64,6 +66,7 @@ export default function TripsScreen() {
   const router = useRouter();
   const identitySession = useSessionStore((state) => state.identitySession);
   const trips = useTripsStore((state) => state.trips);
+  const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
@@ -87,8 +90,10 @@ export default function TripsScreen() {
 
   const visibleTrips = getVisibleTrips(trips);
   const filteredTrips = filterTripsByDate(visibleTrips, dateFilter);
-  const tripSummaries = filteredTrips.map((trip) => buildTripSummary(trip, waypoints, waypointAttachments));
-  const tripsAggregateSummary = buildTripsAggregateSummary(filteredTrips);
+  const tripSummaries = filteredTrips.map((trip) =>
+    buildTripSummary(trip, tripPoints, waypoints, waypointAttachments),
+  );
+  const tripsAggregateSummary = buildTripsAggregateSummary(filteredTrips, tripPoints);
   const selectedTrip = visibleTrips.find((trip) => trip.localId === selectedTripId) ?? null;
   const selectedTripWaypoints = selectedTrip
     ? getVisibleWaypointsForTrip(waypoints, selectedTrip.localId)
@@ -613,10 +618,10 @@ export default function TripsScreen() {
       <View style={styles.summaryGridCards}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryCardLabel}>Walk km</Text>
-          <Text style={styles.summaryCardValue}>n/a</Text>
-          <Text style={styles.summaryCardHint}>
-            Distance after route track is available.
+          <Text style={styles.summaryCardValue}>
+            {formatDistanceKm(tripsAggregateSummary.walkDistanceMeters)}
           </Text>
+          <Text style={styles.summaryCardHint}>{String(tripsAggregateSummary.walkTripCount)} trips</Text>
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryCardLabel}>Walk time</Text>
@@ -629,10 +634,10 @@ export default function TripsScreen() {
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryCardLabel}>Drive km</Text>
-          <Text style={styles.summaryCardValue}>n/a</Text>
-          <Text style={styles.summaryCardHint}>
-            Distance after route track is available.
+          <Text style={styles.summaryCardValue}>
+            {formatDistanceKm(tripsAggregateSummary.driveDistanceMeters)}
           </Text>
+          <Text style={styles.summaryCardHint}>{String(tripsAggregateSummary.driveTripCount)} trips</Text>
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryCardLabel}>Drive time</Text>
@@ -645,10 +650,10 @@ export default function TripsScreen() {
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryCardLabel}>Total km</Text>
-          <Text style={styles.summaryCardValue}>n/a</Text>
-          <Text style={styles.summaryCardHint}>
-            Waiting for recorded trip points.
+          <Text style={styles.summaryCardValue}>
+            {formatDistanceKm(tripsAggregateSummary.totalDistanceMeters)}
           </Text>
+          <Text style={styles.summaryCardHint}>{String(tripsAggregateSummary.totalTripCount)} trips</Text>
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryCardLabel}>Total</Text>
@@ -665,7 +670,7 @@ export default function TripsScreen() {
         <Text style={styles.empty}>No trips match the selected date filter.</Text>
       ) : (
         <View style={styles.list}>
-          {tripSummaries.map(({ trip, waypointCount, photoCount }) => {
+          {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => {
             const statusLabel = trip.endedAt === null ? "Active" : trip.syncStatus;
 
             return (
@@ -686,6 +691,10 @@ export default function TripsScreen() {
                   <View style={styles.metaCell}>
                     <Text style={styles.metaKey}>Mode</Text>
                     <Text style={styles.metaValue}>{getRecordingProfileLabel(trip.recordingProfile)}</Text>
+                  </View>
+                  <View style={styles.metaCell}>
+                    <Text style={styles.metaKey}>Distance</Text>
+                    <Text style={styles.metaValue}>{formatDistanceKm(distanceMeters)}</Text>
                   </View>
                   <View style={styles.metaCell}>
                     <Text style={styles.metaKey}>Waypoints</Text>
