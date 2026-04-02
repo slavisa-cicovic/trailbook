@@ -1,7 +1,26 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { DEFAULT_RECORDING_PROFILE } from "../constants/recording-profiles";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { Trip } from "../domain/trips";
+
+function normalizeTrip(value: Partial<Trip> & Pick<Trip, "localId" | "deviceId" | "userId">): Trip {
+  return {
+    localId: value.localId,
+    serverId: value.serverId ?? null,
+    deviceId: value.deviceId,
+    userId: value.userId,
+    title: value.title ?? value.localId,
+    description: value.description ?? null,
+    recordingProfile: value.recordingProfile ?? DEFAULT_RECORDING_PROFILE,
+    startedAt: value.startedAt ?? new Date(0).toISOString(),
+    endedAt: value.endedAt ?? null,
+    createdAt: value.createdAt ?? value.startedAt ?? new Date(0).toISOString(),
+    updatedAt: value.updatedAt ?? value.startedAt ?? new Date(0).toISOString(),
+    deletedAt: value.deletedAt ?? null,
+    syncStatus: value.syncStatus ?? "local-only",
+  };
+}
 
 export async function loadTrips(): Promise<Trip[]> {
   const rawValue = await AsyncStorage.getItem(STORAGE_KEYS.trips);
@@ -10,7 +29,9 @@ export async function loadTrips(): Promise<Trip[]> {
     return [];
   }
 
-  return JSON.parse(rawValue) as Trip[];
+  return (JSON.parse(rawValue) as Array<Partial<Trip> & Pick<Trip, "localId" | "deviceId" | "userId">>).map(
+    normalizeTrip,
+  );
 }
 
 export async function saveTrips(trips: Trip[]): Promise<void> {

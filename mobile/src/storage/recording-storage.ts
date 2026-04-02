@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { DEFAULT_RECORDING_PROFILE } from "../constants/recording-profiles";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { RecordingSessionSummary } from "../domain/trips";
 
@@ -19,6 +20,7 @@ function normalizeRecordingSession(
     userId: value.userId ?? null,
     userEmail: value.userEmail ?? null,
     deviceId: value.deviceId ?? null,
+    recordingProfile: value.recordingProfile ?? DEFAULT_RECORDING_PROFILE,
   };
 }
 

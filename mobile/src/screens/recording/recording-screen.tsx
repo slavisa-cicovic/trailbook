@@ -1,25 +1,44 @@
 import { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
-import MapView, { Marker, type Region } from "react-native-maps";
-import { Redirect } from "expo-router";
-
-import RecordingControl from "../../components/recording/recording-control";
-import ScreenLayout from "../../components/layout/screen-layout";
 import {
-  closeActiveTrip,
-  continueInterruptedRecording,
-  createRecordingSession,
-  createTripForRecording,
-  markRecordingInterrupted,
-  stopRecordingSession,
-  updateRecordingLastPoint,
-} from "../../services/recording/recording.service";
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Redirect } from "expo-router";
+import MapView, { Marker, type Region } from "react-native-maps";
+
+import ScreenLayout from "../../components/layout/screen-layout";
+import RecordingControl from "../../components/recording/recording-control";
+import {
+  DEFAULT_RECORDING_PROFILE,
+  getRecordingProfileLabel,
+  RECORDING_PROFILE_OPTIONS,
+} from "../../constants/recording-profiles";
+import type { RecordingProfile } from "../../domain/trips";
 import {
   getCurrentForegroundLocation,
   requestForegroundLocationAccess,
   type CurrentLocationSnapshot,
   watchForegroundLocation,
 } from "../../services/location/location.service";
+import {
+  closeActiveTrip,
+  continueInterruptedRecording,
+  createRecordingSession,
+  createTripForRecording,
+  type RecordingDraftInput,
+  stopRecordingSession,
+  updateRecordingLastPoint,
+  updateRecordingProfile,
+  updateTripRecordingProfile,
+} from "../../services/recording/recording.service";
 import {
   initialRecordingSession,
   setRecordingSession,
@@ -32,18 +51,29 @@ export default function RecordingScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);
+
   const [locationPermissionGranted, setLocationPermissionGranted] = useState<boolean | null>(null);
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
+  const [startModalVisible, setStartModalVisible] = useState(false);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>({
+    title: "",
+    description: "",
+    recordingProfile: DEFAULT_RECORDING_PROFILE,
+  });
 
   if (!identitySession) {
     return <Redirect href="/login" />;
   }
 
   const activeIdentitySession = identitySession;
-  const mapLocation = currentLocation;
-
+  const activeTrip = trips.find((trip) => trip.localId === recordingSession.activeTripId) ?? null;
+  const activeRecordingProfile = activeTrip?.recordingProfile ?? recordingSession.recordingProfile;
+  const activeRecordingProfileLabel = getRecordingProfileLabel(activeRecordingProfile);
   const lastPoint = recordingSession.lastPointRecordedAt ?? "n/a";
   const activeTripCount = trips.filter((trip) => trip.endedAt === null).length;
+  const canChangeMode = recordingSession.activeTripId !== null;
+  const canStartRecording = recordingDraft.title.trim().length > 0;
 
   useEffect(() => {
     let active = true;
@@ -68,7 +98,7 @@ export default function RecordingScreen() {
         setCurrentLocation(initialLocation);
       }
 
-      stopWatchingLocation = await watchForegroundLocation((nextLocation) => {
+      stopWatchingLocation = await watchForegroundLocation(activeRecordingProfile, (nextLocation) => {
         setCurrentLocation(nextLocation);
       });
     }
@@ -79,7 +109,7 @@ export default function RecordingScreen() {
       active = false;
       stopWatchingLocation?.();
     };
-  }, []);
+  }, [activeRecordingProfile]);
 
   useEffect(() => {
     if (!currentLocation || recordingSession.status !== "recording") {
@@ -95,10 +125,18 @@ export default function RecordingScreen() {
 
   async function handleStartRecording() {
     const startedAt = new Date().toISOString();
-    const nextTrip = createTripForRecording(activeIdentitySession, startedAt);
+    const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft);
 
     await setTrips([...trips, nextTrip]);
-    await setRecordingSession(createRecordingSession(activeIdentitySession, startedAt));
+    await setRecordingSession(
+      createRecordingSession(activeIdentitySession, startedAt, recordingDraft.recordingProfile),
+    );
+    setStartModalVisible(false);
+    setRecordingDraft({
+      title: "",
+      description: "",
+      recordingProfile: DEFAULT_RECORDING_PROFILE,
+    });
   }
 
   async function handleStopRecording() {
@@ -121,9 +159,24 @@ export default function RecordingScreen() {
     await setRecordingSession(initialRecordingSession);
   }
 
+  async function handleSelectRecordingProfile(profile: RecordingProfile) {
+    if (!recordingSession.activeTripId) {
+      setRecordingDraft((current) => ({
+        ...current,
+        recordingProfile: profile,
+      }));
+      setProfileModalVisible(false);
+      return;
+    }
+
+    await setTrips(updateTripRecordingProfile(trips, recordingSession.activeTripId, profile));
+    await setRecordingSession(updateRecordingProfile(recordingSession, profile));
+    setProfileModalVisible(false);
+  }
+
   function handleRecordingControlPress() {
     if (recordingSession.status === "idle") {
-      void handleStartRecording();
+      setStartModalVisible(true);
       return;
     }
 
@@ -172,8 +225,198 @@ export default function RecordingScreen() {
       showBottomNavigation
       title="Trailbook"
     >
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setProfileModalVisible(false)}
+        transparent
+        visible={profileModalVisible}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalBackdrop}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Recording mode</Text>
+              <Text style={styles.modalSubtitle}>
+                Choose how often Trailbook should refresh location updates.
+              </Text>
+
+              <View style={styles.profileList}>
+                {RECORDING_PROFILE_OPTIONS.map((option) => {
+                  const selected = option.value === activeRecordingProfile;
+
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => void handleSelectRecordingProfile(option.value)}
+                      style={[styles.profileOption, selected && styles.profileOptionSelected]}
+                    >
+                      <View style={styles.profileOptionHeader}>
+                        <Text
+                          style={[
+                            styles.profileOptionLabel,
+                            selected && styles.profileOptionLabelSelected,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.profileOptionTag,
+                            selected && styles.profileOptionTagSelected,
+                          ]}
+                        >
+                          {option.description}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.profileOptionHint,
+                          selected && styles.profileOptionHintSelected,
+                        ]}
+                      >
+                        {option.hint}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setProfileModalVisible(false)}
+                  style={[styles.modalButton, styles.modalButtonSecondary]}
+                >
+                  <Text style={styles.modalButtonSecondaryText}>Close</Text>
+                </Pressable>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setStartModalVisible(false)}
+        transparent
+        visible={startModalVisible}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalBackdrop}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Start recording</Text>
+              <Text style={styles.modalSubtitle}>
+                Give this route a name and choose the recording mode before the trip starts.
+              </Text>
+
+              <Text style={styles.fieldLabel}>Route name</Text>
+              <TextInput
+                autoCapitalize="sentences"
+                onChangeText={(title) => setRecordingDraft((current) => ({ ...current, title }))}
+                placeholder="Morning walk"
+                placeholderTextColor="#8c9a86"
+                style={styles.fieldInput}
+                value={recordingDraft.title}
+              />
+
+              <Text style={styles.fieldLabel}>Description</Text>
+              <TextInput
+                autoCapitalize="sentences"
+                multiline
+                numberOfLines={3}
+                onChangeText={(description) =>
+                  setRecordingDraft((current) => ({ ...current, description }))
+                }
+                placeholder="Optional notes about the route"
+                placeholderTextColor="#8c9a86"
+                style={[styles.fieldInput, styles.fieldTextarea]}
+                textAlignVertical="top"
+                value={recordingDraft.description}
+              />
+
+              <Text style={styles.fieldLabel}>Recording mode</Text>
+              <View style={styles.profileList}>
+                {RECORDING_PROFILE_OPTIONS.map((option) => {
+                  const selected = option.value === recordingDraft.recordingProfile;
+
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() =>
+                        setRecordingDraft((current) => ({
+                          ...current,
+                          recordingProfile: option.value,
+                        }))
+                      }
+                      style={[styles.profileOption, selected && styles.profileOptionSelected]}
+                    >
+                      <View style={styles.profileOptionHeader}>
+                        <Text
+                          style={[
+                            styles.profileOptionLabel,
+                            selected && styles.profileOptionLabelSelected,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.profileOptionTag,
+                            selected && styles.profileOptionTagSelected,
+                          ]}
+                        >
+                          {option.description}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.profileOptionHint,
+                          selected && styles.profileOptionHintSelected,
+                        ]}
+                      >
+                        {option.hint}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setStartModalVisible(false)}
+                  style={[styles.modalButton, styles.modalButtonSecondary]}
+                >
+                  <Text style={styles.modalButtonSecondaryText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  disabled={!canStartRecording}
+                  onPress={() => void handleStartRecording()}
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonPrimary,
+                    !canStartRecording && styles.modalButtonDisabled,
+                  ]}
+                >
+                  <Text style={styles.modalButtonPrimaryText}>Start</Text>
+                </Pressable>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <View style={styles.mapShell}>
-        {mapRegion && mapLocation ? (
+        {mapRegion && currentLocation ? (
           <MapView
             initialRegion={mapRegion}
             region={mapRegion}
@@ -182,8 +425,8 @@ export default function RecordingScreen() {
           >
             <Marker
               coordinate={{
-                latitude: mapLocation.latitude,
-                longitude: mapLocation.longitude,
+                latitude: currentLocation.latitude,
+                longitude: currentLocation.longitude,
               }}
               title="You are here"
             />
@@ -191,7 +434,9 @@ export default function RecordingScreen() {
         ) : (
           <View style={styles.mapPlaceholder}>
             <Text style={styles.placeholderTitle}>
-              {locationPermissionGranted === false ? "Location permission is required" : "Locating you..."}
+              {locationPermissionGranted === false
+                ? "Location permission is required"
+                : "Locating you..."}
             </Text>
             <Text style={styles.placeholderText}>
               {locationPermissionGranted === false
@@ -207,8 +452,12 @@ export default function RecordingScreen() {
             <Text style={styles.statusValue}>{recordingSession.status}</Text>
           </View>
           <View style={styles.statusPill}>
-            <Text style={styles.statusLabel}>Trip</Text>
-            <Text style={styles.statusValue}>{recordingSession.activeTripId ?? "none"}</Text>
+            <Text style={styles.statusLabel}>Route</Text>
+            <Text style={styles.statusValue}>{activeTrip?.title ?? "none"}</Text>
+          </View>
+          <View style={styles.statusPill}>
+            <Text style={styles.statusLabel}>Mode</Text>
+            <Text style={styles.statusValue}>{activeRecordingProfileLabel}</Text>
           </View>
         </View>
 
@@ -218,8 +467,15 @@ export default function RecordingScreen() {
           <View style={styles.metaPanel}>
             <Text style={styles.metaTitle}>Current session</Text>
             <Text style={styles.metaLine}>Active user: {activeIdentitySession.userEmail}</Text>
+            <Text style={styles.metaLine}>Route: {activeTrip?.title ?? "n/a"}</Text>
+            <Text style={styles.metaLine}>Mode: {activeRecordingProfileLabel}</Text>
             <Text style={styles.metaLine}>Last point: {lastPoint}</Text>
             <Text style={styles.metaLine}>Open trips: {String(activeTripCount)}</Text>
+            {canChangeMode ? (
+              <Pressable onPress={() => setProfileModalVisible(true)} style={styles.modeButton}>
+                <Text style={styles.modeButtonText}>Change mode</Text>
+              </Pressable>
+            ) : null}
             {recordingSession.status === "interrupted" ? (
               <Text style={styles.metaWarning}>
                 The previous recording was interrupted. Tap the control to continue or stop it.
@@ -235,6 +491,131 @@ export default function RecordingScreen() {
 const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(20, 28, 20, 0.42)",
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 24,
+    backgroundColor: "#fffdf8",
+    padding: 20,
+    gap: 10,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1f2a1f",
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "#52624f",
+    marginBottom: 4,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    color: "#60705d",
+  },
+  fieldInput: {
+    borderWidth: 1,
+    borderColor: "#d7ddcf",
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#243224",
+  },
+  fieldTextarea: {
+    minHeight: 90,
+  },
+  profileList: {
+    gap: 8,
+  },
+  profileOption: {
+    borderWidth: 1,
+    borderColor: "#d7ddcf",
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  profileOptionSelected: {
+    borderColor: "#243224",
+    backgroundColor: "#edf4e9",
+  },
+  profileOptionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  profileOptionLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  profileOptionLabelSelected: {
+    color: "#1a261a",
+  },
+  profileOptionTag: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: "#60705d",
+  },
+  profileOptionTagSelected: {
+    color: "#2d492d",
+  },
+  profileOptionHint: {
+    fontSize: 13,
+    color: "#52624f",
+  },
+  profileOptionHintSelected: {
+    color: "#384738",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+  },
+  modalButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    paddingVertical: 14,
+  },
+  modalButtonPrimary: {
+    backgroundColor: "#243224",
+  },
+  modalButtonSecondary: {
+    backgroundColor: "#e6ece1",
+  },
+  modalButtonPrimaryText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#fffdf8",
+  },
+  modalButtonSecondaryText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  modalButtonDisabled: {
+    opacity: 0.45,
   },
   mapShell: {
     flex: 1,
@@ -269,10 +650,11 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
   },
   statusPill: {
-    flex: 1,
+    minWidth: 96,
     borderRadius: 18,
     backgroundColor: "rgba(255, 253, 248, 0.92)",
     paddingHorizontal: 14,
@@ -312,6 +694,19 @@ const styles = StyleSheet.create({
   metaLine: {
     fontSize: 14,
     color: "#52624f",
+  },
+  modeButton: {
+    alignSelf: "flex-start",
+    marginTop: 6,
+    borderRadius: 999,
+    backgroundColor: "#243224",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  modeButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fffdf8",
   },
   metaWarning: {
     marginTop: 4,

@@ -1,11 +1,21 @@
 export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error";
 export type RecordingStatus = "idle" | "recording" | "interrupted";
+export type RecordingProfile =
+  | "auto"
+  | "walk_relaxed"
+  | "city_walk"
+  | "drive_city"
+  | "drive_highway"
+  | "frequent";
 
 export interface Trip {
   localId: string;
   serverId: string | null;
   deviceId: string;
   userId: string;
+  title: string;
+  description: string | null;
+  recordingProfile: RecordingProfile;
   startedAt: string;
   endedAt: string | null;
   createdAt: string;
@@ -54,4 +64,5 @@ export interface RecordingSessionSummary {
   userId: string | null;
   userEmail: string | null;
   deviceId: string | null;
+  recordingProfile: RecordingProfile;
 }

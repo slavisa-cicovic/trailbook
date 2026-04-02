@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 
+import { DEFAULT_RECORDING_PROFILE } from "../constants/recording-profiles";
 import type { RecordingSessionSummary, Trip } from "../domain/trips";
 import {
   reconcileRecordingSessionWithTrips,
@@ -15,6 +16,7 @@ export const initialRecordingSession: RecordingSessionSummary = {
   userId: null,
   userEmail: null,
   deviceId: null,
+  recordingProfile: DEFAULT_RECORDING_PROFILE,
 };
 
 interface RecordingState {

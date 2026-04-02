@@ -2,6 +2,7 @@ import { Redirect } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
+import { getRecordingProfileLabel } from "../../constants/recording-profiles";
 import { initialRecordingSession, setRecordingSession } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { useTripsStore } from "../../state/trips-store";
@@ -34,9 +35,14 @@ export default function TripsScreen() {
         <View style={styles.list}>
           {trips.map((trip) => (
             <View key={trip.localId} style={styles.tripCard}>
-              <Text style={styles.tripId}>{trip.localId}</Text>
+              <Text style={styles.tripId}>{trip.title}</Text>
+              {trip.description ? (
+                <Text style={styles.tripDescription}>{trip.description}</Text>
+              ) : null}
+              <Text style={styles.tripMeta}>Local ID: {trip.localId}</Text>
               <Text style={styles.tripMeta}>User: {trip.userId}</Text>
               <Text style={styles.tripMeta}>Device: {trip.deviceId}</Text>
+              <Text style={styles.tripMeta}>Mode: {getRecordingProfileLabel(trip.recordingProfile)}</Text>
               <Text style={styles.tripMeta}>Started: {trip.startedAt}</Text>
               <Text style={styles.tripMeta}>Ended: {trip.endedAt ?? "active"}</Text>
               <Text style={styles.tripMeta}>Sync: {trip.syncStatus}</Text>
@@ -77,5 +83,10 @@ const styles = StyleSheet.create({
   tripMeta: {
     fontSize: 13,
     color: "#52624f",
+  },
+  tripDescription: {
+    fontSize: 14,
+    color: "#384738",
+    marginBottom: 2,
   },
 });
