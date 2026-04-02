@@ -54,6 +54,7 @@ export default function TripsScreen() {
   const [tripDetailsVisible, setTripDetailsVisible] = useState(false);
   const [selectedWaypointId, setSelectedWaypointId] = useState<string | null>(null);
   const [waypointEditVisible, setWaypointEditVisible] = useState(false);
+  const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -76,6 +77,24 @@ export default function TripsScreen() {
       )
     : [];
   const selectedWaypoint = selectedTripWaypoints.find((waypoint) => waypoint.localId === selectedWaypointId) ?? null;
+  const selectedPhotoAttachment =
+    selectedPhotoAttachmentId === null
+      ? null
+      : selectedTripAttachments.find((attachment) => attachment.localId === selectedPhotoAttachmentId) ?? null;
+  const selectedPhotoWaypointAttachments = selectedPhotoAttachment
+    ? selectedTripAttachments
+        .filter((attachment) => attachment.waypointLocalId === selectedPhotoAttachment.waypointLocalId)
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    : [];
+  const selectedPhotoIndex =
+    selectedPhotoAttachment === null
+      ? -1
+      : selectedPhotoWaypointAttachments.findIndex(
+          (attachment) => attachment.localId === selectedPhotoAttachment.localId,
+        );
+  const hasPreviousPhoto = selectedPhotoIndex > 0;
+  const hasNextPhoto =
+    selectedPhotoIndex !== -1 && selectedPhotoIndex < selectedPhotoWaypointAttachments.length - 1;
 
   useEffect(() => {
     if (!pendingUndo) {
@@ -182,9 +201,34 @@ export default function TripsScreen() {
   }
 
   async function handleRemovePhoto(attachmentLocalId: string) {
+    const currentIndex = selectedPhotoWaypointAttachments.findIndex(
+      (attachment) => attachment.localId === attachmentLocalId,
+    );
+    const fallbackAttachment =
+      selectedPhotoWaypointAttachments[currentIndex + 1] ??
+      selectedPhotoWaypointAttachments[currentIndex - 1] ??
+      null;
+
     await setWaypointAttachments(
       markWaypointAttachmentDeleted(waypointAttachments, attachmentLocalId, new Date().toISOString()),
     );
+    setSelectedPhotoAttachmentId(fallbackAttachment?.localId ?? null);
+  }
+
+  function handleShowPreviousPhoto() {
+    if (!hasPreviousPhoto || selectedPhotoIndex === -1) {
+      return;
+    }
+
+    setSelectedPhotoAttachmentId(selectedPhotoWaypointAttachments[selectedPhotoIndex - 1]?.localId ?? null);
+  }
+
+  function handleShowNextPhoto() {
+    if (!hasNextPhoto || selectedPhotoIndex === -1) {
+      return;
+    }
+
+    setSelectedPhotoAttachmentId(selectedPhotoWaypointAttachments[selectedPhotoIndex + 1]?.localId ?? null);
   }
 
   async function handleResumeTrip(trip: Trip) {
@@ -392,21 +436,28 @@ export default function TripsScreen() {
                         {waypoint.note ? (
                           <Text style={styles.detailsCardText}>{waypoint.note}</Text>
                         ) : null}
+                        <Text style={styles.detailsCardLocation}>
+                          Location: {waypoint.latitude.toFixed(5)}, {waypoint.longitude.toFixed(5)}
+                        </Text>
                         <Text style={styles.detailsCardMeta}>
                           {new Date(waypoint.createdAt).toLocaleString()}
                         </Text>
 
-                        {attachments.map((attachment) => (
-                          <View key={attachment.localId} style={styles.attachmentCard}>
-                            <Image source={{ uri: attachment.localUri }} style={styles.attachmentImage} />
-                            <Pressable
-                              onPress={() => void handleRemovePhoto(attachment.localId)}
-                              style={styles.removePhotoButton}
-                            >
-                              <Text style={styles.removePhotoText}>Remove photo</Text>
-                            </Pressable>
-                          </View>
-                        ))}
+                        {attachments.length > 0 ? (
+                          <ScrollView
+                            contentContainerStyle={styles.attachmentRow}
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                          >
+                            {attachments.map((attachment) => (
+                              <View key={attachment.localId} style={styles.attachmentCard}>
+                                <Pressable onPress={() => setSelectedPhotoAttachmentId(attachment.localId)}>
+                                  <Image source={{ uri: attachment.localUri }} style={styles.attachmentImage} />
+                                </Pressable>
+                              </View>
+                            ))}
+                          </ScrollView>
+                        ) : null}
                       </View>
                     );
                   })
@@ -421,6 +472,84 @@ export default function TripsScreen() {
             ) : null}
           </ScrollView>
         </SafeAreaView>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setSelectedPhotoAttachmentId(null)}
+        transparent
+        visible={selectedPhotoAttachment !== null}
+      >
+        <View style={styles.photoViewerBackdrop}>
+          <Pressable
+            onPress={() => setSelectedPhotoAttachmentId(null)}
+            style={styles.photoViewerBackdropPressable}
+          />
+          {selectedPhotoAttachment ? (
+            <View style={styles.photoViewerCard}>
+              <Image
+                resizeMode="contain"
+                source={{ uri: selectedPhotoAttachment.localUri }}
+                style={styles.photoViewerImage}
+              />
+              {selectedPhotoWaypointAttachments.length > 1 ? (
+                <View style={styles.photoViewerPager}>
+                  <Pressable
+                    disabled={!hasPreviousPhoto}
+                    onPress={handleShowPreviousPhoto}
+                    style={[
+                      styles.photoViewerNavButton,
+                      !hasPreviousPhoto && styles.photoViewerNavButtonDisabled,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.photoViewerNavText,
+                        !hasPreviousPhoto && styles.photoViewerNavTextDisabled,
+                      ]}
+                    >
+                      Previous
+                    </Text>
+                  </Pressable>
+                  <Text style={styles.photoViewerPagerText}>
+                    {selectedPhotoIndex + 1} / {selectedPhotoWaypointAttachments.length}
+                  </Text>
+                  <Pressable
+                    disabled={!hasNextPhoto}
+                    onPress={handleShowNextPhoto}
+                    style={[
+                      styles.photoViewerNavButton,
+                      !hasNextPhoto && styles.photoViewerNavButtonDisabled,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.photoViewerNavText,
+                        !hasNextPhoto && styles.photoViewerNavTextDisabled,
+                      ]}
+                    >
+                      Next
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setSelectedPhotoAttachmentId(null)}
+                  style={styles.secondaryButton}
+                >
+                  <Text style={styles.secondaryButtonText}>Close</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void handleRemovePhoto(selectedPhotoAttachment.localId)}
+                  style={styles.photoViewerRemoveButton}
+                >
+                  <Text style={styles.photoViewerRemoveText}>Remove photo</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </View>
       </Modal>
 
       <Text style={styles.subtitle}>Your local recorded routes and saved trip content.</Text>
@@ -702,6 +831,77 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 8,
   },
+  photoViewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(12, 16, 12, 0.86)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  photoViewerBackdropPressable: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  photoViewerCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 24,
+    backgroundColor: "#101510",
+    padding: 14,
+    gap: 14,
+  },
+  photoViewerImage: {
+    width: "100%",
+    height: 420,
+    borderRadius: 18,
+    backgroundColor: "#1b231b",
+  },
+  photoViewerPager: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  photoViewerNavButton: {
+    minWidth: 92,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    backgroundColor: "#243224",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  photoViewerNavButtonDisabled: {
+    backgroundColor: "#2d342d",
+    opacity: 0.4,
+  },
+  photoViewerNavText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fffdf8",
+  },
+  photoViewerNavTextDisabled: {
+    color: "#cbd4cb",
+  },
+  photoViewerPagerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#dbe3db",
+    textAlign: "center",
+  },
+  photoViewerRemoveButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: "#8f3428",
+    paddingVertical: 14,
+  },
+  photoViewerRemoveText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#fff7f4",
+  },
   primaryButton: {
     flex: 1,
     alignItems: "center",
@@ -816,29 +1016,25 @@ const styles = StyleSheet.create({
     color: "#4f5f4f",
     lineHeight: 20,
   },
+  detailsCardLocation: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#52624f",
+  },
   detailsCardMeta: {
     fontSize: 12,
     color: "#76856f",
   },
+  attachmentRow: {
+    gap: 10,
+  },
   attachmentCard: {
-    gap: 8,
+    width: 150,
   },
   attachmentImage: {
-    width: "100%",
-    height: 170,
+    width: 150,
+    height: 150,
     borderRadius: 14,
     backgroundColor: "#d7ddcf",
-  },
-  removePhotoButton: {
-    alignSelf: "flex-start",
-    borderRadius: 999,
-    backgroundColor: "#f7e0db",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  removePhotoText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#9f3f31",
   },
 });

@@ -35,6 +35,28 @@ export async function pickPhotoFromLibrary(): Promise<PickedPhoto | null> {
   return normalizePhotoAsset(result.assets[0]);
 }
 
+export async function pickPhotosFromLibrary(): Promise<PickedPhoto[]> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+  if (!permission.granted) {
+    return [];
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ["images"],
+    quality: 0.8,
+    allowsEditing: false,
+    allowsMultipleSelection: true,
+    selectionLimit: 10,
+  });
+
+  if (result.canceled || result.assets.length === 0) {
+    return [];
+  }
+
+  return result.assets.map(normalizePhotoAsset);
+}
+
 export async function capturePhotoWithCamera(): Promise<PickedPhoto | null> {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
 

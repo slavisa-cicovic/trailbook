@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { RecordingStatus } from "../../domain/trips";
 
 interface RecordingControlProps {
+  compact?: boolean;
   onPress: () => void;
   status: RecordingStatus;
 }
@@ -37,7 +38,11 @@ const controlByStatus: Record<
   },
 };
 
-export default function RecordingControl({ onPress, status }: RecordingControlProps) {
+export default function RecordingControl({
+  compact = false,
+  onPress,
+  status,
+}: RecordingControlProps) {
   const config = controlByStatus[status];
 
   return (
@@ -54,15 +59,16 @@ export default function RecordingControl({ onPress, status }: RecordingControlPr
         <View
           style={[
             styles.innerButton,
+            compact && styles.innerButtonCompact,
             {
               backgroundColor: config.buttonColor,
             },
           ]}
         >
-          <MaterialIcons color="#fffdf8" name={config.iconName} size={40} />
+          <MaterialIcons color="#fffdf8" name={config.iconName} size={compact ? 30 : 40} />
         </View>
       </Pressable>
-      <Text style={styles.caption}>{config.caption}</Text>
+      {!compact ? <Text style={styles.caption}>{config.caption}</Text> : null}
     </View>
   );
 }
@@ -73,19 +79,24 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   outerRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 82,
+    height: 82,
+    borderRadius: 41,
     alignItems: "center",
     justifyContent: "center",
   },
   innerButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
+  },
+  innerButtonCompact: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   caption: {
     fontSize: 13,

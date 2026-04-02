@@ -221,3 +221,40 @@ export function markWaypointAttachmentDeleted(
       : attachment,
   );
 }
+
+export function markWaypointDeleted(
+  waypoints: Waypoint[],
+  attachments: WaypointAttachment[],
+  waypointLocalId: string,
+  deletedAt: string,
+): {
+  attachments: WaypointAttachment[];
+  waypoints: Waypoint[];
+} {
+  const nextWaypoints = waypoints.map((waypoint) =>
+    waypoint.localId === waypointLocalId
+      ? {
+          ...waypoint,
+          deletedAt,
+          updatedAt: deletedAt,
+          syncStatus: "pending-sync" as const,
+        }
+      : waypoint,
+  );
+
+  const nextAttachments = attachments.map((attachment) =>
+    attachment.waypointLocalId === waypointLocalId
+      ? {
+          ...attachment,
+          deletedAt,
+          updatedAt: deletedAt,
+          syncStatus: "pending-sync" as const,
+        }
+      : attachment,
+  );
+
+  return {
+    waypoints: nextWaypoints,
+    attachments: nextAttachments,
+  };
+}

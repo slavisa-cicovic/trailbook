@@ -4,7 +4,7 @@ import type { PickedPhoto } from "../media/photo-picker.service";
 
 export interface WaypointDraftInput {
   note: string;
-  photo: PickedPhoto | null;
+  photos: PickedPhoto[];
   title: string;
 }
 

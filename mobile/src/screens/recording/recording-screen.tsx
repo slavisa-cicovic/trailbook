@@ -42,8 +42,12 @@ import {
 } from "../../services/recording/recording.service";
 import {
   capturePhotoWithCamera,
-  pickPhotoFromLibrary,
+  pickPhotosFromLibrary,
 } from "../../services/media/photo-picker.service";
+import {
+  markWaypointAttachmentDeleted,
+  markWaypointDeleted,
+} from "../../services/trips/trips-management.service";
 import {
   createPhotoAttachmentForWaypoint,
   createWaypointForTrip,
@@ -74,6 +78,7 @@ export default function RecordingScreen() {
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [waypointModalVisible, setWaypointModalVisible] = useState(false);
   const [sessionMenuVisible, setSessionMenuVisible] = useState(false);
+  const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
   const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>({
     title: "",
     description: "",
@@ -82,7 +87,7 @@ export default function RecordingScreen() {
   const [waypointDraft, setWaypointDraft] = useState<WaypointDraftInput>({
     title: "",
     note: "",
-    photo: null,
+    photos: [],
   });
 
   const activeIdentitySession = identitySession;
@@ -99,17 +104,42 @@ export default function RecordingScreen() {
     : [];
   const recentWaypointCards = recentWaypoints.map((waypoint) => ({
     waypoint,
-    photo:
-      waypointAttachments.find(
-        (attachment) =>
-          attachment.waypointLocalId === waypoint.localId &&
-          attachment.deletedAt === null &&
-          attachment.type === "photo",
-      ) ?? null,
+    photos: waypointAttachments.filter(
+      (attachment) =>
+        attachment.waypointLocalId === waypoint.localId &&
+        attachment.deletedAt === null &&
+        attachment.type === "photo",
+    ),
   }));
   const canChangeMode = recordingSession.activeTripId !== null;
   const canStartRecording = recordingDraft.title.trim().length > 0;
   const canSaveWaypoint = waypointDraft.title.trim().length > 0;
+  const selectedPhotoAttachment =
+    selectedPhotoAttachmentId === null
+      ? null
+      : waypointAttachments.find(
+          (attachment) =>
+            attachment.localId === selectedPhotoAttachmentId && attachment.deletedAt === null,
+        ) ?? null;
+  const selectedPhotoWaypointAttachments = selectedPhotoAttachment
+    ? waypointAttachments
+        .filter(
+          (attachment) =>
+            attachment.waypointLocalId === selectedPhotoAttachment.waypointLocalId &&
+            attachment.deletedAt === null &&
+            attachment.type === "photo",
+        )
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    : [];
+  const selectedPhotoIndex =
+    selectedPhotoAttachment === null
+      ? -1
+      : selectedPhotoWaypointAttachments.findIndex(
+          (attachment) => attachment.localId === selectedPhotoAttachment.localId,
+        );
+  const hasPreviousPhoto = selectedPhotoIndex > 0;
+  const hasNextPhoto =
+    selectedPhotoIndex !== -1 && selectedPhotoIndex < selectedPhotoWaypointAttachments.length - 1;
   const sessionTriggerLabel = activeTrip
     ? `${activeTrip.title} • ${activeRecordingProfileLabel}`
     : recordingSession.status === "idle"
@@ -231,12 +261,12 @@ export default function RecordingScreen() {
 
     const createdAt = new Date().toISOString();
     const nextWaypoint = createWaypointForTrip(activeTrip, currentLocation, waypointDraft, createdAt);
-    const nextAttachments = waypointDraft.photo
-      ? [
-          ...waypointAttachments,
-          createPhotoAttachmentForWaypoint(nextWaypoint, waypointDraft.photo, createdAt),
-        ]
-      : waypointAttachments;
+    const nextAttachments = [
+      ...waypointAttachments,
+      ...waypointDraft.photos.map((photo, index) =>
+        createPhotoAttachmentForWaypoint(nextWaypoint, photo, `${createdAt}-${index}`),
+      ),
+    ];
 
     await setWaypoints([...waypoints, nextWaypoint]);
     await setWaypointAttachments(nextAttachments);
@@ -244,7 +274,7 @@ export default function RecordingScreen() {
     setWaypointDraft({
       title: "",
       note: "",
-      photo: null,
+      photos: [],
     });
   }
 
@@ -258,22 +288,128 @@ export default function RecordingScreen() {
 
     setWaypointDraft((current) => ({
       ...current,
-      photo,
+      photos: [...current.photos, photo],
     }));
   }
 
   async function handleChoosePhoto() {
-    const photo = await pickPhotoFromLibrary();
+    const photos = await pickPhotosFromLibrary();
 
-    if (!photo) {
-      Alert.alert("Photo not added", "Trailbook could not get a photo from the library.");
+    if (photos.length === 0) {
+      Alert.alert("Photos not added", "Trailbook could not get photos from the library.");
       return;
     }
 
     setWaypointDraft((current) => ({
       ...current,
-      photo,
+      photos: [...current.photos, ...photos],
     }));
+  }
+
+  function handleRemoveDraftPhoto(indexToRemove: number) {
+    setWaypointDraft((current) => ({
+      ...current,
+      photos: current.photos.filter((_, index) => index !== indexToRemove),
+    }));
+  }
+
+  async function handleAddPhotoToWaypoint(waypointLocalId: string, source: "camera" | "library") {
+    const waypoint = waypoints.find(
+      (currentWaypoint) => currentWaypoint.localId === waypointLocalId && currentWaypoint.deletedAt === null,
+    );
+
+    if (!waypoint) {
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+
+    if (source === "camera") {
+      const photo = await capturePhotoWithCamera();
+
+      if (!photo) {
+        return;
+      }
+
+      await setWaypointAttachments([
+        ...waypointAttachments,
+        createPhotoAttachmentForWaypoint(waypoint, photo, createdAt),
+      ]);
+      return;
+    }
+
+    const photos = await pickPhotosFromLibrary();
+
+    if (photos.length === 0) {
+      return;
+    }
+
+    await setWaypointAttachments([
+      ...waypointAttachments,
+      ...photos.map((photo, index) =>
+        createPhotoAttachmentForWaypoint(waypoint, photo, `${createdAt}-${index}`),
+      ),
+    ]);
+  }
+
+  function handlePromptAddPhotoToWaypoint(waypointLocalId: string) {
+    Alert.alert("Add photo", "How do you want to add photos to this waypoint?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Camera",
+        onPress: () => void handleAddPhotoToWaypoint(waypointLocalId, "camera"),
+      },
+      {
+        text: "Library",
+        onPress: () => void handleAddPhotoToWaypoint(waypointLocalId, "library"),
+      },
+    ]);
+  }
+
+  async function handleRemoveWaypoint(waypointLocalId: string) {
+    const deletedAt = new Date().toISOString();
+    const nextState = markWaypointDeleted(waypoints, waypointAttachments, waypointLocalId, deletedAt);
+
+    await setWaypoints(nextState.waypoints);
+    await setWaypointAttachments(nextState.attachments);
+  }
+
+  async function handleRemoveWaypointPhoto(attachmentLocalId: string) {
+    const currentIndex = selectedPhotoWaypointAttachments.findIndex(
+      (attachment) => attachment.localId === attachmentLocalId,
+    );
+    const fallbackAttachment =
+      selectedPhotoWaypointAttachments[currentIndex + 1] ??
+      selectedPhotoWaypointAttachments[currentIndex - 1] ??
+      null;
+
+    await setWaypointAttachments(
+      markWaypointAttachmentDeleted(
+        waypointAttachments,
+        attachmentLocalId,
+        new Date().toISOString(),
+      ),
+    );
+    setSelectedPhotoAttachmentId(fallbackAttachment?.localId ?? null);
+  }
+
+  function handleShowPreviousPhoto() {
+    if (!hasPreviousPhoto || selectedPhotoIndex === -1) {
+      return;
+    }
+
+    setSelectedPhotoAttachmentId(selectedPhotoWaypointAttachments[selectedPhotoIndex - 1]?.localId ?? null);
+  }
+
+  function handleShowNextPhoto() {
+    if (!hasNextPhoto || selectedPhotoIndex === -1) {
+      return;
+    }
+
+    setSelectedPhotoAttachmentId(selectedPhotoWaypointAttachments[selectedPhotoIndex + 1]?.localId ?? null);
   }
 
   function handleRecordingControlPress() {
@@ -374,23 +510,38 @@ export default function RecordingScreen() {
                 value={waypointDraft.note}
               />
 
-              <Text style={styles.fieldLabel}>Photo</Text>
-              {waypointDraft.photo ? (
-                <Image source={{ uri: waypointDraft.photo.localUri }} style={styles.photoPreview} />
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <Text style={styles.photoPlaceholderText}>No photo selected yet.</Text>
-                </View>
-              )}
-
-              <View style={styles.inlineActions}>
-                <Pressable onPress={() => void handleTakePhoto()} style={styles.modeButton}>
-                  <Text style={styles.modeButtonText}>Take photo</Text>
+              <Text style={styles.fieldLabel}>Photos</Text>
+              <Text style={styles.photoHelpText}>
+                Add one or more photos from the camera or your library.
+              </Text>
+              <View style={styles.photoActionRow}>
+                <Pressable onPress={() => void handleTakePhoto()} style={styles.photoActionPrimary}>
+                  <Text style={styles.photoActionPrimaryText}>Take photo</Text>
                 </Pressable>
-                <Pressable onPress={() => void handleChoosePhoto()} style={styles.noteButton}>
-                  <Text style={styles.noteButtonText}>Choose photo</Text>
+                <Pressable onPress={() => void handleChoosePhoto()} style={styles.photoActionSecondary}>
+                  <Text style={styles.photoActionSecondaryText}>Add photos</Text>
                 </Pressable>
               </View>
+
+              {waypointDraft.photos.length > 0 ? (
+                <View style={styles.photoDraftList}>
+                  {waypointDraft.photos.map((photo, index) => (
+                    <View key={`${photo.localUri}-${index}`} style={styles.photoDraftCard}>
+                      <Image source={{ uri: photo.localUri }} style={styles.photoPreview} />
+                      <Pressable
+                        onPress={() => handleRemoveDraftPhoto(index)}
+                        style={styles.removeDraftPhotoButton}
+                      >
+                        <Text style={styles.removeDraftPhotoText}>Remove</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.photoPlaceholder}>
+                  <Text style={styles.photoPlaceholderText}>No photos selected yet.</Text>
+                </View>
+              )}
 
               <View style={styles.modalActions}>
                 <Pressable
@@ -414,6 +565,84 @@ export default function RecordingScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setSelectedPhotoAttachmentId(null)}
+        transparent
+        visible={selectedPhotoAttachment !== null}
+      >
+        <View style={styles.photoViewerBackdrop}>
+          <Pressable
+            onPress={() => setSelectedPhotoAttachmentId(null)}
+            style={styles.photoViewerBackdropPressable}
+          />
+          {selectedPhotoAttachment ? (
+            <View style={styles.photoViewerCard}>
+              <Image
+                resizeMode="contain"
+                source={{ uri: selectedPhotoAttachment.localUri }}
+                style={styles.photoViewerImage}
+              />
+              {selectedPhotoWaypointAttachments.length > 1 ? (
+                <View style={styles.photoViewerPager}>
+                  <Pressable
+                    disabled={!hasPreviousPhoto}
+                    onPress={handleShowPreviousPhoto}
+                    style={[
+                      styles.photoViewerNavButton,
+                      !hasPreviousPhoto && styles.photoViewerNavButtonDisabled,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.photoViewerNavText,
+                        !hasPreviousPhoto && styles.photoViewerNavTextDisabled,
+                      ]}
+                    >
+                      Previous
+                    </Text>
+                  </Pressable>
+                  <Text style={styles.photoViewerPagerText}>
+                    {selectedPhotoIndex + 1} / {selectedPhotoWaypointAttachments.length}
+                  </Text>
+                  <Pressable
+                    disabled={!hasNextPhoto}
+                    onPress={handleShowNextPhoto}
+                    style={[
+                      styles.photoViewerNavButton,
+                      !hasNextPhoto && styles.photoViewerNavButtonDisabled,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.photoViewerNavText,
+                        !hasNextPhoto && styles.photoViewerNavTextDisabled,
+                      ]}
+                    >
+                      Next
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              <View style={styles.photoViewerActions}>
+                <Pressable
+                  onPress={() => setSelectedPhotoAttachmentId(null)}
+                  style={[styles.modalButton, styles.modalButtonSecondary]}
+                >
+                  <Text style={styles.modalButtonSecondaryText}>Close</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void handleRemoveWaypointPhoto(selectedPhotoAttachment.localId)}
+                  style={[styles.modalButton, styles.photoViewerRemoveButton]}
+                >
+                  <Text style={styles.photoViewerRemoveText}>Remove photo</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </View>
       </Modal>
 
       <Modal
@@ -650,80 +879,146 @@ export default function RecordingScreen() {
             </Text>
           </Pressable>
 
-          {sessionMenuVisible ? (
-            <View style={styles.sessionMenu}>
-              <View style={styles.sessionMenuArrow} />
+          <View style={styles.mapTopControl}>
+            <RecordingControl
+              compact
+              onPress={handleRecordingControlPress}
+              status={recordingSession.status}
+            />
+          </View>
+        </View>
 
-              <View style={styles.metaPanel}>
-                <Text style={styles.metaTitle}>Current session</Text>
-                <Text style={styles.metaLine}>Active user: {activeIdentitySession.userEmail}</Text>
-                <Text style={styles.metaLine}>Route: {activeTrip?.title ?? "n/a"}</Text>
-                <Text style={styles.metaLine}>Mode: {activeRecordingProfileLabel}</Text>
-                <Text style={styles.metaLine}>Last point: {lastPoint}</Text>
-                <Text style={styles.metaLine}>Open trips: {String(activeTripCount)}</Text>
-                <View style={styles.inlineActions}>
-                  {canChangeMode ? (
-                    <Pressable
-                      onPress={() => {
-                        setSessionMenuVisible(false);
-                        setProfileModalVisible(true);
-                      }}
-                      style={styles.modeButton}
-                    >
-                      <Text style={styles.modeButtonText}>Change mode</Text>
-                    </Pressable>
-                  ) : null}
-                  {activeTrip ? (
-                    <Pressable
-                      onPress={() => {
-                        setSessionMenuVisible(false);
-                        setWaypointModalVisible(true);
-                      }}
-                      style={styles.noteButton}
-                    >
-                      <Text style={styles.noteButtonText}>Add note</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-                {recordingSession.status === "interrupted" ? (
-                  <Text style={styles.metaWarning}>
-                    The previous recording was interrupted. Tap the control to continue or stop it.
-                  </Text>
-                ) : null}
+        {sessionMenuVisible ? (
+          <View style={styles.drawerOverlay}>
+            <Pressable
+              onPress={() => setSessionMenuVisible(false)}
+              style={styles.drawerBackdrop}
+            />
+            <View style={styles.drawerPanel}>
+              <View style={styles.drawerHeader}>
+                <Text style={styles.drawerTitle}>Current session</Text>
+                <Pressable
+                  onPress={() => setSessionMenuVisible(false)}
+                  style={styles.drawerCloseButton}
+                >
+                  <Text style={styles.drawerCloseText}>Close</Text>
+                </Pressable>
               </View>
 
-              {activeTrip ? (
-                <View style={styles.waypointsPanel}>
-                  <Text style={styles.metaTitle}>Recent waypoints</Text>
-                  {recentWaypoints.length === 0 ? (
-                    <Text style={styles.metaLine}>No saved notes on this route yet.</Text>
-                  ) : (
-                  recentWaypointCards.map(({ waypoint, photo }) => (
-                      <View key={waypoint.localId} style={styles.waypointCard}>
-                        {photo ? (
-                          <Image source={{ uri: photo.localUri }} style={styles.waypointPhoto} />
-                        ) : null}
-                        <Text style={styles.waypointTitle}>{waypoint.title}</Text>
-                        {waypoint.note ? (
+              <ScrollView
+                contentContainerStyle={styles.drawerContent}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.metaPanel}>
+                  <Text style={styles.metaLine}>Active user: {activeIdentitySession.userEmail}</Text>
+                  <Text style={styles.metaLine}>Route: {activeTrip?.title ?? "n/a"}</Text>
+                  <Text style={styles.metaLine}>Mode: {activeRecordingProfileLabel}</Text>
+                  <Text style={styles.metaLine}>Last point: {lastPoint}</Text>
+                  <Text style={styles.metaLine}>Open trips: {String(activeTripCount)}</Text>
+                  <View style={styles.inlineActions}>
+                    {canChangeMode ? (
+                      <Pressable
+                        onPress={() => {
+                          setSessionMenuVisible(false);
+                          setProfileModalVisible(true);
+                        }}
+                        style={styles.modeButton}
+                      >
+                        <Text style={styles.modeButtonText}>Change mode</Text>
+                      </Pressable>
+                    ) : null}
+                    {activeTrip ? (
+                      <Pressable
+                        onPress={() => {
+                          setSessionMenuVisible(false);
+                          setWaypointModalVisible(true);
+                        }}
+                        style={styles.noteButton}
+                      >
+                        <Text style={styles.noteButtonText}>Add note</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  {recordingSession.status === "interrupted" ? (
+                    <Text style={styles.metaWarning}>
+                      The previous recording was interrupted. Tap the control to continue or stop it.
+                    </Text>
+                  ) : null}
+                </View>
+
+                {activeTrip ? (
+                  <View style={styles.waypointsPanel}>
+                    <Text style={styles.metaTitle}>Recent waypoints</Text>
+                    <ScrollView
+                      contentContainerStyle={styles.waypointsScrollContent}
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator={false}
+                    >
+                      {recentWaypoints.length === 0 ? (
+                        <Text style={styles.metaLine}>No saved notes on this route yet.</Text>
+                      ) : (
+                        recentWaypointCards.map(({ waypoint, photos }) => (
+                          <View key={waypoint.localId} style={styles.waypointCard}>
+                            {photos.length > 0 ? (
+                              <ScrollView
+                                contentContainerStyle={styles.waypointPhotoRow}
+                                horizontal
+                                nestedScrollEnabled
+                                showsHorizontalScrollIndicator={false}
+                              >
+                                {photos.map((photo) => (
+                                  <Pressable
+                                    key={photo.localId}
+                                    onPress={() => setSelectedPhotoAttachmentId(photo.localId)}
+                                  >
+                                    <Image
+                                      source={{ uri: photo.localUri }}
+                                      style={styles.waypointPhoto}
+                                    />
+                                  </Pressable>
+                                ))}
+                              </ScrollView>
+                            ) : null}
+                            <Text style={styles.waypointTitle}>{waypoint.title}</Text>
+                            {waypoint.note ? (
                           <Text numberOfLines={2} style={styles.waypointNote}>
                             {waypoint.note}
                           </Text>
                         ) : null}
-                        <Text style={styles.waypointMeta}>
-                          {new Date(waypoint.createdAt).toLocaleString()}
+                        <View style={styles.waypointActions}>
+                          <Pressable
+                            onPress={() => handlePromptAddPhotoToWaypoint(waypoint.localId)}
+                            style={styles.waypointActionButton}
+                          >
+                            <Text style={styles.waypointActionText}>Add photo</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => void handleRemoveWaypoint(waypoint.localId)}
+                            style={[styles.waypointActionButton, styles.waypointRemoveButton]}
+                          >
+                            <Text style={[styles.waypointActionText, styles.waypointRemoveText]}>
+                              Remove note
+                            </Text>
+                          </Pressable>
+                        </View>
+                        <Text style={styles.waypointLocation}>
+                          Location: {waypoint.latitude.toFixed(5)}, {waypoint.longitude.toFixed(5)}
                         </Text>
-                      </View>
-                    ))
-                  )}
-                </View>
-              ) : null}
+                            <Text style={styles.waypointMeta}>
+                              {new Date(waypoint.createdAt).toLocaleString()}
+                            </Text>
+                          </View>
+                        ))
+                      )}
+                    </ScrollView>
+                  </View>
+                ) : null}
+              </ScrollView>
             </View>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
 
-        <View style={styles.mapBottomOverlay}>
-          <RecordingControl onPress={handleRecordingControlPress} status={recordingSession.status} />
-        </View>
       </View>
     </ScreenLayout>
   );
@@ -780,11 +1075,67 @@ const styles = StyleSheet.create({
   fieldTextarea: {
     minHeight: 90,
   },
+  photoDraftList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  photoHelpText: {
+    fontSize: 13,
+    color: "#52624f",
+    marginTop: -2,
+  },
+  photoActionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  photoActionPrimary: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: "#243224",
+    paddingVertical: 12,
+  },
+  photoActionPrimaryText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#fffdf8",
+  },
+  photoActionSecondary: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: "#3c5a3c",
+    paddingVertical: 12,
+  },
+  photoActionSecondaryText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#fffdf8",
+  },
+  photoDraftCard: {
+    width: 132,
+    gap: 8,
+  },
   photoPreview: {
-    width: "100%",
-    height: 180,
+    width: 132,
+    height: 132,
     borderRadius: 18,
     backgroundColor: "#d7ddcf",
+  },
+  removeDraftPhotoButton: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    backgroundColor: "#f7e0db",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  removeDraftPhotoText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#9f3f31",
   },
   photoPlaceholder: {
     alignItems: "center",
@@ -878,6 +1229,81 @@ const styles = StyleSheet.create({
   modalButtonDisabled: {
     opacity: 0.45,
   },
+  photoViewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(12, 16, 12, 0.86)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  photoViewerBackdropPressable: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  photoViewerCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 24,
+    backgroundColor: "#101510",
+    padding: 14,
+    gap: 14,
+  },
+  photoViewerImage: {
+    width: "100%",
+    height: 420,
+    borderRadius: 18,
+    backgroundColor: "#1b231b",
+  },
+  photoViewerPager: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  photoViewerNavButton: {
+    minWidth: 92,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    backgroundColor: "#243224",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  photoViewerNavButtonDisabled: {
+    backgroundColor: "#2d342d",
+    opacity: 0.4,
+  },
+  photoViewerNavText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fffdf8",
+  },
+  photoViewerNavTextDisabled: {
+    color: "#cbd4cb",
+  },
+  photoViewerPagerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#dbe3db",
+    textAlign: "center",
+  },
+  photoViewerActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  photoViewerRemoveButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: "#8f3428",
+    paddingVertical: 14,
+  },
+  photoViewerRemoveText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#fff7f4",
+  },
   mapShell: {
     flex: 1,
     borderRadius: 28,
@@ -910,15 +1336,22 @@ const styles = StyleSheet.create({
     top: 16,
     left: 16,
     right: 16,
+    flexDirection: "row",
     alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
   },
   sessionTrigger: {
-    alignSelf: "flex-start",
-    maxWidth: "100%",
+    flex: 1,
+    maxWidth: "78%",
     borderRadius: 18,
     backgroundColor: "rgba(255, 253, 248, 0.92)",
     paddingHorizontal: 14,
     paddingVertical: 10,
+  },
+  mapTopControl: {
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
   },
   sessionTriggerLabel: {
     fontSize: 15,
@@ -930,26 +1363,56 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#60705d",
   },
-  sessionMenu: {
-    width: "100%",
-    maxWidth: 380,
-    marginTop: 10,
-    gap: 10,
+  drawerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: "row",
+    justifyContent: "flex-end",
   },
-  sessionMenuArrow: {
-    marginLeft: 24,
-    width: 16,
-    height: 16,
-    backgroundColor: "#fffdf8",
-    transform: [{ rotate: "45deg" }],
+  drawerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(20, 28, 20, 0.18)",
   },
-  mapBottomOverlay: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 16,
-    gap: 12,
+  drawerPanel: {
+    width: "82%",
+    maxWidth: 360,
+    backgroundColor: "#f8f4ea",
+    paddingTop: 72,
+    paddingHorizontal: 14,
+    paddingBottom: 18,
+    borderTopLeftRadius: 28,
+    borderBottomLeftRadius: 28,
+    shadowColor: "#243224",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: -4, height: 0 },
+    elevation: 10,
+  },
+  drawerHeader: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  drawerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  drawerCloseButton: {
+    borderRadius: 999,
+    backgroundColor: "#e6ece1",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  drawerCloseText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  drawerContent: {
+    gap: 10,
+    paddingBottom: 20,
   },
   metaPanel: {
     width: "100%",
@@ -1007,6 +1470,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#fffdf8",
     padding: 16,
     gap: 10,
+    maxHeight: 320,
+  },
+  waypointsScrollContent: {
+    gap: 10,
+    paddingBottom: 4,
   },
   waypointCard: {
     borderRadius: 16,
@@ -1015,11 +1483,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   waypointPhoto: {
-    width: "100%",
+    width: 112,
     height: 120,
     borderRadius: 12,
-    marginBottom: 4,
     backgroundColor: "#d7ddcf",
+  },
+  waypointPhotoRow: {
+    gap: 8,
+    marginBottom: 4,
   },
   waypointTitle: {
     fontSize: 14,
@@ -1029,6 +1500,34 @@ const styles = StyleSheet.create({
   waypointNote: {
     fontSize: 13,
     color: "#455445",
+  },
+  waypointActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 2,
+  },
+  waypointActionButton: {
+    borderRadius: 999,
+    backgroundColor: "#dfead9",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  waypointActionText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  waypointRemoveButton: {
+    backgroundColor: "#f7e0db",
+  },
+  waypointRemoveText: {
+    color: "#9f3f31",
+  },
+  waypointLocation: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#52624f",
   },
   waypointMeta: {
     fontSize: 12,
