@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import type { AuthenticatedDeviceSession, TemporaryUserCredentials } from "../domain/identity";
+import { getOrCreateDeviceId } from "../storage/device-storage";
 import { loadSession, saveSession } from "../storage/session-storage";
 
 interface SessionState {
@@ -47,6 +48,7 @@ export function useSessionStore<T>(selector: (snapshot: SessionState) => T): T {
 }
 
 export async function hydrateSessionStore(): Promise<void> {
+  const deviceId = await getOrCreateDeviceId();
   const identitySession = await loadSession();
 
   setState((currentState) => ({
@@ -57,7 +59,7 @@ export async function hydrateSessionStore(): Promise<void> {
       email: identitySession?.userEmail ?? "",
       password: "",
     },
-    deviceId: identitySession?.deviceId ?? currentState.deviceId,
+    deviceId: identitySession?.deviceId ?? deviceId,
   }));
 }
 
@@ -71,13 +73,6 @@ export function updateSessionCredentials(partial: Partial<TemporaryUserCredentia
   }));
 }
 
-export function updateSessionDeviceId(deviceId: string) {
-  setState((currentState) => ({
-    ...currentState,
-    deviceId,
-  }));
-}
-
 export async function setActiveIdentitySession(
   identitySession: AuthenticatedDeviceSession | null,
 ): Promise<void> {
@@ -88,7 +83,7 @@ export async function setActiveIdentitySession(
       email: identitySession?.userEmail ?? "",
       password: "",
     },
-    deviceId: identitySession?.deviceId ?? "ios-local-device-001",
+    deviceId: identitySession?.deviceId ?? currentState.deviceId,
   }));
 
   await saveSession(identitySession);

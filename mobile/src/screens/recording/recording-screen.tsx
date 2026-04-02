@@ -61,9 +61,6 @@ export default function RecordingScreen() {
       <Text style={styles.label}>Active user</Text>
       <Text style={styles.value}>{activeIdentitySession.userEmail}</Text>
 
-      <Text style={styles.label}>Active device</Text>
-      <Text style={styles.value}>{activeIdentitySession.deviceId}</Text>
-
       <Text style={styles.label}>Status</Text>
       <Text style={styles.value}>{status}</Text>
 

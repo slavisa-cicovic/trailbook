@@ -17,9 +17,6 @@ export default function SettingsScreen() {
       <Text style={styles.label}>Active user</Text>
       <Text style={styles.value}>{identitySession?.userEmail ?? "n/a"}</Text>
 
-      <Text style={styles.label}>Active device</Text>
-      <Text style={styles.value}>{identitySession?.deviceId ?? "n/a"}</Text>
-
       <PrimaryButton onPress={() => router.replace("/recording")} variant="ghost">
         Back to Recording
       </PrimaryButton>
