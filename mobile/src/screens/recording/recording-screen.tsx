@@ -1,4 +1,4 @@
-import { Redirect, useRouter } from "expo-router";
+import { Redirect } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
@@ -14,7 +14,6 @@ import { setActiveIdentitySession, useSessionStore } from "../../state/session-s
 import { setTrips, useTripsStore } from "../../state/trips-store";
 
 export default function RecordingScreen() {
-  const router = useRouter();
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);
@@ -50,13 +49,16 @@ export default function RecordingScreen() {
   async function handleClearLocalSession() {
     await setActiveIdentitySession(null);
     await setRecordingSession(initialRecordingSession);
-    router.replace("/login");
   }
 
   return (
-    <ScreenLayout>
-      <Text style={styles.title}>Trailbook</Text>
-      <Text style={styles.subtitle}>User and device bound recording scaffold</Text>
+    <ScreenLayout
+      accountEmail={activeIdentitySession.userEmail}
+      onLogout={() => void handleClearLocalSession()}
+      showBottomNavigation
+      title="Trailbook"
+    >
+      <Text style={styles.subtitle}>User and device bound recording scaffold.</Text>
 
       <Text style={styles.label}>Active user</Text>
       <Text style={styles.value}>{activeIdentitySession.userEmail}</Text>
@@ -87,26 +89,12 @@ export default function RecordingScreen() {
         >
           Stop Recording
         </PrimaryButton>
-        <PrimaryButton onPress={() => router.push("/trips")} variant="ghost">
-          View Trips
-        </PrimaryButton>
-        <PrimaryButton onPress={() => router.push("/settings")} variant="ghost">
-          Settings
-        </PrimaryButton>
-        <PrimaryButton onPress={() => void handleClearLocalSession()} variant="ghost">
-          Clear Local Session
-        </PrimaryButton>
       </View>
     </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#1f2a1f",
-  },
   subtitle: {
     fontSize: 16,
     color: "#52624f",

@@ -1,35 +1,38 @@
-import { useRouter } from "expo-router";
+import { Redirect } from "expo-router";
 import { StyleSheet, Text } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
-import PrimaryButton from "../../components/ui/primary-button";
-import { useSessionStore } from "../../state/session-store";
+import { initialRecordingSession, setRecordingSession } from "../../state/recording-store";
+import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 
 export default function SettingsScreen() {
-  const router = useRouter();
   const identitySession = useSessionStore((state) => state.identitySession);
 
+  async function handleLogout() {
+    await setActiveIdentitySession(null);
+    await setRecordingSession(initialRecordingSession);
+  }
+
+  if (!identitySession) {
+    return <Redirect href="/login" />;
+  }
+
   return (
-    <ScreenLayout>
-      <Text style={styles.title}>Settings</Text>
+    <ScreenLayout
+      accountEmail={identitySession.userEmail}
+      onLogout={() => void handleLogout()}
+      showBottomNavigation
+      title="Settings"
+    >
       <Text style={styles.subtitle}>Temporary local session details for the current device.</Text>
 
       <Text style={styles.label}>Active user</Text>
-      <Text style={styles.value}>{identitySession?.userEmail ?? "n/a"}</Text>
-
-      <PrimaryButton onPress={() => router.replace("/recording")} variant="ghost">
-        Back to Recording
-      </PrimaryButton>
+      <Text style={styles.value}>{identitySession.userEmail}</Text>
     </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#1f2a1f",
-  },
   subtitle: {
     fontSize: 16,
     color: "#52624f",

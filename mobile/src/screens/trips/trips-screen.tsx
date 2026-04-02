@@ -1,17 +1,31 @@
-import { useRouter } from "expo-router";
+import { Redirect } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
-import PrimaryButton from "../../components/ui/primary-button";
+import { initialRecordingSession, setRecordingSession } from "../../state/recording-store";
+import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { useTripsStore } from "../../state/trips-store";
 
 export default function TripsScreen() {
-  const router = useRouter();
+  const identitySession = useSessionStore((state) => state.identitySession);
   const trips = useTripsStore((state) => state.trips);
 
+  async function handleLogout() {
+    await setActiveIdentitySession(null);
+    await setRecordingSession(initialRecordingSession);
+  }
+
+  if (!identitySession) {
+    return <Redirect href="/login" />;
+  }
+
   return (
-    <ScreenLayout>
-      <Text style={styles.title}>Trips</Text>
+    <ScreenLayout
+      accountEmail={identitySession.userEmail}
+      onLogout={() => void handleLogout()}
+      showBottomNavigation
+      title="Trips"
+    >
       <Text style={styles.subtitle}>Local trip records created by recording start/stop.</Text>
 
       {trips.length === 0 ? (
@@ -30,20 +44,11 @@ export default function TripsScreen() {
           ))}
         </View>
       )}
-
-      <PrimaryButton onPress={() => router.replace("/recording")} variant="ghost">
-        Back to Recording
-      </PrimaryButton>
     </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#1f2a1f",
-  },
   subtitle: {
     fontSize: 16,
     color: "#52624f",
