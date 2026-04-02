@@ -41,6 +41,12 @@ interface PendingUndoState {
   tripTitle: string;
 }
 
+interface PendingWaypointEditState {
+  note: string;
+  title: string;
+  waypointLocalId: string;
+}
+
 export default function TripsScreen() {
   const router = useRouter();
   const identitySession = useSessionStore((state) => state.identitySession);
@@ -54,6 +60,7 @@ export default function TripsScreen() {
   const [tripDetailsVisible, setTripDetailsVisible] = useState(false);
   const [selectedWaypointId, setSelectedWaypointId] = useState<string | null>(null);
   const [waypointEditVisible, setWaypointEditVisible] = useState(false);
+  const [pendingWaypointEdit, setPendingWaypointEdit] = useState<PendingWaypointEditState | null>(null);
   const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
@@ -107,6 +114,20 @@ export default function TripsScreen() {
 
     return () => clearTimeout(timeoutId);
   }, [pendingUndo]);
+
+  useEffect(() => {
+    if (tripDetailsVisible || !pendingWaypointEdit) {
+      return;
+    }
+
+    setSelectedWaypointId(pendingWaypointEdit.waypointLocalId);
+    setWaypointDraft({
+      title: pendingWaypointEdit.title,
+      note: pendingWaypointEdit.note,
+    });
+    setWaypointEditVisible(true);
+    setPendingWaypointEdit(null);
+  }, [pendingWaypointEdit, tripDetailsVisible]);
 
   async function handleLogout() {
     await setActiveIdentitySession(null);
@@ -178,15 +199,12 @@ export default function TripsScreen() {
   }
 
   function openWaypointEdit(waypoint: Waypoint) {
-    setSelectedWaypointId(waypoint.localId);
-    setWaypointDraft({
+    setPendingWaypointEdit({
+      waypointLocalId: waypoint.localId,
       title: waypoint.title,
       note: waypoint.note ?? "",
     });
     setTripDetailsVisible(false);
-    setTimeout(() => {
-      setWaypointEditVisible(true);
-    }, 0);
   }
 
   async function handleSaveWaypointEdit() {
