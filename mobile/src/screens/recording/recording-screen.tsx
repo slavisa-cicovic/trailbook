@@ -86,10 +86,6 @@ export default function RecordingScreen() {
     photo: null,
   });
 
-  if (!identitySession) {
-    return <Redirect href="/login" />;
-  }
-
   const activeIdentitySession = identitySession;
   const activeTrip = trips.find((trip) => trip.localId === recordingSession.activeTripId) ?? null;
   const activeRecordingProfile = activeTrip?.recordingProfile ?? recordingSession.recordingProfile;
@@ -170,6 +166,10 @@ export default function RecordingScreen() {
   }, [currentLocation, recordingSession]);
 
   async function handleStartRecording() {
+    if (!activeIdentitySession) {
+      return;
+    }
+
     const startedAt = new Date().toISOString();
     const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft);
 
@@ -318,6 +318,10 @@ export default function RecordingScreen() {
         longitudeDelta: 0.01,
       }
     : undefined;
+
+  if (!activeIdentitySession) {
+    return <Redirect href="/login" />;
+  }
 
   return (
     <ScreenLayout
