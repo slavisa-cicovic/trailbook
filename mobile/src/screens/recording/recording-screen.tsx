@@ -63,6 +63,7 @@ export default function RecordingScreen() {
   const [startModalVisible, setStartModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [waypointModalVisible, setWaypointModalVisible] = useState(false);
+  const [sessionMenuVisible, setSessionMenuVisible] = useState(false);
   const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>({
     title: "",
     description: "",
@@ -92,6 +93,11 @@ export default function RecordingScreen() {
   const canChangeMode = recordingSession.activeTripId !== null;
   const canStartRecording = recordingDraft.title.trim().length > 0;
   const canSaveWaypoint = waypointDraft.title.trim().length > 0;
+  const sessionTriggerLabel = activeTrip
+    ? `${activeTrip.title} • ${activeRecordingProfileLabel}`
+    : recordingSession.status === "idle"
+      ? "No active route"
+      : "Session details";
 
   useEffect(() => {
     let active = true;
@@ -554,71 +560,88 @@ export default function RecordingScreen() {
         )}
 
         <View style={styles.mapTopOverlay}>
-          <View style={styles.statusPill}>
-            <Text style={styles.statusLabel}>Status</Text>
-            <Text style={styles.statusValue}>{recordingSession.status}</Text>
-          </View>
-          <View style={styles.statusPill}>
-            <Text style={styles.statusLabel}>Route</Text>
-            <Text style={styles.statusValue}>{activeTrip?.title ?? "none"}</Text>
-          </View>
-          <View style={styles.statusPill}>
-            <Text style={styles.statusLabel}>Mode</Text>
-            <Text style={styles.statusValue}>{activeRecordingProfileLabel}</Text>
-          </View>
+          <Pressable
+            onPress={() => setSessionMenuVisible((current) => !current)}
+            style={styles.sessionTrigger}
+          >
+            <Text style={styles.sessionTriggerLabel}>{sessionTriggerLabel}</Text>
+            <Text style={styles.sessionTriggerMeta}>
+              {recordingSession.status === "idle"
+                ? "Tap for session details"
+                : `${recordingSession.status} • tap for details`}
+            </Text>
+          </Pressable>
+
+          {sessionMenuVisible ? (
+            <View style={styles.sessionMenu}>
+              <View style={styles.sessionMenuArrow} />
+
+              <View style={styles.metaPanel}>
+                <Text style={styles.metaTitle}>Current session</Text>
+                <Text style={styles.metaLine}>Active user: {activeIdentitySession.userEmail}</Text>
+                <Text style={styles.metaLine}>Route: {activeTrip?.title ?? "n/a"}</Text>
+                <Text style={styles.metaLine}>Mode: {activeRecordingProfileLabel}</Text>
+                <Text style={styles.metaLine}>Last point: {lastPoint}</Text>
+                <Text style={styles.metaLine}>Open trips: {String(activeTripCount)}</Text>
+                <View style={styles.inlineActions}>
+                  {canChangeMode ? (
+                    <Pressable
+                      onPress={() => {
+                        setSessionMenuVisible(false);
+                        setProfileModalVisible(true);
+                      }}
+                      style={styles.modeButton}
+                    >
+                      <Text style={styles.modeButtonText}>Change mode</Text>
+                    </Pressable>
+                  ) : null}
+                  {activeTrip ? (
+                    <Pressable
+                      onPress={() => {
+                        setSessionMenuVisible(false);
+                        setWaypointModalVisible(true);
+                      }}
+                      style={styles.noteButton}
+                    >
+                      <Text style={styles.noteButtonText}>Add note</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                {recordingSession.status === "interrupted" ? (
+                  <Text style={styles.metaWarning}>
+                    The previous recording was interrupted. Tap the control to continue or stop it.
+                  </Text>
+                ) : null}
+              </View>
+
+              {activeTrip ? (
+                <View style={styles.waypointsPanel}>
+                  <Text style={styles.metaTitle}>Recent waypoints</Text>
+                  {recentWaypoints.length === 0 ? (
+                    <Text style={styles.metaLine}>No saved notes on this route yet.</Text>
+                  ) : (
+                    recentWaypoints.map((waypoint) => (
+                      <View key={waypoint.localId} style={styles.waypointCard}>
+                        <Text style={styles.waypointTitle}>{waypoint.title}</Text>
+                        {waypoint.note ? (
+                          <Text numberOfLines={2} style={styles.waypointNote}>
+                            {waypoint.note}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.waypointMeta}>
+                          {new Date(waypoint.createdAt).toLocaleString()}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.mapBottomOverlay}>
           <RecordingControl onPress={handleRecordingControlPress} status={recordingSession.status} />
-
-          <View style={styles.metaPanel}>
-            <Text style={styles.metaTitle}>Current session</Text>
-            <Text style={styles.metaLine}>Active user: {activeIdentitySession.userEmail}</Text>
-            <Text style={styles.metaLine}>Route: {activeTrip?.title ?? "n/a"}</Text>
-            <Text style={styles.metaLine}>Mode: {activeRecordingProfileLabel}</Text>
-            <Text style={styles.metaLine}>Last point: {lastPoint}</Text>
-            <Text style={styles.metaLine}>Open trips: {String(activeTripCount)}</Text>
-            <View style={styles.inlineActions}>
-              {canChangeMode ? (
-                <Pressable onPress={() => setProfileModalVisible(true)} style={styles.modeButton}>
-                  <Text style={styles.modeButtonText}>Change mode</Text>
-                </Pressable>
-              ) : null}
-              {activeTrip ? (
-                <Pressable onPress={() => setWaypointModalVisible(true)} style={styles.noteButton}>
-                  <Text style={styles.noteButtonText}>Add note</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            {recordingSession.status === "interrupted" ? (
-              <Text style={styles.metaWarning}>
-                The previous recording was interrupted. Tap the control to continue or stop it.
-              </Text>
-            ) : null}
-          </View>
-
-          {activeTrip ? (
-            <View style={styles.waypointsPanel}>
-              <Text style={styles.metaTitle}>Recent waypoints</Text>
-              {recentWaypoints.length === 0 ? (
-                <Text style={styles.metaLine}>No saved notes on this route yet.</Text>
-              ) : (
-                recentWaypoints.map((waypoint) => (
-                  <View key={waypoint.localId} style={styles.waypointCard}>
-                    <Text style={styles.waypointTitle}>{waypoint.title}</Text>
-                    {waypoint.note ? (
-                      <Text numberOfLines={2} style={styles.waypointNote}>
-                        {waypoint.note}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.waypointMeta}>
-                      {new Date(waypoint.createdAt).toLocaleString()}
-                    </Text>
-                  </View>
-                ))
-              )}
-            </View>
-          ) : null}
         </View>
       </View>
     </ScreenLayout>
@@ -786,27 +809,38 @@ const styles = StyleSheet.create({
     top: 16,
     left: 16,
     right: 16,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+    alignItems: "flex-start",
   },
-  statusPill: {
-    minWidth: 96,
+  sessionTrigger: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
     borderRadius: 18,
     backgroundColor: "rgba(255, 253, 248, 0.92)",
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  statusLabel: {
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: "#60705d",
-  },
-  statusValue: {
+  sessionTriggerLabel: {
     fontSize: 15,
     fontWeight: "700",
     color: "#243224",
+  },
+  sessionTriggerMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#60705d",
+  },
+  sessionMenu: {
+    width: "100%",
+    maxWidth: 380,
+    marginTop: 10,
+    gap: 10,
+  },
+  sessionMenuArrow: {
+    marginLeft: 24,
+    width: 16,
+    height: 16,
+    backgroundColor: "#fffdf8",
+    transform: [{ rotate: "45deg" }],
   },
   mapBottomOverlay: {
     position: "absolute",
@@ -819,7 +853,7 @@ const styles = StyleSheet.create({
   metaPanel: {
     width: "100%",
     borderRadius: 20,
-    backgroundColor: "rgba(255, 253, 248, 0.95)",
+    backgroundColor: "#fffdf8",
     padding: 16,
     gap: 6,
   },
@@ -869,7 +903,7 @@ const styles = StyleSheet.create({
   waypointsPanel: {
     width: "100%",
     borderRadius: 20,
-    backgroundColor: "rgba(255, 253, 248, 0.95)",
+    backgroundColor: "#fffdf8",
     padding: 16,
     gap: 10,
   },
