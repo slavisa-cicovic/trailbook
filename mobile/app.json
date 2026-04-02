@@ -8,7 +8,13 @@
     "userInterfaceStyle": "light",
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Trailbook uses your location to show where you are and support trip recording."
+        }
+      ]
     ],
     "assetBundlePatterns": [
       "**/*"

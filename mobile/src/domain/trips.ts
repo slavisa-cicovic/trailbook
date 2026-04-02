@@ -1,4 +1,5 @@
 export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error";
+export type RecordingStatus = "idle" | "recording" | "interrupted";
 
 export interface Trip {
   localId: string;
@@ -45,9 +46,11 @@ export interface Waypoint {
 }
 
 export interface RecordingSessionSummary {
+  status: RecordingStatus;
   activeTripId: string | null;
-  isRecording: boolean;
+  startedAt: string | null;
   lastPointRecordedAt: string | null;
+  interruptedAt: string | null;
   userId: string | null;
   userEmail: string | null;
   deviceId: string | null;

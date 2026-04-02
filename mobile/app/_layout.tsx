@@ -3,19 +3,29 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
-import { hydrateRecordingStore, useRecordingStore } from "../src/state/recording-store";
+import {
+  hydrateRecordingStore,
+  reconcileHydratedRecordingState,
+  useRecordingStore,
+} from "../src/state/recording-store";
 import { hydrateSessionStore, useSessionStore } from "../src/state/session-store";
-import { hydrateTripsStore } from "../src/state/trips-store";
+import { getTripsStateSnapshot, hydrateTripsStore, useTripsStore } from "../src/state/trips-store";
 
 export default function RootLayout() {
   const sessionHydrated = useSessionStore((state) => state.hydrated);
   const recordingHydrated = useRecordingStore((state) => state.hydrated);
+  const tripsHydrated = useTripsStore((state) => state.hydrated);
 
   useEffect(() => {
-    void Promise.all([hydrateSessionStore(), hydrateRecordingStore(), hydrateTripsStore()]);
+    async function hydrateAppState() {
+      await Promise.all([hydrateSessionStore(), hydrateRecordingStore(), hydrateTripsStore()]);
+      await reconcileHydratedRecordingState(getTripsStateSnapshot().trips);
+    }
+
+    void hydrateAppState();
   }, []);
 
-  if (!sessionHydrated || !recordingHydrated) {
+  if (!sessionHydrated || !recordingHydrated || !tripsHydrated) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color="#243224" />

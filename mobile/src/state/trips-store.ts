@@ -35,6 +35,10 @@ function getSnapshot() {
   return state;
 }
 
+export function getTripsStateSnapshot() {
+  return state;
+}
+
 export function useTripsStore<T>(selector: (snapshot: TripsState) => T): T {
   return useSyncExternalStore(subscribe, () => selector(getSnapshot()), () => selector(getSnapshot()));
 }

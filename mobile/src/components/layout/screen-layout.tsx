@@ -5,16 +5,21 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  type StyleProp,
   StyleSheet,
   Text,
   View,
+  type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 interface ScreenLayoutProps extends PropsWithChildren {
   title?: string;
   accountEmail?: string | null;
+  contentStyle?: StyleProp<ViewStyle>;
+  contentVariant?: "card" | "plain";
   onLogout?: () => void;
+  scrollEnabled?: boolean;
   showBottomNavigation?: boolean;
 }
 
@@ -28,7 +33,10 @@ export default function ScreenLayout({
   children,
   title,
   accountEmail,
+  contentStyle,
+  contentVariant = "card",
   onLogout,
+  scrollEnabled = true,
   showBottomNavigation = false,
 }: ScreenLayoutProps) {
   const router = useRouter();
@@ -84,12 +92,33 @@ export default function ScreenLayout({
             </View>
           )}
 
-          <ScrollView
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.card}>{children}</View>
-          </ScrollView>
+          {scrollEnabled ? (
+            <ScrollView
+              contentContainerStyle={[
+                styles.content,
+                contentVariant === "plain" && styles.contentPlain,
+                contentStyle,
+              ]}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={contentVariant === "card" ? styles.card : styles.plainContent}>
+                {children}
+              </View>
+            </ScrollView>
+          ) : (
+            <View
+              style={[
+                styles.content,
+                styles.contentNoScroll,
+                contentVariant === "plain" && styles.contentPlain,
+                contentStyle,
+              ]}
+            >
+              <View style={contentVariant === "card" ? styles.card : styles.plainContent}>
+                {children}
+              </View>
+            </View>
+          )}
 
           {showBottomNavigation ? (
             <View style={styles.bottomNavigation}>
@@ -210,12 +239,23 @@ const styles = StyleSheet.create({
     padding: 24,
     zIndex: 1,
   },
+  contentNoScroll: {
+    flex: 1,
+  },
+  contentPlain: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
   card: {
     borderRadius: 24,
     backgroundColor: "#fffdf8",
     padding: 24,
     gap: 8,
     zIndex: 1,
+  },
+  plainContent: {
+    flex: 1,
   },
   bottomNavigation: {
     flexDirection: "row",

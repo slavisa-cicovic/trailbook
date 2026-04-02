@@ -1,12 +1,17 @@
 import { useSyncExternalStore } from "react";
 
-import type { RecordingSessionSummary } from "../domain/trips";
+import type { RecordingSessionSummary, Trip } from "../domain/trips";
+import {
+  reconcileRecordingSessionWithTrips,
+} from "../services/recording/recording.service";
 import { loadRecordingSession, saveRecordingSession } from "../storage/recording-storage";
 
 export const initialRecordingSession: RecordingSessionSummary = {
+  status: "idle",
   activeTripId: null,
-  isRecording: false,
+  startedAt: null,
   lastPointRecordedAt: null,
+  interruptedAt: null,
   userId: null,
   userEmail: null,
   deviceId: null,
@@ -44,6 +49,10 @@ function getSnapshot() {
   return state;
 }
 
+export function getRecordingStateSnapshot() {
+  return state;
+}
+
 export function useRecordingStore<T>(selector: (snapshot: RecordingState) => T): T {
   return useSyncExternalStore(subscribe, () => selector(getSnapshot()), () => selector(getSnapshot()));
 }
@@ -64,4 +73,19 @@ export async function setRecordingSession(session: RecordingSessionSummary): Pro
   }));
 
   await saveRecordingSession(session);
+}
+
+export async function reconcileHydratedRecordingState(trips: Trip[]): Promise<void> {
+  const reconciledSession = reconcileRecordingSessionWithTrips(
+    state.session,
+    trips,
+    new Date().toISOString(),
+  );
+
+  setState((currentState) => ({
+    ...currentState,
+    session: reconciledSession,
+  }));
+
+  await saveRecordingSession(reconciledSession);
 }
