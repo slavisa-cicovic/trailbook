@@ -1,5 +1,6 @@
 export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error";
 export type RecordingStatus = "idle" | "recording" | "interrupted";
+export type WaypointAttachmentType = "photo";
 export type RecordingProfile =
   | "auto"
   | "walk_relaxed"
@@ -49,6 +50,22 @@ export interface Waypoint {
   longitude: number;
   title: string;
   note: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  syncStatus: SyncStatus;
+}
+
+export interface WaypointAttachment {
+  localId: string;
+  serverId: string | null;
+  waypointLocalId: string;
+  deviceId: string;
+  userId: string;
+  type: WaypointAttachmentType;
+  localUri: string;
+  mimeType: string | null;
+  fileSize: number | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

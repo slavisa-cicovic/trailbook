@@ -10,6 +10,10 @@ import {
 } from "../src/state/recording-store";
 import { hydrateSessionStore, useSessionStore } from "../src/state/session-store";
 import { getTripsStateSnapshot, hydrateTripsStore, useTripsStore } from "../src/state/trips-store";
+import {
+  hydrateWaypointAttachmentsStore,
+  useWaypointAttachmentsStore,
+} from "../src/state/waypoint-attachments-store";
 import { hydrateWaypointsStore, useWaypointsStore } from "../src/state/waypoints-store";
 
 export default function RootLayout() {
@@ -17,6 +21,7 @@ export default function RootLayout() {
   const recordingHydrated = useRecordingStore((state) => state.hydrated);
   const tripsHydrated = useTripsStore((state) => state.hydrated);
   const waypointsHydrated = useWaypointsStore((state) => state.hydrated);
+  const waypointAttachmentsHydrated = useWaypointAttachmentsStore((state) => state.hydrated);
 
   useEffect(() => {
     async function hydrateAppState() {
@@ -25,6 +30,7 @@ export default function RootLayout() {
         hydrateRecordingStore(),
         hydrateTripsStore(),
         hydrateWaypointsStore(),
+        hydrateWaypointAttachmentsStore(),
       ]);
       await reconcileHydratedRecordingState(getTripsStateSnapshot().trips);
     }
@@ -32,7 +38,13 @@ export default function RootLayout() {
     void hydrateAppState();
   }, []);
 
-  if (!sessionHydrated || !recordingHydrated || !tripsHydrated || !waypointsHydrated) {
+  if (
+    !sessionHydrated ||
+    !recordingHydrated ||
+    !tripsHydrated ||
+    !waypointsHydrated ||
+    !waypointAttachmentsHydrated
+  ) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color="#243224" />

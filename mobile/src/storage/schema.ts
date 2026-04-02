@@ -1,4 +1,4 @@
-import type { Trip, TripPoint, Waypoint } from "../domain/trips";
+import type { Trip, TripPoint, Waypoint, WaypointAttachment } from "../domain/trips";
 import type { AuthenticatedDeviceSession } from "../domain/identity";
 
 export interface MobileDatabaseSchema {
@@ -6,6 +6,7 @@ export interface MobileDatabaseSchema {
   trips: Trip[];
   tripPoints: TripPoint[];
   waypoints: Waypoint[];
+  waypointAttachments: WaypointAttachment[];
 }
 
 export function createEmptyMobileDatabase(): MobileDatabaseSchema {
@@ -14,5 +15,6 @@ export function createEmptyMobileDatabase(): MobileDatabaseSchema {
     trips: [],
     tripPoints: [],
     waypoints: [],
+    waypointAttachments: [],
   };
 }

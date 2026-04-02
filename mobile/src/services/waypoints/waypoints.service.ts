@@ -1,8 +1,10 @@
 import type { CurrentLocationSnapshot } from "../location/location.service";
-import type { Trip, Waypoint } from "../../domain/trips";
+import type { Trip, Waypoint, WaypointAttachment } from "../../domain/trips";
+import type { PickedPhoto } from "../media/photo-picker.service";
 
 export interface WaypointDraftInput {
   note: string;
+  photo: PickedPhoto | null;
   title: string;
 }
 
@@ -22,6 +24,28 @@ export function createWaypointForTrip(
     longitude: location.longitude,
     title: draft.title.trim(),
     note: draft.note.trim() || null,
+    createdAt,
+    updatedAt: createdAt,
+    deletedAt: null,
+    syncStatus: "local-only",
+  };
+}
+
+export function createPhotoAttachmentForWaypoint(
+  waypoint: Waypoint,
+  photo: PickedPhoto,
+  createdAt: string,
+): WaypointAttachment {
+  return {
+    localId: `waypoint-attachment-${createdAt}`,
+    serverId: null,
+    waypointLocalId: waypoint.localId,
+    deviceId: waypoint.deviceId,
+    userId: waypoint.userId,
+    type: "photo",
+    localUri: photo.localUri,
+    mimeType: photo.mimeType,
+    fileSize: photo.fileSize,
     createdAt,
     updatedAt: createdAt,
     deletedAt: null,

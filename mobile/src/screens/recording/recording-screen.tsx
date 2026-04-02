@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -40,6 +41,11 @@ import {
   updateTripRecordingProfile,
 } from "../../services/recording/recording.service";
 import {
+  capturePhotoWithCamera,
+  pickPhotoFromLibrary,
+} from "../../services/media/photo-picker.service";
+import {
+  createPhotoAttachmentForWaypoint,
   createWaypointForTrip,
   type WaypointDraftInput,
 } from "../../services/waypoints/waypoints.service";
@@ -49,6 +55,10 @@ import {
   useRecordingStore,
 } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import {
+  setWaypointAttachments,
+  useWaypointAttachmentsStore,
+} from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 
@@ -57,6 +67,7 @@ export default function RecordingScreen() {
   const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);
   const waypoints = useWaypointsStore((state) => state.waypoints);
+  const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
   const [locationPermissionGranted, setLocationPermissionGranted] = useState<boolean | null>(null);
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
@@ -72,6 +83,7 @@ export default function RecordingScreen() {
   const [waypointDraft, setWaypointDraft] = useState<WaypointDraftInput>({
     title: "",
     note: "",
+    photo: null,
   });
 
   if (!identitySession) {
@@ -90,6 +102,16 @@ export default function RecordingScreen() {
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
         .slice(0, 3)
     : [];
+  const recentWaypointCards = recentWaypoints.map((waypoint) => ({
+    waypoint,
+    photo:
+      waypointAttachments.find(
+        (attachment) =>
+          attachment.waypointLocalId === waypoint.localId &&
+          attachment.deletedAt === null &&
+          attachment.type === "photo",
+      ) ?? null,
+  }));
   const canChangeMode = recordingSession.activeTripId !== null;
   const canStartRecording = recordingDraft.title.trim().length > 0;
   const canSaveWaypoint = waypointDraft.title.trim().length > 0;
@@ -211,13 +233,49 @@ export default function RecordingScreen() {
 
     const createdAt = new Date().toISOString();
     const nextWaypoint = createWaypointForTrip(activeTrip, currentLocation, waypointDraft, createdAt);
+    const nextAttachments = waypointDraft.photo
+      ? [
+          ...waypointAttachments,
+          createPhotoAttachmentForWaypoint(nextWaypoint, waypointDraft.photo, createdAt),
+        ]
+      : waypointAttachments;
 
     await setWaypoints([...waypoints, nextWaypoint]);
+    await setWaypointAttachments(nextAttachments);
     setWaypointModalVisible(false);
     setWaypointDraft({
       title: "",
       note: "",
+      photo: null,
     });
+  }
+
+  async function handleTakePhoto() {
+    const photo = await capturePhotoWithCamera();
+
+    if (!photo) {
+      Alert.alert("Photo not added", "Trailbook could not get a photo from the camera.");
+      return;
+    }
+
+    setWaypointDraft((current) => ({
+      ...current,
+      photo,
+    }));
+  }
+
+  async function handleChoosePhoto() {
+    const photo = await pickPhotoFromLibrary();
+
+    if (!photo) {
+      Alert.alert("Photo not added", "Trailbook could not get a photo from the library.");
+      return;
+    }
+
+    setWaypointDraft((current) => ({
+      ...current,
+      photo,
+    }));
   }
 
   function handleRecordingControlPress() {
@@ -313,6 +371,24 @@ export default function RecordingScreen() {
                 textAlignVertical="top"
                 value={waypointDraft.note}
               />
+
+              <Text style={styles.fieldLabel}>Photo</Text>
+              {waypointDraft.photo ? (
+                <Image source={{ uri: waypointDraft.photo.localUri }} style={styles.photoPreview} />
+              ) : (
+                <View style={styles.photoPlaceholder}>
+                  <Text style={styles.photoPlaceholderText}>No photo selected yet.</Text>
+                </View>
+              )}
+
+              <View style={styles.inlineActions}>
+                <Pressable onPress={() => void handleTakePhoto()} style={styles.modeButton}>
+                  <Text style={styles.modeButtonText}>Take photo</Text>
+                </Pressable>
+                <Pressable onPress={() => void handleChoosePhoto()} style={styles.noteButton}>
+                  <Text style={styles.noteButtonText}>Choose photo</Text>
+                </Pressable>
+              </View>
 
               <View style={styles.modalActions}>
                 <Pressable
@@ -620,8 +696,11 @@ export default function RecordingScreen() {
                   {recentWaypoints.length === 0 ? (
                     <Text style={styles.metaLine}>No saved notes on this route yet.</Text>
                   ) : (
-                    recentWaypoints.map((waypoint) => (
+                  recentWaypointCards.map(({ waypoint, photo }) => (
                       <View key={waypoint.localId} style={styles.waypointCard}>
+                        {photo ? (
+                          <Image source={{ uri: photo.localUri }} style={styles.waypointPhoto} />
+                        ) : null}
                         <Text style={styles.waypointTitle}>{waypoint.title}</Text>
                         {waypoint.note ? (
                           <Text numberOfLines={2} style={styles.waypointNote}>
@@ -698,6 +777,26 @@ const styles = StyleSheet.create({
   },
   fieldTextarea: {
     minHeight: 90,
+  },
+  photoPreview: {
+    width: "100%",
+    height: 180,
+    borderRadius: 18,
+    backgroundColor: "#d7ddcf",
+  },
+  photoPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#d7ddcf",
+    borderRadius: 18,
+    backgroundColor: "#f3f6ef",
+    minHeight: 110,
+    paddingHorizontal: 16,
+  },
+  photoPlaceholderText: {
+    fontSize: 14,
+    color: "#60705d",
   },
   profileList: {
     gap: 8,
@@ -912,6 +1011,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#eef3e7",
     padding: 12,
     gap: 4,
+  },
+  waypointPhoto: {
+    width: "100%",
+    height: 120,
+    borderRadius: 12,
+    marginBottom: 4,
+    backgroundColor: "#d7ddcf",
   },
   waypointTitle: {
     fontSize: 14,
