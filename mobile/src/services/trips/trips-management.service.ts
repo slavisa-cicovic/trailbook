@@ -1,9 +1,26 @@
-import type { Trip, Waypoint, WaypointAttachment } from "../../domain/trips";
+import type { RecordingProfile, Trip, Waypoint, WaypointAttachment } from "../../domain/trips";
 
 export interface TripSummary {
   photoCount: number;
   trip: Trip;
   waypointCount: number;
+}
+
+export type TripDateFilter =
+  | "all"
+  | "today"
+  | "yesterday"
+  | "last_week"
+  | "last_month"
+  | "last_year";
+
+export interface TripsAggregateSummary {
+  driveDurationMs: number;
+  driveTripCount: number;
+  totalDurationMs: number;
+  totalTripCount: number;
+  walkDurationMs: number;
+  walkTripCount: number;
 }
 
 export interface TripUpdateInput {
@@ -16,10 +33,118 @@ export interface WaypointUpdateInput {
   title: string;
 }
 
+function startOfDay(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function isDriveProfile(profile: RecordingProfile): boolean {
+  return profile === "drive_city" || profile === "drive_highway";
+}
+
+function getTripDurationMs(trip: Trip): number {
+  const startedAt = new Date(trip.startedAt).getTime();
+  const endedAt = new Date(trip.endedAt ?? new Date().toISOString()).getTime();
+
+  if (Number.isNaN(startedAt) || Number.isNaN(endedAt) || endedAt < startedAt) {
+    return 0;
+  }
+
+  return endedAt - startedAt;
+}
+
 export function getVisibleTrips(trips: Trip[]): Trip[] {
   return trips
     .filter((trip) => trip.deletedAt === null)
     .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+}
+
+export function filterTripsByDate(
+  trips: Trip[],
+  filter: TripDateFilter,
+  now: Date = new Date(),
+): Trip[] {
+  if (filter === "all") {
+    return trips;
+  }
+
+  const todayStart = startOfDay(now);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(todayStart.getDate() + 1);
+
+  if (filter === "today") {
+    return trips.filter((trip) => {
+      const tripDate = new Date(trip.startedAt);
+      return tripDate >= todayStart && tripDate < tomorrowStart;
+    });
+  }
+
+  if (filter === "yesterday") {
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(todayStart.getDate() - 1);
+
+    return trips.filter((trip) => {
+      const tripDate = new Date(trip.startedAt);
+      return tripDate >= yesterdayStart && tripDate < todayStart;
+    });
+  }
+
+  const threshold = new Date(todayStart);
+
+  if (filter === "last_week") {
+    threshold.setDate(todayStart.getDate() - 7);
+  } else if (filter === "last_month") {
+    threshold.setMonth(todayStart.getMonth() - 1);
+  } else {
+    threshold.setFullYear(todayStart.getFullYear() - 1);
+  }
+
+  return trips.filter((trip) => new Date(trip.startedAt) >= threshold);
+}
+
+export function buildTripsAggregateSummary(trips: Trip[]): TripsAggregateSummary {
+  return trips.reduce<TripsAggregateSummary>(
+    (summary, trip) => {
+      const durationMs = getTripDurationMs(trip);
+      const isDrive = isDriveProfile(trip.recordingProfile);
+
+      summary.totalTripCount += 1;
+      summary.totalDurationMs += durationMs;
+
+      if (isDrive) {
+        summary.driveTripCount += 1;
+        summary.driveDurationMs += durationMs;
+      } else {
+        summary.walkTripCount += 1;
+        summary.walkDurationMs += durationMs;
+      }
+
+      return summary;
+    },
+    {
+      walkDurationMs: 0,
+      walkTripCount: 0,
+      driveDurationMs: 0,
+      driveTripCount: 0,
+      totalDurationMs: 0,
+      totalTripCount: 0,
+    },
+  );
+}
+
+export function formatDurationSummary(durationMs: number): string {
+  const totalMinutes = Math.max(0, Math.round(durationMs / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return `${minutes}m`;
+  }
+
+  if (minutes === 0) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h ${minutes}m`;
 }
 
 export function getVisibleWaypointsForTrip(waypoints: Waypoint[], tripLocalId: string): Waypoint[] {

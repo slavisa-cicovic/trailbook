@@ -18,13 +18,17 @@ import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
 import type { Trip, Waypoint } from "../../domain/trips";
 import {
+  buildTripsAggregateSummary,
   buildTripSummary,
+  filterTripsByDate,
+  formatDurationSummary,
   getVisibleAttachmentsForWaypoints,
   getVisibleTrips,
   getVisibleWaypointsForTrip,
   markTripDeleted,
   markWaypointAttachmentDeleted,
   restoreTripDeletedState,
+  type TripDateFilter,
   updateTripMetadata,
   updateWaypointMetadata,
   type TripUpdateInput,
@@ -47,6 +51,15 @@ interface PendingWaypointEditState {
   waypointLocalId: string;
 }
 
+const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "last_week", label: "Last week" },
+  { value: "last_month", label: "Last month" },
+  { value: "last_year", label: "Last year" },
+  { value: "all", label: "All" },
+];
+
 export default function TripsScreen() {
   const router = useRouter();
   const identitySession = useSessionStore((state) => state.identitySession);
@@ -62,6 +75,7 @@ export default function TripsScreen() {
   const [waypointEditVisible, setWaypointEditVisible] = useState(false);
   const [pendingWaypointEdit, setPendingWaypointEdit] = useState<PendingWaypointEditState | null>(null);
   const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<TripDateFilter>("all");
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -72,7 +86,9 @@ export default function TripsScreen() {
   });
 
   const visibleTrips = getVisibleTrips(trips);
-  const tripSummaries = visibleTrips.map((trip) => buildTripSummary(trip, waypoints, waypointAttachments));
+  const filteredTrips = filterTripsByDate(visibleTrips, dateFilter);
+  const tripSummaries = filteredTrips.map((trip) => buildTripSummary(trip, waypoints, waypointAttachments));
+  const tripsAggregateSummary = buildTripsAggregateSummary(filteredTrips);
   const selectedTrip = visibleTrips.find((trip) => trip.localId === selectedTripId) ?? null;
   const selectedTripWaypoints = selectedTrip
     ? getVisibleWaypointsForTrip(waypoints, selectedTrip.localId)
@@ -572,8 +588,81 @@ export default function TripsScreen() {
 
       <Text style={styles.subtitle}>Your local recorded routes and saved trip content.</Text>
 
+      <ScrollView
+        contentContainerStyle={styles.filterRow}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
+        {TRIP_DATE_FILTER_OPTIONS.map((option) => {
+          const selected = option.value === dateFilter;
+
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => setDateFilter(option.value)}
+              style={[styles.filterChip, selected && styles.filterChipSelected]}
+            >
+              <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <View style={styles.summaryGridCards}>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryCardLabel}>Walk km</Text>
+          <Text style={styles.summaryCardValue}>n/a</Text>
+          <Text style={styles.summaryCardHint}>
+            Distance after route track is available.
+          </Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryCardLabel}>Walk time</Text>
+          <Text style={styles.summaryCardValue}>
+            {formatDurationSummary(tripsAggregateSummary.walkDurationMs)}
+          </Text>
+          <Text style={styles.summaryCardHint}>
+            {String(tripsAggregateSummary.walkTripCount)} trips
+          </Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryCardLabel}>Drive km</Text>
+          <Text style={styles.summaryCardValue}>n/a</Text>
+          <Text style={styles.summaryCardHint}>
+            Distance after route track is available.
+          </Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryCardLabel}>Drive time</Text>
+          <Text style={styles.summaryCardValue}>
+            {formatDurationSummary(tripsAggregateSummary.driveDurationMs)}
+          </Text>
+          <Text style={styles.summaryCardHint}>
+            {String(tripsAggregateSummary.driveTripCount)} trips
+          </Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryCardLabel}>Total km</Text>
+          <Text style={styles.summaryCardValue}>n/a</Text>
+          <Text style={styles.summaryCardHint}>
+            Waiting for recorded trip points.
+          </Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryCardLabel}>Total</Text>
+          <Text style={styles.summaryCardValue}>
+            {formatDurationSummary(tripsAggregateSummary.totalDurationMs)}
+          </Text>
+          <Text style={styles.summaryCardHint}>
+            {String(tripsAggregateSummary.totalTripCount)} trips
+          </Text>
+        </View>
+      </View>
+
       {tripSummaries.length === 0 ? (
-        <Text style={styles.empty}>No local trips yet.</Text>
+        <Text style={styles.empty}>No trips match the selected date filter.</Text>
       ) : (
         <View style={styles.list}>
           {tripSummaries.map(({ trip, waypointCount, photoCount }) => {
@@ -673,6 +762,54 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#52624f",
     marginBottom: 16,
+  },
+  filterRow: {
+    gap: 10,
+    paddingBottom: 14,
+  },
+  filterChip: {
+    borderRadius: 999,
+    backgroundColor: "#e8ede2",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  filterChipSelected: {
+    backgroundColor: "#243224",
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  filterChipTextSelected: {
+    color: "#fffdf8",
+  },
+  summaryGridCards: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -5,
+    rowGap: 10,
+    marginBottom: 18,
+  },
+  summaryCard: {
+    width: "50%",
+    paddingHorizontal: 5,
+    gap: 4,
+  },
+  summaryCardLabel: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    color: "#76856f",
+  },
+  summaryCardValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  summaryCardHint: {
+    fontSize: 12,
+    color: "#60705d",
   },
   empty: {
     fontSize: 15,
