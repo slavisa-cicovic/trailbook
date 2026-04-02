@@ -6,11 +6,13 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
@@ -162,7 +164,10 @@ export default function TripsScreen() {
       title: waypoint.title,
       note: waypoint.note ?? "",
     });
-    setWaypointEditVisible(true);
+    setTripDetailsVisible(false);
+    setTimeout(() => {
+      setWaypointEditVisible(true);
+    }, 0);
   }
 
   async function handleSaveWaypointEdit() {
@@ -225,7 +230,8 @@ export default function TripsScreen() {
         onRequestClose={() => setTripEditVisible(false)}
         visible={tripEditVisible}
       >
-        <View style={styles.modalScreen}>
+        <SafeAreaView style={styles.modalScreen}>
+          <StatusBar barStyle="dark-content" />
           <ScrollView contentContainerStyle={styles.modalContent}>
             <Text style={styles.modalTitle}>Edit trip</Text>
 
@@ -266,7 +272,7 @@ export default function TripsScreen() {
               </Pressable>
             </View>
           </ScrollView>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       <Modal
@@ -274,7 +280,8 @@ export default function TripsScreen() {
         onRequestClose={() => setWaypointEditVisible(false)}
         visible={waypointEditVisible}
       >
-        <View style={styles.modalScreen}>
+        <SafeAreaView style={styles.modalScreen}>
+          <StatusBar barStyle="dark-content" />
           <ScrollView contentContainerStyle={styles.modalContent}>
             <Text style={styles.modalTitle}>Edit note</Text>
 
@@ -315,7 +322,7 @@ export default function TripsScreen() {
               </Pressable>
             </View>
           </ScrollView>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       <Modal
@@ -323,7 +330,8 @@ export default function TripsScreen() {
         onRequestClose={() => setTripDetailsVisible(false)}
         visible={tripDetailsVisible}
       >
-        <View style={styles.modalScreen}>
+        <SafeAreaView style={styles.modalScreen}>
+          <StatusBar barStyle="dark-content" />
           <ScrollView contentContainerStyle={styles.modalContent}>
             {selectedTrip ? (
               <>
@@ -412,7 +420,7 @@ export default function TripsScreen() {
               </>
             ) : null}
           </ScrollView>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       <Text style={styles.subtitle}>Your local recorded routes and saved trip content.</Text>
