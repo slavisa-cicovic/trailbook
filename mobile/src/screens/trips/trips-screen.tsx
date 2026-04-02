@@ -3,7 +3,6 @@ import { StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
-import { initialRecordingSession, setRecordingSession } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { useTripsStore } from "../../state/trips-store";
 
@@ -13,7 +12,6 @@ export default function TripsScreen() {
 
   async function handleLogout() {
     await setActiveIdentitySession(null);
-    await setRecordingSession(initialRecordingSession);
   }
 
   if (!identitySession) {

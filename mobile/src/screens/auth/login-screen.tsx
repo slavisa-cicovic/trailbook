@@ -15,7 +15,12 @@ import {
   updateSessionCredentials,
   useSessionStore,
 } from "../../state/session-store";
-import { initialRecordingSession, setRecordingSession } from "../../state/recording-store";
+import {
+  reconcileHydratedRecordingState,
+  setRecordingSession,
+  useRecordingStore,
+} from "../../state/recording-store";
+import { getTripsStateSnapshot } from "../../state/trips-store";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -23,6 +28,7 @@ export default function LoginScreen() {
   const credentials = useSessionStore((state) => state.credentials);
   const deviceId = useSessionStore((state) => state.deviceId);
   const identitySession = useSessionStore((state) => state.identitySession);
+  const recordingSession = useRecordingStore((state) => state.session);
   const canSignIn = canCreateTemporarySession(credentials, deviceId);
   const credentialsMatch = areHardcodedCredentialsValid(credentials);
 
@@ -35,11 +41,12 @@ export default function LoginScreen() {
 
     await setActiveIdentitySession(session);
     await setRecordingSession({
-      ...initialRecordingSession,
+      ...recordingSession,
       userId: session.userId,
       userEmail: session.userEmail,
       deviceId: session.deviceId,
     });
+    await reconcileHydratedRecordingState(getTripsStateSnapshot().trips);
 
     router.replace("/recording");
   }

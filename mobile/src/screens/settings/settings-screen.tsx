@@ -2,7 +2,6 @@ import { Redirect } from "expo-router";
 import { StyleSheet, Text } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
-import { initialRecordingSession, setRecordingSession } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 
 export default function SettingsScreen() {
@@ -10,7 +9,6 @@ export default function SettingsScreen() {
 
   async function handleLogout() {
     await setActiveIdentitySession(null);
-    await setRecordingSession(initialRecordingSession);
   }
 
   if (!identitySession) {

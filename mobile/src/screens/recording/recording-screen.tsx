@@ -50,7 +50,6 @@ import {
   type WaypointDraftInput,
 } from "../../services/waypoints/waypoints.service";
 import {
-  initialRecordingSession,
   setRecordingSession,
   useRecordingStore,
 } from "../../state/recording-store";
@@ -202,7 +201,6 @@ export default function RecordingScreen() {
 
   async function handleClearLocalSession() {
     await setActiveIdentitySession(null);
-    await setRecordingSession(initialRecordingSession);
   }
 
   async function handleSelectRecordingProfile(profile: RecordingProfile) {
