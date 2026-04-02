@@ -1,14 +1,16 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View, useColorScheme } from "react-native";
 
+import { getAppTheme, resolveAppThemeMode } from "../src/constants/app-theme";
 import {
   hydrateRecordingStore,
   reconcileHydratedRecordingState,
   useRecordingStore,
 } from "../src/state/recording-store";
 import { hydrateSessionStore, useSessionStore } from "../src/state/session-store";
+import { hydrateThemeStore, useThemeStore } from "../src/state/theme-store";
 import { hydrateTripPointsStore, useTripPointsStore } from "../src/state/trip-points-store";
 import { getTripsStateSnapshot, hydrateTripsStore, useTripsStore } from "../src/state/trips-store";
 import {
@@ -19,15 +21,22 @@ import { hydrateWaypointsStore, useWaypointsStore } from "../src/state/waypoints
 
 export default function RootLayout() {
   const sessionHydrated = useSessionStore((state) => state.hydrated);
+  const themeHydrated = useThemeStore((state) => state.hydrated);
+  const themeMode = useThemeStore((state) => state.mode);
+  const systemColorScheme = useColorScheme();
   const recordingHydrated = useRecordingStore((state) => state.hydrated);
   const tripsHydrated = useTripsStore((state) => state.hydrated);
   const tripPointsHydrated = useTripPointsStore((state) => state.hydrated);
   const waypointsHydrated = useWaypointsStore((state) => state.hydrated);
   const waypointAttachmentsHydrated = useWaypointAttachmentsStore((state) => state.hydrated);
 
+  const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
+  const theme = getAppTheme(resolvedThemeMode);
+
   useEffect(() => {
     async function hydrateAppState() {
       await Promise.all([
+        hydrateThemeStore(),
         hydrateSessionStore(),
         hydrateRecordingStore(),
         hydrateTripsStore(),
@@ -42,6 +51,7 @@ export default function RootLayout() {
   }, []);
 
   if (
+    !themeHydrated ||
     !sessionHydrated ||
     !recordingHydrated ||
     !tripsHydrated ||
@@ -50,8 +60,8 @@ export default function RootLayout() {
     !waypointAttachmentsHydrated
   ) {
     return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color="#243224" />
+      <View style={[styles.loadingScreen, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
@@ -65,7 +75,7 @@ export default function RootLayout() {
         <Stack.Screen name="trips" />
         <Stack.Screen name="settings" />
       </Stack>
-      <StatusBar style="dark" />
+      <StatusBar style={resolvedThemeMode === "night" ? "light" : "dark"} />
     </>
   );
 }
@@ -75,6 +85,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3efe6",
   },
 });

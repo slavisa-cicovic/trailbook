@@ -8,10 +8,14 @@ import {
   type StyleProp,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
   type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
+import { useThemeStore } from "../../state/theme-store";
 
 interface ScreenLayoutProps extends PropsWithChildren {
   title?: string;
@@ -42,9 +46,13 @@ export default function ScreenLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const themeMode = useThemeStore((state) => state.mode);
+  const systemColorScheme = useColorScheme();
+  const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
+  const theme = getAppTheme(resolvedThemeMode);
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardContainer}
@@ -52,25 +60,30 @@ export default function ScreenLayout({
         <View style={styles.shell}>
           {(title || onLogout) && (
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>{title ?? ""}</Text>
+              <Text style={[styles.headerTitle, { color: theme.primaryText }]}>{title ?? ""}</Text>
               {onLogout ? (
                 <View style={styles.accountArea}>
                   <Pressable
                     onPress={() => setAccountMenuOpen((current) => !current)}
-                    style={styles.accountButton}
+                    style={[styles.accountButton, { backgroundColor: theme.accentMuted }]}
                   >
-                    <Text numberOfLines={1} style={styles.accountEmail}>
+                    <Text numberOfLines={1} style={[styles.accountEmail, { color: theme.accent }]}>
                       {accountEmail ?? "Account"}
                     </Text>
-                    <Text style={styles.accountChevron}>
+                    <Text style={[styles.accountChevron, { color: theme.mutedText }]}>
                       {accountMenuOpen ? "Close" : "Account"}
                     </Text>
                   </Pressable>
 
                   {accountMenuOpen ? (
-                    <View style={styles.accountMenu}>
+                    <View
+                      style={[
+                        styles.accountMenu,
+                        { backgroundColor: theme.card, borderColor: theme.border },
+                      ]}
+                    >
                       {accountEmail ? (
-                        <Text numberOfLines={1} style={styles.accountMenuEmail}>
+                        <Text numberOfLines={1} style={[styles.accountMenuEmail, { color: theme.mutedText }]}>
                           {accountEmail}
                         </Text>
                       ) : null}
@@ -79,9 +92,9 @@ export default function ScreenLayout({
                           setAccountMenuOpen(false);
                           onLogout();
                         }}
-                        style={styles.logoutButton}
+                        style={[styles.logoutButton, { backgroundColor: theme.accent }]}
                       >
-                        <Text style={styles.logoutText}>Logout</Text>
+                        <Text style={[styles.logoutText, { color: theme.surface }]}>Logout</Text>
                       </Pressable>
                     </View>
                   ) : null}
@@ -101,7 +114,12 @@ export default function ScreenLayout({
               ]}
               keyboardShouldPersistTaps="handled"
             >
-              <View style={contentVariant === "card" ? styles.card : styles.plainContent}>
+              <View
+                style={[
+                  contentVariant === "card" ? styles.card : styles.plainContent,
+                  contentVariant === "card" ? { backgroundColor: theme.card } : null,
+                ]}
+              >
                 {children}
               </View>
             </ScrollView>
@@ -114,14 +132,24 @@ export default function ScreenLayout({
                 contentStyle,
               ]}
             >
-              <View style={contentVariant === "card" ? styles.card : styles.plainContent}>
+              <View
+                style={[
+                  contentVariant === "card" ? styles.card : styles.plainContent,
+                  contentVariant === "card" ? { backgroundColor: theme.card } : null,
+                ]}
+              >
                 {children}
               </View>
             </View>
           )}
 
           {showBottomNavigation ? (
-            <View style={styles.bottomNavigation}>
+            <View
+              style={[
+                styles.bottomNavigation,
+                { backgroundColor: theme.background, borderTopColor: theme.border },
+              ]}
+            >
               {navigationItems.map((item) => {
                 const active = pathname === item.href;
 
@@ -129,9 +157,19 @@ export default function ScreenLayout({
                   <Pressable
                     key={item.href}
                     onPress={() => router.replace(item.href)}
-                    style={[styles.navItem, active && styles.navItemActive]}
+                    style={[
+                      styles.navItem,
+                      { backgroundColor: theme.accentMuted },
+                      active && { backgroundColor: theme.navActiveBackground },
+                    ]}
                   >
-                    <Text style={[styles.navText, active && styles.navTextActive]}>
+                    <Text
+                      style={[
+                        styles.navText,
+                        { color: theme.navText },
+                        active && { color: resolvedThemeMode === "night" ? "#132014" : "#f7f4ed" },
+                      ]}
+                    >
                       {item.label}
                     </Text>
                   </Pressable>
@@ -148,7 +186,6 @@ export default function ScreenLayout({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f3efe6",
   },
   keyboardContainer: {
     flex: 1,
@@ -170,7 +207,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#1f2a1f",
   },
   accountArea: {
     position: "relative",
@@ -180,7 +216,6 @@ const styles = StyleSheet.create({
   accountButton: {
     maxWidth: 190,
     borderRadius: 18,
-    backgroundColor: "#e4ebe0",
     paddingHorizontal: 14,
     paddingVertical: 10,
     gap: 2,
@@ -188,11 +223,9 @@ const styles = StyleSheet.create({
   accountEmail: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#243224",
   },
   accountChevron: {
     fontSize: 11,
-    color: "#52624f",
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
@@ -202,11 +235,9 @@ const styles = StyleSheet.create({
     right: 0,
     minWidth: 190,
     borderRadius: 16,
-    backgroundColor: "#fffdf8",
     padding: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: "#dde6d8",
     shadowColor: "#243224",
     shadowOpacity: 0.12,
     shadowRadius: 16,
@@ -216,11 +247,9 @@ const styles = StyleSheet.create({
   },
   accountMenuEmail: {
     fontSize: 13,
-    color: "#52624f",
   },
   logoutButton: {
     borderRadius: 12,
-    backgroundColor: "#243224",
     paddingHorizontal: 14,
     paddingVertical: 10,
     alignItems: "center",
@@ -228,7 +257,6 @@ const styles = StyleSheet.create({
   logoutText: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#f7f4ed",
   },
   headerSpacer: {
     width: 72,
@@ -249,7 +277,6 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 24,
-    backgroundColor: "#fffdf8",
     padding: 24,
     gap: 8,
     zIndex: 1,
@@ -264,8 +291,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
     borderTopWidth: 1,
-    borderTopColor: "#dde6d8",
-    backgroundColor: "#f3efe6",
   },
   navItem: {
     flex: 1,
@@ -273,17 +298,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 16,
     paddingVertical: 14,
-    backgroundColor: "#e8eee4",
-  },
-  navItemActive: {
-    backgroundColor: "#243224",
   },
   navText: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#52624f",
-  },
-  navTextActive: {
-    color: "#f7f4ed",
   },
 });

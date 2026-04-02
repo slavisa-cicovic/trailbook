@@ -1,11 +1,17 @@
 import { Redirect } from "expo-router";
-import { StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
+import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
 import ScreenLayout from "../../components/layout/screen-layout";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { setThemeMode, useThemeStore } from "../../state/theme-store";
 
 export default function SettingsScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
+  const themeMode = useThemeStore((state) => state.mode);
+  const systemColorScheme = useColorScheme();
+  const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
+  const theme = getAppTheme(resolvedThemeMode);
 
   async function handleLogout() {
     await setActiveIdentitySession(null);
@@ -22,10 +28,74 @@ export default function SettingsScreen() {
       showBottomNavigation
       title="Settings"
     >
-      <Text style={styles.subtitle}>Temporary local session details for the current device.</Text>
+      <Text style={[styles.subtitle, { color: theme.mutedText }]}>
+        Temporary local session details for the current device.
+      </Text>
 
-      <Text style={styles.label}>Active user</Text>
-      <Text style={styles.value}>{identitySession.userEmail}</Text>
+      <Text style={[styles.label, { color: theme.mutedText }]}>Theme</Text>
+      <View style={styles.themeRow}>
+        <Pressable
+          onPress={() => void setThemeMode("auto")}
+          style={[
+            styles.themeButton,
+            { backgroundColor: theme.accentMuted },
+            themeMode === "auto" && { backgroundColor: theme.accent },
+          ]}
+        >
+          <Text
+            style={[
+              styles.themeButtonText,
+              { color: theme.accent },
+              themeMode === "auto" && { color: theme.surface },
+            ]}
+          >
+            Auto
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => void setThemeMode("day")}
+          style={[
+            styles.themeButton,
+            { backgroundColor: theme.accentMuted },
+            themeMode === "day" && { backgroundColor: theme.accent },
+          ]}
+        >
+          <Text
+            style={[
+              styles.themeButtonText,
+              { color: theme.accent },
+              themeMode === "day" && { color: theme.surface },
+            ]}
+          >
+            Day
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => void setThemeMode("night")}
+          style={[
+            styles.themeButton,
+            { backgroundColor: theme.accentMuted },
+            themeMode === "night" && { backgroundColor: theme.accent },
+          ]}
+        >
+          <Text
+            style={[
+              styles.themeButtonText,
+              { color: theme.accent },
+              themeMode === "night" && { color: theme.surface },
+            ]}
+          >
+            Night
+          </Text>
+        </Pressable>
+      </View>
+      <Text style={[styles.themeHint, { color: theme.mutedText }]}>
+        Active theme: {resolvedThemeMode === "night" ? "Night" : "Day"}
+        {themeMode === "auto" ? " via system" : ""}
+      </Text>
+
+      <Text style={[styles.label, { color: theme.mutedText }]}>Active user</Text>
+      <Text style={[styles.value, { color: theme.primaryText }]}>{identitySession.userEmail}</Text>
     </ScreenLayout>
   );
 }
@@ -40,12 +110,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 1,
-    color: "#7b8a75",
+    marginTop: 4,
   },
   value: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#243224",
     marginBottom: 8,
+  },
+  themeRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+  themeButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  themeButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  themeHint: {
+    fontSize: 13,
+    marginBottom: 12,
   },
 });

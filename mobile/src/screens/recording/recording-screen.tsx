@@ -894,24 +894,23 @@ export default function RecordingScreen() {
         )}
 
         <View style={styles.mapTopOverlay}>
-          <Pressable
-            onPress={() => setSessionMenuVisible((current) => !current)}
-            style={styles.sessionTrigger}
-          >
-            <Text style={styles.sessionTriggerLabel}>{sessionTriggerLabel}</Text>
-            <Text style={styles.sessionTriggerMeta}>
-              {recordingSession.status === "idle"
-                ? "Tap for session details"
-                : `${recordingSession.status} • tap for details`}
-            </Text>
-          </Pressable>
-
-          <View style={styles.mapTopControl}>
+          <View style={styles.sessionBar}>
             <RecordingControl
               compact
               onPress={handleRecordingControlPress}
               status={recordingSession.status}
             />
+            <Pressable
+              onPress={() => setSessionMenuVisible((current) => !current)}
+              style={styles.sessionTrigger}
+            >
+              <Text style={styles.sessionTriggerLabel}>{sessionTriggerLabel}</Text>
+              <Text style={styles.sessionTriggerMeta}>
+                {recordingSession.status === "idle"
+                  ? "Tap for session details"
+                  : `${recordingSession.status} • tap for details`}
+              </Text>
+            </Pressable>
           </View>
         </View>
 
@@ -1363,22 +1362,21 @@ const styles = StyleSheet.create({
     top: 16,
     left: 16,
     right: 16,
+  },
+  sessionBar: {
+    width: "100%",
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+    alignItems: "center",
     gap: 12,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 253, 248, 0.94)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   sessionTrigger: {
     flex: 1,
-    maxWidth: "78%",
-    borderRadius: 18,
-    backgroundColor: "rgba(255, 253, 248, 0.92)",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  mapTopControl: {
-    alignItems: "flex-end",
-    justifyContent: "flex-start",
+    minHeight: 52,
+    justifyContent: "center",
   },
   sessionTriggerLabel: {
     fontSize: 15,
