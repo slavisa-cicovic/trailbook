@@ -1,9 +1,16 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "types": [
+      "react",
+      "react-native",
+      "expo-router/types"
+    ]
   },
   "include": [
+    "app/**/*",
     "src/**/*"
   ]
 }

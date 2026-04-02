@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Mobile: Expo Start",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run start --workspace mobile",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Mobile: Expo Start (Clear Cache)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run start:clear",
+      "cwd": "${workspaceFolder}/mobile"
+    },
+    {
+      "name": "Mobile: Run iOS",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run ios",
+      "cwd": "${workspaceFolder}/mobile"
+    },
+    {
+      "name": "Mobile: Run Android",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run android",
+      "cwd": "${workspaceFolder}/mobile"
+    }
+  ]
+}

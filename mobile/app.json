@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Trailbook",
+    "slug": "trailbook",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router"
+    ],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.slavisacicovic.trailbook"
+    },
+    "android": {
+      "package": "com.slavisacicovic.trailbook"
+    },
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

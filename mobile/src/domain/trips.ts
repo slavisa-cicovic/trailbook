@@ -17,6 +17,8 @@ export interface TripPoint {
   localId: string;
   serverId: string | null;
   tripLocalId: string;
+  deviceId: string;
+  userId: string;
   latitude: number;
   longitude: number;
   recordedAt: string;
@@ -30,6 +32,8 @@ export interface Waypoint {
   localId: string;
   serverId: string | null;
   tripLocalId: string;
+  deviceId: string;
+  userId: string;
   latitude: number;
   longitude: number;
   title: string;
@@ -44,4 +48,7 @@ export interface RecordingSessionSummary {
   activeTripId: string | null;
   isRecording: boolean;
   lastPointRecordedAt: string | null;
+  userId: string | null;
+  userEmail: string | null;
+  deviceId: string | null;
 }
