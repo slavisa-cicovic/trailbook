@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   buttonLabel: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "800",
     color: "#fffdf8",
     textAlign: "center",
