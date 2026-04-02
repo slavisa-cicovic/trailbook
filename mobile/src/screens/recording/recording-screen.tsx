@@ -40,26 +40,37 @@ import {
   updateTripRecordingProfile,
 } from "../../services/recording/recording.service";
 import {
+  createWaypointForTrip,
+  type WaypointDraftInput,
+} from "../../services/waypoints/waypoints.service";
+import {
   initialRecordingSession,
   setRecordingSession,
   useRecordingStore,
 } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
+import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 
 export default function RecordingScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);
+  const waypoints = useWaypointsStore((state) => state.waypoints);
 
   const [locationPermissionGranted, setLocationPermissionGranted] = useState<boolean | null>(null);
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
   const [startModalVisible, setStartModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [waypointModalVisible, setWaypointModalVisible] = useState(false);
   const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>({
     title: "",
     description: "",
     recordingProfile: DEFAULT_RECORDING_PROFILE,
+  });
+  const [waypointDraft, setWaypointDraft] = useState<WaypointDraftInput>({
+    title: "",
+    note: "",
   });
 
   if (!identitySession) {
@@ -72,8 +83,15 @@ export default function RecordingScreen() {
   const activeRecordingProfileLabel = getRecordingProfileLabel(activeRecordingProfile);
   const lastPoint = recordingSession.lastPointRecordedAt ?? "n/a";
   const activeTripCount = trips.filter((trip) => trip.endedAt === null).length;
+  const recentWaypoints = activeTrip
+    ? waypoints
+        .filter((waypoint) => waypoint.tripLocalId === activeTrip.localId && waypoint.deletedAt === null)
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+        .slice(0, 3)
+    : [];
   const canChangeMode = recordingSession.activeTripId !== null;
   const canStartRecording = recordingDraft.title.trim().length > 0;
+  const canSaveWaypoint = waypointDraft.title.trim().length > 0;
 
   useEffect(() => {
     let active = true;
@@ -174,6 +192,28 @@ export default function RecordingScreen() {
     setProfileModalVisible(false);
   }
 
+  async function handleSaveWaypoint() {
+    if (!activeTrip) {
+      Alert.alert("No active route", "Start recording before adding a note to the route.");
+      return;
+    }
+
+    if (!currentLocation) {
+      Alert.alert("Location not ready", "Wait for the current location to load before saving a note.");
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    const nextWaypoint = createWaypointForTrip(activeTrip, currentLocation, waypointDraft, createdAt);
+
+    await setWaypoints([...waypoints, nextWaypoint]);
+    setWaypointModalVisible(false);
+    setWaypointDraft({
+      title: "",
+      note: "",
+    });
+  }
+
   function handleRecordingControlPress() {
     if (recordingSession.status === "idle") {
       setStartModalVisible(true);
@@ -225,6 +265,73 @@ export default function RecordingScreen() {
       showBottomNavigation
       title="Trailbook"
     >
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setWaypointModalVisible(false)}
+        transparent
+        visible={waypointModalVisible}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalBackdrop}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Add note</Text>
+              <Text style={styles.modalSubtitle}>
+                Save a quick waypoint for this route using your current location.
+              </Text>
+
+              <Text style={styles.fieldLabel}>Title</Text>
+              <TextInput
+                autoCapitalize="sentences"
+                onChangeText={(title) => setWaypointDraft((current) => ({ ...current, title }))}
+                placeholder="Viewpoint"
+                placeholderTextColor="#8c9a86"
+                style={styles.fieldInput}
+                value={waypointDraft.title}
+              />
+
+              <Text style={styles.fieldLabel}>Note</Text>
+              <TextInput
+                autoCapitalize="sentences"
+                multiline
+                numberOfLines={3}
+                onChangeText={(note) => setWaypointDraft((current) => ({ ...current, note }))}
+                placeholder="What do you want to remember here?"
+                placeholderTextColor="#8c9a86"
+                style={[styles.fieldInput, styles.fieldTextarea]}
+                textAlignVertical="top"
+                value={waypointDraft.note}
+              />
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setWaypointModalVisible(false)}
+                  style={[styles.modalButton, styles.modalButtonSecondary]}
+                >
+                  <Text style={styles.modalButtonSecondaryText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  disabled={!canSaveWaypoint}
+                  onPress={() => void handleSaveWaypoint()}
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonPrimary,
+                    !canSaveWaypoint && styles.modalButtonDisabled,
+                  ]}
+                >
+                  <Text style={styles.modalButtonPrimaryText}>Save note</Text>
+                </Pressable>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <Modal
         animationType="fade"
         onRequestClose={() => setProfileModalVisible(false)}
@@ -471,17 +578,47 @@ export default function RecordingScreen() {
             <Text style={styles.metaLine}>Mode: {activeRecordingProfileLabel}</Text>
             <Text style={styles.metaLine}>Last point: {lastPoint}</Text>
             <Text style={styles.metaLine}>Open trips: {String(activeTripCount)}</Text>
-            {canChangeMode ? (
-              <Pressable onPress={() => setProfileModalVisible(true)} style={styles.modeButton}>
-                <Text style={styles.modeButtonText}>Change mode</Text>
-              </Pressable>
-            ) : null}
+            <View style={styles.inlineActions}>
+              {canChangeMode ? (
+                <Pressable onPress={() => setProfileModalVisible(true)} style={styles.modeButton}>
+                  <Text style={styles.modeButtonText}>Change mode</Text>
+                </Pressable>
+              ) : null}
+              {activeTrip ? (
+                <Pressable onPress={() => setWaypointModalVisible(true)} style={styles.noteButton}>
+                  <Text style={styles.noteButtonText}>Add note</Text>
+                </Pressable>
+              ) : null}
+            </View>
             {recordingSession.status === "interrupted" ? (
               <Text style={styles.metaWarning}>
                 The previous recording was interrupted. Tap the control to continue or stop it.
               </Text>
             ) : null}
           </View>
+
+          {activeTrip ? (
+            <View style={styles.waypointsPanel}>
+              <Text style={styles.metaTitle}>Recent waypoints</Text>
+              {recentWaypoints.length === 0 ? (
+                <Text style={styles.metaLine}>No saved notes on this route yet.</Text>
+              ) : (
+                recentWaypoints.map((waypoint) => (
+                  <View key={waypoint.localId} style={styles.waypointCard}>
+                    <Text style={styles.waypointTitle}>{waypoint.title}</Text>
+                    {waypoint.note ? (
+                      <Text numberOfLines={2} style={styles.waypointNote}>
+                        {waypoint.note}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.waypointMeta}>
+                      {new Date(waypoint.createdAt).toLocaleString()}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </View>
+          ) : null}
         </View>
       </View>
     </ScreenLayout>
@@ -695,9 +832,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#52624f",
   },
-  modeButton: {
-    alignSelf: "flex-start",
+  inlineActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     marginTop: 6,
+  },
+  modeButton: {
     borderRadius: 999,
     backgroundColor: "#243224",
     paddingHorizontal: 14,
@@ -708,10 +849,47 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#fffdf8",
   },
+  noteButton: {
+    borderRadius: 999,
+    backgroundColor: "#3c5a3c",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  noteButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fffdf8",
+  },
   metaWarning: {
     marginTop: 4,
     fontSize: 13,
     fontWeight: "600",
     color: "#b0661d",
+  },
+  waypointsPanel: {
+    width: "100%",
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 253, 248, 0.95)",
+    padding: 16,
+    gap: 10,
+  },
+  waypointCard: {
+    borderRadius: 16,
+    backgroundColor: "#eef3e7",
+    padding: 12,
+    gap: 4,
+  },
+  waypointTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  waypointNote: {
+    fontSize: 13,
+    color: "#455445",
+  },
+  waypointMeta: {
+    fontSize: 12,
+    color: "#60705d",
   },
 });
