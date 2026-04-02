@@ -18,8 +18,8 @@ const listeners = new Set<Listener>();
 let state: SessionState = {
   hydrated: false,
   credentials: {
-    email: "slavisacicovic@gmail.com",
-    password: "111111",
+    email: "",
+    password: "",
   },
   deviceId: "ios-local-device-001",
   identitySession: null,
@@ -56,8 +56,8 @@ export async function hydrateSessionStore(): Promise<void> {
     hydrated: true,
     identitySession,
     credentials: {
-      email: identitySession?.userEmail ?? "slavisacicovic@gmail.com",
-      password: "111111",
+      email: identitySession?.userEmail ?? "",
+      password: "",
     },
     deviceId: identitySession?.deviceId ?? deviceId,
   }));
@@ -80,8 +80,8 @@ export async function setActiveIdentitySession(
     ...currentState,
     identitySession,
     credentials: {
-      email: identitySession?.userEmail ?? "slavisacicovic@gmail.com",
-      password: "111111",
+      email: identitySession?.userEmail ?? "",
+      password: "",
     },
     deviceId: identitySession?.deviceId ?? currentState.deviceId,
   }));

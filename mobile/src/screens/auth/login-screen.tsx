@@ -6,7 +6,6 @@ import ScreenLayout from "../../components/layout/screen-layout";
 import FormField from "../../components/ui/form-field";
 import PrimaryButton from "../../components/ui/primary-button";
 import {
-  areHardcodedCredentialsValid,
   canCreateTemporarySession,
   createTemporarySession,
 } from "../../services/auth/temporary-login.service";
@@ -30,10 +29,9 @@ export default function LoginScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
   const canSignIn = canCreateTemporarySession(credentials, deviceId);
-  const credentialsMatch = areHardcodedCredentialsValid(credentials);
 
   async function handleSignIn() {
-    if (!canSignIn || !credentialsMatch) {
+    if (!canSignIn) {
       return;
     }
 
@@ -91,11 +89,7 @@ export default function LoginScreen() {
         value={credentials.password}
       />
 
-      {!credentialsMatch && credentials.password.length > 0 ? (
-        <Text style={styles.errorText}>Use the current development login credentials.</Text>
-      ) : null}
-
-      <PrimaryButton disabled={!canSignIn || !credentialsMatch} onPress={() => void handleSignIn()}>
+      <PrimaryButton disabled={!canSignIn} onPress={() => void handleSignIn()}>
         Login
       </PrimaryButton>
     </ScreenLayout>
@@ -114,10 +108,5 @@ const styles = StyleSheet.create({
   heroImage: {
     width: 220,
     height: 220,
-  },
-  errorText: {
-    fontSize: 14,
-    color: "#b24b38",
-    marginBottom: 8,
   },
 });
