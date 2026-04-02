@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ScreenLayout from "../../components/layout/screen-layout";
@@ -40,7 +41,10 @@ import { useTripPointsStore } from "../../state/trip-points-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
-import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
+import {
+  formatDistanceKm,
+  getVisibleTripPointsForTrip,
+} from "../../services/trip-points/trip-points.service";
 
 interface PendingUndoState {
   tripLocalId: string;
@@ -61,6 +65,37 @@ const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> 
   { value: "last_year", label: "Last year" },
   { value: "all", label: "All" },
 ];
+
+function buildTripMapRegion(
+  coordinates: Array<{ latitude: number; longitude: number }>,
+): Region | null {
+  if (coordinates.length === 0) {
+    return null;
+  }
+
+  if (coordinates.length === 1) {
+    return {
+      latitude: coordinates[0].latitude,
+      longitude: coordinates[0].longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    };
+  }
+
+  const latitudes = coordinates.map((coordinate) => coordinate.latitude);
+  const longitudes = coordinates.map((coordinate) => coordinate.longitude);
+  const minLatitude = Math.min(...latitudes);
+  const maxLatitude = Math.max(...latitudes);
+  const minLongitude = Math.min(...longitudes);
+  const maxLongitude = Math.max(...longitudes);
+
+  return {
+    latitude: (minLatitude + maxLatitude) / 2,
+    longitude: (minLongitude + maxLongitude) / 2,
+    latitudeDelta: Math.max((maxLatitude - minLatitude) * 1.4, 0.01),
+    longitudeDelta: Math.max((maxLongitude - minLongitude) * 1.4, 0.01),
+  };
+}
 
 export default function TripsScreen() {
   const router = useRouter();
@@ -98,12 +133,27 @@ export default function TripsScreen() {
   const selectedTripWaypoints = selectedTrip
     ? getVisibleWaypointsForTrip(waypoints, selectedTrip.localId)
     : [];
+  const selectedTripPoints = selectedTrip
+    ? getVisibleTripPointsForTrip(tripPoints, selectedTrip.localId)
+    : [];
   const selectedTripAttachments = selectedTrip
     ? getVisibleAttachmentsForWaypoints(
         waypointAttachments,
         selectedTripWaypoints.map((waypoint) => waypoint.localId),
       )
     : [];
+  const selectedTripMapCoordinates = selectedTripPoints.map((tripPoint) => ({
+    latitude: tripPoint.latitude,
+    longitude: tripPoint.longitude,
+  }));
+  const selectedTripMapRegion = buildTripMapRegion(
+    selectedTripMapCoordinates.length > 0
+      ? selectedTripMapCoordinates
+      : selectedTripWaypoints.map((waypoint) => ({
+          latitude: waypoint.latitude,
+          longitude: waypoint.longitude,
+        })),
+  );
   const selectedWaypoint = selectedTripWaypoints.find((waypoint) => waypoint.localId === selectedWaypointId) ?? null;
   const selectedPhotoAttachment =
     selectedPhotoAttachmentId === null
@@ -452,10 +502,53 @@ export default function TripsScreen() {
                     <Text style={styles.summaryValue}>{String(selectedTripAttachments.length)}</Text>
                   </View>
                   <View style={styles.summaryItem}>
+                    <Text style={styles.summaryKey}>Distance</Text>
+                    <Text style={styles.summaryValue}>
+                      {formatDistanceKm(
+                        tripSummaries.find((summary) => summary.trip.localId === selectedTrip.localId)
+                          ?.distanceMeters ?? 0,
+                      )}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryItem}>
                     <Text style={styles.summaryKey}>Sync</Text>
                     <Text style={styles.summaryValue}>{selectedTrip.syncStatus}</Text>
                   </View>
                 </View>
+
+                <Text style={styles.sectionTitle}>Route</Text>
+                {selectedTripMapRegion ? (
+                  <View style={styles.routeMapCard}>
+                    <MapView
+                      initialRegion={selectedTripMapRegion}
+                      region={selectedTripMapRegion}
+                      scrollEnabled={false}
+                      style={styles.routeMap}
+                    >
+                      {selectedTripMapCoordinates.length > 1 ? (
+                        <Polyline
+                          coordinates={selectedTripMapCoordinates}
+                          lineCap="round"
+                          lineJoin="round"
+                          strokeColor="#355035"
+                          strokeWidth={4}
+                        />
+                      ) : null}
+                      {selectedTripWaypoints.map((waypoint) => (
+                        <Marker
+                          key={waypoint.localId}
+                          coordinate={{
+                            latitude: waypoint.latitude,
+                            longitude: waypoint.longitude,
+                          }}
+                          title={waypoint.title}
+                        />
+                      ))}
+                    </MapView>
+                  </View>
+                ) : (
+                  <Text style={styles.empty}>No recorded route points yet.</Text>
+                )}
 
                 <Text style={styles.sectionTitle}>Waypoints</Text>
                 {selectedTripWaypoints.length === 0 ? (
@@ -1148,6 +1241,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#243224",
+  },
+  routeMapCard: {
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#dfe8db",
+    height: 220,
+  },
+  routeMap: {
+    flex: 1,
   },
   detailsCard: {
     borderRadius: 18,
