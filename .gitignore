@@ -39,6 +39,8 @@ ios/Pods/
 android/.gradle/
 android/app/build/
 android/build/
+mobile/android/
+mobile/ios/
 
 # TypeScript
 *.tsbuildinfo
