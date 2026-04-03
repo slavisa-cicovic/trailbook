@@ -6,6 +6,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/app-icon.png",
     "plugins": [
       "expo-router",
       "expo-secure-store",
@@ -27,11 +28,16 @@
       "**/*"
     ],
     "ios": {
+      "icon": "./assets/app-icon.png",
       "supportsTablet": false,
       "bundleIdentifier": "com.slavisacicovic.trailbook"
     },
     "android": {
-      "package": "com.slavisacicovic.trailbook"
+      "package": "com.slavisacicovic.trailbook",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#f3efe6"
+      }
     },
     "experiments": {
       "typedRoutes": false
