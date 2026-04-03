@@ -379,10 +379,6 @@ export default function TripsScreen() {
         )}
         onClose={() => setTripDetailsVisible(false)}
         onEditNote={openWaypointEdit}
-        onEditTrip={(trip) => {
-          setTripDetailsVisible(false);
-          openTripEdit(trip);
-        }}
         onSelectPhoto={setSelectedPhotoAttachmentId}
         selectedTrip={selectedTrip}
         selectedTripMapCoordinates={selectedTripMapCoordinates}

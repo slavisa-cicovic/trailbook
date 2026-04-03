@@ -14,7 +14,6 @@ interface TripDetailsModalProps {
   distanceText: string;
   onClose: () => void;
   onEditNote: (waypoint: Waypoint) => void;
-  onEditTrip: (trip: Trip) => void;
   onSelectPhoto: (attachmentLocalId: string) => void;
   selectedTrip: Trip | null;
   selectedTripMapCoordinates: Array<{ latitude: number; longitude: number }>;
@@ -27,7 +26,6 @@ export default function TripDetailsModal({
   distanceText,
   onClose,
   onEditNote,
-  onEditTrip,
   onSelectPhoto,
   selectedTrip,
   selectedTripMapCoordinates,
@@ -49,9 +47,6 @@ export default function TripDetailsModal({
                     <Text style={styles.detailsDescription}>{selectedTrip.description}</Text>
                   ) : null}
                 </View>
-                <Pressable onPress={() => onEditTrip(selectedTrip)} style={styles.editChip}>
-                  <Text style={styles.editChipText}>Edit trip</Text>
-                </Pressable>
               </View>
 
               <View style={styles.summaryGrid}>
@@ -197,17 +192,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     color: "#52624f",
-  },
-  editChip: {
-    borderRadius: 999,
-    backgroundColor: "#e6ece1",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  editChipText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#243224",
   },
   summaryGrid: {
     flexDirection: "row",
