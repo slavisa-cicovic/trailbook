@@ -72,7 +72,8 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
         <Stack.Screen name="recording" />
-        <Stack.Screen name="trips" />
+        <Stack.Screen name="trips/index" />
+        <Stack.Screen name="trips/[tripId]" />
         <Stack.Screen name="settings" />
       </Stack>
       <StatusBar style={resolvedThemeMode === "night" ? "light" : "dark"} />

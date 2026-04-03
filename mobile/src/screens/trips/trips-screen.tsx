@@ -4,23 +4,18 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } 
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
-import type { Trip, Waypoint } from "../../domain/trips";
+import type { Trip } from "../../domain/trips";
 import {
   buildTripsAggregateSummary,
   buildTripSummary,
   filterTripsByDate,
   formatDurationSummary,
-  getVisibleAttachmentsForWaypoints,
   getVisibleTrips,
-  getVisibleWaypointsForTrip,
   markTripDeleted,
-  markWaypointAttachmentDeleted,
   restoreTripDeletedState,
   type TripDateFilter,
   updateTripMetadata,
-  updateWaypointMetadata,
   type TripUpdateInput,
-  type WaypointUpdateInput,
 } from "../../services/trips/trips-management.service";
 import { setRecordingSession } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
@@ -28,24 +23,12 @@ import { useTripPointsStore } from "../../state/trip-points-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
-import {
-  formatDistanceKm,
-  getVisibleTripPointsForTrip,
-} from "../../services/trip-points/trip-points.service";
-import PhotoViewerModal from "./components/photo-viewer-modal";
-import TripDetailsModal from "./components/trip-details-modal";
+import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
 import TripEditModal from "./components/trip-edit-modal";
-import WaypointEditModal from "./components/waypoint-edit-modal";
 
 interface PendingUndoState {
   tripLocalId: string;
   tripTitle: string;
-}
-
-interface PendingWaypointEditState {
-  note: string;
-  title: string;
-  waypointLocalId: string;
 }
 
 const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> = [
@@ -56,37 +39,6 @@ const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> 
   { value: "last_year", label: "Last year" },
   { value: "all", label: "All" },
 ];
-
-function buildTripMapRegion(
-  coordinates: Array<{ latitude: number; longitude: number }>,
-): { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | null {
-  if (coordinates.length === 0) {
-    return null;
-  }
-
-  if (coordinates.length === 1) {
-    return {
-      latitude: coordinates[0].latitude,
-      longitude: coordinates[0].longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    };
-  }
-
-  const latitudes = coordinates.map((coordinate) => coordinate.latitude);
-  const longitudes = coordinates.map((coordinate) => coordinate.longitude);
-  const minLatitude = Math.min(...latitudes);
-  const maxLatitude = Math.max(...latitudes);
-  const minLongitude = Math.min(...longitudes);
-  const maxLongitude = Math.max(...longitudes);
-
-  return {
-    latitude: (minLatitude + maxLatitude) / 2,
-    longitude: (minLongitude + maxLongitude) / 2,
-    latitudeDelta: Math.max((maxLatitude - minLatitude) * 1.4, 0.01),
-    longitudeDelta: Math.max((maxLongitude - minLongitude) * 1.4, 0.01),
-  };
-}
 
 export default function TripsScreen() {
   const router = useRouter();
@@ -99,19 +51,10 @@ export default function TripsScreen() {
   const [pendingUndo, setPendingUndo] = useState<PendingUndoState | null>(null);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [tripEditVisible, setTripEditVisible] = useState(false);
-  const [tripDetailsVisible, setTripDetailsVisible] = useState(false);
-  const [selectedWaypointId, setSelectedWaypointId] = useState<string | null>(null);
-  const [waypointEditVisible, setWaypointEditVisible] = useState(false);
-  const [pendingWaypointEdit, setPendingWaypointEdit] = useState<PendingWaypointEditState | null>(null);
-  const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<TripDateFilter>("all");
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
-  });
-  const [waypointDraft, setWaypointDraft] = useState<WaypointUpdateInput>({
-    title: "",
-    note: "",
   });
 
   const visibleTrips = getVisibleTrips(trips);
@@ -121,49 +64,6 @@ export default function TripsScreen() {
   );
   const tripsAggregateSummary = buildTripsAggregateSummary(filteredTrips, tripPoints);
   const selectedTrip = visibleTrips.find((trip) => trip.localId === selectedTripId) ?? null;
-  const selectedTripWaypoints = selectedTrip
-    ? getVisibleWaypointsForTrip(waypoints, selectedTrip.localId)
-    : [];
-  const selectedTripPoints = selectedTrip
-    ? getVisibleTripPointsForTrip(tripPoints, selectedTrip.localId)
-    : [];
-  const selectedTripAttachments = selectedTrip
-    ? getVisibleAttachmentsForWaypoints(
-      waypointAttachments,
-      selectedTripWaypoints.map((waypoint) => waypoint.localId),
-    )
-    : [];
-  const selectedTripMapCoordinates = selectedTripPoints.map((tripPoint) => ({
-    latitude: tripPoint.latitude,
-    longitude: tripPoint.longitude,
-  }));
-  const selectedTripMapRegion = buildTripMapRegion(
-    selectedTripMapCoordinates.length > 0
-      ? selectedTripMapCoordinates
-      : selectedTripWaypoints.map((waypoint) => ({
-        latitude: waypoint.latitude,
-        longitude: waypoint.longitude,
-      })),
-  );
-  const selectedWaypoint = selectedTripWaypoints.find((waypoint) => waypoint.localId === selectedWaypointId) ?? null;
-  const selectedPhotoAttachment =
-    selectedPhotoAttachmentId === null
-      ? null
-      : selectedTripAttachments.find((attachment) => attachment.localId === selectedPhotoAttachmentId) ?? null;
-  const selectedPhotoWaypointAttachments = selectedPhotoAttachment
-    ? selectedTripAttachments
-      .filter((attachment) => attachment.waypointLocalId === selectedPhotoAttachment.waypointLocalId)
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-    : [];
-  const selectedPhotoIndex =
-    selectedPhotoAttachment === null
-      ? -1
-      : selectedPhotoWaypointAttachments.findIndex(
-        (attachment) => attachment.localId === selectedPhotoAttachment.localId,
-      );
-  const hasPreviousPhoto = selectedPhotoIndex > 0;
-  const hasNextPhoto =
-    selectedPhotoIndex !== -1 && selectedPhotoIndex < selectedPhotoWaypointAttachments.length - 1;
 
   useEffect(() => {
     if (!pendingUndo) {
@@ -176,20 +76,6 @@ export default function TripsScreen() {
 
     return () => clearTimeout(timeoutId);
   }, [pendingUndo]);
-
-  useEffect(() => {
-    if (tripDetailsVisible || !pendingWaypointEdit) {
-      return;
-    }
-
-    setSelectedWaypointId(pendingWaypointEdit.waypointLocalId);
-    setWaypointDraft({
-      title: pendingWaypointEdit.title,
-      note: pendingWaypointEdit.note,
-    });
-    setWaypointEditVisible(true);
-    setPendingWaypointEdit(null);
-  }, [pendingWaypointEdit, tripDetailsVisible]);
 
   async function handleLogout() {
     await setActiveIdentitySession(null);
@@ -212,8 +98,8 @@ export default function TripsScreen() {
       tripTitle: trip.title,
     });
     if (selectedTripId === trip.localId) {
-      setTripDetailsVisible(false);
       setSelectedTripId(null);
+      setTripEditVisible(false);
     }
   }
 
@@ -255,62 +141,6 @@ export default function TripsScreen() {
     setTripEditVisible(false);
   }
 
-  function openTripDetails(trip: Trip) {
-    setSelectedTripId(trip.localId);
-    setTripDetailsVisible(true);
-  }
-
-  function openWaypointEdit(waypoint: Waypoint) {
-    setPendingWaypointEdit({
-      waypointLocalId: waypoint.localId,
-      title: waypoint.title,
-      note: waypoint.note ?? "",
-    });
-    setTripDetailsVisible(false);
-  }
-
-  async function handleSaveWaypointEdit() {
-    if (!selectedWaypoint || waypointDraft.title.trim().length === 0) {
-      return;
-    }
-
-    await setWaypoints(
-      updateWaypointMetadata(waypoints, selectedWaypoint.localId, waypointDraft, new Date().toISOString()),
-    );
-    setWaypointEditVisible(false);
-  }
-
-  async function handleRemovePhoto(attachmentLocalId: string) {
-    const currentIndex = selectedPhotoWaypointAttachments.findIndex(
-      (attachment) => attachment.localId === attachmentLocalId,
-    );
-    const fallbackAttachment =
-      selectedPhotoWaypointAttachments[currentIndex + 1] ??
-      selectedPhotoWaypointAttachments[currentIndex - 1] ??
-      null;
-
-    await setWaypointAttachments(
-      markWaypointAttachmentDeleted(waypointAttachments, attachmentLocalId, new Date().toISOString()),
-    );
-    setSelectedPhotoAttachmentId(fallbackAttachment?.localId ?? null);
-  }
-
-  function handleShowPreviousPhoto() {
-    if (!hasPreviousPhoto || selectedPhotoIndex === -1) {
-      return;
-    }
-
-    setSelectedPhotoAttachmentId(selectedPhotoWaypointAttachments[selectedPhotoIndex - 1]?.localId ?? null);
-  }
-
-  function handleShowNextPhoto() {
-    if (!hasNextPhoto || selectedPhotoIndex === -1) {
-      return;
-    }
-
-    setSelectedPhotoAttachmentId(selectedPhotoWaypointAttachments[selectedPhotoIndex + 1]?.localId ?? null);
-  }
-
   async function handleResumeTrip(trip: Trip) {
     if (!identitySession) {
       return;
@@ -330,17 +160,6 @@ export default function TripsScreen() {
 
     router.replace("/recording");
   }
-
-  function getAttachmentsForWaypoint(waypointLocalId: string) {
-    return selectedTripAttachments.filter(
-      (attachment) => attachment.waypointLocalId === waypointLocalId && attachment.deletedAt === null,
-    );
-  }
-
-  const waypointItems = selectedTripWaypoints.map((waypoint) => ({
-    waypoint,
-    attachments: getAttachmentsForWaypoint(waypoint.localId),
-  }));
 
   if (!identitySession) {
     return <Redirect href="/login" />;
@@ -362,42 +181,6 @@ export default function TripsScreen() {
         onClose={() => setTripEditVisible(false)}
         onSave={() => void handleSaveTripEdit()}
         visible={tripEditVisible}
-      />
-
-      <WaypointEditModal
-        draft={waypointDraft}
-        onChangeNote={(note) => setWaypointDraft((current) => ({ ...current, note }))}
-        onChangeTitle={(title) => setWaypointDraft((current) => ({ ...current, title }))}
-        onClose={() => setWaypointEditVisible(false)}
-        onSave={() => void handleSaveWaypointEdit()}
-        visible={waypointEditVisible}
-      />
-
-      <TripDetailsModal
-        distanceText={formatDistanceKm(
-          tripSummaries.find((summary) => summary.trip.localId === selectedTrip?.localId)?.distanceMeters ?? 0,
-        )}
-        onClose={() => setTripDetailsVisible(false)}
-        onEditNote={openWaypointEdit}
-        onSelectPhoto={setSelectedPhotoAttachmentId}
-        selectedTrip={selectedTrip}
-        selectedTripMapCoordinates={selectedTripMapCoordinates}
-        selectedTripMapRegion={selectedTripMapRegion}
-        visible={tripDetailsVisible}
-        waypointItems={waypointItems}
-      />
-
-      <PhotoViewerModal
-        hasNextPhoto={hasNextPhoto}
-        hasPreviousPhoto={hasPreviousPhoto}
-        onClose={() => setSelectedPhotoAttachmentId(null)}
-        onNext={handleShowNextPhoto}
-        onPrevious={handleShowPreviousPhoto}
-        onRemove={(attachmentLocalId) => void handleRemovePhoto(attachmentLocalId)}
-        selectedPhotoAttachment={selectedPhotoAttachment}
-        selectedPhotoIndex={selectedPhotoIndex}
-        selectedPhotoWaypointAttachments={selectedPhotoWaypointAttachments}
-        visible={selectedPhotoAttachment !== null}
       />
 
       <Text style={styles.subtitle}>Your local recorded routes and saved trip content.</Text>
@@ -524,7 +307,10 @@ export default function TripsScreen() {
                 </View>
 
                 <View style={styles.cardActions}>
-                  <Pressable onPress={() => openTripDetails(trip)} style={styles.actionButton}>
+                  <Pressable
+                    onPress={() => router.push(`/trips/${trip.localId}`)}
+                    style={styles.actionButton}
+                  >
                     <Text style={styles.actionButtonText}>Open</Text>
                   </Pressable>
                   <Pressable onPress={() => openTripEdit(trip)} style={styles.actionButton}>

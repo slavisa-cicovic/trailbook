@@ -1,5 +1,6 @@
 import { useState, type PropsWithChildren } from "react";
 import { usePathname, useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -22,6 +23,7 @@ interface ScreenLayoutProps extends PropsWithChildren {
   accountEmail?: string | null;
   contentStyle?: StyleProp<ViewStyle>;
   contentVariant?: "card" | "plain";
+  onBack?: () => void;
   onLogout?: () => void;
   scrollEnabled?: boolean;
   showBottomNavigation?: boolean;
@@ -39,6 +41,7 @@ export default function ScreenLayout({
   accountEmail,
   contentStyle,
   contentVariant = "card",
+  onBack,
   onLogout,
   scrollEnabled = true,
   showBottomNavigation = false,
@@ -60,7 +63,17 @@ export default function ScreenLayout({
         <View style={styles.shell}>
           {(title || onLogout) && (
             <View style={styles.header}>
-              <Text style={[styles.headerTitle, { color: theme.primaryText }]}>{title ?? ""}</Text>
+              <View style={styles.headerLead}>
+                {onBack ? (
+                  <Pressable
+                    onPress={onBack}
+                    style={[styles.backButton, { backgroundColor: theme.accentMuted }]}
+                  >
+                    <MaterialIcons color={theme.accent} name="arrow-back" size={18} />
+                  </Pressable>
+                ) : null}
+                <Text style={[styles.headerTitle, { color: theme.primaryText }]}>{title ?? ""}</Text>
+              </View>
               {onLogout ? (
                 <View style={styles.accountArea}>
                   <Pressable
@@ -155,7 +168,7 @@ export default function ScreenLayout({
               ]}
             >
               {navigationItems.map((item) => {
-                const active = pathname === item.href;
+                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
                 return (
                   <Pressable
@@ -208,9 +221,21 @@ const styles = StyleSheet.create({
     zIndex: 20,
     elevation: 20,
   },
+  headerLead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    paddingRight: 12,
+  },
   headerTitle: {
     fontSize: 24,
     fontWeight: "700",
+  },
+  backButton: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   accountArea: {
     position: "relative",
