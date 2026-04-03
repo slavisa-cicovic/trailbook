@@ -18,6 +18,7 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+!mobile/.env.example
 
 # Dependencies
 node_modules/
