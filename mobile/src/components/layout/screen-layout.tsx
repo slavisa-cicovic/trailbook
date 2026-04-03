@@ -116,7 +116,11 @@ export default function ScreenLayout({
             >
               <View
                 style={[
-                  contentVariant === "card" ? styles.card : styles.plainContent,
+                  contentVariant === "card"
+                    ? styles.card
+                    : scrollEnabled
+                      ? styles.plainContentScroll
+                      : styles.plainContent,
                   contentVariant === "card" ? { backgroundColor: theme.card } : null,
                 ]}
               >
@@ -283,6 +287,9 @@ const styles = StyleSheet.create({
   },
   plainContent: {
     flex: 1,
+  },
+  plainContentScroll: {
+    width: "100%",
   },
   bottomNavigation: {
     flexDirection: "row",

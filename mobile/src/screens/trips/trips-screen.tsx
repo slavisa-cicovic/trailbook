@@ -1,19 +1,6 @@
 import { useEffect, useState } from "react";
 import { Redirect, useRouter } from "expo-router";
-import {
-  Alert,
-  Image,
-  Modal,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import MapView, { Marker, Polyline, type Region } from "react-native-maps";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
@@ -45,6 +32,10 @@ import {
   formatDistanceKm,
   getVisibleTripPointsForTrip,
 } from "../../services/trip-points/trip-points.service";
+import PhotoViewerModal from "./components/photo-viewer-modal";
+import TripDetailsModal from "./components/trip-details-modal";
+import TripEditModal from "./components/trip-edit-modal";
+import WaypointEditModal from "./components/waypoint-edit-modal";
 
 interface PendingUndoState {
   tripLocalId: string;
@@ -68,7 +59,7 @@ const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> 
 
 function buildTripMapRegion(
   coordinates: Array<{ latitude: number; longitude: number }>,
-): Region | null {
+): { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | null {
   if (coordinates.length === 0) {
     return null;
   }
@@ -138,9 +129,9 @@ export default function TripsScreen() {
     : [];
   const selectedTripAttachments = selectedTrip
     ? getVisibleAttachmentsForWaypoints(
-        waypointAttachments,
-        selectedTripWaypoints.map((waypoint) => waypoint.localId),
-      )
+      waypointAttachments,
+      selectedTripWaypoints.map((waypoint) => waypoint.localId),
+    )
     : [];
   const selectedTripMapCoordinates = selectedTripPoints.map((tripPoint) => ({
     latitude: tripPoint.latitude,
@@ -150,9 +141,9 @@ export default function TripsScreen() {
     selectedTripMapCoordinates.length > 0
       ? selectedTripMapCoordinates
       : selectedTripWaypoints.map((waypoint) => ({
-          latitude: waypoint.latitude,
-          longitude: waypoint.longitude,
-        })),
+        latitude: waypoint.latitude,
+        longitude: waypoint.longitude,
+      })),
   );
   const selectedWaypoint = selectedTripWaypoints.find((waypoint) => waypoint.localId === selectedWaypointId) ?? null;
   const selectedPhotoAttachment =
@@ -161,15 +152,15 @@ export default function TripsScreen() {
       : selectedTripAttachments.find((attachment) => attachment.localId === selectedPhotoAttachmentId) ?? null;
   const selectedPhotoWaypointAttachments = selectedPhotoAttachment
     ? selectedTripAttachments
-        .filter((attachment) => attachment.waypointLocalId === selectedPhotoAttachment.waypointLocalId)
-        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .filter((attachment) => attachment.waypointLocalId === selectedPhotoAttachment.waypointLocalId)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
     : [];
   const selectedPhotoIndex =
     selectedPhotoAttachment === null
       ? -1
       : selectedPhotoWaypointAttachments.findIndex(
-          (attachment) => attachment.localId === selectedPhotoAttachment.localId,
-        );
+        (attachment) => attachment.localId === selectedPhotoAttachment.localId,
+      );
   const hasPreviousPhoto = selectedPhotoIndex > 0;
   const hasNextPhoto =
     selectedPhotoIndex !== -1 && selectedPhotoIndex < selectedPhotoWaypointAttachments.length - 1;
@@ -346,6 +337,11 @@ export default function TripsScreen() {
     );
   }
 
+  const waypointItems = selectedTripWaypoints.map((waypoint) => ({
+    waypoint,
+    attachments: getAttachmentsForWaypoint(waypoint.localId),
+  }));
+
   if (!identitySession) {
     return <Redirect href="/login" />;
   }
@@ -353,336 +349,60 @@ export default function TripsScreen() {
   return (
     <ScreenLayout
       accountEmail={identitySession.userEmail}
+      contentStyle={styles.screenContent}
       contentVariant="plain"
       onLogout={() => void handleLogout()}
       showBottomNavigation
       title="Trips"
     >
-      <Modal
-        animationType="slide"
-        onRequestClose={() => setTripEditVisible(false)}
+      <TripEditModal
+        draft={tripDraft}
+        onChangeDescription={(description) => setTripDraft((current) => ({ ...current, description }))}
+        onChangeTitle={(title) => setTripDraft((current) => ({ ...current, title }))}
+        onClose={() => setTripEditVisible(false)}
+        onSave={() => void handleSaveTripEdit()}
         visible={tripEditVisible}
-      >
-        <SafeAreaView style={styles.modalScreen}>
-          <StatusBar barStyle="dark-content" />
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit trip</Text>
+      />
 
-            <Text style={styles.fieldLabel}>Trip name</Text>
-            <TextInput
-              onChangeText={(title) => setTripDraft((current) => ({ ...current, title }))}
-              placeholder="Trip name"
-              placeholderTextColor="#8c9a86"
-              style={styles.fieldInput}
-              value={tripDraft.title}
-            />
-
-            <Text style={styles.fieldLabel}>Description</Text>
-            <TextInput
-              multiline
-              numberOfLines={4}
-              onChangeText={(description) => setTripDraft((current) => ({ ...current, description }))}
-              placeholder="Trip description"
-              placeholderTextColor="#8c9a86"
-              style={[styles.fieldInput, styles.fieldTextarea]}
-              textAlignVertical="top"
-              value={tripDraft.description}
-            />
-
-            <View style={styles.modalActions}>
-              <Pressable onPress={() => setTripEditVisible(false)} style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                disabled={tripDraft.title.trim().length === 0}
-                onPress={() => void handleSaveTripEdit()}
-                style={[
-                  styles.primaryButton,
-                  tripDraft.title.trim().length === 0 && styles.disabledButton,
-                ]}
-              >
-                <Text style={styles.primaryButtonText}>Save</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      <Modal
-        animationType="slide"
-        onRequestClose={() => setWaypointEditVisible(false)}
+      <WaypointEditModal
+        draft={waypointDraft}
+        onChangeNote={(note) => setWaypointDraft((current) => ({ ...current, note }))}
+        onChangeTitle={(title) => setWaypointDraft((current) => ({ ...current, title }))}
+        onClose={() => setWaypointEditVisible(false)}
+        onSave={() => void handleSaveWaypointEdit()}
         visible={waypointEditVisible}
-      >
-        <SafeAreaView style={styles.modalScreen}>
-          <StatusBar barStyle="dark-content" />
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit note</Text>
+      />
 
-            <Text style={styles.fieldLabel}>Title</Text>
-            <TextInput
-              onChangeText={(title) => setWaypointDraft((current) => ({ ...current, title }))}
-              placeholder="Waypoint title"
-              placeholderTextColor="#8c9a86"
-              style={styles.fieldInput}
-              value={waypointDraft.title}
-            />
-
-            <Text style={styles.fieldLabel}>Note</Text>
-            <TextInput
-              multiline
-              numberOfLines={4}
-              onChangeText={(note) => setWaypointDraft((current) => ({ ...current, note }))}
-              placeholder="Waypoint note"
-              placeholderTextColor="#8c9a86"
-              style={[styles.fieldInput, styles.fieldTextarea]}
-              textAlignVertical="top"
-              value={waypointDraft.note}
-            />
-
-            <View style={styles.modalActions}>
-              <Pressable onPress={() => setWaypointEditVisible(false)} style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                disabled={waypointDraft.title.trim().length === 0}
-                onPress={() => void handleSaveWaypointEdit()}
-                style={[
-                  styles.primaryButton,
-                  waypointDraft.title.trim().length === 0 && styles.disabledButton,
-                ]}
-              >
-                <Text style={styles.primaryButtonText}>Save</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      <Modal
-        animationType="slide"
-        onRequestClose={() => setTripDetailsVisible(false)}
+      <TripDetailsModal
+        distanceText={formatDistanceKm(
+          tripSummaries.find((summary) => summary.trip.localId === selectedTrip?.localId)?.distanceMeters ?? 0,
+        )}
+        onClose={() => setTripDetailsVisible(false)}
+        onEditNote={openWaypointEdit}
+        onEditTrip={(trip) => {
+          setTripDetailsVisible(false);
+          openTripEdit(trip);
+        }}
+        onSelectPhoto={setSelectedPhotoAttachmentId}
+        selectedTrip={selectedTrip}
+        selectedTripMapCoordinates={selectedTripMapCoordinates}
+        selectedTripMapRegion={selectedTripMapRegion}
         visible={tripDetailsVisible}
-      >
-        <SafeAreaView style={styles.modalScreen}>
-          <StatusBar barStyle="dark-content" />
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            {selectedTrip ? (
-              <>
-                <View style={styles.detailsHeader}>
-                  <View style={styles.detailsHeaderText}>
-                    <Text style={styles.modalTitle}>{selectedTrip.title}</Text>
-                    {selectedTrip.description ? (
-                      <Text style={styles.detailsDescription}>{selectedTrip.description}</Text>
-                    ) : null}
-                  </View>
-                  <Pressable
-                    onPress={() => {
-                      setTripDetailsVisible(false);
-                      openTripEdit(selectedTrip);
-                    }}
-                    style={styles.editChip}
-                  >
-                    <Text style={styles.editChipText}>Edit trip</Text>
-                  </Pressable>
-                </View>
+        waypointItems={waypointItems}
+      />
 
-                <View style={styles.summaryGrid}>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryKey}>Mode</Text>
-                    <Text style={styles.summaryValue}>
-                      {getRecordingProfileLabel(selectedTrip.recordingProfile)}
-                    </Text>
-                  </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryKey}>Waypoints</Text>
-                    <Text style={styles.summaryValue}>{String(selectedTripWaypoints.length)}</Text>
-                  </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryKey}>Photos</Text>
-                    <Text style={styles.summaryValue}>{String(selectedTripAttachments.length)}</Text>
-                  </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryKey}>Distance</Text>
-                    <Text style={styles.summaryValue}>
-                      {formatDistanceKm(
-                        tripSummaries.find((summary) => summary.trip.localId === selectedTrip.localId)
-                          ?.distanceMeters ?? 0,
-                      )}
-                    </Text>
-                  </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryKey}>Sync</Text>
-                    <Text style={styles.summaryValue}>{selectedTrip.syncStatus}</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.sectionTitle}>Route</Text>
-                {selectedTripMapRegion ? (
-                  <View style={styles.routeMapCard}>
-                    <MapView
-                      initialRegion={selectedTripMapRegion}
-                      region={selectedTripMapRegion}
-                      scrollEnabled={false}
-                      style={styles.routeMap}
-                    >
-                      {selectedTripMapCoordinates.length > 1 ? (
-                        <Polyline
-                          coordinates={selectedTripMapCoordinates}
-                          lineCap="round"
-                          lineJoin="round"
-                          strokeColor="#355035"
-                          strokeWidth={4}
-                        />
-                      ) : null}
-                      {selectedTripWaypoints.map((waypoint) => (
-                        <Marker
-                          key={waypoint.localId}
-                          coordinate={{
-                            latitude: waypoint.latitude,
-                            longitude: waypoint.longitude,
-                          }}
-                          title={waypoint.title}
-                        />
-                      ))}
-                    </MapView>
-                  </View>
-                ) : (
-                  <Text style={styles.empty}>No recorded route points yet.</Text>
-                )}
-
-                <Text style={styles.sectionTitle}>Waypoints</Text>
-                {selectedTripWaypoints.length === 0 ? (
-                  <Text style={styles.empty}>No notes saved on this trip.</Text>
-                ) : (
-                  selectedTripWaypoints.map((waypoint) => {
-                    const attachments = getAttachmentsForWaypoint(waypoint.localId);
-
-                    return (
-                      <View key={waypoint.localId} style={styles.detailsCard}>
-                        <View style={styles.detailsCardHeader}>
-                          <Text style={styles.detailsCardTitle}>{waypoint.title}</Text>
-                          <Pressable onPress={() => openWaypointEdit(waypoint)} style={styles.inlineLink}>
-                            <Text style={styles.inlineLinkText}>Edit note</Text>
-                          </Pressable>
-                        </View>
-                        {waypoint.note ? (
-                          <Text style={styles.detailsCardText}>{waypoint.note}</Text>
-                        ) : null}
-                        <Text style={styles.detailsCardLocation}>
-                          Location: {waypoint.latitude.toFixed(5)}, {waypoint.longitude.toFixed(5)}
-                        </Text>
-                        <Text style={styles.detailsCardMeta}>
-                          {new Date(waypoint.createdAt).toLocaleString()}
-                        </Text>
-
-                        {attachments.length > 0 ? (
-                          <ScrollView
-                            contentContainerStyle={styles.attachmentRow}
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                          >
-                            {attachments.map((attachment) => (
-                              <View key={attachment.localId} style={styles.attachmentCard}>
-                                <Pressable onPress={() => setSelectedPhotoAttachmentId(attachment.localId)}>
-                                  <Image source={{ uri: attachment.localUri }} style={styles.attachmentImage} />
-                                </Pressable>
-                              </View>
-                            ))}
-                          </ScrollView>
-                        ) : null}
-                      </View>
-                    );
-                  })
-                )}
-
-                <View style={styles.modalActions}>
-                  <Pressable onPress={() => setTripDetailsVisible(false)} style={styles.primaryButton}>
-                    <Text style={styles.primaryButtonText}>Close</Text>
-                  </Pressable>
-                </View>
-              </>
-            ) : null}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setSelectedPhotoAttachmentId(null)}
-        transparent
+      <PhotoViewerModal
+        hasNextPhoto={hasNextPhoto}
+        hasPreviousPhoto={hasPreviousPhoto}
+        onClose={() => setSelectedPhotoAttachmentId(null)}
+        onNext={handleShowNextPhoto}
+        onPrevious={handleShowPreviousPhoto}
+        onRemove={(attachmentLocalId) => void handleRemovePhoto(attachmentLocalId)}
+        selectedPhotoAttachment={selectedPhotoAttachment}
+        selectedPhotoIndex={selectedPhotoIndex}
+        selectedPhotoWaypointAttachments={selectedPhotoWaypointAttachments}
         visible={selectedPhotoAttachment !== null}
-      >
-        <View style={styles.photoViewerBackdrop}>
-          <Pressable
-            onPress={() => setSelectedPhotoAttachmentId(null)}
-            style={styles.photoViewerBackdropPressable}
-          />
-          {selectedPhotoAttachment ? (
-            <View style={styles.photoViewerCard}>
-              <Image
-                resizeMode="contain"
-                source={{ uri: selectedPhotoAttachment.localUri }}
-                style={styles.photoViewerImage}
-              />
-              {selectedPhotoWaypointAttachments.length > 1 ? (
-                <View style={styles.photoViewerPager}>
-                  <Pressable
-                    disabled={!hasPreviousPhoto}
-                    onPress={handleShowPreviousPhoto}
-                    style={[
-                      styles.photoViewerNavButton,
-                      !hasPreviousPhoto && styles.photoViewerNavButtonDisabled,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.photoViewerNavText,
-                        !hasPreviousPhoto && styles.photoViewerNavTextDisabled,
-                      ]}
-                    >
-                      Previous
-                    </Text>
-                  </Pressable>
-                  <Text style={styles.photoViewerPagerText}>
-                    {selectedPhotoIndex + 1} / {selectedPhotoWaypointAttachments.length}
-                  </Text>
-                  <Pressable
-                    disabled={!hasNextPhoto}
-                    onPress={handleShowNextPhoto}
-                    style={[
-                      styles.photoViewerNavButton,
-                      !hasNextPhoto && styles.photoViewerNavButtonDisabled,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.photoViewerNavText,
-                        !hasNextPhoto && styles.photoViewerNavTextDisabled,
-                      ]}
-                    >
-                      Next
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-              <View style={styles.modalActions}>
-                <Pressable
-                  onPress={() => setSelectedPhotoAttachmentId(null)}
-                  style={styles.secondaryButton}
-                >
-                  <Text style={styles.secondaryButtonText}>Close</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => void handleRemovePhoto(selectedPhotoAttachment.localId)}
-                  style={styles.photoViewerRemoveButton}
-                >
-                  <Text style={styles.photoViewerRemoveText}>Remove photo</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-        </View>
-      </Modal>
+      />
 
       <Text style={styles.subtitle}>Your local recorded routes and saved trip content.</Text>
 
@@ -708,53 +428,47 @@ export default function TripsScreen() {
         })}
       </ScrollView>
 
-      <View style={styles.summaryGridCards}>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryCardLabel}>Walk km</Text>
-          <Text style={styles.summaryCardValue}>
+      <View style={styles.summaryTable}>
+        <View style={[styles.summaryRow, styles.summaryHeaderRow]}>
+          <Text style={[styles.summaryHeaderCell, styles.summaryModeCell]}>Mode</Text>
+          <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>km</Text>
+          <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>time</Text>
+          <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>Trips</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Walk</Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
             {formatDistanceKm(tripsAggregateSummary.walkDistanceMeters)}
           </Text>
-          <Text style={styles.summaryCardHint}>{String(tripsAggregateSummary.walkTripCount)} trips</Text>
-        </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryCardLabel}>Walk time</Text>
-          <Text style={styles.summaryCardValue}>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
             {formatDurationSummary(tripsAggregateSummary.walkDurationMs)}
           </Text>
-          <Text style={styles.summaryCardHint}>
-            {String(tripsAggregateSummary.walkTripCount)} trips
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {String(tripsAggregateSummary.walkTripCount)}
           </Text>
         </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryCardLabel}>Drive km</Text>
-          <Text style={styles.summaryCardValue}>
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Drive</Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
             {formatDistanceKm(tripsAggregateSummary.driveDistanceMeters)}
           </Text>
-          <Text style={styles.summaryCardHint}>{String(tripsAggregateSummary.driveTripCount)} trips</Text>
-        </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryCardLabel}>Drive time</Text>
-          <Text style={styles.summaryCardValue}>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
             {formatDurationSummary(tripsAggregateSummary.driveDurationMs)}
           </Text>
-          <Text style={styles.summaryCardHint}>
-            {String(tripsAggregateSummary.driveTripCount)} trips
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {String(tripsAggregateSummary.driveTripCount)}
           </Text>
         </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryCardLabel}>Total km</Text>
-          <Text style={styles.summaryCardValue}>
+        <View style={[styles.summaryRow, styles.summaryTotalRow]}>
+          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Total</Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
             {formatDistanceKm(tripsAggregateSummary.totalDistanceMeters)}
           </Text>
-          <Text style={styles.summaryCardHint}>{String(tripsAggregateSummary.totalTripCount)} trips</Text>
-        </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryCardLabel}>Total</Text>
-          <Text style={styles.summaryCardValue}>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
             {formatDurationSummary(tripsAggregateSummary.totalDurationMs)}
           </Text>
-          <Text style={styles.summaryCardHint}>
-            {String(tripsAggregateSummary.totalTripCount)} trips
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {String(tripsAggregateSummary.totalTripCount)}
           </Text>
         </View>
       </View>
@@ -860,6 +574,9 @@ export default function TripsScreen() {
 }
 
 const styles = StyleSheet.create({
+  screenContent: {
+    justifyContent: "flex-start",
+  },
   subtitle: {
     fontSize: 15,
     color: "#52624f",
@@ -886,32 +603,52 @@ const styles = StyleSheet.create({
   filterChipTextSelected: {
     color: "#fffdf8",
   },
-  summaryGridCards: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -5,
-    rowGap: 10,
+  summaryTable: {
+    borderRadius: 18,
+    backgroundColor: "#f6f1e5",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
     marginBottom: 18,
+    overflow: "hidden",
   },
-  summaryCard: {
-    width: "50%",
-    paddingHorizontal: 5,
-    gap: 4,
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 52,
+    paddingHorizontal: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#ebe1cf",
   },
-  summaryCardLabel: {
+  summaryHeaderRow: {
+    minHeight: 44,
+    backgroundColor: "#ece4d4",
+    borderTopWidth: 0,
+  },
+  summaryTotalRow: {
+    backgroundColor: "#f0eadb",
+  },
+  summaryModeCell: {
+    flex: 1.15,
+  },
+  summaryValueCell: {
+    flex: 1,
+  },
+  summaryHeaderCell: {
     fontSize: 11,
     textTransform: "uppercase",
     letterSpacing: 0.7,
     color: "#76856f",
+    fontWeight: "700",
   },
-  summaryCardValue: {
-    fontSize: 18,
+  summaryModeText: {
+    fontSize: 15,
     fontWeight: "700",
     color: "#243224",
   },
-  summaryCardHint: {
-    fontSize: 12,
-    color: "#60705d",
+  summaryValueText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#355035",
   },
   empty: {
     fontSize: 15,
@@ -1050,257 +787,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#243224",
-  },
-  modalScreen: {
-    flex: 1,
-    backgroundColor: "#f3efe6",
-  },
-  modalContent: {
-    padding: 24,
-    gap: 14,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1f2a1f",
-  },
-  fieldLabel: {
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: "#60705d",
-  },
-  fieldInput: {
-    borderWidth: 1,
-    borderColor: "#d7ddcf",
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#243224",
-  },
-  fieldTextarea: {
-    minHeight: 110,
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 8,
-  },
-  photoViewerBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(12, 16, 12, 0.86)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-  },
-  photoViewerBackdropPressable: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  photoViewerCard: {
-    width: "100%",
-    maxWidth: 420,
-    borderRadius: 24,
-    backgroundColor: "#101510",
-    padding: 14,
-    gap: 14,
-  },
-  photoViewerImage: {
-    width: "100%",
-    height: 420,
-    borderRadius: 18,
-    backgroundColor: "#1b231b",
-  },
-  photoViewerPager: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  photoViewerNavButton: {
-    minWidth: 92,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 999,
-    backgroundColor: "#243224",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  photoViewerNavButtonDisabled: {
-    backgroundColor: "#2d342d",
-    opacity: 0.4,
-  },
-  photoViewerNavText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#fffdf8",
-  },
-  photoViewerNavTextDisabled: {
-    color: "#cbd4cb",
-  },
-  photoViewerPagerText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#dbe3db",
-    textAlign: "center",
-  },
-  photoViewerRemoveButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#8f3428",
-    paddingVertical: 14,
-  },
-  photoViewerRemoveText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#fff7f4",
-  },
-  primaryButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#243224",
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#fffdf8",
-  },
-  secondaryButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#e6ece1",
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#243224",
-  },
-  disabledButton: {
-    opacity: 0.45,
-  },
-  detailsHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  detailsHeaderText: {
-    flex: 1,
-    gap: 6,
-  },
-  detailsDescription: {
-    fontSize: 15,
-    lineHeight: 21,
-    color: "#52624f",
-  },
-  editChip: {
-    borderRadius: 999,
-    backgroundColor: "#e6ece1",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  editChipText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#243224",
-  },
-  summaryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -5,
-    rowGap: 10,
-  },
-  summaryItem: {
-    width: "50%",
-    paddingHorizontal: 5,
-    gap: 2,
-  },
-  summaryKey: {
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-    color: "#76856f",
-  },
-  summaryValue: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#243224",
-  },
-  sectionTitle: {
-    marginTop: 6,
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#243224",
-  },
-  routeMapCard: {
-    borderRadius: 18,
-    overflow: "hidden",
-    backgroundColor: "#dfe8db",
-    height: 220,
-  },
-  routeMap: {
-    flex: 1,
-  },
-  detailsCard: {
-    borderRadius: 18,
-    backgroundColor: "#fffdf8",
-    padding: 14,
-    gap: 8,
-  },
-  detailsCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  detailsCardTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#243224",
-  },
-  inlineLink: {
-    paddingVertical: 4,
-  },
-  inlineLinkText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#355035",
-  },
-  detailsCardText: {
-    fontSize: 14,
-    color: "#4f5f4f",
-    lineHeight: 20,
-  },
-  detailsCardLocation: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#52624f",
-  },
-  detailsCardMeta: {
-    fontSize: 12,
-    color: "#76856f",
-  },
-  attachmentRow: {
-    gap: 10,
-  },
-  attachmentCard: {
-    width: 150,
-  },
-  attachmentImage: {
-    width: 150,
-    height: 150,
-    borderRadius: 14,
-    backgroundColor: "#d7ddcf",
   },
 });
