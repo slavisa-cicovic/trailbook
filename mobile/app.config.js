@@ -38,11 +38,14 @@ module.exports = {
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
       },
-      config: googleMapsApiKey
-        ? {
-            googleMapsApiKey,
-          }
-        : undefined,
+      config: {
+        usesNonExemptEncryption: false,
+        ...(googleMapsApiKey
+          ? {
+              googleMapsApiKey,
+            }
+          : {}),
+      },
     },
     android: {
       package: "com.slavisacicovic.trailbook",
