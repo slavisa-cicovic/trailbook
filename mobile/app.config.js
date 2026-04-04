@@ -35,6 +35,9 @@ module.exports = {
       icon: "./assets/app-icon.png",
       supportsTablet: false,
       bundleIdentifier: "com.slavisacicovic.trailbook",
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
       config: googleMapsApiKey
         ? {
             googleMapsApiKey,
