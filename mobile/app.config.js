@@ -60,6 +60,9 @@ module.exports = {
     },
     extra: {
       hasGoogleMapsApiKey: Boolean(googleMapsApiKey),
+      eas: {
+        projectId: "34a686f3-39be-4580-a53e-eebbf40627b5",
+      },
     },
   },
 };
