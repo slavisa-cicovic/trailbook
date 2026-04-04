@@ -5,6 +5,7 @@ import { Image, StyleSheet, Text, TextInput, View } from "react-native";
 import ScreenLayout from "../../components/layout/screen-layout";
 import FormField from "../../components/ui/form-field";
 import PrimaryButton from "../../components/ui/primary-button";
+import { DEMO_CREDENTIALS } from "../../domain/identity";
 import {
   canCreateTemporarySession,
   createTemporarySession,
@@ -28,14 +29,13 @@ export default function LoginScreen() {
   const deviceId = useSessionStore((state) => state.deviceId);
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
-  const canSignIn = canCreateTemporarySession(credentials, deviceId);
 
-  async function handleSignIn() {
-    if (!canSignIn) {
+  async function completeSignInWith(credentialsToUse: typeof credentials) {
+    if (!canCreateTemporarySession(credentialsToUse, deviceId)) {
       return;
     }
 
-    const session = createTemporarySession(credentials, deviceId);
+    const session = createTemporarySession(credentialsToUse, deviceId);
 
     await setActiveIdentitySession(session);
     await setRecordingSession({
@@ -47,6 +47,16 @@ export default function LoginScreen() {
     await reconcileHydratedRecordingState(getTripsStateSnapshot().trips);
 
     router.replace("/recording");
+  }
+
+  async function handleEnterDemo() {
+    const demoCredentials = {
+      email: DEMO_CREDENTIALS.email,
+      password: DEMO_CREDENTIALS.password,
+    };
+
+    updateSessionCredentials(demoCredentials);
+    await completeSignInWith(demoCredentials);
   }
 
   if (identitySession) {
@@ -67,10 +77,10 @@ export default function LoginScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
-        label="User email"
+        label="Username"
         onChangeText={(email) => updateSessionCredentials({ email })}
         onSubmitEditing={() => passwordInputRef.current?.focus()}
-        placeholder="user@example.com"
+        placeholder="username"
         returnKeyType="next"
         value={credentials.email}
       />
@@ -80,8 +90,8 @@ export default function LoginScreen() {
         autoCorrect={false}
         label="Password"
         onChangeText={(password) => updateSessionCredentials({ password })}
-        onSubmitEditing={() => void handleSignIn()}
-        placeholder="temporary password"
+        onSubmitEditing={() => passwordInputRef.current?.blur()}
+        placeholder="password"
         ref={passwordInputRef}
         returnKeyType="done"
         secureTextEntry
@@ -89,8 +99,12 @@ export default function LoginScreen() {
         value={credentials.password}
       />
 
-      <PrimaryButton disabled={!canSignIn} onPress={() => void handleSignIn()}>
+      <PrimaryButton disabled onPress={() => {}}>
         Login
+      </PrimaryButton>
+
+      <PrimaryButton onPress={() => void handleEnterDemo()} variant="secondary">
+        Enter Demo
       </PrimaryButton>
     </ScreenLayout>
   );

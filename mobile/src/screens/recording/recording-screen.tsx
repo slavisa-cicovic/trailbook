@@ -475,6 +475,7 @@ export default function RecordingScreen() {
   return (
     <ScreenLayout
       accountEmail={activeIdentitySession.userEmail}
+      accountMode={activeIdentitySession.mode}
       contentStyle={styles.screenContent}
       contentVariant="plain"
       onLogout={() => void handleClearLocalSession()}

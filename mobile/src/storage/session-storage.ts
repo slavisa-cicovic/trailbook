@@ -3,6 +3,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { AuthenticatedDeviceSession } from "../domain/identity";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 
+function normalizeSession(session: AuthenticatedDeviceSession): AuthenticatedDeviceSession {
+  return {
+    ...session,
+    mode: session.mode ?? (session.userEmail === "demo" ? "demo" : "standard"),
+  };
+}
+
 export async function loadSession(): Promise<AuthenticatedDeviceSession | null> {
   const rawValue = await AsyncStorage.getItem(STORAGE_KEYS.session);
 
@@ -10,7 +17,7 @@ export async function loadSession(): Promise<AuthenticatedDeviceSession | null> 
     return null;
   }
 
-  return JSON.parse(rawValue) as AuthenticatedDeviceSession;
+  return normalizeSession(JSON.parse(rawValue) as AuthenticatedDeviceSession);
 }
 
 export async function saveSession(session: AuthenticatedDeviceSession | null): Promise<void> {

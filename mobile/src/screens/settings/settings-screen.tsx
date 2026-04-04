@@ -24,6 +24,7 @@ export default function SettingsScreen() {
   return (
     <ScreenLayout
       accountEmail={identitySession.userEmail}
+      accountMode={identitySession.mode}
       onLogout={() => void handleLogout()}
       showBottomNavigation
       title="Settings"
@@ -96,6 +97,10 @@ export default function SettingsScreen() {
 
       <Text style={[styles.label, { color: theme.mutedText }]}>Active user</Text>
       <Text style={[styles.value, { color: theme.primaryText }]}>{identitySession.userEmail}</Text>
+      <Text style={[styles.label, { color: theme.mutedText }]}>Session mode</Text>
+      <Text style={[styles.value, { color: theme.primaryText }]}>
+        {identitySession.mode === "demo" ? "Demo" : "Standard"}
+      </Text>
     </ScreenLayout>
   );
 }

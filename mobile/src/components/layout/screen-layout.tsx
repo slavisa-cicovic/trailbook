@@ -21,6 +21,7 @@ import { useThemeStore } from "../../state/theme-store";
 interface ScreenLayoutProps extends PropsWithChildren {
   title?: string;
   accountEmail?: string | null;
+  accountMode?: "demo" | "standard" | null;
   contentStyle?: StyleProp<ViewStyle>;
   contentVariant?: "card" | "plain";
   onBack?: () => void;
@@ -39,6 +40,7 @@ export default function ScreenLayout({
   children,
   title,
   accountEmail,
+  accountMode,
   contentStyle,
   contentVariant = "card",
   onBack,
@@ -83,9 +85,16 @@ export default function ScreenLayout({
                     <Text numberOfLines={1} style={[styles.accountEmail, { color: theme.accent }]}>
                       {accountEmail ?? "Account"}
                     </Text>
-                    <Text style={[styles.accountChevron, { color: theme.mutedText }]}>
-                      {accountMenuOpen ? "Close" : "Account"}
-                    </Text>
+                    <View style={styles.accountMetaRow}>
+                      <Text style={[styles.accountChevron, { color: theme.mutedText }]}>
+                        {accountMenuOpen ? "Close" : "Account"}
+                      </Text>
+                      {accountMode === "demo" ? (
+                        <View style={[styles.demoBadge, { backgroundColor: theme.accent }]}>
+                          <Text style={[styles.demoBadgeText, { color: theme.surface }]}>Demo</Text>
+                        </View>
+                      ) : null}
+                    </View>
                   </Pressable>
 
                   {accountMenuOpen ? (
@@ -98,6 +107,11 @@ export default function ScreenLayout({
                       {accountEmail ? (
                         <Text numberOfLines={1} style={[styles.accountMenuEmail, { color: theme.mutedText }]}>
                           {accountEmail}
+                        </Text>
+                      ) : null}
+                      {accountMode === "demo" ? (
+                        <Text style={[styles.accountMenuMode, { color: theme.mutedText }]}>
+                          Demo mode
                         </Text>
                       ) : null}
                       <Pressable
@@ -258,6 +272,22 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
+  accountMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  demoBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  demoBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   accountMenu: {
     position: "absolute",
     top: 54,
@@ -276,6 +306,10 @@ const styles = StyleSheet.create({
   },
   accountMenuEmail: {
     fontSize: 13,
+  },
+  accountMenuMode: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   logoutButton: {
     borderRadius: 12,

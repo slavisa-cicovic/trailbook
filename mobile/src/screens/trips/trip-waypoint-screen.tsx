@@ -184,6 +184,7 @@ export default function TripWaypointScreen() {
     return (
       <ScreenLayout
         accountEmail={identitySession.userEmail}
+        accountMode={identitySession.mode}
         contentVariant="plain"
         onLogout={() => void handleLogout()}
         showBottomNavigation
@@ -200,6 +201,7 @@ export default function TripWaypointScreen() {
   return (
       <ScreenLayout
         accountEmail={identitySession.userEmail}
+        accountMode={identitySession.mode}
         contentStyle={styles.screenContent}
         contentVariant="plain"
         onBack={() => router.back()}

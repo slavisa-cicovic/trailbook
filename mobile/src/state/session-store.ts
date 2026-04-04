@@ -1,6 +1,10 @@
 import { useSyncExternalStore } from "react";
 
-import type { AuthenticatedDeviceSession, TemporaryUserCredentials } from "../domain/identity";
+import {
+  DEMO_CREDENTIALS,
+  type AuthenticatedDeviceSession,
+  type TemporaryUserCredentials,
+} from "../domain/identity";
 import { getOrCreateDeviceId } from "../storage/device-storage";
 import { loadSession, saveSession } from "../storage/session-storage";
 

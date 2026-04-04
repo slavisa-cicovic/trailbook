@@ -168,6 +168,7 @@ export default function TripsScreen() {
   return (
     <ScreenLayout
       accountEmail={identitySession.userEmail}
+      accountMode={identitySession.mode}
       contentStyle={styles.screenContent}
       contentVariant="plain"
       onLogout={() => void handleLogout()}
