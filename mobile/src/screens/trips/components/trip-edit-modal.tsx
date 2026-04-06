@@ -1,4 +1,15 @@
-import { Modal, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { TripUpdateInput } from "../../../services/trips/trips-management.service";
@@ -23,46 +34,55 @@ export default function TripEditModal({
   const canSave = draft.title.trim().length > 0;
 
   return (
-    <Modal animationType="slide" onRequestClose={onClose} visible={visible}>
-      <SafeAreaView style={styles.modalScreen}>
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.modalScreen}>
         <StatusBar barStyle="dark-content" />
-        <ScrollView contentContainerStyle={styles.modalContent}>
-          <Text style={styles.modalTitle}>Edit trip</Text>
+        <Pressable onPress={onClose} style={styles.modalBackdrop} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalKeyboardAvoidingView}
+        >
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>Edit trip</Text>
 
-          <Text style={styles.fieldLabel}>Trip name</Text>
-          <TextInput
-            onChangeText={onChangeTitle}
-            placeholder="Trip name"
-            placeholderTextColor="#8c9a86"
-            style={styles.fieldInput}
-            value={draft.title}
-          />
+              <Text style={styles.fieldLabel}>Trip name</Text>
+              <TextInput
+                onChangeText={onChangeTitle}
+                placeholder="Trip name"
+                placeholderTextColor="#8c9a86"
+                style={styles.fieldInput}
+                value={draft.title}
+              />
 
-          <Text style={styles.fieldLabel}>Description</Text>
-          <TextInput
-            multiline
-            numberOfLines={4}
-            onChangeText={onChangeDescription}
-            placeholder="Trip description"
-            placeholderTextColor="#8c9a86"
-            style={[styles.fieldInput, styles.fieldTextarea]}
-            textAlignVertical="top"
-            value={draft.description}
-          />
+              <Text style={styles.fieldLabel}>Description</Text>
+              <TextInput
+                multiline
+                numberOfLines={4}
+                onChangeText={onChangeDescription}
+                placeholder="Trip description"
+                placeholderTextColor="#8c9a86"
+                style={[styles.fieldInput, styles.fieldTextarea]}
+                textAlignVertical="top"
+                value={draft.description}
+              />
 
-          <View style={styles.modalActions}>
-            <Pressable onPress={onClose} style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              disabled={!canSave}
-              onPress={onSave}
-              style={[styles.primaryButton, !canSave && styles.disabledButton]}
-            >
-              <Text style={styles.primaryButtonText}>Save</Text>
-            </Pressable>
+              <View style={styles.modalActions}>
+                <Pressable onPress={onClose} style={styles.secondaryButton}>
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  disabled={!canSave}
+                  onPress={onSave}
+                  style={[styles.primaryButton, !canSave && styles.disabledButton]}
+                >
+                  <Text style={styles.primaryButtonText}>Save</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
           </View>
-        </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
   );
@@ -71,10 +91,39 @@ export default function TripEditModal({
 const styles = StyleSheet.create({
   modalScreen: {
     flex: 1,
+    backgroundColor: "rgba(24, 31, 24, 0.36)",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalKeyboardAvoidingView: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    maxHeight: "84%",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     backgroundColor: "#f3efe6",
+    overflow: "hidden",
+    shadowColor: "#000000",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 10,
+  },
+  modalHandle: {
+    alignSelf: "center",
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "#c9d2c2",
+    marginTop: 10,
   },
   modalContent: {
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    paddingBottom: 28,
     gap: 14,
   },
   modalTitle: {
