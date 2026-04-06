@@ -25,7 +25,12 @@ import {
 import type { RecordingProfile } from "../../domain/trips";
 import {
   getCurrentForegroundLocation,
+  isBackgroundLocationTrackingSupported,
+  requestBackgroundLocationAccess,
   requestForegroundLocationAccess,
+  restartBackgroundLocationTracking,
+  startBackgroundLocationTracking,
+  stopBackgroundLocationTracking,
   type CurrentLocationSnapshot,
   watchForegroundLocation,
 } from "../../services/location/location.service";
@@ -80,6 +85,7 @@ export default function RecordingScreen() {
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
   const [locationPermissionGranted, setLocationPermissionGranted] = useState<boolean | null>(null);
+  const [backgroundRecordingSupported, setBackgroundRecordingSupported] = useState<boolean | null>(null);
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
   const [startModalVisible, setStartModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
@@ -159,6 +165,14 @@ export default function RecordingScreen() {
     let stopWatchingLocation: (() => void) | null = null;
 
     async function hydrateLocation() {
+      const backgroundSupported = await isBackgroundLocationTrackingSupported();
+
+      if (!active) {
+        return;
+      }
+
+      setBackgroundRecordingSupported(backgroundSupported);
+
       const granted = await requestForegroundLocationAccess();
 
       if (!active) {
@@ -191,7 +205,11 @@ export default function RecordingScreen() {
   }, [activeRecordingProfile]);
 
   useEffect(() => {
-    if (!currentLocation || recordingSession.status !== "recording") {
+    if (
+      backgroundRecordingSupported !== false ||
+      !currentLocation ||
+      recordingSession.status !== "recording"
+    ) {
       return;
     }
 
@@ -207,26 +225,71 @@ export default function RecordingScreen() {
 
     void setTripPoints(appendTripPointIfUseful(tripPoints, nextTripPoint));
     void setRecordingSession(updateRecordingLastPoint(recordingSession, currentLocation.recordedAt));
-  }, [activeTrip, currentLocation, recordingSession, tripPoints]);
+  }, [activeTrip, backgroundRecordingSupported, currentLocation, recordingSession, tripPoints]);
 
   async function handleStartRecording() {
     if (!activeIdentitySession) {
       return;
     }
 
+    const foregroundGranted =
+      locationPermissionGranted ?? (await requestForegroundLocationAccess());
+
+    setLocationPermissionGranted(foregroundGranted);
+
+    if (!foregroundGranted) {
+      Alert.alert(
+        "Location required",
+        "Allow location access so Trailbook can start recording this trip.",
+      );
+      return;
+    }
+
+    const supportsBackgroundRecording =
+      backgroundRecordingSupported ?? (await isBackgroundLocationTrackingSupported());
+
+    setBackgroundRecordingSupported(supportsBackgroundRecording);
+
+    if (supportsBackgroundRecording) {
+      const backgroundGranted = await requestBackgroundLocationAccess();
+
+      if (!backgroundGranted) {
+        Alert.alert(
+          "Background location required",
+          "Allow background location access so Trailbook can keep recording while the screen is locked.",
+        );
+        return;
+      }
+    }
+
     const startedAt = new Date().toISOString();
     const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft);
-
-    await setTrips([...trips, nextTrip]);
-    await setRecordingSession(
-      createRecordingSession(activeIdentitySession, startedAt, recordingDraft.recordingProfile),
+    const nextSession = createRecordingSession(
+      activeIdentitySession,
+      startedAt,
+      recordingDraft.recordingProfile,
     );
-    setStartModalVisible(false);
-    setRecordingDraft({
-      title: "",
-      description: "",
-      recordingProfile: DEFAULT_RECORDING_PROFILE,
-    });
+
+    try {
+      await setTrips([...trips, nextTrip]);
+      await setRecordingSession(nextSession);
+      if (supportsBackgroundRecording) {
+        await startBackgroundLocationTracking(recordingDraft.recordingProfile);
+      }
+      setStartModalVisible(false);
+      setRecordingDraft({
+        title: "",
+        description: "",
+        recordingProfile: DEFAULT_RECORDING_PROFILE,
+      });
+    } catch {
+      await setTrips(trips);
+      await setRecordingSession(recordingSession);
+      Alert.alert(
+        "Recording unavailable",
+        "Trailbook could not start background trip recording on this device.",
+      );
+    }
   }
 
   async function handleStopRecording() {
@@ -236,15 +299,34 @@ export default function RecordingScreen() {
 
     const endedAt = new Date().toISOString();
 
+    if (backgroundRecordingSupported !== false) {
+      await stopBackgroundLocationTracking();
+    }
     await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt));
     await setRecordingSession(stopRecordingSession(recordingSession));
   }
 
   async function handleContinueInterruptedRecording() {
-    await setRecordingSession(continueInterruptedRecording(recordingSession));
+    const nextSession = continueInterruptedRecording(recordingSession);
+
+    try {
+      await setRecordingSession(nextSession);
+      if (backgroundRecordingSupported !== false) {
+        await startBackgroundLocationTracking(nextSession.recordingProfile);
+      }
+    } catch {
+      await setRecordingSession(recordingSession);
+      Alert.alert(
+        "Recording unavailable",
+        "Trailbook could not resume background trip recording on this device.",
+      );
+    }
   }
 
   async function handleClearLocalSession() {
+    if (backgroundRecordingSupported !== false) {
+      await stopBackgroundLocationTracking();
+    }
     await setActiveIdentitySession(null);
   }
 
@@ -260,6 +342,9 @@ export default function RecordingScreen() {
 
     await setTrips(updateTripRecordingProfile(trips, recordingSession.activeTripId, profile));
     await setRecordingSession(updateRecordingProfile(recordingSession, profile));
+    if (backgroundRecordingSupported !== false) {
+      await restartBackgroundLocationTracking(profile);
+    }
     setProfileModalVisible(false);
   }
 
@@ -888,7 +973,7 @@ export default function RecordingScreen() {
             </Text>
             <Text style={styles.placeholderText}>
               {locationPermissionGranted === false
-                ? "Allow foreground location access so the recording map can show where you are."
+                ? "Allow location access so Trailbook can show where you are and keep recording in the background."
                 : "The recording screen will center the map on your current position."}
             </Text>
           </View>

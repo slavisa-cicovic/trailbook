@@ -27,6 +27,11 @@ module.exports = {
         {
           locationWhenInUsePermission:
             "Trailbook uses your location to show where you are and support trip recording.",
+          locationAlwaysAndWhenInUsePermission:
+            "Trailbook uses your location to keep recording trips when the app is in the background or the screen is locked.",
+          isIosBackgroundLocationEnabled: true,
+          isAndroidBackgroundLocationEnabled: true,
+          isAndroidForegroundServiceEnabled: true,
         },
       ],
     ],

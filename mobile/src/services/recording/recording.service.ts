@@ -114,10 +114,10 @@ export function reconcileRecordingSessionWithTrips(
   if (session.status === "recording") {
     return {
       ...session,
-      status: "interrupted",
+      status: "recording",
       activeTripId: unfinishedTrip.localId,
       startedAt: session.startedAt ?? unfinishedTrip.startedAt,
-      interruptedAt: now,
+      interruptedAt: null,
       userId: session.userId ?? unfinishedTrip.userId,
       deviceId: session.deviceId ?? unfinishedTrip.deviceId,
       recordingProfile: session.recordingProfile ?? unfinishedTrip.recordingProfile,

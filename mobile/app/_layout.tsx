@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
+import "../src/services/recording/background-recording-task";
 import { getAppTheme, resolveAppThemeMode } from "../src/constants/app-theme";
+import { syncBackgroundLocationTracking } from "../src/services/location/location.service";
 import {
   hydrateRecordingStore,
   reconcileHydratedRecordingState,
@@ -26,6 +28,9 @@ export default function RootLayout() {
   const themeMode = useThemeStore((state) => state.mode);
   const systemColorScheme = useColorScheme();
   const recordingHydrated = useRecordingStore((state) => state.hydrated);
+  const recordingStatus = useRecordingStore((state) => state.session.status);
+  const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
+  const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
   const tripsHydrated = useTripsStore((state) => state.hydrated);
   const tripPointsHydrated = useTripPointsStore((state) => state.hydrated);
   const waypointsHydrated = useWaypointsStore((state) => state.hydrated);
@@ -50,6 +55,24 @@ export default function RootLayout() {
 
     void hydrateAppState();
   }, []);
+
+  useEffect(() => {
+    if (!recordingHydrated || !tripsHydrated) {
+      return;
+    }
+
+    void syncBackgroundLocationTracking(
+      recordingStatus,
+      activeRecordingTripId,
+      activeRecordingProfile,
+    ).catch(() => undefined);
+  }, [
+    activeRecordingProfile,
+    activeRecordingTripId,
+    recordingHydrated,
+    recordingStatus,
+    tripsHydrated,
+  ]);
 
   if (
     !themeHydrated ||
