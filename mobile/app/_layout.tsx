@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View, useColorScheme } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { getAppTheme, resolveAppThemeMode } from "../src/constants/app-theme";
 import {
@@ -67,7 +68,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <GestureHandlerRootView style={styles.gestureRoot}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
@@ -77,11 +78,14 @@ export default function RootLayout() {
         <Stack.Screen name="settings" />
       </Stack>
       <StatusBar style={resolvedThemeMode === "night" ? "light" : "dark"} />
-    </>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   loadingScreen: {
     flex: 1,
     alignItems: "center",

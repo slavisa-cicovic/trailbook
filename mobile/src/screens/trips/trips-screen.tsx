@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Redirect, useRouter } from "expo-router";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
@@ -261,79 +262,89 @@ export default function TripsScreen() {
             const statusLabel = trip.endedAt === null ? "Active" : trip.syncStatus;
 
             return (
-              <View key={trip.localId} style={styles.tripCard}>
-                <View style={styles.tripHeader}>
-                  <View style={styles.tripHeaderText}>
-                    <Text style={styles.tripTitle}>{trip.title}</Text>
-                    {trip.description ? (
-                      <Text style={styles.tripDescription}>{trip.description}</Text>
-                    ) : null}
-                  </View>
-                  <View style={styles.tripBadge}>
-                    <Text style={styles.tripBadgeText}>{statusLabel}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.metaGrid}>
-                  <View style={styles.metaCell}>
-                    <Text style={styles.metaKey}>Mode</Text>
-                    <Text style={styles.metaValue}>{getRecordingProfileLabel(trip.recordingProfile)}</Text>
-                  </View>
-                  <View style={styles.metaCell}>
-                    <Text style={styles.metaKey}>Distance</Text>
-                    <Text style={styles.metaValue}>{formatDistanceKm(distanceMeters)}</Text>
-                  </View>
-                  <View style={styles.metaCell}>
-                    <Text style={styles.metaKey}>Waypoints</Text>
-                    <Text style={styles.metaValue}>{String(waypointCount)}</Text>
-                  </View>
-                  <View style={styles.metaCell}>
-                    <Text style={styles.metaKey}>Photos</Text>
-                    <Text style={styles.metaValue}>{String(photoCount)}</Text>
-                  </View>
-                  <View style={styles.metaCell}>
-                    <Text style={styles.metaKey}>Started</Text>
-                    <Text style={styles.metaValue}>{new Date(trip.startedAt).toLocaleDateString()}</Text>
-                  </View>
-                  <View style={styles.metaCell}>
-                    <Text style={styles.metaKey}>Ended</Text>
-                    <Text style={styles.metaValue}>
-                      {trip.endedAt ? new Date(trip.endedAt).toLocaleDateString() : "Active"}
-                    </Text>
-                  </View>
-                  <View style={styles.metaCell}>
-                    <Text style={styles.metaKey}>Sync</Text>
-                    <Text style={styles.metaValue}>{trip.syncStatus}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.cardActions}>
-                  <Pressable
-                    onPress={() => router.push(`/trips/${trip.localId}`)}
-                    style={styles.actionButton}
-                  >
-                    <Text style={styles.actionButtonText}>Open</Text>
-                  </Pressable>
-                  <Pressable onPress={() => openTripEdit(trip)} style={styles.actionButton}>
-                    <Text style={styles.actionButtonText}>Edit</Text>
-                  </Pressable>
-                  {trip.endedAt === null ? (
+              <Swipeable
+                key={trip.localId}
+                friction={2}
+                overshootRight={false}
+                renderRightActions={() => (
+                  <View style={styles.swipeActions}>
                     <Pressable
-                      onPress={() => void handleResumeTrip(trip)}
-                      style={[styles.actionButton, styles.resumeActionButton]}
+                      onPress={() => router.push(`/trips/${trip.localId}`)}
+                      style={[styles.swipeAction, styles.openSwipeAction]}
                     >
-                      <Text style={[styles.actionButtonText, styles.resumeActionText]}>Resume</Text>
+                      <Text style={styles.swipeActionText}>Open</Text>
                     </Pressable>
-                  ) : (
-                    <Pressable
-                      onPress={() => void handleDeleteTrip(trip)}
-                      style={[styles.actionButton, styles.deleteActionButton]}
-                    >
-                      <Text style={[styles.actionButtonText, styles.deleteActionText]}>Delete</Text>
-                    </Pressable>
-                  )}
+                    {trip.endedAt === null ? (
+                      <Pressable
+                        onPress={() => void handleResumeTrip(trip)}
+                        style={[styles.swipeAction, styles.resumeSwipeAction]}
+                      >
+                        <Text style={[styles.swipeActionText, styles.resumeSwipeActionText]}>
+                          Resume
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        onPress={() => void handleDeleteTrip(trip)}
+                        style={[styles.swipeAction, styles.deleteSwipeAction]}
+                      >
+                        <Text style={[styles.swipeActionText, styles.deleteSwipeActionText]}>
+                          Delete
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
+              >
+                <View style={styles.tripCardRow}>
+                  <View style={styles.tripCard}>
+                    <View style={styles.tripBodyPressable}>
+                      <View style={styles.tripHeader}>
+                        <View style={styles.tripHeaderText}>
+                          <Text style={styles.tripTitle}>{trip.title}</Text>
+                          {trip.description ? (
+                            <Text style={styles.tripDescription}>{trip.description}</Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.tripBadge}>
+                          <Text style={styles.tripBadgeText}>{statusLabel}</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.metaGrid}>
+                        <View style={styles.metaCell}>
+                          <Text style={styles.metaKey}>Mode</Text>
+                          <Text style={styles.metaValue}>{getRecordingProfileLabel(trip.recordingProfile)}</Text>
+                        </View>
+                        <View style={styles.metaCell}>
+                          <Text style={styles.metaKey}>Distance</Text>
+                          <Text style={styles.metaValue}>{formatDistanceKm(distanceMeters)}</Text>
+                        </View>
+                        <View style={styles.metaCell}>
+                          <Text style={styles.metaKey}>Waypoints</Text>
+                          <Text style={styles.metaValue}>{String(waypointCount)}</Text>
+                        </View>
+                        <View style={styles.metaCell}>
+                          <Text style={styles.metaKey}>Photos</Text>
+                          <Text style={styles.metaValue}>{String(photoCount)}</Text>
+                        </View>
+                        <View style={styles.metaCell}>
+                          <Text style={styles.metaKey}>Started</Text>
+                          <Text style={styles.metaValue}>
+                            {new Date(trip.startedAt).toLocaleDateString()}
+                          </Text>
+                        </View>
+                        <View style={styles.metaCell}>
+                          <Text style={styles.metaKey}>Ended</Text>
+                          <Text style={styles.metaValue}>
+                            {trip.endedAt ? new Date(trip.endedAt).toLocaleDateString() : "Active"}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
                 </View>
-              </View>
+              </Swipeable>
             );
           })}
         </View>
@@ -438,8 +449,10 @@ const styles = StyleSheet.create({
     color: "#52624f",
   },
   list: {
-    gap: 14,
     paddingBottom: 20,
+  },
+  tripCardRow: {
+    marginBottom: 14,
   },
   tripCard: {
     borderRadius: 22,
@@ -448,6 +461,9 @@ const styles = StyleSheet.create({
     gap: 14,
     borderWidth: 1,
     borderColor: "#ebe1cf",
+  },
+  tripBodyPressable: {
+    gap: 14,
   },
   tripHeader: {
     flexDirection: "row",
@@ -504,33 +520,40 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#243224",
   },
-  cardActions: {
+  swipeActions: {
     flexDirection: "row",
     gap: 10,
+    alignItems: "stretch",
+    justifyContent: "flex-end",
+    paddingLeft: 12,
+    marginBottom: 14,
   },
-  actionButton: {
-    flex: 1,
+  swipeAction: {
+    width: 92,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 14,
     backgroundColor: "#e6ece1",
-    paddingVertical: 12,
+    paddingVertical: 18,
   },
-  actionButtonText: {
+  swipeActionText: {
     fontSize: 14,
     fontWeight: "700",
     color: "#243224",
   },
-  deleteActionButton: {
+  openSwipeAction: {
+    backgroundColor: "#e6ece1",
+  },
+  deleteSwipeAction: {
     backgroundColor: "#f7e0db",
   },
-  deleteActionText: {
+  deleteSwipeActionText: {
     color: "#9f3f31",
   },
-  resumeActionButton: {
+  resumeSwipeAction: {
     backgroundColor: "#dfead9",
   },
-  resumeActionText: {
+  resumeSwipeActionText: {
     color: "#355035",
   },
   undoBanner: {
