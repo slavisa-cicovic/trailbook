@@ -41,6 +41,11 @@ export async function requestBackgroundLocationAccess(): Promise<boolean> {
   return permission.granted;
 }
 
+export async function getBackgroundLocationAccess(): Promise<boolean> {
+  const permission = await Location.getBackgroundPermissionsAsync();
+  return permission.granted;
+}
+
 export async function isBackgroundLocationTrackingSupported(): Promise<boolean> {
   return TaskManager.isAvailableAsync();
 }

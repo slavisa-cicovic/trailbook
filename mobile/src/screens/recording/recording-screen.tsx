@@ -24,6 +24,7 @@ import {
 } from "../../constants/recording-profiles";
 import type { RecordingProfile } from "../../domain/trips";
 import {
+  getBackgroundLocationAccess,
   getCurrentForegroundLocation,
   isBackgroundLocationTrackingSupported,
   requestBackgroundLocationAccess,
@@ -86,6 +87,9 @@ export default function RecordingScreen() {
 
   const [locationPermissionGranted, setLocationPermissionGranted] = useState<boolean | null>(null);
   const [backgroundRecordingSupported, setBackgroundRecordingSupported] = useState<boolean | null>(null);
+  const [backgroundLocationPermissionGranted, setBackgroundLocationPermissionGranted] = useState<boolean | null>(
+    null,
+  );
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
   const [startModalVisible, setStartModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
@@ -185,6 +189,16 @@ export default function RecordingScreen() {
         return;
       }
 
+      if (backgroundSupported) {
+        const backgroundGranted = await getBackgroundLocationAccess();
+
+        if (!active) {
+          return;
+        }
+
+        setBackgroundLocationPermissionGranted(backgroundGranted);
+      }
+
       const initialLocation = await getCurrentForegroundLocation();
 
       if (active && initialLocation) {
@@ -206,7 +220,7 @@ export default function RecordingScreen() {
 
   useEffect(() => {
     if (
-      backgroundRecordingSupported !== false ||
+      (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) ||
       !currentLocation ||
       recordingSession.status !== "recording"
     ) {
@@ -225,7 +239,14 @@ export default function RecordingScreen() {
 
     void setTripPoints(appendTripPointIfUseful(tripPoints, nextTripPoint));
     void setRecordingSession(updateRecordingLastPoint(recordingSession, currentLocation.recordedAt));
-  }, [activeTrip, backgroundRecordingSupported, currentLocation, recordingSession, tripPoints]);
+  }, [
+    activeTrip,
+    backgroundLocationPermissionGranted,
+    backgroundRecordingSupported,
+    currentLocation,
+    recordingSession,
+    tripPoints,
+  ]);
 
   async function handleStartRecording() {
     if (!activeIdentitySession) {
@@ -249,17 +270,11 @@ export default function RecordingScreen() {
       backgroundRecordingSupported ?? (await isBackgroundLocationTrackingSupported());
 
     setBackgroundRecordingSupported(supportsBackgroundRecording);
+    let backgroundPermissionGranted = backgroundLocationPermissionGranted ?? false;
 
     if (supportsBackgroundRecording) {
-      const backgroundGranted = await requestBackgroundLocationAccess();
-
-      if (!backgroundGranted) {
-        Alert.alert(
-          "Background location required",
-          "Allow background location access so Trailbook can keep recording while the screen is locked.",
-        );
-        return;
-      }
+      backgroundPermissionGranted = await requestBackgroundLocationAccess();
+      setBackgroundLocationPermissionGranted(backgroundPermissionGranted);
     }
 
     const startedAt = new Date().toISOString();
@@ -273,7 +288,7 @@ export default function RecordingScreen() {
     try {
       await setTrips([...trips, nextTrip]);
       await setRecordingSession(nextSession);
-      if (supportsBackgroundRecording) {
+      if (supportsBackgroundRecording && backgroundPermissionGranted) {
         await startBackgroundLocationTracking(recordingDraft.recordingProfile);
       }
       setStartModalVisible(false);
@@ -282,6 +297,12 @@ export default function RecordingScreen() {
         description: "",
         recordingProfile: DEFAULT_RECORDING_PROFILE,
       });
+      if (supportsBackgroundRecording && !backgroundPermissionGranted) {
+        Alert.alert(
+          "Background permission not enabled",
+          "Recording has started, but it will continue only while Trailbook stays active until background location is enabled.",
+        );
+      }
     } catch {
       await setTrips(trips);
       await setRecordingSession(recordingSession);
@@ -311,7 +332,7 @@ export default function RecordingScreen() {
 
     try {
       await setRecordingSession(nextSession);
-      if (backgroundRecordingSupported !== false) {
+      if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
         await startBackgroundLocationTracking(nextSession.recordingProfile);
       }
     } catch {
@@ -342,7 +363,7 @@ export default function RecordingScreen() {
 
     await setTrips(updateTripRecordingProfile(trips, recordingSession.activeTripId, profile));
     await setRecordingSession(updateRecordingProfile(recordingSession, profile));
-    if (backgroundRecordingSupported !== false) {
+    if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
       await restartBackgroundLocationTracking(profile);
     }
     setProfileModalVisible(false);
