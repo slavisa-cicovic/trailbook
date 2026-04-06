@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import {
   Alert,
+  AppState,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -33,6 +35,7 @@ import {
   startBackgroundLocationTracking,
   stopBackgroundLocationTracking,
   type CurrentLocationSnapshot,
+  watchImmediateForegroundLocation,
   watchForegroundLocation,
 } from "../../services/location/location.service";
 import {
@@ -164,6 +167,29 @@ export default function RecordingScreen() {
       ? "No active route"
       : "Session details";
 
+  async function refreshCurrentLocation() {
+    const nextLocation = await getCurrentForegroundLocation();
+
+    if (nextLocation) {
+      setCurrentLocation(nextLocation);
+    }
+  }
+
+  function promptOpenBackgroundLocationSettings(message: string) {
+    Alert.alert("Background permission not enabled", message, [
+      {
+        text: "Not now",
+        style: "cancel",
+      },
+      {
+        text: "Open Settings",
+        onPress: () => {
+          void Linking.openSettings();
+        },
+      },
+    ]);
+  }
+
   useEffect(() => {
     let active = true;
     let stopWatchingLocation: (() => void) | null = null;
@@ -205,9 +231,14 @@ export default function RecordingScreen() {
         setCurrentLocation(initialLocation);
       }
 
-      stopWatchingLocation = await watchForegroundLocation(activeRecordingProfile, (nextLocation) => {
-        setCurrentLocation(nextLocation);
-      });
+      stopWatchingLocation =
+        recordingSession.status === "idle"
+          ? await watchImmediateForegroundLocation((nextLocation) => {
+              setCurrentLocation(nextLocation);
+            })
+          : await watchForegroundLocation(activeRecordingProfile, (nextLocation) => {
+              setCurrentLocation(nextLocation);
+            });
     }
 
     void hydrateLocation();
@@ -216,7 +247,28 @@ export default function RecordingScreen() {
       active = false;
       stopWatchingLocation?.();
     };
-  }, [activeRecordingProfile]);
+  }, [activeRecordingProfile, recordingSession.status]);
+
+  useEffect(() => {
+    if (locationPermissionGranted !== true || currentLocation) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      void refreshCurrentLocation();
+    }, 3000);
+
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        void refreshCurrentLocation();
+      }
+    });
+
+    return () => {
+      clearInterval(intervalId);
+      subscription.remove();
+    };
+  }, [currentLocation, locationPermissionGranted]);
 
   useEffect(() => {
     if (
@@ -272,11 +324,6 @@ export default function RecordingScreen() {
     setBackgroundRecordingSupported(supportsBackgroundRecording);
     let backgroundPermissionGranted = backgroundLocationPermissionGranted ?? false;
 
-    if (supportsBackgroundRecording) {
-      backgroundPermissionGranted = await requestBackgroundLocationAccess();
-      setBackgroundLocationPermissionGranted(backgroundPermissionGranted);
-    }
-
     const startedAt = new Date().toISOString();
     const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft);
     const nextSession = createRecordingSession(
@@ -288,20 +335,31 @@ export default function RecordingScreen() {
     try {
       await setTrips([...trips, nextTrip]);
       await setRecordingSession(nextSession);
-      if (supportsBackgroundRecording && backgroundPermissionGranted) {
-        await startBackgroundLocationTracking(recordingDraft.recordingProfile);
-      }
       setStartModalVisible(false);
       setRecordingDraft({
         title: "",
         description: "",
         recordingProfile: DEFAULT_RECORDING_PROFILE,
       });
-      if (supportsBackgroundRecording && !backgroundPermissionGranted) {
-        Alert.alert(
-          "Background permission not enabled",
-          "Recording has started, but it will continue only while Trailbook stays active until background location is enabled.",
-        );
+
+      if (supportsBackgroundRecording) {
+        try {
+          backgroundPermissionGranted = await requestBackgroundLocationAccess();
+          setBackgroundLocationPermissionGranted(backgroundPermissionGranted);
+
+          if (backgroundPermissionGranted) {
+            await startBackgroundLocationTracking(recordingDraft.recordingProfile);
+          } else {
+            promptOpenBackgroundLocationSettings(
+              "Recording has started, but it will continue only while Trailbook stays active until background location is enabled. In Trailbook permissions, allow location all the time.",
+            );
+          }
+        } catch {
+          setBackgroundLocationPermissionGranted(false);
+          promptOpenBackgroundLocationSettings(
+            "Recording has started, but Trailbook could not enable background recording on this device. Open app settings and allow location all the time.",
+          );
+        }
       }
     } catch {
       await setTrips(trips);
@@ -997,6 +1055,11 @@ export default function RecordingScreen() {
                 ? "Allow location access so Trailbook can show where you are and keep recording in the background."
                 : "The recording screen will center the map on your current position."}
             </Text>
+            {locationPermissionGranted === true ? (
+              <Pressable onPress={() => void refreshCurrentLocation()} style={styles.retryLocationButton}>
+                <Text style={styles.retryLocationButtonText}>Retry location</Text>
+              </Pressable>
+            ) : null}
           </View>
         )}
 
@@ -1188,6 +1251,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#52624f",
     marginBottom: 4,
+  },
+  retryLocationButton: {
+    marginTop: 12,
+    alignSelf: "center",
+    borderRadius: 999,
+    backgroundColor: "#243224",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  retryLocationButtonText: {
+    color: "#fffdf8",
+    fontSize: 14,
+    fontWeight: "700",
   },
   fieldLabel: {
     fontSize: 12,

@@ -51,11 +51,22 @@ export async function isBackgroundLocationTrackingSupported(): Promise<boolean> 
 }
 
 export async function getCurrentForegroundLocation(): Promise<CurrentLocationSnapshot | null> {
-  const location = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.Balanced,
-  });
+  const lastKnownLocation = await Location.getLastKnownPositionAsync();
 
-  return toSnapshot(location);
+  if (lastKnownLocation) {
+    return toSnapshot(lastKnownLocation);
+  }
+
+  try {
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+      mayShowUserSettingsDialog: true,
+    });
+
+    return toSnapshot(location);
+  } catch {
+    return null;
+  }
 }
 
 export function getTrackingOptionsForProfile(profile: RecordingProfile): TrackingOptions {
@@ -238,6 +249,23 @@ export async function watchForegroundLocation(
   const trackingOptions = getTrackingOptionsForProfile(profile);
   const subscription = await Location.watchPositionAsync(
     trackingOptions,
+    (location: Location.LocationObject) => {
+      onLocation(toSnapshot(location));
+    },
+  );
+
+  return () => subscription.remove();
+}
+
+export async function watchImmediateForegroundLocation(
+  onLocation: (snapshot: CurrentLocationSnapshot) => void,
+): Promise<() => void> {
+  const subscription = await Location.watchPositionAsync(
+    {
+      accuracy: Location.Accuracy.Balanced,
+      distanceInterval: 1,
+      timeInterval: 1000,
+    },
     (location: Location.LocationObject) => {
       onLocation(toSnapshot(location));
     },
