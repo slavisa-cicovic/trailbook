@@ -72,10 +72,10 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
-        <Stack.Screen name="recording" />
-        <Stack.Screen name="trips/index" />
+        <Stack.Screen name="recording" options={{ animation: "none" }} />
+        <Stack.Screen name="trips/index" options={{ animation: "none" }} />
         <Stack.Screen name="trips/[tripId]" />
-        <Stack.Screen name="settings" />
+        <Stack.Screen name="settings" options={{ animation: "none" }} />
       </Stack>
       <StatusBar style={resolvedThemeMode === "night" ? "light" : "dark"} />
     </GestureHandlerRootView>

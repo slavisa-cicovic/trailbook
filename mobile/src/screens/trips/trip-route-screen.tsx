@@ -166,7 +166,7 @@ export default function TripRouteScreen() {
       accountMode={identitySession.mode}
       contentStyle={styles.screenContent}
       contentVariant="plain"
-      onBack={() => router.replace("/trips")}
+      onBack={() => router.back()}
       onLogout={() => void handleLogout()}
       scrollEnabled={false}
       showBottomNavigation
