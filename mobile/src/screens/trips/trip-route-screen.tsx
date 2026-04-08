@@ -395,6 +395,7 @@ const styles = StyleSheet.create({
     color: "#52624f",
   },
   segmentsCard: {
+    marginTop: 6,
     borderRadius: 20,
     backgroundColor: "#fffdf8",
     borderWidth: 1,
