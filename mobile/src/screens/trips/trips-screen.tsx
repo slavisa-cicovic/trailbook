@@ -38,12 +38,12 @@ interface PendingUndoState {
 }
 
 const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> = [
+  { value: "all", label: "All" },
   { value: "today", label: "Today" },
   { value: "yesterday", label: "Yesterday" },
   { value: "last_week", label: "Last week" },
   { value: "last_month", label: "Last month" },
   { value: "last_year", label: "Last year" },
-  { value: "all", label: "All" },
 ];
 
 export default function TripsScreen() {
