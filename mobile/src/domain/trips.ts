@@ -2,6 +2,18 @@ export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error"
 export type RecordingStatus = "idle" | "recording" | "interrupted";
 export type WaypointAttachmentType = "photo";
 export type RecordingProfile = "walk" | "bike" | "drive";
+export type WaypointCategory =
+  | "generic"
+  | "departure"
+  | "fuel"
+  | "border"
+  | "port"
+  | "ferry"
+  | "restaurant"
+  | "cafe"
+  | "viewpoint"
+  | "monument"
+  | "beach";
 
 export interface Trip {
   localId: string;
@@ -58,6 +70,7 @@ export interface Waypoint {
   userId: string;
   latitude: number;
   longitude: number;
+  category: WaypointCategory;
   title: string;
   note: string | null;
   createdAt: string;

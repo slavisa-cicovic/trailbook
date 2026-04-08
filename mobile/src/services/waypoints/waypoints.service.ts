@@ -1,8 +1,10 @@
+import { getWaypointCategoryOption } from "../../constants/waypoint-categories";
 import type { CurrentLocationSnapshot } from "../location/location.service";
-import type { Trip, Waypoint, WaypointAttachment } from "../../domain/trips";
+import type { Trip, Waypoint, WaypointAttachment, WaypointCategory } from "../../domain/trips";
 import type { PickedPhoto } from "../media/photo-picker.service";
 
 export interface WaypointDraftInput {
+  category: WaypointCategory;
   note: string;
   photos: PickedPhoto[];
   title: string;
@@ -24,6 +26,7 @@ export function createWaypointForTrip(
     userId: trip.userId,
     latitude: location.latitude,
     longitude: location.longitude,
+    category: draft.category,
     title: draft.title.trim(),
     note: draft.note.trim() || null,
     createdAt,
@@ -31,6 +34,10 @@ export function createWaypointForTrip(
     deletedAt: null,
     syncStatus: "local-only",
   };
+}
+
+export function getSuggestedWaypointTitle(category: WaypointCategory): string {
+  return getWaypointCategoryOption(category).label;
 }
 
 export function createPhotoAttachmentForWaypoint(

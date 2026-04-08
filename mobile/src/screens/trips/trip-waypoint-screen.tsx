@@ -3,6 +3,7 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
+import { getWaypointCategoryOption } from "../../constants/waypoint-categories";
 import type { WaypointAttachment } from "../../domain/trips";
 import {
   capturePhotoWithCamera,
@@ -56,6 +57,9 @@ export default function TripWaypointScreen() {
 
   const selectedPhotoSet = useMemo(() => new Set(selectedPhotoIds), [selectedPhotoIds]);
   const photoViewerVisible = selectedPhotoAttachmentId !== null && attachments.length > 0;
+  const selectedWaypointCategory = selectedWaypoint
+    ? getWaypointCategoryOption(selectedWaypoint.category)
+    : null;
 
   async function handleLogout() {
     await setActiveIdentitySession(null);
@@ -218,6 +222,14 @@ export default function TripWaypointScreen() {
         visible={waypointEditVisible}
       />
 
+      {selectedWaypointCategory ? (
+        <View style={styles.categoryRow}>
+          <View style={[styles.categoryBadge, { backgroundColor: selectedWaypointCategory.color }]}>
+            <Text style={styles.categoryBadgeText}>{selectedWaypointCategory.label}</Text>
+          </View>
+        </View>
+      ) : null}
+
       <WaypointPhotoViewerModal
         attachments={attachments}
         onClose={() => setSelectedPhotoAttachmentId(null)}
@@ -325,6 +337,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#52624f",
     textAlign: "center",
+  },
+  categoryRow: {
+    flexDirection: "row",
+    marginTop: -6,
+  },
+  categoryBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  categoryBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fffdf8",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
   primaryAction: {
     flex: 1,

@@ -1,6 +1,8 @@
+import { MaterialIcons } from "@expo/vector-icons";
 import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 import { StyleSheet, View } from "react-native";
 
+import { getWaypointCategoryOption } from "../../../constants/waypoint-categories";
 import type { Waypoint } from "../../../domain/trips";
 
 interface RouteWaypointMarker {
@@ -62,8 +64,20 @@ export default function TripRouteMap({
               longitude: waypoint.longitude,
             }}
             onPress={() => onSelectWaypoint(waypoint)}
-            pinColor={hasPhotos ? "#9f5f0f" : "#355035"}
-          />
+          >
+            <View
+              style={[
+                styles.markerBadge,
+                { backgroundColor: hasPhotos ? "#9f5f0f" : getWaypointCategoryOption(waypoint.category).color },
+              ]}
+            >
+              <MaterialIcons
+                color="#fffdf8"
+                name={getWaypointCategoryOption(waypoint.category).iconName}
+                size={18}
+              />
+            </View>
+          </Marker>
         ))}
       </MapView>
     </View>
@@ -86,5 +100,14 @@ const styles = StyleSheet.create({
     minHeight: 320,
     borderRadius: 20,
     backgroundColor: "#dfe8db",
+  },
+  markerBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#fffdf8",
   },
 });

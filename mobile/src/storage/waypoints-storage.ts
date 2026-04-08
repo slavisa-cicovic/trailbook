@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { DEFAULT_WAYPOINT_CATEGORY, normalizeWaypointCategory } from "../constants/waypoint-categories";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { Waypoint } from "../domain/trips";
 
@@ -17,6 +18,7 @@ function normalizeWaypoint(
     userId: value.userId,
     latitude: value.latitude ?? 0,
     longitude: value.longitude ?? 0,
+    category: normalizeWaypointCategory(value.category ?? DEFAULT_WAYPOINT_CATEGORY),
     title: value.title ?? value.localId,
     note: value.note ?? null,
     createdAt: value.createdAt ?? fallbackDate,

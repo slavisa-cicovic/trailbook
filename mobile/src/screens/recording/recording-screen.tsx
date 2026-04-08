@@ -24,6 +24,11 @@ import {
   getRecordingProfileLabel,
   RECORDING_PROFILE_OPTIONS,
 } from "../../constants/recording-profiles";
+import {
+  DEFAULT_WAYPOINT_CATEGORY,
+  WAYPOINT_CATEGORY_OPTIONS,
+  getWaypointCategoryOption,
+} from "../../constants/waypoint-categories";
 import type { RecordingProfile } from "../../domain/trips";
 import {
   getBackgroundLocationAccess,
@@ -70,6 +75,7 @@ import {
 import {
   createPhotoAttachmentForWaypoint,
   createWaypointForTrip,
+  getSuggestedWaypointTitle,
   type WaypointDraftInput,
 } from "../../services/waypoints/waypoints.service";
 import {
@@ -112,6 +118,7 @@ export default function RecordingScreen() {
     recordingProfile: DEFAULT_RECORDING_PROFILE,
   });
   const [waypointDraft, setWaypointDraft] = useState<WaypointDraftInput>({
+    category: DEFAULT_WAYPOINT_CATEGORY,
     title: "",
     note: "",
     photos: [],
@@ -137,6 +144,7 @@ export default function RecordingScreen() {
     : [];
   const recentWaypointCards = recentWaypoints.map((waypoint) => ({
     waypoint,
+    category: getWaypointCategoryOption(waypoint.category),
     photos: waypointAttachments.filter(
       (attachment) =>
         attachment.waypointLocalId === waypoint.localId &&
@@ -498,6 +506,7 @@ export default function RecordingScreen() {
     await setWaypointAttachments(nextAttachments);
     setWaypointModalVisible(false);
     setWaypointDraft({
+      category: DEFAULT_WAYPOINT_CATEGORY,
       title: "",
       note: "",
       photos: [],
@@ -537,6 +546,21 @@ export default function RecordingScreen() {
       ...current,
       photos: current.photos.filter((_, index) => index !== indexToRemove),
     }));
+  }
+
+  function handleSelectWaypointCategory(category: WaypointDraftInput["category"]) {
+    setWaypointDraft((current) => {
+      const previousSuggestedTitle = getSuggestedWaypointTitle(current.category);
+      const nextSuggestedTitle = getSuggestedWaypointTitle(category);
+      const shouldReplaceTitle =
+        current.title.trim().length === 0 || current.title.trim() === previousSuggestedTitle;
+
+      return {
+        ...current,
+        category,
+        title: shouldReplaceTitle ? nextSuggestedTitle : current.title,
+      };
+    });
   }
 
   async function handleAddPhotoToWaypoint(waypointLocalId: string, source: "camera" | "library") {
@@ -723,6 +747,38 @@ export default function RecordingScreen() {
                 style={styles.fieldInput}
                 value={waypointDraft.title}
               />
+
+              <Text style={styles.fieldLabel}>Category</Text>
+              <ScrollView
+                contentContainerStyle={styles.categoryPickerRow}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {WAYPOINT_CATEGORY_OPTIONS.map((option) => {
+                  const selected = option.value === waypointDraft.category;
+
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => handleSelectWaypointCategory(option.value)}
+                      style={[
+                        styles.categoryChip,
+                        { borderColor: option.color },
+                        selected && { backgroundColor: option.color },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          selected && styles.categoryChipTextSelected,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
 
               <Text style={styles.fieldLabel}>Note</Text>
               <TextInput
@@ -1201,7 +1257,7 @@ export default function RecordingScreen() {
                       {recentWaypoints.length === 0 ? (
                         <Text style={styles.metaLine}>No saved notes on this route yet.</Text>
                       ) : (
-                        recentWaypointCards.map(({ waypoint, photos }) => (
+                        recentWaypointCards.map(({ waypoint, category, photos }) => (
                           <View key={waypoint.localId} style={styles.waypointCard}>
                             {photos.length > 0 ? (
                               <ScrollView
@@ -1223,6 +1279,16 @@ export default function RecordingScreen() {
                                 ))}
                               </ScrollView>
                             ) : null}
+                            <View style={styles.waypointCategoryRow}>
+                              <View
+                                style={[
+                                  styles.waypointCategoryBadge,
+                                  { backgroundColor: category.color },
+                                ]}
+                              >
+                                <Text style={styles.waypointCategoryBadgeText}>{category.label}</Text>
+                              </View>
+                            </View>
                             <Text style={styles.waypointTitle}>{waypoint.title}</Text>
                             {waypoint.note ? (
                           <Text numberOfLines={2} style={styles.waypointNote}>
@@ -1418,6 +1484,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 4,
+  },
+  categoryPickerRow: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  categoryChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    backgroundColor: "#fffdf8",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  categoryChipTextSelected: {
+    color: "#fffdf8",
   },
   profileOptionSelected: {
     borderColor: "#243224",
@@ -1736,6 +1821,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#eef3e7",
     padding: 12,
     gap: 4,
+  },
+  waypointCategoryRow: {
+    flexDirection: "row",
+    marginBottom: 2,
+  },
+  waypointCategoryBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  waypointCategoryBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#fffdf8",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   waypointPhoto: {
     width: 112,
