@@ -14,6 +14,11 @@ import {
 } from "../src/state/recording-store";
 import { hydrateSessionStore, useSessionStore } from "../src/state/session-store";
 import { hydrateThemeStore, useThemeStore } from "../src/state/theme-store";
+import {
+  getTripSegmentsStateSnapshot,
+  hydrateTripSegmentsStore,
+  useTripSegmentsStore,
+} from "../src/state/trip-segments-store";
 import { hydrateTripPointsStore, useTripPointsStore } from "../src/state/trip-points-store";
 import { getTripsStateSnapshot, hydrateTripsStore, useTripsStore } from "../src/state/trips-store";
 import {
@@ -32,6 +37,7 @@ export default function RootLayout() {
   const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
   const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
   const tripsHydrated = useTripsStore((state) => state.hydrated);
+  const tripSegmentsHydrated = useTripSegmentsStore((state) => state.hydrated);
   const tripPointsHydrated = useTripPointsStore((state) => state.hydrated);
   const waypointsHydrated = useWaypointsStore((state) => state.hydrated);
   const waypointAttachmentsHydrated = useWaypointAttachmentsStore((state) => state.hydrated);
@@ -46,18 +52,22 @@ export default function RootLayout() {
         hydrateSessionStore(),
         hydrateRecordingStore(),
         hydrateTripsStore(),
+        hydrateTripSegmentsStore(),
         hydrateTripPointsStore(),
         hydrateWaypointsStore(),
         hydrateWaypointAttachmentsStore(),
       ]);
-      await reconcileHydratedRecordingState(getTripsStateSnapshot().trips);
+      await reconcileHydratedRecordingState(
+        getTripsStateSnapshot().trips,
+        getTripSegmentsStateSnapshot().tripSegments,
+      );
     }
 
     void hydrateAppState();
   }, []);
 
   useEffect(() => {
-    if (!recordingHydrated || !tripsHydrated) {
+    if (!recordingHydrated || !tripsHydrated || !tripSegmentsHydrated) {
       return;
     }
 
@@ -71,6 +81,7 @@ export default function RootLayout() {
     activeRecordingTripId,
     recordingHydrated,
     recordingStatus,
+    tripSegmentsHydrated,
     tripsHydrated,
   ]);
 
@@ -79,6 +90,7 @@ export default function RootLayout() {
     !sessionHydrated ||
     !recordingHydrated ||
     !tripsHydrated ||
+    !tripSegmentsHydrated ||
     !tripPointsHydrated ||
     !waypointsHydrated ||
     !waypointAttachmentsHydrated

@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import { DEFAULT_RECORDING_PROFILE } from "../constants/recording-profiles";
-import type { RecordingSessionSummary, Trip } from "../domain/trips";
+import type { RecordingSessionSummary, Trip, TripSegment } from "../domain/trips";
 import {
   reconcileRecordingSessionWithTrips,
 } from "../services/recording/recording.service";
@@ -10,6 +10,7 @@ import { loadRecordingSession, saveRecordingSession } from "../storage/recording
 export const initialRecordingSession: RecordingSessionSummary = {
   status: "idle",
   activeTripId: null,
+  activeSegmentId: null,
   startedAt: null,
   lastPointRecordedAt: null,
   interruptedAt: null,
@@ -77,10 +78,14 @@ export async function setRecordingSession(session: RecordingSessionSummary): Pro
   await saveRecordingSession(session);
 }
 
-export async function reconcileHydratedRecordingState(trips: Trip[]): Promise<void> {
+export async function reconcileHydratedRecordingState(
+  trips: Trip[],
+  tripSegments: TripSegment[],
+): Promise<void> {
   const reconciledSession = reconcileRecordingSessionWithTrips(
     state.session,
     trips,
+    tripSegments,
     new Date().toISOString(),
   );
 

@@ -5,12 +5,14 @@ const MIN_SEGMENT_DISTANCE_METERS = 5;
 
 export function createTripPointForLocation(
   trip: Trip,
+  segmentLocalId: string | null,
   location: CurrentLocationSnapshot,
 ): TripPoint {
   return {
     localId: `trip-point-${trip.localId}-${location.recordedAt}`,
     serverId: null,
     tripLocalId: trip.localId,
+    segmentLocalId,
     deviceId: trip.deviceId,
     userId: trip.userId,
     latitude: location.latitude,

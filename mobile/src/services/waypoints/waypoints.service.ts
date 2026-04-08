@@ -10,6 +10,7 @@ export interface WaypointDraftInput {
 
 export function createWaypointForTrip(
   trip: Trip,
+  segmentLocalId: string | null,
   location: CurrentLocationSnapshot,
   draft: WaypointDraftInput,
   createdAt: string,
@@ -18,6 +19,7 @@ export function createWaypointForTrip(
     localId: `waypoint-${createdAt}`,
     serverId: null,
     tripLocalId: trip.localId,
+    segmentLocalId,
     deviceId: trip.deviceId,
     userId: trip.userId,
     latitude: location.latitude,

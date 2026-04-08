@@ -25,10 +25,25 @@ export interface Trip {
   syncStatus: SyncStatus;
 }
 
+export interface TripSegment {
+  localId: string;
+  serverId: string | null;
+  tripLocalId: string;
+  deviceId: string;
+  userId: string;
+  recordingProfile: RecordingProfile;
+  startedAt: string;
+  endedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  syncStatus: SyncStatus;
+}
+
 export interface TripPoint {
   localId: string;
   serverId: string | null;
   tripLocalId: string;
+  segmentLocalId: string | null;
   deviceId: string;
   userId: string;
   latitude: number;
@@ -44,6 +59,7 @@ export interface Waypoint {
   localId: string;
   serverId: string | null;
   tripLocalId: string;
+  segmentLocalId: string | null;
   deviceId: string;
   userId: string;
   latitude: number;
@@ -75,6 +91,7 @@ export interface WaypointAttachment {
 export interface RecordingSessionSummary {
   status: RecordingStatus;
   activeTripId: string | null;
+  activeSegmentId: string | null;
   startedAt: string | null;
   lastPointRecordedAt: string | null;
   interruptedAt: string | null;

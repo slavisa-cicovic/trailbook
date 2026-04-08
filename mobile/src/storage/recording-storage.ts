@@ -14,6 +14,7 @@ function normalizeRecordingSession(
   return {
     status: inferredStatus,
     activeTripId: value.activeTripId ?? null,
+    activeSegmentId: value.activeSegmentId ?? null,
     startedAt: value.startedAt ?? null,
     lastPointRecordedAt: value.lastPointRecordedAt ?? null,
     interruptedAt: value.interruptedAt ?? null,

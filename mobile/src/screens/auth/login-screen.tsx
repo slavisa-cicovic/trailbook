@@ -20,6 +20,7 @@ import {
   setRecordingSession,
   useRecordingStore,
 } from "../../state/recording-store";
+import { getTripSegmentsStateSnapshot } from "../../state/trip-segments-store";
 import { getTripsStateSnapshot } from "../../state/trips-store";
 
 export default function LoginScreen() {
@@ -44,7 +45,10 @@ export default function LoginScreen() {
       userEmail: session.userEmail,
       deviceId: session.deviceId,
     });
-    await reconcileHydratedRecordingState(getTripsStateSnapshot().trips);
+    await reconcileHydratedRecordingState(
+      getTripsStateSnapshot().trips,
+      getTripSegmentsStateSnapshot().tripSegments,
+    );
 
     router.replace("/recording");
   }

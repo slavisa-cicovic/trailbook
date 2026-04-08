@@ -4,8 +4,12 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } 
 import { Swipeable } from "react-native-gesture-handler";
 
 import ScreenLayout from "../../components/layout/screen-layout";
-import { getRecordingProfileLabel } from "../../constants/recording-profiles";
 import type { Trip } from "../../domain/trips";
+import {
+  buildTripModeSummary,
+  getOpenTripSegmentForTrip,
+  getVisibleTripSegmentsForTrip,
+} from "../../services/trip-segments/trip-segments.service";
 import {
   buildTripsAggregateSummary,
   buildTripSummary,
@@ -20,6 +24,7 @@ import {
 } from "../../services/trips/trips-management.service";
 import { setRecordingSession } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { useTripSegmentsStore } from "../../state/trip-segments-store";
 import { useTripPointsStore } from "../../state/trip-points-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
@@ -46,6 +51,7 @@ export default function TripsScreen() {
   const suppressTapUntilRef = useRef(0);
   const identitySession = useSessionStore((state) => state.identitySession);
   const trips = useTripsStore((state) => state.trips);
+  const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
@@ -148,16 +154,19 @@ export default function TripsScreen() {
       return;
     }
 
+    const activeSegment = getOpenTripSegmentForTrip(tripSegments, trip.localId);
+
     await setRecordingSession({
       status: "interrupted",
       activeTripId: trip.localId,
+      activeSegmentId: activeSegment?.localId ?? null,
       startedAt: trip.startedAt,
       lastPointRecordedAt: null,
       interruptedAt: new Date().toISOString(),
       userId: trip.userId,
       userEmail: identitySession.userEmail,
       deviceId: trip.deviceId,
-      recordingProfile: trip.recordingProfile,
+      recordingProfile: activeSegment?.recordingProfile ?? trip.recordingProfile,
     });
 
     router.replace("/recording");
@@ -273,6 +282,13 @@ export default function TripsScreen() {
         <View style={styles.list}>
           {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => {
             const statusLabel = trip.endedAt === null ? "Active" : trip.syncStatus;
+            const tripModeSummary = buildTripModeSummary(tripSegments, trip.localId);
+            const tripSegmentsForCard = getVisibleTripSegmentsForTrip(tripSegments, trip.localId);
+            const tripDurationMs = Math.max(
+              0,
+              new Date(trip.endedAt ?? new Date().toISOString()).getTime() -
+                new Date(trip.startedAt).getTime(),
+            );
 
             return (
               <Swipeable
@@ -334,7 +350,7 @@ export default function TripsScreen() {
                       <View style={styles.metaGrid}>
                         <View style={styles.metaCell}>
                           <Text style={styles.metaKey}>Mode</Text>
-                          <Text style={styles.metaValue}>{getRecordingProfileLabel(trip.recordingProfile)}</Text>
+                          <Text style={styles.metaValue}>{tripModeSummary}</Text>
                         </View>
                         <View style={styles.metaCell}>
                           <Text style={styles.metaKey}>Distance</Text>
@@ -347,6 +363,16 @@ export default function TripsScreen() {
                         <View style={styles.metaCell}>
                           <Text style={styles.metaKey}>Photos</Text>
                           <Text style={styles.metaValue}>{String(photoCount)}</Text>
+                        </View>
+                        <View style={styles.metaCell}>
+                          <Text style={styles.metaKey}>Segments</Text>
+                          <Text style={styles.metaValue}>{String(tripSegmentsForCard.length)}</Text>
+                        </View>
+                        <View style={styles.metaCell}>
+                          <Text style={styles.metaKey}>Duration</Text>
+                          <Text style={styles.metaValue}>
+                            {formatDurationSummary(tripDurationMs)}
+                          </Text>
                         </View>
                         <View style={styles.metaCell}>
                           <Text style={styles.metaKey}>Started</Text>

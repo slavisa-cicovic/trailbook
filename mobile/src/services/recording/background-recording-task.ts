@@ -12,6 +12,7 @@ import { setRecordingSession } from "../../state/recording-store";
 import { setTripPoints } from "../../state/trip-points-store";
 import { loadRecordingSession } from "../../storage/recording-storage";
 import { loadTripPoints } from "../../storage/trip-points-storage";
+import { loadTripSegments } from "../../storage/trip-segments-storage";
 import { loadTrips } from "../../storage/trips-storage";
 
 interface BackgroundLocationTaskData {
@@ -21,7 +22,11 @@ interface BackgroundLocationTaskData {
 async function persistRecordedLocations(locations: Location.LocationObject[]): Promise<void> {
   const recordingSession = await loadRecordingSession();
 
-  if (!recordingSession || recordingSession.status !== "recording" || !recordingSession.activeTripId) {
+  if (
+    !recordingSession ||
+    recordingSession.status !== "recording" ||
+    !recordingSession.activeTripId
+  ) {
     return;
   }
 
@@ -38,6 +43,16 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
     return;
   }
 
+  const tripSegments = await loadTripSegments();
+  const activeSegment =
+    (recordingSession.activeSegmentId
+      ? tripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ?? null
+      : null) ??
+    tripSegments.find(
+      (segment) => segment.tripLocalId === activeTrip.localId && segment.endedAt === null,
+    ) ??
+    null;
+
   let nextTripPoints = await loadTripPoints();
   let pointsChanged = false;
   let lastRecordedAt = recordingSession.lastPointRecordedAt;
@@ -51,7 +66,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
 
     const appendedTripPoints = appendTripPointIfUseful(
       nextTripPoints,
-      createTripPointForLocation(activeTrip, snapshot),
+      createTripPointForLocation(activeTrip, activeSegment?.localId ?? null, snapshot),
     );
 
     if (appendedTripPoints !== nextTripPoints) {

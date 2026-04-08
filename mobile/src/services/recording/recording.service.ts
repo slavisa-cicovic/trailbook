@@ -1,6 +1,12 @@
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
-import type { RecordingProfile, RecordingSessionSummary, Trip } from "../../domain/trips";
+import type {
+  RecordingProfile,
+  RecordingSessionSummary,
+  Trip,
+  TripSegment,
+} from "../../domain/trips";
+import { getOpenTripSegmentForTrip } from "../trip-segments/trip-segments.service";
 
 export interface RecordingDraftInput {
   description: string;
@@ -10,12 +16,15 @@ export interface RecordingDraftInput {
 
 export function createRecordingSession(
   identitySession: AuthenticatedDeviceSession,
+  activeTripId: string,
+  activeSegmentId: string,
   startedAt: string,
   recordingProfile: RecordingProfile,
 ): RecordingSessionSummary {
   return {
     status: "recording",
-    activeTripId: `trip-${startedAt}`,
+    activeTripId,
+    activeSegmentId,
     startedAt,
     lastPointRecordedAt: startedAt,
     interruptedAt: null,
@@ -53,6 +62,7 @@ export function stopRecordingSession(session: RecordingSessionSummary): Recordin
     ...session,
     status: "idle",
     activeTripId: null,
+    activeSegmentId: null,
     startedAt: null,
     interruptedAt: null,
   };
@@ -92,6 +102,7 @@ export function updateRecordingLastPoint(
 export function reconcileRecordingSessionWithTrips(
   session: RecordingSessionSummary,
   trips: Trip[],
+  tripSegments: TripSegment[],
   now: string,
 ): RecordingSessionSummary {
   const unfinishedTrip = [...trips].reverse().find((trip) => trip.endedAt === null);
@@ -102,6 +113,7 @@ export function reconcileRecordingSessionWithTrips(
         ...session,
         status: "idle",
         activeTripId: null,
+        activeSegmentId: null,
         startedAt: null,
         interruptedAt: null,
         recordingProfile: DEFAULT_RECORDING_PROFILE,
@@ -111,16 +123,20 @@ export function reconcileRecordingSessionWithTrips(
     return session;
   }
 
+  const openSegment = getOpenTripSegmentForTrip(tripSegments, unfinishedTrip.localId);
+
   if (session.status === "recording") {
     return {
       ...session,
       status: "recording",
       activeTripId: unfinishedTrip.localId,
+      activeSegmentId: session.activeSegmentId ?? openSegment?.localId ?? null,
       startedAt: session.startedAt ?? unfinishedTrip.startedAt,
       interruptedAt: null,
       userId: session.userId ?? unfinishedTrip.userId,
       deviceId: session.deviceId ?? unfinishedTrip.deviceId,
-      recordingProfile: session.recordingProfile ?? unfinishedTrip.recordingProfile,
+      recordingProfile:
+        session.recordingProfile ?? openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
     };
   }
 
@@ -128,11 +144,13 @@ export function reconcileRecordingSessionWithTrips(
     return {
       ...session,
       activeTripId: unfinishedTrip.localId,
+      activeSegmentId: session.activeSegmentId ?? openSegment?.localId ?? null,
       startedAt: session.startedAt ?? unfinishedTrip.startedAt,
       interruptedAt: session.interruptedAt ?? now,
       userId: session.userId ?? unfinishedTrip.userId,
       deviceId: session.deviceId ?? unfinishedTrip.deviceId,
-      recordingProfile: session.recordingProfile ?? unfinishedTrip.recordingProfile,
+      recordingProfile:
+        session.recordingProfile ?? openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
     };
   }
 
@@ -140,11 +158,12 @@ export function reconcileRecordingSessionWithTrips(
     ...session,
     status: "interrupted",
     activeTripId: unfinishedTrip.localId,
+    activeSegmentId: openSegment?.localId ?? null,
     startedAt: unfinishedTrip.startedAt,
     interruptedAt: now,
     userId: session.userId ?? unfinishedTrip.userId,
     deviceId: session.deviceId ?? unfinishedTrip.deviceId,
-    recordingProfile: unfinishedTrip.recordingProfile,
+    recordingProfile: openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
   };
 }
 
@@ -171,18 +190,14 @@ export function updateRecordingProfile(
   };
 }
 
-export function updateTripRecordingProfile(
-  trips: Trip[],
-  activeTripId: string,
+export function updateRecordingSegment(
+  session: RecordingSessionSummary,
+  activeSegmentId: string,
   recordingProfile: RecordingProfile,
-): Trip[] {
-  return trips.map((trip) =>
-    trip.localId === activeTripId
-      ? {
-          ...trip,
-          recordingProfile,
-          updatedAt: new Date().toISOString(),
-        }
-      : trip,
-  );
+): RecordingSessionSummary {
+  return {
+    ...session,
+    activeSegmentId,
+    recordingProfile,
+  };
 }

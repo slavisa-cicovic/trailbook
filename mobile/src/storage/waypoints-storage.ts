@@ -12,6 +12,7 @@ function normalizeWaypoint(
     localId: value.localId,
     serverId: value.serverId ?? null,
     tripLocalId: value.tripLocalId,
+    segmentLocalId: value.segmentLocalId ?? null,
     deviceId: value.deviceId,
     userId: value.userId,
     latitude: value.latitude ?? 0,

@@ -45,10 +45,15 @@ import {
   createTripForRecording,
   type RecordingDraftInput,
   stopRecordingSession,
+  updateRecordingSegment,
   updateRecordingLastPoint,
-  updateRecordingProfile,
-  updateTripRecordingProfile,
 } from "../../services/recording/recording.service";
+import {
+  closeActiveTripSegment,
+  createInitialTripSegment,
+  getOpenTripSegmentForTrip,
+  startNextTripSegment,
+} from "../../services/trip-segments/trip-segments.service";
 import {
   capturePhotoWithCamera,
   pickPhotosFromLibrary,
@@ -72,6 +77,7 @@ import {
   useRecordingStore,
 } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
 import {
   setWaypointAttachments,
@@ -84,6 +90,7 @@ export default function RecordingScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);
+  const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
@@ -112,7 +119,12 @@ export default function RecordingScreen() {
 
   const activeIdentitySession = identitySession;
   const activeTrip = trips.find((trip) => trip.localId === recordingSession.activeTripId) ?? null;
-  const activeRecordingProfile = activeTrip?.recordingProfile ?? recordingSession.recordingProfile;
+  const activeSegment = recordingSession.activeSegmentId
+    ? tripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ?? null
+    : activeTrip
+      ? getOpenTripSegmentForTrip(tripSegments, activeTrip.localId)
+      : null;
+  const activeRecordingProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
   const activeTripPoints = activeTrip ? getVisibleTripPointsForTrip(tripPoints, activeTrip.localId) : [];
   const activeRecordingProfileLabel = getRecordingProfileLabel(activeRecordingProfile);
   const lastPoint = recordingSession.lastPointRecordedAt ?? "n/a";
@@ -287,7 +299,11 @@ export default function RecordingScreen() {
       return;
     }
 
-    const nextTripPoint = createTripPointForLocation(activeTrip, currentLocation);
+    const nextTripPoint = createTripPointForLocation(
+      activeTrip,
+      recordingSession.activeSegmentId,
+      currentLocation,
+    );
 
     void setTripPoints(appendTripPointIfUseful(tripPoints, nextTripPoint));
     void setRecordingSession(updateRecordingLastPoint(recordingSession, currentLocation.recordedAt));
@@ -326,14 +342,18 @@ export default function RecordingScreen() {
 
     const startedAt = new Date().toISOString();
     const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft);
+    const nextSegment = createInitialTripSegment(nextTrip, startedAt);
     const nextSession = createRecordingSession(
       activeIdentitySession,
+      nextTrip.localId,
+      nextSegment.localId,
       startedAt,
       recordingDraft.recordingProfile,
     );
 
     try {
       await setTrips([...trips, nextTrip]);
+      await setTripSegments([...tripSegments, nextSegment]);
       await setRecordingSession(nextSession);
       setStartModalVisible(false);
       setRecordingDraft({
@@ -363,6 +383,7 @@ export default function RecordingScreen() {
       }
     } catch {
       await setTrips(trips);
+      await setTripSegments(tripSegments);
       await setRecordingSession(recordingSession);
       Alert.alert(
         "Recording unavailable",
@@ -372,7 +393,7 @@ export default function RecordingScreen() {
   }
 
   async function handleStopRecording() {
-    if (!recordingSession.activeTripId) {
+    if (!recordingSession.activeTripId || !recordingSession.activeSegmentId) {
       return;
     }
 
@@ -381,6 +402,9 @@ export default function RecordingScreen() {
     if (backgroundRecordingSupported !== false) {
       await stopBackgroundLocationTracking();
     }
+    await setTripSegments(
+      closeActiveTripSegment(tripSegments, recordingSession.activeSegmentId, endedAt),
+    );
     await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt));
     await setRecordingSession(stopRecordingSession(recordingSession));
   }
@@ -410,7 +434,7 @@ export default function RecordingScreen() {
   }
 
   async function handleSelectRecordingProfile(profile: RecordingProfile) {
-    if (!recordingSession.activeTripId) {
+    if (!recordingSession.activeTripId || !activeTrip) {
       setRecordingDraft((current) => ({
         ...current,
         recordingProfile: profile,
@@ -419,8 +443,25 @@ export default function RecordingScreen() {
       return;
     }
 
-    await setTrips(updateTripRecordingProfile(trips, recordingSession.activeTripId, profile));
-    await setRecordingSession(updateRecordingProfile(recordingSession, profile));
+    if (!recordingSession.activeSegmentId) {
+      return;
+    }
+
+    const changedAt = new Date().toISOString();
+    const closedSegments = closeActiveTripSegment(
+      tripSegments,
+      recordingSession.activeSegmentId,
+      changedAt,
+    );
+    const { nextSegment, tripSegments: nextTripSegments } = startNextTripSegment(
+      activeTrip,
+      closedSegments,
+      profile,
+      changedAt,
+    );
+
+    await setTripSegments(nextTripSegments);
+    await setRecordingSession(updateRecordingSegment(recordingSession, nextSegment.localId, profile));
     if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
       await restartBackgroundLocationTracking(profile);
     }
@@ -439,7 +480,13 @@ export default function RecordingScreen() {
     }
 
     const createdAt = new Date().toISOString();
-    const nextWaypoint = createWaypointForTrip(activeTrip, currentLocation, waypointDraft, createdAt);
+    const nextWaypoint = createWaypointForTrip(
+      activeTrip,
+      recordingSession.activeSegmentId,
+      currentLocation,
+      waypointDraft,
+      createdAt,
+    );
     const nextAttachments = [
       ...waypointAttachments,
       ...waypointDraft.photos.map((photo, index) =>

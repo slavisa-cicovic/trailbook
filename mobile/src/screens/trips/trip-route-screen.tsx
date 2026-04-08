@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
 import type { Trip, Waypoint } from "../../domain/trips";
+import { buildTripModeSummary, buildTripSegmentsSummary } from "../../services/trip-segments/trip-segments.service";
 import {
   getVisibleAttachmentsForWaypoints,
   getVisibleTrips,
@@ -18,6 +19,7 @@ import {
   getVisibleTripPointsForTrip,
 } from "../../services/trip-points/trip-points.service";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { useTripSegmentsStore } from "../../state/trip-segments-store";
 import { useTripPointsStore } from "../../state/trip-points-store";
 import { useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
@@ -61,6 +63,7 @@ export default function TripRouteScreen() {
   const { tripId } = useLocalSearchParams<{ tripId?: string | string[] }>();
   const identitySession = useSessionStore((state) => state.identitySession);
   const trips = useTripsStore((state) => state.trips);
+  const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
@@ -76,6 +79,9 @@ export default function TripRouteScreen() {
   const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
   const selectedTripPoints = selectedTrip
     ? getVisibleTripPointsForTrip(tripPoints, selectedTrip.localId)
+    : [];
+  const selectedTripSegments = selectedTrip
+    ? buildTripSegmentsSummary(tripSegments, tripPoints, selectedTrip.localId)
     : [];
   const selectedTripWaypoints = selectedTrip
     ? getVisibleWaypointsForTrip(waypoints, selectedTrip.localId)
@@ -159,6 +165,7 @@ export default function TripRouteScreen() {
   }
 
   const distanceText = formatDistanceKm(calculateTripDistanceMeters(selectedTripPoints));
+  const modeSummary = buildTripModeSummary(tripSegments, selectedTrip.localId);
 
   return (
     <ScreenLayout
@@ -200,7 +207,7 @@ export default function TripRouteScreen() {
         <View style={styles.summaryGrid}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryKey}>Mode</Text>
-            <Text style={styles.summaryValue}>{getRecordingProfileLabel(selectedTrip.recordingProfile)}</Text>
+            <Text style={styles.summaryValue}>{modeSummary}</Text>
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryKey}>Waypoints</Text>
@@ -214,6 +221,10 @@ export default function TripRouteScreen() {
             <Text style={styles.summaryKey}>Distance</Text>
             <Text style={styles.summaryValue}>{distanceText}</Text>
           </View>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryKey}>Segments</Text>
+            <Text style={styles.summaryValue}>{String(selectedTripSegments.length)}</Text>
+          </View>
         </View>
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
@@ -226,6 +237,35 @@ export default function TripRouteScreen() {
           </View>
         </View>
       </View>
+
+      {selectedTripSegments.length > 0 ? (
+        <View style={styles.segmentsCard}>
+          <Text style={styles.segmentsTitle}>Segments</Text>
+          {selectedTripSegments.map(({ segment, distanceMeters, durationLabel }) => (
+            <View key={segment.localId} style={styles.segmentRow}>
+              <View style={styles.segmentHeader}>
+                <Text style={styles.segmentMode}>{getRecordingProfileLabel(segment.recordingProfile)}</Text>
+                <Text style={styles.segmentDistance}>{formatDistanceKm(distanceMeters)}</Text>
+              </View>
+              <Text style={styles.segmentMeta}>
+                {new Date(segment.startedAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+                {" - "}
+                {segment.endedAt
+                  ? new Date(segment.endedAt).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : "Active"}
+                {" • "}
+                {durationLabel}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       <TripRouteMap
         coordinates={routeCoordinates}
@@ -344,6 +384,45 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 13,
     fontWeight: "600",
+    color: "#52624f",
+  },
+  segmentsCard: {
+    borderRadius: 20,
+    backgroundColor: "#fffdf8",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
+    padding: 16,
+    gap: 12,
+  },
+  segmentsTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  segmentRow: {
+    gap: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#ece4d4",
+    paddingTop: 12,
+  },
+  segmentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  segmentMode: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  segmentDistance: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  segmentMeta: {
+    fontSize: 13,
     color: "#52624f",
   },
 });
