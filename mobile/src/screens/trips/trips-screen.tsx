@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Redirect, useRouter } from "expo-router";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
@@ -43,6 +43,7 @@ const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> 
 
 export default function TripsScreen() {
   const router = useRouter();
+  const suppressTapUntilRef = useRef(0);
   const identitySession = useSessionStore((state) => state.identitySession);
   const trips = useTripsStore((state) => state.trips);
   const tripPoints = useTripPointsStore((state) => state.tripPoints);
@@ -162,6 +163,18 @@ export default function TripsScreen() {
     router.replace("/recording");
   }
 
+  function handleTripCardPress(tripLocalId: string) {
+    if (Date.now() < suppressTapUntilRef.current) {
+      return;
+    }
+
+    router.push(`/trips/${tripLocalId}`);
+  }
+
+  function suppressTapAfterSwipe() {
+    suppressTapUntilRef.current = Date.now() + 1200;
+  }
+
   if (!identitySession) {
     return <Redirect href="/login" />;
   }
@@ -265,6 +278,10 @@ export default function TripsScreen() {
               <Swipeable
                 key={trip.localId}
                 friction={2}
+                onSwipeableCloseStartDrag={suppressTapAfterSwipe}
+                onSwipeableOpenStartDrag={suppressTapAfterSwipe}
+                onSwipeableWillClose={suppressTapAfterSwipe}
+                onSwipeableWillOpen={suppressTapAfterSwipe}
                 overshootRight={false}
                 renderRightActions={() => (
                   <View style={styles.swipeActions}>
@@ -298,7 +315,10 @@ export default function TripsScreen() {
               >
                 <View style={styles.tripCardRow}>
                   <View style={styles.tripCard}>
-                    <View style={styles.tripBodyPressable}>
+                    <Pressable
+                      onPress={() => handleTripCardPress(trip.localId)}
+                      style={styles.tripBodyPressable}
+                    >
                       <View style={styles.tripHeader}>
                         <View style={styles.tripHeaderText}>
                           <Text style={styles.tripTitle}>{trip.title}</Text>
@@ -341,7 +361,7 @@ export default function TripsScreen() {
                           </Text>
                         </View>
                       </View>
-                    </View>
+                    </Pressable>
                   </View>
                 </View>
               </Swipeable>
