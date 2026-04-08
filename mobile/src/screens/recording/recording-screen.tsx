@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { Redirect } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
 import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 
 import ScreenLayout from "../../components/layout/screen-layout";
@@ -767,6 +768,11 @@ export default function RecordingScreen() {
                         selected && { backgroundColor: option.color },
                       ]}
                     >
+                      <MaterialIcons
+                        color={selected ? "#fffdf8" : option.color}
+                        name={option.iconName}
+                        size={16}
+                      />
                       <Text
                         style={[
                           styles.categoryChipText,
@@ -1286,6 +1292,11 @@ export default function RecordingScreen() {
                                   { backgroundColor: category.color },
                                 ]}
                               >
+                                <MaterialIcons
+                                  color="#fffdf8"
+                                  name={category.iconName}
+                                  size={14}
+                                />
                                 <Text style={styles.waypointCategoryBadgeText}>{category.label}</Text>
                               </View>
                             </View>
@@ -1490,6 +1501,9 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     borderWidth: 1,
     borderRadius: 999,
     backgroundColor: "#fffdf8",
@@ -1827,6 +1841,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   waypointCategoryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,

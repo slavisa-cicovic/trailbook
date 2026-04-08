@@ -10,12 +10,19 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { MaterialIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import {
+  WAYPOINT_CATEGORY_OPTIONS,
+  getWaypointCategoryOption,
+} from "../../../constants/waypoint-categories";
+import type { WaypointCategory } from "../../../domain/trips";
 import type { WaypointUpdateInput } from "../../../services/trips/trips-management.service";
 
 interface WaypointEditModalProps {
   draft: WaypointUpdateInput;
+  onChangeCategory: (category: WaypointCategory) => void;
   onChangeNote: (note: string) => void;
   onChangeTitle: (title: string) => void;
   onClose: () => void;
@@ -25,6 +32,7 @@ interface WaypointEditModalProps {
 
 export default function WaypointEditModal({
   draft,
+  onChangeCategory,
   onChangeNote,
   onChangeTitle,
   onClose,
@@ -55,6 +63,43 @@ export default function WaypointEditModal({
                 style={styles.fieldInput}
                 value={draft.title}
               />
+
+              <Text style={styles.fieldLabel}>Category</Text>
+              <ScrollView
+                contentContainerStyle={styles.categoryPickerRow}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {WAYPOINT_CATEGORY_OPTIONS.map((option) => {
+                  const selected = option.value === draft.category;
+
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => onChangeCategory(option.value)}
+                      style={[
+                        styles.categoryChip,
+                        { borderColor: option.color },
+                        selected && { backgroundColor: option.color },
+                      ]}
+                    >
+                      <MaterialIcons
+                        color={selected ? "#fffdf8" : option.color}
+                        name={getWaypointCategoryOption(option.value).iconName}
+                        size={16}
+                      />
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          selected && styles.categoryChipTextSelected,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
 
               <Text style={styles.fieldLabel}>Note</Text>
               <TextInput
@@ -149,6 +194,28 @@ const styles = StyleSheet.create({
   },
   fieldTextarea: {
     minHeight: 110,
+  },
+  categoryPickerRow: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    backgroundColor: "#fffdf8",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  categoryChipTextSelected: {
+    color: "#fffdf8",
   },
   modalActions: {
     flexDirection: "row",

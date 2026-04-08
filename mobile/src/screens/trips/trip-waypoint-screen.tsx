@@ -1,9 +1,13 @@
 import { useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
-import { getWaypointCategoryOption } from "../../constants/waypoint-categories";
+import {
+  DEFAULT_WAYPOINT_CATEGORY,
+  getWaypointCategoryOption,
+} from "../../constants/waypoint-categories";
 import type { WaypointAttachment } from "../../domain/trips";
 import {
   capturePhotoWithCamera,
@@ -37,7 +41,11 @@ export default function TripWaypointScreen() {
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
   const [waypointEditVisible, setWaypointEditVisible] = useState(false);
-  const [waypointDraft, setWaypointDraft] = useState<WaypointUpdateInput>({ title: "", note: "" });
+  const [waypointDraft, setWaypointDraft] = useState<WaypointUpdateInput>({
+    category: DEFAULT_WAYPOINT_CATEGORY,
+    title: "",
+    note: "",
+  });
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
@@ -71,6 +79,7 @@ export default function TripWaypointScreen() {
     }
 
     setWaypointDraft({
+      category: selectedWaypoint.category,
       title: selectedWaypoint.title,
       note: selectedWaypoint.note ?? "",
     });
@@ -215,6 +224,7 @@ export default function TripWaypointScreen() {
     >
       <WaypointEditModal
         draft={waypointDraft}
+        onChangeCategory={(category) => setWaypointDraft((current) => ({ ...current, category }))}
         onChangeNote={(note) => setWaypointDraft((current) => ({ ...current, note }))}
         onChangeTitle={(title) => setWaypointDraft((current) => ({ ...current, title }))}
         onClose={() => setWaypointEditVisible(false)}
@@ -225,6 +235,11 @@ export default function TripWaypointScreen() {
       {selectedWaypointCategory ? (
         <View style={styles.categoryRow}>
           <View style={[styles.categoryBadge, { backgroundColor: selectedWaypointCategory.color }]}>
+            <MaterialIcons
+              color="#fffdf8"
+              name={selectedWaypointCategory.iconName}
+              size={16}
+            />
             <Text style={styles.categoryBadgeText}>{selectedWaypointCategory.label}</Text>
           </View>
         </View>
@@ -341,8 +356,12 @@ const styles = StyleSheet.create({
   categoryRow: {
     flexDirection: "row",
     marginTop: -6,
+    marginBottom: 6,
   },
   categoryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,

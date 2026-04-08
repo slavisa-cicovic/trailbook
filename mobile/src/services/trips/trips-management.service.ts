@@ -1,4 +1,11 @@
-import type { RecordingProfile, Trip, TripPoint, Waypoint, WaypointAttachment } from "../../domain/trips";
+import type {
+  RecordingProfile,
+  Trip,
+  TripPoint,
+  Waypoint,
+  WaypointAttachment,
+  WaypointCategory,
+} from "../../domain/trips";
 import { calculateTripDistanceMeters, getVisibleTripPointsForTrip } from "../trip-points/trip-points.service";
 
 export interface TripSummary {
@@ -37,6 +44,7 @@ export interface TripUpdateInput {
 }
 
 export interface WaypointUpdateInput {
+  category: WaypointCategory;
   note: string;
   title: string;
 }
@@ -346,6 +354,7 @@ export function updateWaypointMetadata(
     waypoint.localId === waypointLocalId
       ? {
           ...waypoint,
+          category: input.category,
           title: input.title.trim(),
           note: input.note.trim() || null,
           updatedAt,
