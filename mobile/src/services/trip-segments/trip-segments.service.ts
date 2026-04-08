@@ -1,4 +1,8 @@
-import { getRecordingProfileLabel } from "../../constants/recording-profiles";
+import {
+  DEFAULT_RECORDING_PROFILE,
+  getRecordingProfileColor,
+  getRecordingProfileLabel,
+} from "../../constants/recording-profiles";
 import type { RecordingProfile, Trip, TripPoint, TripSegment } from "../../domain/trips";
 import { calculateTripDistanceMeters, getVisibleTripPointsForTrip } from "../trip-points/trip-points.service";
 import { formatDurationSummary } from "../trips/trips-management.service";
@@ -21,16 +25,10 @@ function getSegmentDurationMs(segment: TripSegment): number {
   return endedAt - startedAt;
 }
 
-function getModeCategory(profile: RecordingProfile): "drive" | "walk" | "other" {
-  if (profile === "drive_city" || profile === "drive_highway") {
-    return "drive";
-  }
-
-  if (profile === "walk_relaxed" || profile === "city_walk") {
-    return "walk";
-  }
-
-  return "other";
+export interface SegmentPolyline {
+  color: string;
+  coordinates: Array<{ latitude: number; longitude: number }>;
+  segmentLocalId: string;
 }
 
 export function createInitialTripSegment(trip: Trip, startedAt: string): TripSegment {
@@ -136,16 +134,11 @@ export function buildTripModeSummary(tripSegments: TripSegment[], tripLocalId: s
   const orderedSegments = getVisibleTripSegmentsForTrip(tripSegments, tripLocalId);
 
   if (orderedSegments.length === 0) {
-    return getRecordingProfileLabel("auto");
+    return getRecordingProfileLabel(DEFAULT_RECORDING_PROFILE);
   }
 
   const categoryLabels = orderedSegments.reduce<string[]>((labels, segment) => {
-    const nextLabel =
-      getModeCategory(segment.recordingProfile) === "drive"
-        ? "Drive"
-        : getModeCategory(segment.recordingProfile) === "walk"
-          ? "Walk"
-          : getRecordingProfileLabel(segment.recordingProfile);
+    const nextLabel = getRecordingProfileLabel(segment.recordingProfile);
 
     if (!labels.includes(nextLabel)) {
       labels.push(nextLabel);
@@ -155,4 +148,27 @@ export function buildTripModeSummary(tripSegments: TripSegment[], tripLocalId: s
   }, []);
 
   return categoryLabels.join(" + ");
+}
+
+export function buildSegmentPolylines(
+  tripSegments: TripSegment[],
+  tripPoints: TripPoint[],
+  tripLocalId: string,
+): SegmentPolyline[] {
+  return getVisibleTripSegmentsForTrip(tripSegments, tripLocalId)
+    .map((segment) => {
+      const coordinates = getVisibleTripPointsForTrip(tripPoints, tripLocalId)
+        .filter((tripPoint) => tripPoint.segmentLocalId === segment.localId)
+        .map((tripPoint) => ({
+          latitude: tripPoint.latitude,
+          longitude: tripPoint.longitude,
+        }));
+
+      return {
+        segmentLocalId: segment.localId,
+        coordinates,
+        color: getRecordingProfileColor(segment.recordingProfile),
+      };
+    })
+    .filter((segment) => segment.coordinates.length > 1);
 }

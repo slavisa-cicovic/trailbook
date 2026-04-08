@@ -17,6 +17,9 @@ export type TripDateFilter =
   | "last_year";
 
 export interface TripsAggregateSummary {
+  bikeDistanceMeters: number;
+  bikeDurationMs: number;
+  bikeTripCount: number;
   driveDistanceMeters: number;
   driveDurationMs: number;
   driveTripCount: number;
@@ -43,7 +46,7 @@ function startOfDay(value: Date): Date {
 }
 
 function isDriveProfile(profile: RecordingProfile): boolean {
-  return profile === "drive_city" || profile === "drive_highway";
+  return profile === "drive";
 }
 
 function getTripDurationMs(trip: Trip): number {
@@ -121,6 +124,10 @@ export function buildTripsAggregateSummary(trips: Trip[], tripPoints: TripPoint[
         summary.driveTripCount += 1;
         summary.driveDurationMs += durationMs;
         summary.driveDistanceMeters += distanceMeters;
+      } else if (trip.recordingProfile === "bike") {
+        summary.bikeTripCount += 1;
+        summary.bikeDurationMs += durationMs;
+        summary.bikeDistanceMeters += distanceMeters;
       } else {
         summary.walkTripCount += 1;
         summary.walkDurationMs += durationMs;
@@ -130,6 +137,9 @@ export function buildTripsAggregateSummary(trips: Trip[], tripPoints: TripPoint[
       return summary;
     },
     {
+      bikeDistanceMeters: 0,
+      bikeDurationMs: 0,
+      bikeTripCount: 0,
       walkDistanceMeters: 0,
       walkDurationMs: 0,
       walkTripCount: 0,

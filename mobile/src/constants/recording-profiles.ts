@@ -7,50 +7,74 @@ export interface RecordingProfileOption {
   value: RecordingProfile;
 }
 
-export const DEFAULT_RECORDING_PROFILE: RecordingProfile = "auto";
+export type LegacyRecordingProfile =
+  | "auto"
+  | "walk_relaxed"
+  | "city_walk"
+  | "drive_city"
+  | "drive_highway"
+  | "frequent";
+
+export const DEFAULT_RECORDING_PROFILE: RecordingProfile = "walk";
 
 export const RECORDING_PROFILE_OPTIONS: RecordingProfileOption[] = [
   {
-    value: "auto",
-    label: "Auto",
-    description: "Recommended",
-    hint: "Balanced route detail and battery use.",
+    value: "walk",
+    label: "Walk",
+    description: "On foot",
+    hint: "Best for walking tours, short turns, and exploring on foot.",
   },
   {
-    value: "walk_relaxed",
-    label: "Walk / relaxed",
-    description: "Lower battery use",
-    hint: "Good for long relaxed walks and coarse traces.",
+    value: "bike",
+    label: "Bike",
+    description: "Steady motion",
+    hint: "Good for bike rides and medium-speed route detail.",
   },
   {
-    value: "city_walk",
-    label: "City walk",
-    description: "More route detail",
-    hint: "Better for turns and shorter street segments.",
-  },
-  {
-    value: "drive_city",
-    label: "Drive / city",
-    description: "Urban driving",
-    hint: "Good for city traffic, turns, and frequent street changes.",
-  },
-  {
-    value: "drive_highway",
-    label: "Drive / highway",
-    description: "Longer road segments",
-    hint: "Better for faster travel with fewer direction changes.",
-  },
-  {
-    value: "frequent",
-    label: "Frequent",
-    description: "Higher battery use",
-    hint: "Most detailed trace of all available modes.",
+    value: "drive",
+    label: "Drive",
+    description: "Faster travel",
+    hint: "Best for car trips and longer road segments.",
   },
 ];
+
+export function normalizeRecordingProfile(
+  profile: RecordingProfile | LegacyRecordingProfile | null | undefined,
+): RecordingProfile {
+  switch (profile) {
+    case "walk":
+    case "bike":
+    case "drive":
+      return profile;
+    case "drive_city":
+    case "drive_highway":
+      return "drive";
+    case "frequent":
+      return "bike";
+    case "auto":
+    case "walk_relaxed":
+    case "city_walk":
+    default:
+      return "walk";
+  }
+}
 
 export function getRecordingProfileLabel(profile: RecordingProfile): string {
   return (
     RECORDING_PROFILE_OPTIONS.find((option) => option.value === profile)?.label ??
     RECORDING_PROFILE_OPTIONS[0].label
   );
+}
+
+export function getRecordingProfileColor(profile: RecordingProfile): string {
+  switch (profile) {
+    case "walk":
+      return "#2f7d4b";
+    case "bike":
+      return "#2f6db3";
+    case "drive":
+      return "#d8751f";
+    default:
+      return "#355035";
+  }
 }

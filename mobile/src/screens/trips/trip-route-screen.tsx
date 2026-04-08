@@ -5,7 +5,11 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
 import type { Trip, Waypoint } from "../../domain/trips";
-import { buildTripModeSummary, buildTripSegmentsSummary } from "../../services/trip-segments/trip-segments.service";
+import {
+  buildSegmentPolylines,
+  buildTripModeSummary,
+  buildTripSegmentsSummary,
+} from "../../services/trip-segments/trip-segments.service";
 import {
   getVisibleAttachmentsForWaypoints,
   getVisibleTrips,
@@ -96,6 +100,9 @@ export default function TripRouteScreen() {
     latitude: tripPoint.latitude,
     longitude: tripPoint.longitude,
   }));
+  const segmentPolylines = selectedTrip
+    ? buildSegmentPolylines(tripSegments, tripPoints, selectedTrip.localId)
+    : [];
   const fallbackCoordinates = selectedTripWaypoints.map((waypoint) => ({
     latitude: waypoint.latitude,
     longitude: waypoint.longitude,
@@ -271,6 +278,7 @@ export default function TripRouteScreen() {
         coordinates={routeCoordinates}
         onSelectWaypoint={handleSelectWaypoint}
         region={selectedTripMapRegion}
+        segmentPolylines={segmentPolylines}
         waypointMarkers={waypointMarkers}
       />
     </ScreenLayout>

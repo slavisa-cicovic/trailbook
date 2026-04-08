@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { DEFAULT_RECORDING_PROFILE } from "../constants/recording-profiles";
+import { DEFAULT_RECORDING_PROFILE, normalizeRecordingProfile } from "../constants/recording-profiles";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { Trip } from "../domain/trips";
 
@@ -12,7 +12,7 @@ function normalizeTrip(value: Partial<Trip> & Pick<Trip, "localId" | "deviceId" 
     userId: value.userId,
     title: value.title ?? value.localId,
     description: value.description ?? null,
-    recordingProfile: value.recordingProfile ?? DEFAULT_RECORDING_PROFILE,
+    recordingProfile: normalizeRecordingProfile(value.recordingProfile ?? DEFAULT_RECORDING_PROFILE),
     startedAt: value.startedAt ?? new Date(0).toISOString(),
     endedAt: value.endedAt ?? null,
     createdAt: value.createdAt ?? value.startedAt ?? new Date(0).toISOString(),

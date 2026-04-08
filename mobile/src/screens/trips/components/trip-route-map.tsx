@@ -12,6 +12,11 @@ interface TripRouteMapProps {
   coordinates: Array<{ latitude: number; longitude: number }>;
   onSelectWaypoint: (waypoint: Waypoint) => void;
   region: Region | null;
+  segmentPolylines: Array<{
+    color: string;
+    coordinates: Array<{ latitude: number; longitude: number }>;
+    segmentLocalId: string;
+  }>;
   waypointMarkers: RouteWaypointMarker[];
 }
 
@@ -19,6 +24,7 @@ export default function TripRouteMap({
   coordinates,
   onSelectWaypoint,
   region,
+  segmentPolylines,
   waypointMarkers,
 }: TripRouteMapProps) {
   if (!region) {
@@ -28,7 +34,18 @@ export default function TripRouteMap({
   return (
     <View style={styles.mapCard}>
       <MapView initialRegion={region} style={styles.map}>
-        {coordinates.length > 1 ? (
+        {segmentPolylines.length > 0 ? (
+          segmentPolylines.map((segmentPolyline) => (
+            <Polyline
+              key={segmentPolyline.segmentLocalId}
+              coordinates={segmentPolyline.coordinates}
+              lineCap="round"
+              lineJoin="round"
+              strokeColor={segmentPolyline.color}
+              strokeWidth={4}
+            />
+          ))
+        ) : coordinates.length > 1 ? (
           <Polyline
             coordinates={coordinates}
             lineCap="round"

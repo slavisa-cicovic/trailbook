@@ -1,13 +1,7 @@
 export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error";
 export type RecordingStatus = "idle" | "recording" | "interrupted";
 export type WaypointAttachmentType = "photo";
-export type RecordingProfile =
-  | "auto"
-  | "walk_relaxed"
-  | "city_walk"
-  | "drive_city"
-  | "drive_highway"
-  | "frequent";
+export type RecordingProfile = "walk" | "bike" | "drive";
 
 export interface Trip {
   localId: string;

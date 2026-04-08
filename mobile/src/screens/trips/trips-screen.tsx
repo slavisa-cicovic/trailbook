@@ -251,6 +251,18 @@ export default function TripsScreen() {
           </Text>
         </View>
         <View style={styles.summaryRow}>
+          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Bike</Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {formatDistanceKm(tripsAggregateSummary.bikeDistanceMeters)}
+          </Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {formatDurationSummary(tripsAggregateSummary.bikeDurationMs)}
+          </Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {String(tripsAggregateSummary.bikeTripCount)}
+          </Text>
+        </View>
+        <View style={styles.summaryRow}>
           <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Drive</Text>
           <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
             {formatDistanceKm(tripsAggregateSummary.driveDistanceMeters)}

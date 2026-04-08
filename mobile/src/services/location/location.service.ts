@@ -71,41 +71,23 @@ export async function getCurrentForegroundLocation(): Promise<CurrentLocationSna
 
 export function getTrackingOptionsForProfile(profile: RecordingProfile): TrackingOptions {
   switch (profile) {
-    case "walk_relaxed":
-      return {
-        accuracy: Location.Accuracy.Low,
-        distanceInterval: 50,
-        timeInterval: 10 * 60 * 1000,
-      };
-    case "city_walk":
-      return {
-        accuracy: Location.Accuracy.Balanced,
-        distanceInterval: 20,
-        timeInterval: 5 * 60 * 1000,
-      };
-    case "drive_city":
+    case "walk":
       return {
         accuracy: Location.Accuracy.High,
-        distanceInterval: 35,
-        timeInterval: 2 * 60 * 1000,
-      };
-    case "drive_highway":
-      return {
-        accuracy: Location.Accuracy.Balanced,
-        distanceInterval: 150,
-        timeInterval: 3 * 60 * 1000,
-      };
-    case "frequent":
-      return {
-        accuracy: Location.Accuracy.High,
-        distanceInterval: 10,
+        distanceInterval: 12,
         timeInterval: 60 * 1000,
       };
-    case "auto":
+    case "bike":
+      return {
+        accuracy: Location.Accuracy.Balanced,
+        distanceInterval: 30,
+        timeInterval: 2 * 60 * 1000,
+      };
+    case "drive":
     default:
       return {
         accuracy: Location.Accuracy.Balanced,
-        distanceInterval: 25,
+        distanceInterval: 120,
         timeInterval: 3 * 60 * 1000,
       };
   }
@@ -113,13 +95,11 @@ export function getTrackingOptionsForProfile(profile: RecordingProfile): Trackin
 
 function getBackgroundActivityTypeForProfile(profile: RecordingProfile): Location.LocationActivityType {
   switch (profile) {
-    case "drive_city":
-    case "drive_highway":
+    case "drive":
       return Location.LocationActivityType.AutomotiveNavigation;
-    case "walk_relaxed":
-    case "city_walk":
-    case "frequent":
-    case "auto":
+    case "bike":
+      return Location.LocationActivityType.OtherNavigation;
+    case "walk":
     default:
       return Location.LocationActivityType.Fitness;
   }
