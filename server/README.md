@@ -23,6 +23,12 @@ Local bootstrap:
 5. Run `npm run start:dev --workspace server`
 
 The local Docker PostgreSQL instance binds to `localhost:55432` to avoid colliding with existing host PostgreSQL ports.
+MailHog SMTP/Web UI runs on:
+
+- SMTP: `localhost:1025`
+- UI: `http://localhost:8025`
+
+If you open the web app from another device or via a LAN IP, add that browser origin to `WEB_ALLOWED_ORIGINS`.
 
 Test bootstrap:
 

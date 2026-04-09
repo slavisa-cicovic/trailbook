@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, UnauthorizedException } from "
 import { compare, hash } from "bcryptjs";
 
 import { DatabaseService } from "../database/database.service";
+import { MailService } from "../mail/mail.service";
 import { UsersService } from "../users/users.service";
 import type { UserRecord } from "../users/user.types";
 import type { ForgotPasswordDto } from "./dto/forgot-password.dto";
@@ -19,6 +20,8 @@ export class AuthService {
   constructor(
     @Inject(DatabaseService)
     private readonly databaseService: DatabaseService,
+    @Inject(MailService)
+    private readonly mailService: MailService,
     @Inject(UsersService)
     private readonly usersService: UsersService,
   ) {}
@@ -83,19 +86,48 @@ export class AuthService {
 
     const token = createOpaqueToken();
     const expiresAt = new Date(Date.now() + 1000 * 60 * this.passwordResetTtlMinutes);
+    const resetUrl = this.buildResetUrl(token);
+    const subject = "Trailbook password reset";
+    const textBody = [
+      "We received a request to reset your Trailbook password.",
+      "",
+      `Reset your password: ${resetUrl}`,
+      "",
+      `This link expires at ${expiresAt.toISOString()}.`,
+    ].join("\n");
+    const htmlBody = [
+      "<p>We received a request to reset your Trailbook password.</p>",
+      `<p><a href="${resetUrl}">Reset your password</a></p>`,
+      `<p>This link expires at ${expiresAt.toISOString()}.</p>`,
+    ].join("");
 
-    await this.databaseService.passwordResetToken.create({
-      data: {
-        userId: user.id,
-        tokenHash: hashOpaqueToken(token),
-        expiresAt,
-      },
+    const { outbox } = await this.databaseService.$transaction(async (tx) => {
+      await tx.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: hashOpaqueToken(token),
+          expiresAt,
+        },
+      });
+
+      const createdOutbox = await tx.mailOutbox.create({
+        data: {
+          userId: user.id,
+          toEmail: user.email,
+          subject,
+          textBody,
+          htmlBody,
+          status: "pending",
+        },
+      });
+
+      return { outbox: createdOutbox };
     });
+
+    await this.mailService.dispatchOutboxMessage(outbox.id);
 
     return {
       success: true,
-      tokenPreview: token,
-      expiresAt: expiresAt.toISOString(),
     };
   }
 
@@ -169,6 +201,11 @@ export class AuthService {
       status: "not_implemented",
       note: "OAuth callback integration is reserved after persistent local auth lands.",
     };
+  }
+
+  private buildResetUrl(token: string) {
+    const webAppUrl = process.env.WEB_APP_URL || "http://localhost:3000";
+    return `${webAppUrl}/reset-password?token=${encodeURIComponent(token)}`;
   }
 
   private async createSession(userId: string, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {

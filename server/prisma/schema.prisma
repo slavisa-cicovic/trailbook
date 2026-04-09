@@ -41,6 +41,14 @@ enum SubscriptionStatus {
   @@map("subscription_status")
 }
 
+enum MailOutboxStatus {
+  pending
+  sent
+  failed
+
+  @@map("mail_outbox_status")
+}
+
 model User {
   id                  String              @id @default(cuid())
   email               String              @unique
@@ -54,6 +62,7 @@ model User {
   sessions            Session[]
   passwordResetTokens PasswordResetToken[]
   subscriptions       Subscription[]
+  mailOutboxEntries   MailOutbox[]
 
   @@map("users")
 }
@@ -131,4 +140,25 @@ model Subscription {
   @@index([userId])
   @@index([planId])
   @@map("subscriptions")
+}
+
+model MailOutbox {
+  id            String           @id @default(cuid())
+  userId        String?          @map("user_id")
+  toEmail       String           @map("to_email")
+  subject       String
+  textBody      String           @map("text_body")
+  htmlBody      String           @map("html_body")
+  status        MailOutboxStatus @default(pending)
+  provider      String?
+  providerId    String?          @map("provider_id")
+  errorMessage  String?          @map("error_message")
+  sentAt        DateTime?        @map("sent_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  user          User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@map("mail_outbox")
 }

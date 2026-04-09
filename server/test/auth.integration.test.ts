@@ -32,6 +32,7 @@ describe("auth integration", () => {
     await databaseService.$executeRawUnsafe(`
       TRUNCATE TABLE
         external_identities,
+        mail_outbox,
         password_reset_tokens,
         sessions,
         subscriptions,
@@ -122,11 +123,16 @@ describe("auth integration", () => {
 
     assert.equal(forgotResponse.status, 201);
     assert.equal(forgotResponse.body.success, true);
-    assert.ok(forgotResponse.body.tokenPreview);
+    assert.equal(forgotResponse.body.tokenPreview, undefined);
 
     const tokens = await databaseService.passwordResetToken.findMany();
     assert.equal(tokens.length, 1);
     assert.equal(tokens[0]?.usedAt, null);
+
+    const outbox = await databaseService.mailOutbox.findMany();
+    assert.equal(outbox.length, 1);
+    assert.equal(outbox[0]?.status, "sent");
+    assert.equal(outbox[0]?.toEmail, "slavisa@example.com");
   });
 
   test("reset-password updates the password and invalidates existing sessions", async () => {
@@ -146,8 +152,12 @@ describe("auth integration", () => {
       email: "slavisa@example.com",
     });
 
+    const outbox = await databaseService.mailOutbox.findFirstOrThrow();
+    const resetTokenMatch = outbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(resetTokenMatch?.[1]);
+
     const resetResponse = await request(app.getHttpServer()).post("/api/auth/reset-password").send({
-      token: forgotResponse.body.tokenPreview,
+      token: decodeURIComponent(resetTokenMatch[1]),
       password: "newpassword123",
     });
 

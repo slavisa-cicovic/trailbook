@@ -30,6 +30,14 @@ BEGIN
 END
 $$;
 
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'mail_outbox_status') THEN
+    CREATE TYPE mail_outbox_status AS ENUM ('pending', 'sent', 'failed');
+  END IF;
+END
+$$;
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
@@ -103,3 +111,22 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 
 CREATE INDEX IF NOT EXISTS subscriptions_user_id_idx ON subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS subscriptions_plan_id_idx ON subscriptions(plan_id);
+
+CREATE TABLE IF NOT EXISTS mail_outbox (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  to_email TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  text_body TEXT NOT NULL,
+  html_body TEXT NOT NULL,
+  status mail_outbox_status NOT NULL DEFAULT 'pending',
+  provider TEXT,
+  provider_id TEXT,
+  error_message TEXT,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS mail_outbox_user_id_idx ON mail_outbox(user_id);
+CREATE INDEX IF NOT EXISTS mail_outbox_status_idx ON mail_outbox(status);

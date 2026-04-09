@@ -1,0 +1,62 @@
+"use client";
+
+import { Alert, Button, Divider, Link as MuiLink, Stack, TextField } from "@mui/material";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import { login } from "../../lib/auth-api";
+import { SocialSigninButtons } from "./social-signin-buttons";
+
+export function LoginForm() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      await login({ email, password });
+      router.push("/dashboard");
+      router.refresh();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Login failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <Stack component="form" spacing={2} onSubmit={handleSubmit}>
+        <TextField fullWidth label="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+        <TextField
+          fullWidth
+          label="Password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+        {error ? <Alert severity="error">{error}</Alert> : null}
+        <Button disabled={submitting} size="large" type="submit" variant="contained">
+          {submitting ? "Logging in..." : "Login"}
+        </Button>
+      </Stack>
+      <Divider>or</Divider>
+      <SocialSigninButtons />
+      <Stack direction="row" justifyContent="space-between">
+        <MuiLink component={Link} href="/forgot-password" underline="hover">
+          Forgot password?
+        </MuiLink>
+        <MuiLink component={Link} href="/register" underline="hover">
+          Create account
+        </MuiLink>
+      </Stack>
+    </>
+  );
+}

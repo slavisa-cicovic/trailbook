@@ -1,4 +1,4 @@
-# PLAN 21: Server Social Auth
+# PLAN XX: Server Social Auth
 
 ## Goal
 
