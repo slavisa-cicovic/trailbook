@@ -36,6 +36,18 @@ export const RECORDING_PROFILE_OPTIONS: RecordingProfileOption[] = [
     description: "Faster travel",
     hint: "Best for car trips and longer road segments.",
   },
+  {
+    value: "boat",
+    label: "Boat",
+    description: "Water travel",
+    hint: "Best for ferries, boats, and slower trips on the water.",
+  },
+  {
+    value: "plane",
+    label: "Plane",
+    description: "Air travel",
+    hint: "Best for flights and long-distance air segments.",
+  },
 ];
 
 export function normalizeRecordingProfile(
@@ -45,6 +57,8 @@ export function normalizeRecordingProfile(
     case "walk":
     case "bike":
     case "drive":
+    case "boat":
+    case "plane":
       return profile;
     case "drive_city":
     case "drive_highway":
@@ -74,6 +88,10 @@ export function getRecordingProfileColor(profile: RecordingProfile): string {
       return "#2f6db3";
     case "drive":
       return "#d8751f";
+    case "boat":
+      return "#1f8aa5";
+    case "plane":
+      return "#7b5bd6";
     default:
       return "#355035";
   }

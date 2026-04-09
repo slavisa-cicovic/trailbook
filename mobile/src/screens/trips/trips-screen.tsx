@@ -274,6 +274,30 @@ export default function TripsScreen() {
             {String(tripsAggregateSummary.driveTripCount)}
           </Text>
         </View>
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Boat</Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {formatDistanceKm(tripsAggregateSummary.boatDistanceMeters)}
+          </Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {formatDurationSummary(tripsAggregateSummary.boatDurationMs)}
+          </Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {String(tripsAggregateSummary.boatTripCount)}
+          </Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Plane</Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {formatDistanceKm(tripsAggregateSummary.planeDistanceMeters)}
+          </Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {formatDurationSummary(tripsAggregateSummary.planeDurationMs)}
+          </Text>
+          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+            {String(tripsAggregateSummary.planeTripCount)}
+          </Text>
+        </View>
         <View style={[styles.summaryRow, styles.summaryTotalRow]}>
           <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Total</Text>
           <Text style={[styles.summaryValueText, styles.summaryValueCell]}>

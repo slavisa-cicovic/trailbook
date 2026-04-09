@@ -84,6 +84,23 @@ export function getTrackingOptionsForProfile(profile: RecordingProfile): Trackin
         timeInterval: 2 * 60 * 1000,
       };
     case "drive":
+      return {
+        accuracy: Location.Accuracy.Balanced,
+        distanceInterval: 120,
+        timeInterval: 3 * 60 * 1000,
+      };
+    case "boat":
+      return {
+        accuracy: Location.Accuracy.Balanced,
+        distanceInterval: 180,
+        timeInterval: 4 * 60 * 1000,
+      };
+    case "plane":
+      return {
+        accuracy: Location.Accuracy.Low,
+        distanceInterval: 1000,
+        timeInterval: 10 * 60 * 1000,
+      };
     default:
       return {
         accuracy: Location.Accuracy.Balanced,
@@ -97,6 +114,9 @@ function getBackgroundActivityTypeForProfile(profile: RecordingProfile): Locatio
   switch (profile) {
     case "drive":
       return Location.LocationActivityType.AutomotiveNavigation;
+    case "plane":
+      return Location.LocationActivityType.Airborne;
+    case "boat":
     case "bike":
       return Location.LocationActivityType.OtherNavigation;
     case "walk":

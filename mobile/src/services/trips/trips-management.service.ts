@@ -27,9 +27,15 @@ export interface TripsAggregateSummary {
   bikeDistanceMeters: number;
   bikeDurationMs: number;
   bikeTripCount: number;
+  boatDistanceMeters: number;
+  boatDurationMs: number;
+  boatTripCount: number;
   driveDistanceMeters: number;
   driveDurationMs: number;
   driveTripCount: number;
+  planeDistanceMeters: number;
+  planeDurationMs: number;
+  planeTripCount: number;
   totalDistanceMeters: number;
   totalDurationMs: number;
   totalTripCount: number;
@@ -55,6 +61,14 @@ function startOfDay(value: Date): Date {
 
 function isDriveProfile(profile: RecordingProfile): boolean {
   return profile === "drive";
+}
+
+function isBoatProfile(profile: RecordingProfile): boolean {
+  return profile === "boat";
+}
+
+function isPlaneProfile(profile: RecordingProfile): boolean {
+  return profile === "plane";
 }
 
 function getTripDurationMs(trip: Trip): number {
@@ -122,6 +136,8 @@ export function buildTripsAggregateSummary(trips: Trip[], tripPoints: TripPoint[
     (summary, trip) => {
       const durationMs = getTripDurationMs(trip);
       const isDrive = isDriveProfile(trip.recordingProfile);
+      const isBoat = isBoatProfile(trip.recordingProfile);
+      const isPlane = isPlaneProfile(trip.recordingProfile);
       const distanceMeters = calculateTripDistanceMeters(getVisibleTripPointsForTrip(tripPoints, trip.localId));
 
       summary.totalTripCount += 1;
@@ -132,6 +148,14 @@ export function buildTripsAggregateSummary(trips: Trip[], tripPoints: TripPoint[
         summary.driveTripCount += 1;
         summary.driveDurationMs += durationMs;
         summary.driveDistanceMeters += distanceMeters;
+      } else if (isBoat) {
+        summary.boatTripCount += 1;
+        summary.boatDurationMs += durationMs;
+        summary.boatDistanceMeters += distanceMeters;
+      } else if (isPlane) {
+        summary.planeTripCount += 1;
+        summary.planeDurationMs += durationMs;
+        summary.planeDistanceMeters += distanceMeters;
       } else if (trip.recordingProfile === "bike") {
         summary.bikeTripCount += 1;
         summary.bikeDurationMs += durationMs;
@@ -148,12 +172,18 @@ export function buildTripsAggregateSummary(trips: Trip[], tripPoints: TripPoint[
       bikeDistanceMeters: 0,
       bikeDurationMs: 0,
       bikeTripCount: 0,
+      boatDistanceMeters: 0,
+      boatDurationMs: 0,
+      boatTripCount: 0,
       walkDistanceMeters: 0,
       walkDurationMs: 0,
       walkTripCount: 0,
       driveDistanceMeters: 0,
       driveDurationMs: 0,
       driveTripCount: 0,
+      planeDistanceMeters: 0,
+      planeDurationMs: 0,
+      planeTripCount: 0,
       totalDistanceMeters: 0,
       totalDurationMs: 0,
       totalTripCount: 0,

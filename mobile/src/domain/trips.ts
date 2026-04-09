@@ -1,7 +1,7 @@
 export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error";
 export type RecordingStatus = "idle" | "recording" | "interrupted";
 export type WaypointAttachmentType = "photo";
-export type RecordingProfile = "walk" | "bike" | "drive";
+export type RecordingProfile = "walk" | "bike" | "drive" | "boat" | "plane";
 export type WaypointCategory =
   | "generic"
   | "departure"
