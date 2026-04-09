@@ -3,6 +3,7 @@ import {
   Alert,
   AppState,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -1070,11 +1071,13 @@ export default function RecordingScreen() {
                 autoCapitalize="sentences"
                 autoCorrect
                 enterKeyHint="done"
+                blurOnSubmit
                 multiline
                 numberOfLines={3}
                 onChangeText={(description) =>
                   setRecordingDraft((current) => ({ ...current, description }))
                 }
+                onSubmitEditing={() => Keyboard.dismiss()}
                 placeholder="Optional notes. You can also dictate with the keyboard microphone."
                 placeholderTextColor="#8c9a86"
                 ref={recordingDescriptionInputRef}
