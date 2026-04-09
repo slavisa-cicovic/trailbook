@@ -53,12 +53,22 @@ export default function TripWaypointScreen() {
   const resolvedTripId = Array.isArray(params.tripId) ? params.tripId[0] : params.tripId;
   const resolvedWaypointId = Array.isArray(params.waypointId) ? params.waypointId[0] : params.waypointId;
 
-  const visibleTrips = getVisibleTrips(trips);
+  const currentUserTrips = identitySession
+    ? trips.filter((trip) => trip.userId === identitySession.userId)
+    : [];
+  const currentUserWaypoints = identitySession
+    ? waypoints.filter((waypoint) => waypoint.userId === identitySession.userId)
+    : [];
+  const currentUserWaypointAttachments = identitySession
+    ? waypointAttachments.filter((attachment) => attachment.userId === identitySession.userId)
+    : [];
+
+  const visibleTrips = getVisibleTrips(currentUserTrips);
   const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
-  const tripWaypoints = selectedTrip ? getVisibleWaypointsForTrip(waypoints, selectedTrip.localId) : [];
+  const tripWaypoints = selectedTrip ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTrip.localId) : [];
   const selectedWaypoint = tripWaypoints.find((waypoint) => waypoint.localId === resolvedWaypointId) ?? null;
   const attachments = selectedWaypoint
-    ? getVisibleAttachmentsForWaypoints(waypointAttachments, [selectedWaypoint.localId]).sort((left, right) =>
+    ? getVisibleAttachmentsForWaypoints(currentUserWaypointAttachments, [selectedWaypoint.localId]).sort((left, right) =>
         left.createdAt.localeCompare(right.createdAt),
       )
     : [];

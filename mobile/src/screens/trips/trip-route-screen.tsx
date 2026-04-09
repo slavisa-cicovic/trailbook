@@ -88,20 +88,36 @@ export default function TripRouteScreen() {
   });
 
   const resolvedTripId = Array.isArray(tripId) ? tripId[0] : tripId;
-  const visibleTrips = getVisibleTrips(trips);
+  const currentUserTrips = identitySession
+    ? trips.filter((trip) => trip.userId === identitySession.userId)
+    : [];
+  const currentUserTripSegments = identitySession
+    ? tripSegments.filter((segment) => segment.userId === identitySession.userId)
+    : [];
+  const currentUserTripPoints = identitySession
+    ? tripPoints.filter((tripPoint) => tripPoint.userId === identitySession.userId)
+    : [];
+  const currentUserWaypoints = identitySession
+    ? waypoints.filter((waypoint) => waypoint.userId === identitySession.userId)
+    : [];
+  const currentUserWaypointAttachments = identitySession
+    ? waypointAttachments.filter((attachment) => attachment.userId === identitySession.userId)
+    : [];
+
+  const visibleTrips = getVisibleTrips(currentUserTrips);
   const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
   const selectedTripPoints = selectedTrip
-    ? getVisibleTripPointsForTrip(tripPoints, selectedTrip.localId)
+    ? getVisibleTripPointsForTrip(currentUserTripPoints, selectedTrip.localId)
     : [];
   const selectedTripSegments = selectedTrip
-    ? buildTripSegmentsSummary(tripSegments, tripPoints, selectedTrip.localId)
+    ? buildTripSegmentsSummary(currentUserTripSegments, currentUserTripPoints, selectedTrip.localId)
     : [];
   const selectedTripWaypoints = selectedTrip
-    ? getVisibleWaypointsForTrip(waypoints, selectedTrip.localId)
+    ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTrip.localId)
     : [];
   const selectedTripAttachments = selectedTrip
     ? getVisibleAttachmentsForWaypoints(
-        waypointAttachments,
+        currentUserWaypointAttachments,
         selectedTripWaypoints.map((waypoint) => waypoint.localId),
       )
     : [];
@@ -110,7 +126,7 @@ export default function TripRouteScreen() {
     longitude: tripPoint.longitude,
   }));
   const segmentPolylines = selectedTrip
-    ? buildSegmentPolylines(tripSegments, tripPoints, selectedTrip.localId)
+    ? buildSegmentPolylines(currentUserTripSegments, currentUserTripPoints, selectedTrip.localId)
     : [];
   const fallbackCoordinates = selectedTripWaypoints.map((waypoint) => ({
     latitude: waypoint.latitude,

@@ -136,19 +136,35 @@ export default function RecordingScreen() {
   });
 
   const activeIdentitySession = identitySession;
-  const activeTrip = trips.find((trip) => trip.localId === recordingSession.activeTripId) ?? null;
+  const currentUserTrips = activeIdentitySession
+    ? trips.filter((trip) => trip.userId === activeIdentitySession.userId)
+    : [];
+  const currentUserTripSegments = activeIdentitySession
+    ? tripSegments.filter((segment) => segment.userId === activeIdentitySession.userId)
+    : [];
+  const currentUserTripPoints = activeIdentitySession
+    ? tripPoints.filter((tripPoint) => tripPoint.userId === activeIdentitySession.userId)
+    : [];
+  const currentUserWaypoints = activeIdentitySession
+    ? waypoints.filter((waypoint) => waypoint.userId === activeIdentitySession.userId)
+    : [];
+  const currentUserWaypointAttachments = activeIdentitySession
+    ? waypointAttachments.filter((attachment) => attachment.userId === activeIdentitySession.userId)
+    : [];
+
+  const activeTrip = currentUserTrips.find((trip) => trip.localId === recordingSession.activeTripId) ?? null;
   const activeSegment = recordingSession.activeSegmentId
-    ? tripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ?? null
+    ? currentUserTripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ?? null
     : activeTrip
-      ? getOpenTripSegmentForTrip(tripSegments, activeTrip.localId)
+      ? getOpenTripSegmentForTrip(currentUserTripSegments, activeTrip.localId)
       : null;
   const activeRecordingProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
-  const activeTripPoints = activeTrip ? getVisibleTripPointsForTrip(tripPoints, activeTrip.localId) : [];
+  const activeTripPoints = activeTrip ? getVisibleTripPointsForTrip(currentUserTripPoints, activeTrip.localId) : [];
   const activeRecordingProfileLabel = getRecordingProfileLabel(activeRecordingProfile);
   const lastPoint = recordingSession.lastPointRecordedAt ?? "n/a";
-  const activeTripCount = trips.filter((trip) => trip.endedAt === null).length;
+  const activeTripCount = currentUserTrips.filter((trip) => trip.endedAt === null).length;
   const recentWaypoints = activeTrip
-    ? waypoints
+    ? currentUserWaypoints
         .filter((waypoint) => waypoint.tripLocalId === activeTrip.localId && waypoint.deletedAt === null)
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
         .slice(0, 3)
@@ -156,7 +172,7 @@ export default function RecordingScreen() {
   const recentWaypointCards = recentWaypoints.map((waypoint) => ({
     waypoint,
     category: getWaypointCategoryOption(waypoint.category),
-    photos: waypointAttachments.filter(
+    photos: currentUserWaypointAttachments.filter(
       (attachment) =>
         attachment.waypointLocalId === waypoint.localId &&
         attachment.deletedAt === null &&
@@ -169,12 +185,12 @@ export default function RecordingScreen() {
   const selectedPhotoAttachment =
     selectedPhotoAttachmentId === null
       ? null
-      : waypointAttachments.find(
+      : currentUserWaypointAttachments.find(
           (attachment) =>
             attachment.localId === selectedPhotoAttachmentId && attachment.deletedAt === null,
         ) ?? null;
   const selectedPhotoWaypointAttachments = selectedPhotoAttachment
-    ? waypointAttachments
+    ? currentUserWaypointAttachments
         .filter(
           (attachment) =>
             attachment.waypointLocalId === selectedPhotoAttachment.waypointLocalId &&

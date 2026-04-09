@@ -65,12 +65,28 @@ export default function TripsScreen() {
     description: "",
   });
 
-  const visibleTrips = getVisibleTrips(trips);
+  const currentUserTrips = identitySession
+    ? trips.filter((trip) => trip.userId === identitySession.userId)
+    : [];
+  const currentUserTripSegments = identitySession
+    ? tripSegments.filter((segment) => segment.userId === identitySession.userId)
+    : [];
+  const currentUserTripPoints = identitySession
+    ? tripPoints.filter((tripPoint) => tripPoint.userId === identitySession.userId)
+    : [];
+  const currentUserWaypoints = identitySession
+    ? waypoints.filter((waypoint) => waypoint.userId === identitySession.userId)
+    : [];
+  const currentUserWaypointAttachments = identitySession
+    ? waypointAttachments.filter((attachment) => attachment.userId === identitySession.userId)
+    : [];
+
+  const visibleTrips = getVisibleTrips(currentUserTrips);
   const filteredTrips = filterTripsByDate(visibleTrips, dateFilter);
   const tripSummaries = filteredTrips.map((trip) =>
-    buildTripSummary(trip, tripPoints, waypoints, waypointAttachments),
+    buildTripSummary(trip, currentUserTripPoints, currentUserWaypoints, currentUserWaypointAttachments),
   );
-  const tripsAggregateSummary = buildTripsAggregateSummary(filteredTrips, tripPoints);
+  const tripsAggregateSummary = buildTripsAggregateSummary(filteredTrips, currentUserTripPoints);
   const selectedTrip = visibleTrips.find((trip) => trip.localId === selectedTripId) ?? null;
 
   useEffect(() => {
@@ -154,7 +170,7 @@ export default function TripsScreen() {
       return;
     }
 
-    const activeSegment = getOpenTripSegmentForTrip(tripSegments, trip.localId);
+    const activeSegment = getOpenTripSegmentForTrip(currentUserTripSegments, trip.localId);
 
     await setRecordingSession({
       status: "interrupted",
