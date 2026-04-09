@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
@@ -73,6 +74,7 @@ export default function TripRouteScreen() {
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
   const [tripEditVisible, setTripEditVisible] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -195,84 +197,84 @@ export default function TripRouteScreen() {
         visible={tripEditVisible}
       />
 
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryHeader}>
-          <View style={styles.summaryText}>
-            <Text numberOfLines={1} style={styles.tripTitle}>
-              {selectedTrip.title}
-            </Text>
+      <View style={styles.detailsAccordionCard}>
+        <Pressable
+          onPress={() => setDetailsExpanded((current) => !current)}
+          style={styles.detailsAccordionTrigger}
+        >
+          <Text numberOfLines={1} style={styles.tripTitle}>
+            {selectedTrip.title}
+          </Text>
+          <View style={styles.detailsAccordionActions}>
+            <Pressable onPress={() => openTripEdit(selectedTrip)} style={styles.headerEditButton}>
+              <Text style={styles.headerEditButtonText}>Edit</Text>
+            </Pressable>
+            <MaterialIcons
+              color="#243224"
+              name={detailsExpanded ? "expand-less" : "expand-more"}
+              size={22}
+            />
+          </View>
+        </Pressable>
+
+        {detailsExpanded ? (
+          <View style={styles.detailsAccordionBody}>
             {selectedTrip.description ? (
-              <Text numberOfLines={2} style={styles.tripDescription}>
-                {selectedTrip.description}
-              </Text>
+              <Text style={styles.tripDescription}>{selectedTrip.description}</Text>
+            ) : null}
+            <View style={styles.summaryGrid}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryKey}>Mode</Text>
+                <Text style={styles.summaryValue}>{modeSummary}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryKey}>Waypoints</Text>
+                <Text style={styles.summaryValue}>{String(selectedTripWaypoints.length)}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryKey}>Photos</Text>
+                <Text style={styles.summaryValue}>{String(selectedTripAttachments.length)}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryKey}>Distance</Text>
+                <Text style={styles.summaryValue}>{distanceText}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryKey}>Segments</Text>
+                <Text style={styles.summaryValue}>{String(selectedTripSegments.length)}</Text>
+              </View>
+            </View>
+            {selectedTripSegments.length > 0 ? (
+              <View style={styles.segmentsList}>
+                <Text style={styles.segmentsTitle}>Segments</Text>
+                {selectedTripSegments.map(({ segment, distanceMeters, durationLabel }) => (
+                  <View key={segment.localId} style={styles.segmentRow}>
+                    <View style={styles.segmentHeader}>
+                      <Text style={styles.segmentMode}>{getRecordingProfileLabel(segment.recordingProfile)}</Text>
+                      <Text style={styles.segmentDistance}>{formatDistanceKm(distanceMeters)}</Text>
+                    </View>
+                    <Text style={styles.segmentMeta}>
+                      {new Date(segment.startedAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      {" - "}
+                      {segment.endedAt
+                        ? new Date(segment.endedAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "Active"}
+                      {" • "}
+                      {durationLabel}
+                    </Text>
+                  </View>
+                ))}
+              </View>
             ) : null}
           </View>
-          <Pressable onPress={() => openTripEdit(selectedTrip)} style={styles.headerEditButton}>
-            <Text style={styles.headerEditButtonText}>Edit</Text>
-          </Pressable>
-        </View>
-        <View style={styles.summaryGrid}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryKey}>Mode</Text>
-            <Text style={styles.summaryValue}>{modeSummary}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryKey}>Waypoints</Text>
-            <Text style={styles.summaryValue}>{String(selectedTripWaypoints.length)}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryKey}>Photos</Text>
-            <Text style={styles.summaryValue}>{String(selectedTripAttachments.length)}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryKey}>Distance</Text>
-            <Text style={styles.summaryValue}>{distanceText}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryKey}>Segments</Text>
-            <Text style={styles.summaryValue}>{String(selectedTripSegments.length)}</Text>
-          </View>
-        </View>
-        <View style={styles.legendRow}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, styles.noteOnlyDot]} />
-            <Text style={styles.legendText}>Note only</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, styles.noteWithPhotosDot]} />
-            <Text style={styles.legendText}>Note + photos</Text>
-          </View>
-        </View>
+        ) : null}
       </View>
-
-      {selectedTripSegments.length > 0 ? (
-        <View style={styles.segmentsCard}>
-          <Text style={styles.segmentsTitle}>Segments</Text>
-          {selectedTripSegments.map(({ segment, distanceMeters, durationLabel }) => (
-            <View key={segment.localId} style={styles.segmentRow}>
-              <View style={styles.segmentHeader}>
-                <Text style={styles.segmentMode}>{getRecordingProfileLabel(segment.recordingProfile)}</Text>
-                <Text style={styles.segmentDistance}>{formatDistanceKm(distanceMeters)}</Text>
-              </View>
-              <Text style={styles.segmentMeta}>
-                {new Date(segment.startedAt).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-                {" - "}
-                {segment.endedAt
-                  ? new Date(segment.endedAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : "Active"}
-                {" • "}
-                {durationLabel}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
 
       <TripRouteMap
         coordinates={routeCoordinates}
@@ -307,25 +309,29 @@ const styles = StyleSheet.create({
     color: "#52624f",
     textAlign: "center",
   },
-  summaryCard: {
+  detailsAccordionCard: {
     borderRadius: 20,
     backgroundColor: "#f6f1e5",
     borderWidth: 1,
     borderColor: "#ebe1cf",
     padding: 16,
-    gap: 14,
   },
-  summaryText: {
-    flex: 1,
-    gap: 4,
-  },
-  summaryHeader: {
+  detailsAccordionTrigger: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+    alignItems: "center",
     gap: 12,
   },
+  detailsAccordionActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  detailsAccordionBody: {
+    gap: 14,
+    paddingTop: 14,
+  },
   tripTitle: {
+    flex: 1,
     fontSize: 20,
     fontWeight: "700",
     color: "#243224",
@@ -368,39 +374,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#243224",
   },
-  legendRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-  },
-  noteOnlyDot: {
-    backgroundColor: "#355035",
-  },
-  noteWithPhotosDot: {
-    backgroundColor: "#9f5f0f",
-  },
-  legendText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#52624f",
-  },
-  segmentsCard: {
-    marginTop: 6,
-    borderRadius: 20,
+  segmentsList: {
+    borderRadius: 16,
     backgroundColor: "#fffdf8",
     borderWidth: 1,
     borderColor: "#ebe1cf",
-    padding: 16,
+    padding: 14,
     gap: 12,
   },
   segmentsTitle: {
