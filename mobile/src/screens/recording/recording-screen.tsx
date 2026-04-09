@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   AppState,
@@ -120,6 +120,8 @@ export default function RecordingScreen() {
   const [sessionMenuVisible, setSessionMenuVisible] = useState(false);
   const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
+  const recordingTitleInputRef = useRef<TextInput | null>(null);
+  const recordingDescriptionInputRef = useRef<TextInput | null>(null);
   const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>({
     title: "",
     description: "",
@@ -217,6 +219,18 @@ export default function RecordingScreen() {
       },
     ]);
   }
+
+  useEffect(() => {
+    if (!startModalVisible) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      recordingTitleInputRef.current?.focus();
+    }, 150);
+
+    return () => clearTimeout(timeoutId);
+  }, [startModalVisible]);
 
   useEffect(() => {
     let active = true;
@@ -1038,9 +1052,15 @@ export default function RecordingScreen() {
               <Text style={styles.fieldLabel}>Route name</Text>
               <TextInput
                 autoCapitalize="sentences"
+                autoCorrect
+                enablesReturnKeyAutomatically
+                enterKeyHint="next"
+                onSubmitEditing={() => recordingDescriptionInputRef.current?.focus()}
                 onChangeText={(title) => setRecordingDraft((current) => ({ ...current, title }))}
-                placeholder="Morning walk"
+                placeholder="e.g. Drive to Belgrade"
                 placeholderTextColor="#8c9a86"
+                ref={recordingTitleInputRef}
+                returnKeyType="next"
                 style={styles.fieldInput}
                 value={recordingDraft.title}
               />
@@ -1048,13 +1068,17 @@ export default function RecordingScreen() {
               <Text style={styles.fieldLabel}>Description</Text>
               <TextInput
                 autoCapitalize="sentences"
+                autoCorrect
+                enterKeyHint="done"
                 multiline
                 numberOfLines={3}
                 onChangeText={(description) =>
                   setRecordingDraft((current) => ({ ...current, description }))
                 }
-                placeholder="Optional notes about the route"
+                placeholder="Optional notes. You can also dictate with the keyboard microphone."
                 placeholderTextColor="#8c9a86"
+                ref={recordingDescriptionInputRef}
+                returnKeyType="done"
                 style={[styles.fieldInput, styles.fieldTextarea]}
                 textAlignVertical="top"
                 value={recordingDraft.description}
