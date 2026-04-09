@@ -31,6 +31,7 @@ import {
   getWaypointCategoryOption,
 } from "../../constants/waypoint-categories";
 import type { RecordingProfile } from "../../domain/trips";
+import type { TrailbookMapType } from "../trips/components/trip-route-map";
 import {
   getBackgroundLocationAccess,
   getCurrentForegroundLocation,
@@ -94,6 +95,11 @@ import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 
 export default function RecordingScreen() {
+  const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
+    { label: "Map", value: "standard" },
+    { label: "Satellite", value: "satellite" },
+    { label: "Hybrid", value: "hybrid" },
+  ];
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);
@@ -113,6 +119,7 @@ export default function RecordingScreen() {
   const [waypointModalVisible, setWaypointModalVisible] = useState(false);
   const [sessionMenuVisible, setSessionMenuVisible] = useState(false);
   const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
+  const [mapType, setMapType] = useState<TrailbookMapType>("standard");
   const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>({
     title: "",
     description: "",
@@ -1128,6 +1135,7 @@ export default function RecordingScreen() {
         {mapRegion && currentLocation ? (
           <MapView
             initialRegion={mapRegion}
+            mapType={mapType}
             region={mapRegion}
             showsUserLocation={locationPermissionGranted === true}
             style={styles.map}
@@ -1190,6 +1198,23 @@ export default function RecordingScreen() {
                   : `${recordingSession.status} • tap for details`}
               </Text>
             </Pressable>
+          </View>
+          <View style={styles.mapTypeBar}>
+            {mapTypeOptions.map((option) => {
+              const selected = option.value === mapType;
+
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setMapType(option.value)}
+                  style={[styles.mapTypeChip, selected && styles.mapTypeChipSelected]}
+                >
+                  <Text style={[styles.mapTypeChipText, selected && styles.mapTypeChipTextSelected]}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
@@ -1691,6 +1716,7 @@ const styles = StyleSheet.create({
     top: 16,
     left: 16,
     right: 16,
+    gap: 10,
   },
   sessionBar: {
     width: "100%",
@@ -1701,6 +1727,32 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 253, 248, 0.94)",
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  mapTypeBar: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 253, 248, 0.94)",
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  mapTypeChip: {
+    borderRadius: 999,
+    backgroundColor: "#e6ece1",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  mapTypeChipSelected: {
+    backgroundColor: "#243224",
+  },
+  mapTypeChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  mapTypeChipTextSelected: {
+    color: "#fffdf8",
   },
   sessionTrigger: {
     flex: 1,

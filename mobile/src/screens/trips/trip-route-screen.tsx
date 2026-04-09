@@ -30,7 +30,13 @@ import { useWaypointAttachmentsStore } from "../../state/waypoint-attachments-st
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { useWaypointsStore } from "../../state/waypoints-store";
 import TripEditModal from "./components/trip-edit-modal";
-import TripRouteMap from "./components/trip-route-map";
+import TripRouteMap, { type TrailbookMapType } from "./components/trip-route-map";
+
+const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
+  { label: "Map", value: "standard" },
+  { label: "Satellite", value: "satellite" },
+  { label: "Hybrid", value: "hybrid" },
+];
 
 function buildTripMapRegion(
   coordinates: Array<{ latitude: number; longitude: number }>,
@@ -75,6 +81,7 @@ export default function TripRouteScreen() {
 
   const [tripEditVisible, setTripEditVisible] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [mapType, setMapType] = useState<TrailbookMapType>("standard");
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -276,8 +283,27 @@ export default function TripRouteScreen() {
         ) : null}
       </View>
 
+      <View style={styles.mapTypeRow}>
+        {mapTypeOptions.map((option) => {
+          const selected = option.value === mapType;
+
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => setMapType(option.value)}
+              style={[styles.mapTypeChip, selected && styles.mapTypeChipSelected]}
+            >
+              <Text style={[styles.mapTypeChipText, selected && styles.mapTypeChipTextSelected]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <TripRouteMap
         coordinates={routeCoordinates}
+        mapType={mapType}
         onSelectWaypoint={handleSelectWaypoint}
         region={selectedTripMapRegion}
         segmentPolylines={segmentPolylines}
@@ -351,6 +377,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#243224",
+  },
+  mapTypeRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  mapTypeChip: {
+    borderRadius: 999,
+    backgroundColor: "#e6ece1",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  mapTypeChipSelected: {
+    backgroundColor: "#243224",
+  },
+  mapTypeChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  mapTypeChipTextSelected: {
+    color: "#fffdf8",
   },
   summaryGrid: {
     flexDirection: "row",

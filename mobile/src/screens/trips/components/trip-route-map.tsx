@@ -5,6 +5,8 @@ import { StyleSheet, View } from "react-native";
 import { getWaypointCategoryOption } from "../../../constants/waypoint-categories";
 import type { Waypoint } from "../../../domain/trips";
 
+export type TrailbookMapType = "standard" | "satellite" | "hybrid";
+
 interface RouteWaypointMarker {
   hasPhotos: boolean;
   waypoint: Waypoint;
@@ -12,6 +14,7 @@ interface RouteWaypointMarker {
 
 interface TripRouteMapProps {
   coordinates: Array<{ latitude: number; longitude: number }>;
+  mapType: TrailbookMapType;
   onSelectWaypoint: (waypoint: Waypoint) => void;
   region: Region | null;
   segmentPolylines: Array<{
@@ -24,6 +27,7 @@ interface TripRouteMapProps {
 
 export default function TripRouteMap({
   coordinates,
+  mapType,
   onSelectWaypoint,
   region,
   segmentPolylines,
@@ -35,7 +39,7 @@ export default function TripRouteMap({
 
   return (
     <View style={styles.mapCard}>
-      <MapView initialRegion={region} style={styles.map}>
+      <MapView initialRegion={region} mapType={mapType} style={styles.map}>
         {segmentPolylines.length > 0 ? (
           segmentPolylines.map((segmentPolyline) => (
             <Polyline
