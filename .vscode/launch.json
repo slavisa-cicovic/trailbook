@@ -79,6 +79,13 @@
       "cwd": "${workspaceFolder}"
     },
     {
+      "name": "Web: Test Auth",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run test --workspace web",
+      "cwd": "${workspaceFolder}"
+    },
+    {
       "name": "Mobile: Expo Start",
       "type": "node-terminal",
       "request": "launch",
