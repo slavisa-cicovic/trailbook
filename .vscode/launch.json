@@ -2,6 +2,34 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Server: Nest Start (Dev)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run start:dev --workspace server",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Server: Nest Start",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run start --workspace server",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Web: Next Dev",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev --workspace web",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Web: Next Start",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run start --workspace web",
+      "cwd": "${workspaceFolder}"
+    },
+    {
       "name": "Mobile: Expo Start",
       "type": "node-terminal",
       "request": "launch",
