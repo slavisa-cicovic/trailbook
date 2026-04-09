@@ -29,14 +29,16 @@ describe("auth integration", () => {
   });
 
   beforeEach(async () => {
-    await databaseService.$transaction([
-      databaseService.externalIdentity.deleteMany(),
-      databaseService.passwordResetToken.deleteMany(),
-      databaseService.session.deleteMany(),
-      databaseService.subscription.deleteMany(),
-      databaseService.plan.deleteMany(),
-      databaseService.user.deleteMany(),
-    ]);
+    await databaseService.$executeRawUnsafe(`
+      TRUNCATE TABLE
+        external_identities,
+        password_reset_tokens,
+        sessions,
+        subscriptions,
+        plans,
+        users
+      RESTART IDENTITY CASCADE
+    `);
   });
 
   test("register creates a persisted local user with demo subscription", async () => {

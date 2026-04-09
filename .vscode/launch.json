@@ -9,10 +9,24 @@
       "cwd": "${workspaceFolder}"
     },
     {
+      "name": "Server Test DB: Up",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run db:test:up --workspace server",
+      "cwd": "${workspaceFolder}"
+    },
+    {
       "name": "Server DB: Init",
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run db:init --workspace server",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Server Test DB: Init",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run db:test:init --workspace server",
       "cwd": "${workspaceFolder}"
     },
     {
@@ -23,7 +37,14 @@
       "cwd": "${workspaceFolder}"
     },
     {
-      "name": "Server: Test Auth",
+      "name": "Server Test DB: Down",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run db:test:down --workspace server",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Server: Test Auth (Test DB)",
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run test --workspace server",

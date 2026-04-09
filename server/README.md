@@ -23,3 +23,12 @@ Local bootstrap:
 5. Run `npm run start:dev --workspace server`
 
 The local Docker PostgreSQL instance binds to `localhost:55432` to avoid colliding with existing host PostgreSQL ports.
+
+Test bootstrap:
+
+1. Copy `.env.test.example` to `.env.test`
+2. Run `npm run db:test:up --workspace server`
+3. Run `npm run db:test:init --workspace server`
+4. Run `npm run test --workspace server`
+
+The isolated PostgreSQL test instance binds to `localhost:55433`.
