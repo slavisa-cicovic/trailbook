@@ -37,10 +37,43 @@ export class AuthController {
     };
   }
 
+  @Post("mobile/register")
+  async registerMobile(@Body() input: RegisterDto, @Req() request: Request) {
+    await this.authService.register(input);
+
+    const result = await this.authService.login(
+      {
+        email: input.email,
+        password: input.password,
+      },
+      {
+        ipAddress: request.ip,
+        userAgent: request.get("user-agent") || null,
+      },
+    );
+
+    return this.toMobileAuthResponse(result);
+  }
+
+  @Post("mobile/login")
+  async loginMobile(@Body() input: LoginDto, @Req() request: Request) {
+    const result = await this.authService.login(input, {
+      ipAddress: request.ip,
+      userAgent: request.get("user-agent") || null,
+    });
+
+    return this.toMobileAuthResponse(result);
+  }
+
   @Post("logout")
   async logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     response.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
-    return this.authService.logout(request.cookies?.[SESSION_COOKIE_NAME]);
+    return this.authService.logout(this.getSessionToken(request));
+  }
+
+  @Post("mobile/logout")
+  async logoutMobile(@Req() request: Request) {
+    return this.authService.logout(this.getSessionToken(request));
   }
 
   @Post("forgot-password")
@@ -55,7 +88,12 @@ export class AuthController {
 
   @Get("me")
   me(@Req() request: Request) {
-    return this.authService.getCurrentUser(request.cookies?.[SESSION_COOKIE_NAME]);
+    return this.authService.getCurrentUser(this.getSessionToken(request));
+  }
+
+  @Get("mobile/me")
+  meMobile(@Req() request: Request) {
+    return this.authService.getCurrentUser(this.getSessionToken(request));
   }
 
   @Get("providers")
@@ -65,7 +103,12 @@ export class AuthController {
 
   @Get("google")
   google(@Res() response: Response) {
-    return this.startSocialLogin("google", response);
+    return this.startSocialLogin("google", "web", response);
+  }
+
+  @Get("mobile/google")
+  mobileGoogle(@Query("redirect_uri") redirectUri: string | undefined, @Res() response: Response) {
+    return this.startSocialLogin("google", "mobile", response, redirectUri);
   }
 
   @Get("google/callback")
@@ -81,7 +124,12 @@ export class AuthController {
 
   @Get("facebook")
   facebook(@Res() response: Response) {
-    return this.startSocialLogin("facebook", response);
+    return this.startSocialLogin("facebook", "web", response);
+  }
+
+  @Get("mobile/facebook")
+  mobileFacebook(@Query("redirect_uri") redirectUri: string | undefined, @Res() response: Response) {
+    return this.startSocialLogin("facebook", "mobile", response, redirectUri);
   }
 
   @Get("facebook/callback")
@@ -97,7 +145,12 @@ export class AuthController {
 
   @Get("apple")
   apple(@Res() response: Response) {
-    return this.startSocialLogin("apple", response);
+    return this.startSocialLogin("apple", "web", response);
+  }
+
+  @Get("mobile/apple")
+  mobileApple(@Query("redirect_uri") redirectUri: string | undefined, @Res() response: Response) {
+    return this.startSocialLogin("apple", "mobile", response, redirectUri);
   }
 
   @Get("apple/callback")
@@ -112,10 +165,20 @@ export class AuthController {
     return this.finishSocialLogin("apple", { code, state, error, user }, request, response);
   }
 
-  private startSocialLogin(provider: SocialProvider, response: Response) {
+  @Post("mobile/social/complete")
+  completeMobileSocial(@Body("handoffCode") handoffCode: string) {
+    return this.socialAuthService.consumeAuthHandoff(handoffCode);
+  }
+
+  private startSocialLogin(
+    provider: SocialProvider,
+    client: "web" | "mobile",
+    response: Response,
+    redirectUri?: string,
+  ) {
     try {
-      const authorizationRequest = this.socialAuthService.createAuthorizationRequest(provider);
-      response.cookie(authorizationRequest.cookieName, authorizationRequest.state, {
+      const authorizationRequest = this.socialAuthService.createAuthorizationRequest(provider, client, redirectUri);
+      response.cookie(authorizationRequest.cookieName, authorizationRequest.stateContext, {
         httpOnly: true,
         sameSite: "lax",
         secure: false,
@@ -124,6 +187,13 @@ export class AuthController {
       });
       return response.redirect(authorizationRequest.authorizationUrl);
     } catch (error) {
+      if (client === "mobile" && redirectUri) {
+        const url = new URL(redirectUri);
+        url.searchParams.set("provider", provider);
+        url.searchParams.set("error", this.toErrorReason(error));
+        return response.redirect(url.toString());
+      }
+
       return response.redirect(this.socialAuthService.getErrorRedirectUrl(provider, this.toErrorReason(error)));
     }
   }
@@ -136,6 +206,7 @@ export class AuthController {
   ) {
     const stateCookieName = this.socialAuthService.getStateCookieName(provider);
     const expectedState = request.cookies?.[stateCookieName];
+    const stateContext = this.socialAuthService.decodeStateContext(expectedState);
 
     response.clearCookie(stateCookieName, { path: `/api/auth/${provider}` });
 
@@ -146,8 +217,18 @@ export class AuthController {
       });
 
       this.setSessionCookie(response, result.session.id);
-      return response.redirect(this.socialAuthService.getSuccessRedirectUrl());
+      return response.redirect(result.redirectUrl);
     } catch (error) {
+      if (stateContext?.client === "mobile" && stateContext.redirectUri) {
+        return response.redirect(
+          this.socialAuthService.getMobileErrorRedirectUrl(
+            provider,
+            stateContext.redirectUri,
+            this.toErrorReason(error),
+          ),
+        );
+      }
+
       return response.redirect(this.socialAuthService.getErrorRedirectUrl(provider, this.toErrorReason(error)));
     }
   }
@@ -159,6 +240,19 @@ export class AuthController {
       secure: false,
       path: "/",
     });
+  }
+
+  private getSessionToken(request: Request) {
+    const header = request.get("authorization");
+    const bearerToken = header?.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : null;
+    return bearerToken || request.cookies?.[SESSION_COOKIE_NAME];
+  }
+
+  private toMobileAuthResponse(result: Awaited<ReturnType<AuthService["login"]>>) {
+    return {
+      sessionToken: result.session.id,
+      user: result.user,
+    };
   }
 
   private toErrorReason(error: unknown) {

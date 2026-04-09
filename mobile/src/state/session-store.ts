@@ -92,3 +92,13 @@ export async function setActiveIdentitySession(
 
   await saveSession(identitySession);
 }
+
+export function clearSessionCredentials() {
+  setState((currentState) => ({
+    ...currentState,
+    credentials: {
+      email: "",
+      password: "",
+    },
+  }));
+}

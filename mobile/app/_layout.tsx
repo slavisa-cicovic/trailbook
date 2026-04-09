@@ -107,6 +107,9 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="forgot-password" />
+        <Stack.Screen name="auth/callback" />
         <Stack.Screen name="recording" options={{ animation: "none" }} />
         <Stack.Screen name="trips/index" options={{ animation: "none" }} />
         <Stack.Screen name="trips/[tripId]" />

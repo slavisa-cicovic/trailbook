@@ -1,14 +1,21 @@
-import { BadRequestException, Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { createHmac } from "node:crypto";
 
-import { createRemoteJWKSet, jwtVerify, SignJWT, importPKCS8, type JWTPayload } from "jose";
+import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT, type JWTPayload } from "jose";
 
 import { UsersService } from "../users/users.service";
-import type { AuthProvider, UserRecord } from "../users/user.types";
+import type { AuthProvider } from "../users/user.types";
 import { AuthService } from "./auth.service";
 import { createOpaqueToken } from "./auth.utils";
 
 type SocialProvider = Exclude<AuthProvider, "local">;
+type SocialClient = "web" | "mobile";
 
 interface AuthRequestMetadata {
   ipAddress?: string | null;
@@ -30,12 +37,26 @@ interface SocialProfile {
   providerSubject: string;
 }
 
+interface SocialStateContext {
+  client: SocialClient;
+  redirectUri?: string;
+  state: string;
+}
+
+interface AuthHandoffEntry {
+  createdAt: number;
+  expiresAt: number;
+  sessionToken: string;
+  user: Awaited<ReturnType<AuthService["getCurrentUser"]>>["user"];
+}
+
 const googleJwks = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 const appleJwks = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
 
 @Injectable()
 export class SocialAuthService {
-  private readonly stateTtlMs = 1000 * 60 * 10;
+  private readonly authHandoffs = new Map<string, AuthHandoffEntry>();
+  private readonly handoffTtlMs = 1000 * 60 * 5;
 
   constructor(
     @Inject(AuthService)
@@ -44,13 +65,21 @@ export class SocialAuthService {
     private readonly usersService: UsersService,
   ) {}
 
-  createAuthorizationRequest(provider: SocialProvider) {
+  createAuthorizationRequest(provider: SocialProvider, client: SocialClient = "web", redirectUri?: string) {
+    if (client === "mobile" && !redirectUri) {
+      throw new BadRequestException("Mobile social auth requires a redirectUri.");
+    }
+
     const state = createOpaqueToken();
 
     return {
       authorizationUrl: this.buildAuthorizationUrl(provider, state),
       cookieName: this.getStateCookieName(provider),
-      state,
+      stateContext: this.encodeStateContext({
+        state,
+        client,
+        redirectUri,
+      }),
     };
   }
 
@@ -62,8 +91,13 @@ export class SocialAuthService {
     };
   }
 
-  async handleCallback(provider: SocialProvider, input: SocialCallbackInput, expectedState: string | undefined, metadata?: AuthRequestMetadata) {
-    this.assertValidState(provider, input.state, expectedState);
+  async handleCallback(
+    provider: SocialProvider,
+    input: SocialCallbackInput,
+    expectedStateContext: string | undefined,
+    metadata?: AuthRequestMetadata,
+  ) {
+    const stateContext = this.decodeAndValidateStateContext(provider, input.state, expectedStateContext);
 
     if (input.error) {
       throw new UnauthorizedException(`${this.getProviderLabel(provider)} login was denied.`);
@@ -75,8 +109,48 @@ export class SocialAuthService {
 
     const profile = await this.resolveProfile(provider, input.code, input.user || undefined);
     const user = await this.resolveOrCreateUser(profile);
+    const loginResult = await this.authService.completeLoginForUser(user.id, metadata);
 
-    return this.authService.completeLoginForUser(user.id, metadata);
+    if (stateContext.client === "mobile") {
+      if (!loginResult.user) {
+        throw new UnauthorizedException("Unable to establish a mobile social session.");
+      }
+
+      const handoffCode = this.createAuthHandoff(loginResult.session.id, loginResult.user);
+      const redirectUrl = new URL(stateContext.redirectUri || "trailbook://auth/callback");
+      redirectUrl.searchParams.set("handoffCode", handoffCode);
+      redirectUrl.searchParams.set("provider", provider);
+
+      return {
+        redirectUrl: redirectUrl.toString(),
+        session: loginResult.session,
+        user: loginResult.user,
+      };
+    }
+
+    return {
+      redirectUrl: this.getSuccessRedirectUrl(),
+      session: loginResult.session,
+      user: loginResult.user,
+    };
+  }
+
+  consumeAuthHandoff(code: string) {
+    this.pruneExpiredHandoffs();
+
+    const handoff = this.authHandoffs.get(code);
+
+    if (!handoff || handoff.expiresAt < Date.now()) {
+      this.authHandoffs.delete(code);
+      throw new UnauthorizedException("Mobile auth handoff is invalid or expired.");
+    }
+
+    this.authHandoffs.delete(code);
+
+    return {
+      sessionToken: handoff.sessionToken,
+      user: handoff.user,
+    };
   }
 
   getErrorRedirectUrl(provider: SocialProvider, reason: string) {
@@ -86,17 +160,81 @@ export class SocialAuthService {
     return url.toString();
   }
 
-  getSuccessRedirectUrl() {
-    return new URL("/dashboard", this.getWebAppUrl()).toString();
+  getMobileErrorRedirectUrl(provider: SocialProvider, redirectUri: string, reason: string) {
+    const url = new URL(redirectUri);
+    url.searchParams.set("provider", provider);
+    url.searchParams.set("error", reason);
+    return url.toString();
   }
 
   getStateCookieName(provider: SocialProvider) {
     return `trailbook_oauth_state_${provider}`;
   }
 
-  private assertValidState(provider: SocialProvider, returnedState: string | null | undefined, expectedState: string | undefined) {
-    if (!returnedState || !expectedState || returnedState !== expectedState) {
+  private encodeStateContext(context: SocialStateContext) {
+    return Buffer.from(JSON.stringify(context)).toString("base64url");
+  }
+
+  private decodeAndValidateStateContext(
+    provider: SocialProvider,
+    returnedState: string | null | undefined,
+    encodedExpectedContext: string | undefined,
+  ) {
+    if (!returnedState || !encodedExpectedContext) {
       throw new BadRequestException(`${this.getProviderLabel(provider)} state validation failed.`);
+    }
+
+    let parsed: SocialStateContext | null = null;
+
+    try {
+      parsed = JSON.parse(Buffer.from(encodedExpectedContext, "base64url").toString("utf8")) as SocialStateContext;
+    } catch {
+      parsed = null;
+    }
+
+    if (!parsed || parsed.state !== returnedState) {
+      throw new BadRequestException(`${this.getProviderLabel(provider)} state validation failed.`);
+    }
+
+    return parsed;
+  }
+
+  decodeStateContext(encodedExpectedContext: string | undefined) {
+    if (!encodedExpectedContext) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(Buffer.from(encodedExpectedContext, "base64url").toString("utf8")) as SocialStateContext;
+    } catch {
+      return null;
+    }
+  }
+
+  private createAuthHandoff(
+    sessionToken: string,
+    user: Awaited<ReturnType<AuthService["getCurrentUser"]>>["user"],
+  ) {
+    const code = createOpaqueToken();
+
+    this.pruneExpiredHandoffs();
+    this.authHandoffs.set(code, {
+      sessionToken,
+      user,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + this.handoffTtlMs,
+    });
+
+    return code;
+  }
+
+  private pruneExpiredHandoffs() {
+    const now = Date.now();
+
+    for (const [code, handoff] of this.authHandoffs.entries()) {
+      if (handoff.expiresAt < now) {
+        this.authHandoffs.delete(code);
+      }
     }
   }
 
@@ -267,7 +405,10 @@ export class SocialAuthService {
     const profileUrl = new URL("https://graph.facebook.com/me");
     profileUrl.searchParams.set("fields", "id,name,email");
     profileUrl.searchParams.set("access_token", tokenResponse.access_token);
-    profileUrl.searchParams.set("appsecret_proof", createHmac("sha256", appSecret).update(tokenResponse.access_token).digest("hex"));
+    profileUrl.searchParams.set(
+      "appsecret_proof",
+      createHmac("sha256", appSecret).update(tokenResponse.access_token).digest("hex"),
+    );
 
     const profileResponse = await this.fetchJson<{ email?: string; id?: string; name?: string }>(profileUrl.toString());
     const email = typeof profileResponse.email === "string" ? profileResponse.email : null;
@@ -375,6 +516,10 @@ export class SocialAuthService {
 
   private getWebAppUrl() {
     return process.env.WEB_APP_URL || "http://localhost:3000";
+  }
+
+  private getSuccessRedirectUrl() {
+    return new URL("/dashboard", this.getWebAppUrl()).toString();
   }
 
   private getProviderLabel(provider: SocialProvider) {

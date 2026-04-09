@@ -1,16 +1,20 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Redirect, useRouter } from "expo-router";
-import { Image, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import FormField from "../../components/ui/form-field";
 import PrimaryButton from "../../components/ui/primary-button";
-import { DEMO_CREDENTIALS } from "../../domain/identity";
+import { DEMO_CREDENTIALS, createBackendAuthenticatedSession, type AuthProvider } from "../../domain/identity";
 import {
-  canCreateTemporarySession,
-  createTemporarySession,
-} from "../../services/auth/temporary-login.service";
+  forgotPasswordWithBackend,
+  getMobileSocialProviderAvailability,
+  loginWithBackend,
+  signInWithSocialProvider,
+} from "../../services/auth/mobile-auth.service";
+import { canCreateTemporarySession, createTemporarySession } from "../../services/auth/temporary-login.service";
 import {
+  clearSessionCredentials,
   setActiveIdentitySession,
   updateSessionCredentials,
   useSessionStore,
@@ -23,6 +27,14 @@ import {
 import { getTripSegmentsStateSnapshot } from "../../state/trip-segments-store";
 import { getTripsStateSnapshot } from "../../state/trips-store";
 
+type SocialProviderAvailability = Record<Exclude<AuthProvider, "local">, boolean>;
+
+const emptyProviderAvailability: SocialProviderAvailability = {
+  google: false,
+  apple: false,
+  facebook: false,
+};
+
 export default function LoginScreen() {
   const router = useRouter();
   const passwordInputRef = useRef<TextInput>(null);
@@ -30,14 +42,36 @@ export default function LoginScreen() {
   const deviceId = useSessionStore((state) => state.deviceId);
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
+  const [busyAction, setBusyAction] = useState<"login" | "demo" | "google" | "apple" | "facebook" | null>(null);
+  const [socialProviders, setSocialProviders] = useState<SocialProviderAvailability>(emptyProviderAvailability);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
-  async function completeSignInWith(credentialsToUse: typeof credentials) {
-    if (!canCreateTemporarySession(credentialsToUse, deviceId)) {
-      return;
+  useEffect(() => {
+    let active = true;
+
+    async function loadProviderAvailability() {
+      try {
+        const availability = await getMobileSocialProviderAvailability();
+
+        if (active) {
+          setSocialProviders(availability);
+        }
+      } catch {
+        if (active) {
+          setSocialProviders(emptyProviderAvailability);
+        }
+      }
     }
 
-    const session = createTemporarySession(credentialsToUse, deviceId);
+    void loadProviderAvailability();
 
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function finalizeSession(session: ReturnType<typeof createTemporarySession>) {
     await setActiveIdentitySession(session);
     await setRecordingSession({
       ...recordingSession,
@@ -49,18 +83,103 @@ export default function LoginScreen() {
       getTripsStateSnapshot().trips,
       getTripSegmentsStateSnapshot().tripSegments,
     );
-
     router.replace("/recording");
   }
 
-  async function handleEnterDemo() {
-    const demoCredentials = {
-      email: DEMO_CREDENTIALS.email,
-      password: DEMO_CREDENTIALS.password,
-    };
+  async function handleLogin() {
+    if (!deviceId) {
+      return;
+    }
 
-    updateSessionCredentials(demoCredentials);
-    await completeSignInWith(demoCredentials);
+    setBusyAction("login");
+    setErrorMessage(null);
+    setInfoMessage(null);
+
+    try {
+      const result = await loginWithBackend({
+        email: credentials.email.trim(),
+        password: credentials.password,
+      });
+
+      await finalizeSession(
+        createBackendAuthenticatedSession(result.user, result.sessionToken, deviceId),
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Login failed.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleEnterDemo() {
+    if (!deviceId) {
+      return;
+    }
+
+    setBusyAction("demo");
+    setErrorMessage(null);
+    setInfoMessage(null);
+
+    try {
+      const demoCredentials = {
+        email: DEMO_CREDENTIALS.email,
+        password: DEMO_CREDENTIALS.password,
+      };
+
+      updateSessionCredentials(demoCredentials);
+
+      if (!canCreateTemporarySession(demoCredentials, deviceId)) {
+        throw new Error("Demo mode is not available on this device.");
+      }
+
+      await finalizeSession(createTemporarySession(deviceId));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to enter demo mode.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleForgotPasswordInline() {
+    if (!credentials.email.trim()) {
+      setErrorMessage("Enter your email first, then try forgot password again.");
+      setInfoMessage(null);
+      return;
+    }
+
+    setBusyAction("login");
+    setErrorMessage(null);
+
+    try {
+      await forgotPasswordWithBackend(credentials.email.trim());
+      setInfoMessage("Password reset instructions were sent if the account exists.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to start password reset.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleSocialLogin(provider: Exclude<AuthProvider, "local">) {
+    if (!deviceId) {
+      return;
+    }
+
+    setBusyAction(provider);
+    setErrorMessage(null);
+    setInfoMessage(null);
+
+    try {
+      const result = await signInWithSocialProvider(provider);
+
+      await finalizeSession(
+        createBackendAuthenticatedSession(result.user, result.sessionToken, deviceId),
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : `${provider} sign-in failed.`);
+    } finally {
+      setBusyAction(null);
+    }
   }
 
   if (identitySession) {
@@ -81,10 +200,10 @@ export default function LoginScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
-        label="Username"
+        label="Email"
         onChangeText={(email) => updateSessionCredentials({ email })}
         onSubmitEditing={() => passwordInputRef.current?.focus()}
-        placeholder="username"
+        placeholder="you@example.com"
         returnKeyType="next"
         value={credentials.email}
       />
@@ -103,13 +222,67 @@ export default function LoginScreen() {
         value={credentials.password}
       />
 
-      <PrimaryButton disabled onPress={() => {}}>
-        Login
+      <PrimaryButton
+        disabled={busyAction !== null || credentials.email.trim().length === 0 || credentials.password.length === 0}
+        onPress={() => void handleLogin()}
+      >
+        {busyAction === "login" ? "Signing In..." : "Login"}
       </PrimaryButton>
 
-      <PrimaryButton onPress={() => void handleEnterDemo()} variant="secondary">
-        Enter Demo
+      {credentials.password.length > 0 && credentials.password.length < 8 ? (
+        <Text style={styles.validationText}>Password must be at least 8 characters.</Text>
+      ) : null}
+
+      <View style={styles.linkRow}>
+        <Pressable onPress={() => router.push("/register")}>
+          <Text style={styles.linkText}>Create account</Text>
+        </Pressable>
+        <Pressable onPress={() => router.push("/forgot-password")}>
+          <Text style={styles.linkText}>Forgot password</Text>
+        </Pressable>
+      </View>
+
+      <Text style={styles.orText}>or continue with</Text>
+
+      <PrimaryButton
+        disabled={busyAction !== null || !socialProviders.google}
+        onPress={() => void handleSocialLogin("google")}
+        variant="ghost"
+      >
+        Continue with Google
       </PrimaryButton>
+      <PrimaryButton
+        disabled={busyAction !== null || !socialProviders.apple}
+        onPress={() => void handleSocialLogin("apple")}
+        variant="ghost"
+      >
+        Continue with Apple
+      </PrimaryButton>
+      <PrimaryButton
+        disabled={busyAction !== null || !socialProviders.facebook}
+        onPress={() => void handleSocialLogin("facebook")}
+        variant="ghost"
+      >
+        Continue with Facebook
+      </PrimaryButton>
+
+      <PrimaryButton
+        disabled={busyAction !== null}
+        onPress={() => void handleEnterDemo()}
+        variant="secondary"
+      >
+        {busyAction === "demo" ? "Opening Demo..." : "Enter Demo"}
+      </PrimaryButton>
+
+      <Pressable disabled={busyAction !== null} onPress={() => void handleForgotPasswordInline()}>
+        <Text style={styles.inlineHint}>Need a quick reset link? Send it to this email.</Text>
+      </Pressable>
+
+      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      {infoMessage ? <Text style={styles.infoText}>{infoMessage}</Text> : null}
+      <Text style={styles.demoHint}>
+        Demo mode stays local on this device and will not sync or share routes.
+      </Text>
     </ScreenLayout>
   );
 }
@@ -126,5 +299,54 @@ const styles = StyleSheet.create({
   heroImage: {
     width: 220,
     height: 220,
+  },
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 6,
+    marginBottom: 12,
+  },
+  linkText: {
+    color: "#2f5d39",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  orText: {
+    marginTop: 4,
+    marginBottom: 8,
+    color: "#71806e",
+    textAlign: "center",
+    fontSize: 13,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  inlineHint: {
+    marginTop: 6,
+    textAlign: "center",
+    color: "#5a6d57",
+    fontSize: 13,
+  },
+  validationText: {
+    marginTop: 8,
+    color: "#7a6750",
+    fontSize: 13,
+  },
+  errorText: {
+    marginTop: 12,
+    color: "#9f2f2f",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  infoText: {
+    marginTop: 12,
+    color: "#2f5d39",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  demoHint: {
+    marginTop: 12,
+    color: "#667862",
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

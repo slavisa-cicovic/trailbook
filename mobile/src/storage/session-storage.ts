@@ -6,7 +6,11 @@ import { STORAGE_KEYS } from "../constants/storage-keys";
 function normalizeSession(session: AuthenticatedDeviceSession): AuthenticatedDeviceSession {
   return {
     ...session,
-    mode: session.mode ?? (session.userEmail === "demo" ? "demo" : "standard"),
+    mode: session.mode ?? (session.userEmail === "demo" ? "demo" : "authenticated"),
+    displayName: session.displayName ?? (session.userEmail === "demo" ? "Demo" : session.userEmail),
+    providers: session.providers ?? (session.userEmail === "demo" ? ["local"] : []),
+    role: session.role ?? "user",
+    sessionToken: "sessionToken" in session ? session.sessionToken : null,
   };
 }
 

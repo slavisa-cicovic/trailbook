@@ -21,7 +21,7 @@ import { useThemeStore } from "../../state/theme-store";
 interface ScreenLayoutProps extends PropsWithChildren {
   title?: string;
   accountEmail?: string | null;
-  accountMode?: "demo" | "standard" | null;
+  accountMode?: "demo" | "authenticated" | null;
   contentStyle?: StyleProp<ViewStyle>;
   contentVariant?: "card" | "plain";
   onBack?: () => void;

@@ -3,7 +3,16 @@ export interface TemporaryUserCredentials {
   password: string;
 }
 
-export type SessionMode = "demo" | "standard";
+export type AuthProvider = "local" | "google" | "facebook" | "apple";
+export type SessionMode = "demo" | "authenticated";
+
+export interface AuthenticatedUserSummary {
+  displayName: string;
+  email: string;
+  id: string;
+  providers: AuthProvider[];
+  role: "user" | "admin";
+}
 
 export interface AuthenticatedDeviceSession {
   userId: string;
@@ -11,6 +20,10 @@ export interface AuthenticatedDeviceSession {
   deviceId: string;
   signedInAt: string;
   mode: SessionMode;
+  displayName: string;
+  providers: AuthProvider[];
+  role: "user" | "admin";
+  sessionToken: string | null;
 }
 
 export function normalizeUserIdFromEmail(email: string): string {
@@ -29,18 +42,35 @@ export function isDemoCredentials(credentials: TemporaryUserCredentials): boolea
   );
 }
 
-export function createAuthenticatedDeviceSession(
-  credentials: TemporaryUserCredentials,
-  deviceId: string,
-): AuthenticatedDeviceSession {
-  const normalizedEmail = credentials.email.trim().toLowerCase();
-
+export function createDemoDeviceSession(deviceId: string): AuthenticatedDeviceSession {
   return {
-    userId: normalizeUserIdFromEmail(normalizedEmail),
-    userEmail: normalizedEmail,
+    userId: normalizeUserIdFromEmail(DEMO_CREDENTIALS.email),
+    userEmail: DEMO_CREDENTIALS.email,
     deviceId,
     signedInAt: new Date().toISOString(),
-    mode: normalizedEmail === DEMO_CREDENTIALS.email ? "demo" : "standard",
+    mode: "demo",
+    displayName: "Demo",
+    providers: ["local"],
+    role: "user",
+    sessionToken: null,
+  };
+}
+
+export function createBackendAuthenticatedSession(
+  user: AuthenticatedUserSummary,
+  sessionToken: string,
+  deviceId: string,
+): AuthenticatedDeviceSession {
+  return {
+    userId: user.id,
+    userEmail: user.email.trim().toLowerCase(),
+    deviceId,
+    signedInAt: new Date().toISOString(),
+    mode: "authenticated",
+    displayName: user.displayName,
+    providers: user.providers,
+    role: user.role,
+    sessionToken,
   };
 }
 

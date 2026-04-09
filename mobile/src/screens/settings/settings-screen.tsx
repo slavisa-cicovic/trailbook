@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, Text, View, useColorScheme } from "react-native"
 
 import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
 import ScreenLayout from "../../components/layout/screen-layout";
-import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { logoutFromBackend } from "../../services/auth/mobile-auth.service";
+import { clearSessionCredentials, setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { setThemeMode, useThemeStore } from "../../state/theme-store";
 
 export default function SettingsScreen() {
@@ -14,7 +15,16 @@ export default function SettingsScreen() {
   const theme = getAppTheme(resolvedThemeMode);
 
   async function handleLogout() {
+    if (identitySession?.sessionToken) {
+      try {
+        await logoutFromBackend(identitySession.sessionToken);
+      } catch {
+        // Local logout should still succeed if the backend session has already expired.
+      }
+    }
+
     await setActiveIdentitySession(null);
+    clearSessionCredentials();
   }
 
   if (!identitySession) {
@@ -30,7 +40,9 @@ export default function SettingsScreen() {
       title="Settings"
     >
       <Text style={[styles.subtitle, { color: theme.mutedText }]}>
-        Temporary local session details for the current device.
+        {identitySession.mode === "demo"
+          ? "Demo mode stays local on this device and cannot sync or share routes."
+          : "Authenticated account details for the current device session."}
       </Text>
 
       <Text style={[styles.label, { color: theme.mutedText }]}>Theme</Text>
@@ -96,10 +108,21 @@ export default function SettingsScreen() {
       </Text>
 
       <Text style={[styles.label, { color: theme.mutedText }]}>Active user</Text>
-      <Text style={[styles.value, { color: theme.primaryText }]}>{identitySession.userEmail}</Text>
+      <Text style={[styles.value, { color: theme.primaryText }]}>
+        {identitySession.displayName || identitySession.userEmail}
+      </Text>
+      <Text style={[styles.themeHint, { color: theme.mutedText }]}>{identitySession.userEmail}</Text>
       <Text style={[styles.label, { color: theme.mutedText }]}>Session mode</Text>
       <Text style={[styles.value, { color: theme.primaryText }]}>
-        {identitySession.mode === "demo" ? "Demo" : "Standard"}
+        {identitySession.mode === "demo" ? "Demo" : "Authenticated"}
+      </Text>
+      <Text style={[styles.label, { color: theme.mutedText }]}>Providers</Text>
+      <Text style={[styles.value, { color: theme.primaryText }]}>
+        {identitySession.providers.map((provider) => provider[0].toUpperCase() + provider.slice(1)).join(", ")}
+      </Text>
+      <Text style={[styles.label, { color: theme.mutedText }]}>Role</Text>
+      <Text style={[styles.value, { color: theme.primaryText }]}>
+        {identitySession.role[0].toUpperCase() + identitySession.role.slice(1)}
       </Text>
     </ScreenLayout>
   );
