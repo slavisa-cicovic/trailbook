@@ -26,6 +26,9 @@ export interface AuthUser {
   providers: string[];
 }
 
+export type SocialAuthProvider = "google" | "apple" | "facebook";
+export type SocialAuthAvailability = Record<SocialAuthProvider, boolean>;
+
 function getApiBaseUrl() {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) {
     return process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -36,6 +39,10 @@ function getApiBaseUrl() {
   }
 
   return "http://localhost:3001/api";
+}
+
+export function getSocialAuthStartUrl(provider: SocialAuthProvider) {
+  return `${getApiBaseUrl()}/auth/${provider}`;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -95,6 +102,12 @@ export async function resetPassword(input: ResetPasswordInput) {
 
 export async function getCurrentUser() {
   return request<{ user: AuthUser | null }>("/auth/me", {
+    method: "GET",
+  });
+}
+
+export async function getSocialAuthProviders() {
+  return request<SocialAuthAvailability>("/auth/providers", {
     method: "GET",
   });
 }

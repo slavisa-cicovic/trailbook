@@ -8,6 +8,7 @@ import { ForgotPasswordForm } from "../src/components/auth/forgot-password-form"
 import { LoginForm } from "../src/components/auth/login-form";
 import { RegisterForm } from "../src/components/auth/register-form";
 import { ResetPasswordForm } from "../src/components/auth/reset-password-form";
+import { SocialSigninButtons } from "../src/components/auth/social-signin-buttons";
 import * as authApi from "../src/lib/auth-api";
 import { render } from "./render";
 
@@ -109,12 +110,19 @@ vi.mock("../src/lib/auth-api", async () => {
     forgotPassword: vi.fn(),
     resetPassword: vi.fn(),
     getCurrentUser: vi.fn(),
+    getSocialAuthProviders: vi.fn(),
+    getSocialAuthStartUrl: vi.fn((provider: string) => `http://localhost:3001/api/auth/${provider}`),
   };
 });
 
 describe("web auth components", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(authApi.getSocialAuthProviders).mockResolvedValue({
+      google: false,
+      apple: false,
+      facebook: false,
+    });
   });
 
   test("login form submits credentials and redirects to dashboard", async () => {
@@ -240,5 +248,26 @@ describe("web auth components", () => {
 
     expect(push).toHaveBeenCalledWith("/login");
     expect(refresh).toHaveBeenCalled();
+  });
+
+  test("social auth buttons are enabled only for configured providers", async () => {
+    vi.mocked(authApi.getSocialAuthProviders).mockResolvedValue({
+      google: true,
+      apple: false,
+      facebook: false,
+    });
+
+    render(React.createElement(SocialSigninButtons));
+
+    const googleButton = await screen.findByRole("link", { name: "Continue with Google" });
+    expect(googleButton).toHaveAttribute(
+      "href",
+      "http://localhost:3001/api/auth/google",
+    );
+
+    expect(screen.getByText("Continue with Apple").closest("a")).toHaveAttribute("disabled");
+    expect(screen.getByText("Continue with Apple").closest("a")).not.toHaveAttribute("href");
+    expect(screen.getByText("Continue with Facebook").closest("a")).toHaveAttribute("disabled");
+    expect(screen.getByText("Continue with Facebook").closest("a")).not.toHaveAttribute("href");
   });
 });

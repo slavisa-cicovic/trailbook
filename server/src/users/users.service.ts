@@ -1,8 +1,14 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { AuthProvider as PrismaAuthProvider, User as PrismaUser } from "@prisma/client";
+import type { Prisma, AuthProvider as PrismaAuthProvider, User as PrismaUser } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
-import type { AuthProvider, CreateLocalUserInput, UserRecord } from "./user.types";
+import type {
+  AuthProvider,
+  CreateLocalUserInput,
+  CreateSocialUserInput,
+  ExternalIdentityInput,
+  UserRecord,
+} from "./user.types";
 
 @Injectable()
 export class UsersService {
@@ -26,52 +32,68 @@ export class UsersService {
     return user ? this.toUserRecord(user) : null;
   }
 
+  async findByExternalIdentity(provider: Exclude<AuthProvider, "local">, providerSubject: string): Promise<UserRecord | null> {
+    const identity = await this.databaseService.externalIdentity.findUnique({
+      where: {
+        provider_providerSubject: {
+          provider: provider as PrismaAuthProvider,
+          providerSubject,
+        },
+      },
+      include: {
+        user: {
+          include: {
+            externalIdentities: true,
+          },
+        },
+      },
+    });
+
+    return identity?.user ? this.toUserRecord(identity.user) : null;
+  }
+
   async createLocalUser(input: CreateLocalUserInput): Promise<UserRecord> {
     const normalizedEmail = this.normalizeEmail(input.email);
     const normalizedDisplayName = input.displayName.trim();
 
-    const user = await this.databaseService.$transaction(async (tx) => {
-      const createdUser = await tx.user.create({
-        data: {
-          email: normalizedEmail,
+    const user = await this.databaseService.$transaction((tx) =>
+      this.createUserWithInitialIdentity(
+        tx,
+        {
           displayName: normalizedDisplayName,
+          email: normalizedEmail,
           passwordHash: input.passwordHash,
         },
-      });
-
-      await tx.externalIdentity.create({
-        data: {
-          userId: createdUser.id,
+        {
           provider: "local",
           providerSubject: normalizedEmail,
           email: normalizedEmail,
         },
-      });
+      ),
+    );
 
-      const demoPlan = await tx.plan.upsert({
-        where: { code: "demo" },
-        update: {},
-        create: {
-          code: "demo",
-          name: "Demo",
-          billingType: "none",
+    return this.toUserRecord(user);
+  }
+
+  async createSocialUser(input: CreateSocialUserInput): Promise<UserRecord> {
+    const normalizedEmail = this.normalizeEmail(input.email);
+    const normalizedDisplayName = input.displayName.trim();
+
+    const user = await this.databaseService.$transaction((tx) =>
+      this.createUserWithInitialIdentity(
+        tx,
+        {
+          displayName: normalizedDisplayName,
+          email: normalizedEmail,
+          passwordHash: null,
         },
-      });
-
-      await tx.subscription.create({
-        data: {
-          userId: createdUser.id,
-          planId: demoPlan.id,
-          status: "active",
-          startedAt: new Date(),
+        {
+          provider: input.provider,
+          providerSubject: input.providerSubject,
+          email: normalizedEmail,
         },
-      });
-
-      return tx.user.findUniqueOrThrow({
-        where: { id: createdUser.id },
-        include: { externalIdentities: true },
-      });
-    });
+      ),
+    );
 
     return this.toUserRecord(user);
   }
@@ -113,8 +135,99 @@ export class UsersService {
     return this.toUserRecord(user);
   }
 
+  async linkExternalIdentity(userId: string, identity: ExternalIdentityInput): Promise<UserRecord | null> {
+    const existingUser = await this.findById(userId);
+
+    if (!existingUser) {
+      return null;
+    }
+
+    const user = await this.databaseService.$transaction(async (tx) => {
+      await tx.externalIdentity.upsert({
+        where: {
+          provider_providerSubject: {
+            provider: identity.provider as PrismaAuthProvider,
+            providerSubject: identity.providerSubject,
+          },
+        },
+        create: {
+          userId,
+          provider: identity.provider as PrismaAuthProvider,
+          providerSubject: identity.providerSubject,
+          email: identity.email ? this.normalizeEmail(identity.email) : null,
+        },
+        update: {
+          userId,
+          email: identity.email ? this.normalizeEmail(identity.email) : null,
+        },
+      });
+
+      return tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        include: { externalIdentities: true },
+      });
+    });
+
+    return this.toUserRecord(user);
+  }
+
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase();
+  }
+
+  private async createUserWithInitialIdentity(
+    transaction: Prisma.TransactionClient,
+    userInput: {
+      displayName: string;
+      email: string;
+      passwordHash: string | null;
+    },
+    identityInput: {
+      email: string | null;
+      provider: AuthProvider;
+      providerSubject: string;
+    },
+  ) {
+    const createdUser = await transaction.user.create({
+      data: {
+        email: userInput.email,
+        displayName: userInput.displayName,
+        passwordHash: userInput.passwordHash,
+      },
+    });
+
+    await transaction.externalIdentity.create({
+      data: {
+        userId: createdUser.id,
+        provider: identityInput.provider as PrismaAuthProvider,
+        providerSubject: identityInput.providerSubject,
+        email: identityInput.email,
+      },
+    });
+
+    const demoPlan = await transaction.plan.upsert({
+      where: { code: "demo" },
+      update: {},
+      create: {
+        code: "demo",
+        name: "Demo",
+        billingType: "none",
+      },
+    });
+
+    await transaction.subscription.create({
+      data: {
+        userId: createdUser.id,
+        planId: demoPlan.id,
+        status: "active",
+        startedAt: new Date(),
+      },
+    });
+
+    return transaction.user.findUniqueOrThrow({
+      where: { id: createdUser.id },
+      include: { externalIdentities: true },
+    });
   }
 
   private toUserRecord(

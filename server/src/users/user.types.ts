@@ -19,3 +19,14 @@ export interface CreateLocalUserInput {
   email: string;
   passwordHash: string;
 }
+
+export interface ExternalIdentityInput {
+  email?: string | null;
+  provider: Exclude<AuthProvider, "local">;
+  providerSubject: string;
+}
+
+export interface CreateSocialUserInput extends ExternalIdentityInput {
+  displayName: string;
+  email: string;
+}

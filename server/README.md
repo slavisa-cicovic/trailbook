@@ -30,6 +30,24 @@ MailHog SMTP/Web UI runs on:
 
 If you open the web app from another device or via a LAN IP, add that browser origin to `WEB_ALLOWED_ORIGINS`.
 
+Social auth environment:
+
+- `AUTH_BASE_URL`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `APPLE_CLIENT_ID`
+- `APPLE_TEAM_ID`
+- `APPLE_KEY_ID`
+- `APPLE_PRIVATE_KEY`
+- `FACEBOOK_APP_ID`
+- `FACEBOOK_APP_SECRET`
+
+Expected callback URLs:
+
+- Google: `${AUTH_BASE_URL}/api/auth/google/callback`
+- Apple: `${AUTH_BASE_URL}/api/auth/apple/callback`
+- Facebook: `${AUTH_BASE_URL}/api/auth/facebook/callback`
+
 Test bootstrap:
 
 1. Copy `.env.test.example` to `.env.test`

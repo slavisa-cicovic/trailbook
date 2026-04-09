@@ -50,13 +50,7 @@ export class AuthService {
       throw new UnauthorizedException("Invalid email or password.");
     }
 
-    const loggedInUser = (await this.usersService.recordLogin(user.id)) ?? user;
-    const session = await this.createSession(loggedInUser.id, metadata);
-
-    return {
-      session,
-      user: this.toAuthUser(loggedInUser),
-    };
+    return this.completeLoginForUser(user.id, metadata);
   }
 
   async logout(sessionToken: string | undefined) {
@@ -195,11 +189,18 @@ export class AuthService {
     };
   }
 
-  beginSocialLogin(provider: "google" | "facebook" | "apple") {
+  async completeLoginForUser(userId: string, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
+    const loggedInUser = await this.usersService.recordLogin(userId);
+
+    if (!loggedInUser) {
+      throw new UnauthorizedException("Unable to establish a session for this user.");
+    }
+
+    const session = await this.createSession(loggedInUser.id, metadata);
+
     return {
-      provider,
-      status: "not_implemented",
-      note: "OAuth callback integration is reserved after persistent local auth lands.",
+      session,
+      user: this.toAuthUser(loggedInUser),
     };
   }
 
