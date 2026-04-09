@@ -49,6 +49,39 @@ enum MailOutboxStatus {
   @@map("mail_outbox_status")
 }
 
+enum RecordingProfile {
+  walk
+  bike
+  drive
+  boat
+  plane
+
+  @@map("recording_profile")
+}
+
+enum WaypointCategory {
+  generic
+  departure
+  fuel
+  border
+  port
+  ferry
+  restaurant
+  cafe
+  viewpoint
+  monument
+  beach
+
+  @@map("waypoint_category")
+}
+
+enum TripShareStatus {
+  active
+  revoked
+
+  @@map("trip_share_status")
+}
+
 model User {
   id                  String              @id @default(cuid())
   email               String              @unique
@@ -63,6 +96,9 @@ model User {
   passwordResetTokens PasswordResetToken[]
   subscriptions       Subscription[]
   mailOutboxEntries   MailOutbox[]
+  ownedTrips          Trip[]              @relation("OwnedTrips")
+  ownedTripShares     TripShare[]         @relation("OwnerTripShares")
+  receivedTripShares  TripShare[]         @relation("RecipientTripShares")
 
   @@map("users")
 }
@@ -161,4 +197,107 @@ model MailOutbox {
   @@index([userId])
   @@index([status])
   @@map("mail_outbox")
+}
+
+model Trip {
+  id               String           @id @default(cuid())
+  ownerUserId      String           @map("owner_user_id")
+  ownerDeviceId    String           @map("owner_device_id")
+  localSourceId    String           @map("local_source_id")
+  title            String
+  description      String?
+  recordingProfile RecordingProfile @map("recording_profile")
+  startedAt        DateTime         @map("started_at")
+  endedAt          DateTime?        @map("ended_at")
+  createdAt        DateTime         @map("created_at")
+  updatedAt        DateTime         @map("updated_at")
+  deletedAt        DateTime?        @map("deleted_at")
+  owner            User             @relation("OwnedTrips", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  segments         TripSegment[]
+  points           TripPoint[]
+  waypoints        Waypoint[]
+  shares           TripShare[]
+
+  @@unique([ownerUserId, localSourceId])
+  @@index([ownerUserId])
+  @@map("trips")
+}
+
+model TripSegment {
+  id               String           @id @default(cuid())
+  tripId           String           @map("trip_id")
+  localSourceId    String           @map("local_source_id")
+  recordingProfile RecordingProfile @map("recording_profile")
+  startedAt        DateTime         @map("started_at")
+  endedAt          DateTime?        @map("ended_at")
+  createdAt        DateTime         @map("created_at")
+  updatedAt        DateTime         @map("updated_at")
+  trip             Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  points           TripPoint[]
+  waypoints        Waypoint[]
+
+  @@unique([tripId, localSourceId])
+  @@index([tripId])
+  @@map("trip_segments")
+}
+
+model TripPoint {
+  id            String       @id @default(cuid())
+  tripId        String       @map("trip_id")
+  segmentId     String?      @map("segment_id")
+  localSourceId String       @map("local_source_id")
+  latitude      Float
+  longitude     Float
+  recordedAt    DateTime     @map("recorded_at")
+  accuracy      Float?
+  altitude      Float?
+  speed         Float?
+  trip          Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  segment       TripSegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+
+  @@unique([tripId, localSourceId])
+  @@index([tripId])
+  @@index([segmentId])
+  @@map("trip_points")
+}
+
+model Waypoint {
+  id            String           @id @default(cuid())
+  tripId        String           @map("trip_id")
+  segmentId     String?          @map("segment_id")
+  localSourceId String           @map("local_source_id")
+  category      WaypointCategory
+  latitude      Float
+  longitude     Float
+  title         String
+  note          String?
+  createdAt     DateTime         @map("created_at")
+  updatedAt     DateTime         @map("updated_at")
+  deletedAt     DateTime?        @map("deleted_at")
+  trip          Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  segment       TripSegment?     @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+
+  @@unique([tripId, localSourceId])
+  @@index([tripId])
+  @@index([segmentId])
+  @@map("waypoints")
+}
+
+model TripShare {
+  id              String          @id @default(cuid())
+  tripId          String          @map("trip_id")
+  ownerUserId     String          @map("owner_user_id")
+  recipientUserId String          @map("recipient_user_id")
+  status          TripShareStatus @default(active)
+  revokedAt       DateTime?       @map("revoked_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  trip            Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  owner           User            @relation("OwnerTripShares", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  recipient       User            @relation("RecipientTripShares", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, recipientUserId])
+  @@index([ownerUserId])
+  @@index([recipientUserId])
+  @@map("trip_shares")
 }

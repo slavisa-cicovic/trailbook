@@ -112,6 +112,7 @@ export default function RootLayout() {
         <Stack.Screen name="auth/callback" />
         <Stack.Screen name="recording" options={{ animation: "none" }} />
         <Stack.Screen name="trips/index" options={{ animation: "none" }} />
+        <Stack.Screen name="trips/shared/[shareId]" />
         <Stack.Screen name="trips/[tripId]" />
         <Stack.Screen name="settings" options={{ animation: "none" }} />
       </Stack>

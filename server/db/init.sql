@@ -38,6 +38,30 @@ BEGIN
 END
 $$;
 
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'recording_profile') THEN
+    CREATE TYPE recording_profile AS ENUM ('walk', 'bike', 'drive', 'boat', 'plane');
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'waypoint_category') THEN
+    CREATE TYPE waypoint_category AS ENUM ('generic', 'departure', 'fuel', 'border', 'port', 'ferry', 'restaurant', 'cafe', 'viewpoint', 'monument', 'beach');
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'trip_share_status') THEN
+    CREATE TYPE trip_share_status AS ENUM ('active', 'revoked');
+  END IF;
+END
+$$;
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
@@ -130,3 +154,86 @@ CREATE TABLE IF NOT EXISTS mail_outbox (
 
 CREATE INDEX IF NOT EXISTS mail_outbox_user_id_idx ON mail_outbox(user_id);
 CREATE INDEX IF NOT EXISTS mail_outbox_status_idx ON mail_outbox(status);
+
+CREATE TABLE IF NOT EXISTS trips (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_device_id TEXT NOT NULL,
+  local_source_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  recording_profile recording_profile NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL,
+  ended_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(owner_user_id, local_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS trips_owner_user_id_idx ON trips(owner_user_id);
+
+CREATE TABLE IF NOT EXISTS trip_segments (
+  id TEXT PRIMARY KEY,
+  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  local_source_id TEXT NOT NULL,
+  recording_profile recording_profile NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL,
+  ended_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
+  UNIQUE(trip_id, local_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS trip_segments_trip_id_idx ON trip_segments(trip_id);
+
+CREATE TABLE IF NOT EXISTS trip_points (
+  id TEXT PRIMARY KEY,
+  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  segment_id TEXT REFERENCES trip_segments(id) ON DELETE SET NULL,
+  local_source_id TEXT NOT NULL,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  recorded_at TIMESTAMPTZ NOT NULL,
+  accuracy DOUBLE PRECISION,
+  altitude DOUBLE PRECISION,
+  speed DOUBLE PRECISION,
+  UNIQUE(trip_id, local_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS trip_points_trip_id_idx ON trip_points(trip_id);
+CREATE INDEX IF NOT EXISTS trip_points_segment_id_idx ON trip_points(segment_id);
+
+CREATE TABLE IF NOT EXISTS waypoints (
+  id TEXT PRIMARY KEY,
+  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  segment_id TEXT REFERENCES trip_segments(id) ON DELETE SET NULL,
+  local_source_id TEXT NOT NULL,
+  category waypoint_category NOT NULL,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  title TEXT NOT NULL,
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(trip_id, local_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS waypoints_trip_id_idx ON waypoints(trip_id);
+CREATE INDEX IF NOT EXISTS waypoints_segment_id_idx ON waypoints(segment_id);
+
+CREATE TABLE IF NOT EXISTS trip_shares (
+  id TEXT PRIMARY KEY,
+  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recipient_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status trip_share_status NOT NULL DEFAULT 'active',
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(trip_id, recipient_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS trip_shares_owner_user_id_idx ON trip_shares(owner_user_id);
+CREATE INDEX IF NOT EXISTS trip_shares_recipient_user_id_idx ON trip_shares(recipient_user_id);

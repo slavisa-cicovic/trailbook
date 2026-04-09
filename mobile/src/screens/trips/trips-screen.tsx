@@ -4,6 +4,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } 
 import { Swipeable } from "react-native-gesture-handler";
 
 import ScreenLayout from "../../components/layout/screen-layout";
+import type { SharedTripSummary } from "../../domain/shared-trips";
 import type { Trip } from "../../domain/trips";
 import {
   buildTripModeSummary,
@@ -30,12 +31,15 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
+import { listSharedTrips } from "../../services/trips/server-trip-sharing.service";
 import TripEditModal from "./components/trip-edit-modal";
 
 interface PendingUndoState {
   tripLocalId: string;
   tripTitle: string;
 }
+
+type TripListMode = "owned" | "shared";
 
 const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> = [
   { value: "all", label: "All" },
@@ -60,6 +64,10 @@ export default function TripsScreen() {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [tripEditVisible, setTripEditVisible] = useState(false);
   const [dateFilter, setDateFilter] = useState<TripDateFilter>("all");
+  const [listMode, setListMode] = useState<TripListMode>("owned");
+  const [sharedTrips, setSharedTrips] = useState<SharedTripSummary[]>([]);
+  const [sharedTripsLoading, setSharedTripsLoading] = useState(false);
+  const [sharedTripsError, setSharedTripsError] = useState<string | null>(null);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -101,8 +109,34 @@ export default function TripsScreen() {
     return () => clearTimeout(timeoutId);
   }, [pendingUndo]);
 
+  useEffect(() => {
+    if (listMode !== "shared" || identitySession?.mode !== "authenticated" || !identitySession.sessionToken) {
+      return;
+    }
+
+    void refreshSharedTrips();
+  }, [identitySession?.mode, identitySession?.sessionToken, listMode]);
+
   async function handleLogout() {
     await setActiveIdentitySession(null);
+  }
+
+  async function refreshSharedTrips() {
+    if (!identitySession?.sessionToken) {
+      return;
+    }
+
+    setSharedTripsLoading(true);
+    setSharedTripsError(null);
+
+    try {
+      const response = await listSharedTrips(identitySession.sessionToken);
+      setSharedTrips(response.sharedTrips);
+    } catch (error) {
+      setSharedTripsError(error instanceof Error ? error.message : "Unable to load shared trips.");
+    } finally {
+      setSharedTripsLoading(false);
+    }
   }
 
   async function handleDeleteTrip(trip: Trip) {
@@ -225,227 +259,334 @@ export default function TripsScreen() {
 
       <Text style={styles.subtitle}>Your local recorded routes and saved trip content.</Text>
 
-      <ScrollView
-        contentContainerStyle={styles.filterRow}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-      >
-        {TRIP_DATE_FILTER_OPTIONS.map((option) => {
-          const selected = option.value === dateFilter;
-
-          return (
-            <Pressable
-              key={option.value}
-              onPress={() => setDateFilter(option.value)}
-              style={[styles.filterChip, selected && styles.filterChipSelected]}
-            >
-              <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <View style={styles.summaryTable}>
-        <View style={[styles.summaryRow, styles.summaryHeaderRow]}>
-          <Text style={[styles.summaryHeaderCell, styles.summaryModeCell]}>Mode</Text>
-          <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>km</Text>
-          <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>time</Text>
-          <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>Trips</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Walk</Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDistanceKm(tripsAggregateSummary.walkDistanceMeters)}
+      <View style={styles.modeToggleRow}>
+        <Pressable
+          onPress={() => setListMode("owned")}
+          style={[styles.modeToggleChip, listMode === "owned" && styles.modeToggleChipSelected]}
+        >
+          <Text
+            style={[styles.modeToggleText, listMode === "owned" && styles.modeToggleTextSelected]}
+          >
+            My trips
           </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDurationSummary(tripsAggregateSummary.walkDurationMs)}
+        </Pressable>
+        <Pressable
+          disabled={identitySession.mode !== "authenticated"}
+          onPress={() => setListMode("shared")}
+          style={[
+            styles.modeToggleChip,
+            listMode === "shared" && styles.modeToggleChipSelected,
+            identitySession.mode !== "authenticated" && styles.modeToggleChipDisabled,
+          ]}
+        >
+          <Text
+            style={[styles.modeToggleText, listMode === "shared" && styles.modeToggleTextSelected]}
+          >
+            Shared with me
           </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {String(tripsAggregateSummary.walkTripCount)}
-          </Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Bike</Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDistanceKm(tripsAggregateSummary.bikeDistanceMeters)}
-          </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDurationSummary(tripsAggregateSummary.bikeDurationMs)}
-          </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {String(tripsAggregateSummary.bikeTripCount)}
-          </Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Drive</Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDistanceKm(tripsAggregateSummary.driveDistanceMeters)}
-          </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDurationSummary(tripsAggregateSummary.driveDurationMs)}
-          </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {String(tripsAggregateSummary.driveTripCount)}
-          </Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Boat</Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDistanceKm(tripsAggregateSummary.boatDistanceMeters)}
-          </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDurationSummary(tripsAggregateSummary.boatDurationMs)}
-          </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {String(tripsAggregateSummary.boatTripCount)}
-          </Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Plane</Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDistanceKm(tripsAggregateSummary.planeDistanceMeters)}
-          </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDurationSummary(tripsAggregateSummary.planeDurationMs)}
-          </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {String(tripsAggregateSummary.planeTripCount)}
-          </Text>
-        </View>
-        <View style={[styles.summaryRow, styles.summaryTotalRow]}>
-          <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Total</Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDistanceKm(tripsAggregateSummary.totalDistanceMeters)}
-          </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {formatDurationSummary(tripsAggregateSummary.totalDurationMs)}
-          </Text>
-          <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-            {String(tripsAggregateSummary.totalTripCount)}
-          </Text>
-        </View>
+        </Pressable>
       </View>
 
-      {tripSummaries.length === 0 ? (
-        <Text style={styles.empty}>No trips match the selected date filter.</Text>
-      ) : (
-        <View style={styles.list}>
-          {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => {
-            const statusLabel = trip.endedAt === null ? "Active" : trip.syncStatus;
-            const tripModeSummary = buildTripModeSummary(tripSegments, trip.localId);
-            const tripSegmentsForCard = getVisibleTripSegmentsForTrip(tripSegments, trip.localId);
-            const tripDurationMs = Math.max(
-              0,
-              new Date(trip.endedAt ?? new Date().toISOString()).getTime() -
-                new Date(trip.startedAt).getTime(),
-            );
+      {listMode === "owned" ? (
+        <>
+          <ScrollView
+            contentContainerStyle={styles.filterRow}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {TRIP_DATE_FILTER_OPTIONS.map((option) => {
+              const selected = option.value === dateFilter;
 
-            return (
-              <Swipeable
-                key={trip.localId}
-                friction={2}
-                onSwipeableCloseStartDrag={suppressTapAfterSwipe}
-                onSwipeableOpenStartDrag={suppressTapAfterSwipe}
-                onSwipeableWillClose={suppressTapAfterSwipe}
-                onSwipeableWillOpen={suppressTapAfterSwipe}
-                overshootRight={false}
-                renderRightActions={() => (
-                  <View style={styles.swipeActions}>
-                    <Pressable
-                      onPress={() => router.push(`/trips/${trip.localId}`)}
-                      style={[styles.swipeAction, styles.openSwipeAction]}
-                    >
-                      <Text style={styles.swipeActionText}>Open</Text>
-                    </Pressable>
-                    {trip.endedAt === null ? (
-                      <Pressable
-                        onPress={() => void handleResumeTrip(trip)}
-                        style={[styles.swipeAction, styles.resumeSwipeAction]}
-                      >
-                        <Text style={[styles.swipeActionText, styles.resumeSwipeActionText]}>
-                          Resume
-                        </Text>
-                      </Pressable>
-                    ) : (
-                      <Pressable
-                        onPress={() => void handleDeleteTrip(trip)}
-                        style={[styles.swipeAction, styles.deleteSwipeAction]}
-                      >
-                        <Text style={[styles.swipeActionText, styles.deleteSwipeActionText]}>
-                          Delete
-                        </Text>
-                      </Pressable>
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setDateFilter(option.value)}
+                  style={[styles.filterChip, selected && styles.filterChipSelected]}
+                >
+                  <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.summaryTable}>
+            <View style={[styles.summaryRow, styles.summaryHeaderRow]}>
+              <Text style={[styles.summaryHeaderCell, styles.summaryModeCell]}>Mode</Text>
+              <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>km</Text>
+              <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>time</Text>
+              <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>Trips</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Walk</Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDistanceKm(tripsAggregateSummary.walkDistanceMeters)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDurationSummary(tripsAggregateSummary.walkDurationMs)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {String(tripsAggregateSummary.walkTripCount)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Bike</Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDistanceKm(tripsAggregateSummary.bikeDistanceMeters)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDurationSummary(tripsAggregateSummary.bikeDurationMs)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {String(tripsAggregateSummary.bikeTripCount)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Drive</Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDistanceKm(tripsAggregateSummary.driveDistanceMeters)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDurationSummary(tripsAggregateSummary.driveDurationMs)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {String(tripsAggregateSummary.driveTripCount)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Boat</Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDistanceKm(tripsAggregateSummary.boatDistanceMeters)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDurationSummary(tripsAggregateSummary.boatDurationMs)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {String(tripsAggregateSummary.boatTripCount)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Plane</Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDistanceKm(tripsAggregateSummary.planeDistanceMeters)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDurationSummary(tripsAggregateSummary.planeDurationMs)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {String(tripsAggregateSummary.planeTripCount)}
+              </Text>
+            </View>
+            <View style={[styles.summaryRow, styles.summaryTotalRow]}>
+              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Total</Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDistanceKm(tripsAggregateSummary.totalDistanceMeters)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {formatDurationSummary(tripsAggregateSummary.totalDurationMs)}
+              </Text>
+              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                {String(tripsAggregateSummary.totalTripCount)}
+              </Text>
+            </View>
+          </View>
+
+          {tripSummaries.length === 0 ? (
+            <Text style={styles.empty}>No trips match the selected date filter.</Text>
+          ) : (
+            <View style={styles.list}>
+              {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => {
+                const statusLabel = trip.endedAt === null ? "Active" : trip.syncStatus;
+                const tripModeSummary = buildTripModeSummary(currentUserTripSegments, trip.localId);
+                const tripSegmentsForCard = getVisibleTripSegmentsForTrip(currentUserTripSegments, trip.localId);
+                const tripDurationMs = Math.max(
+                  0,
+                  new Date(trip.endedAt ?? new Date().toISOString()).getTime() -
+                    new Date(trip.startedAt).getTime(),
+                );
+
+                return (
+                  <Swipeable
+                    key={trip.localId}
+                    friction={2}
+                    onSwipeableCloseStartDrag={suppressTapAfterSwipe}
+                    onSwipeableOpenStartDrag={suppressTapAfterSwipe}
+                    onSwipeableWillClose={suppressTapAfterSwipe}
+                    onSwipeableWillOpen={suppressTapAfterSwipe}
+                    overshootRight={false}
+                    renderRightActions={() => (
+                      <View style={styles.swipeActions}>
+                        <Pressable
+                          onPress={() => router.push(`/trips/${trip.localId}`)}
+                          style={[styles.swipeAction, styles.openSwipeAction]}
+                        >
+                          <Text style={styles.swipeActionText}>Open</Text>
+                        </Pressable>
+                        {trip.endedAt === null ? (
+                          <Pressable
+                            onPress={() => void handleResumeTrip(trip)}
+                            style={[styles.swipeAction, styles.resumeSwipeAction]}
+                          >
+                            <Text style={[styles.swipeActionText, styles.resumeSwipeActionText]}>
+                              Resume
+                            </Text>
+                          </Pressable>
+                        ) : (
+                          <Pressable
+                            onPress={() => void handleDeleteTrip(trip)}
+                            style={[styles.swipeAction, styles.deleteSwipeAction]}
+                          >
+                            <Text style={[styles.swipeActionText, styles.deleteSwipeActionText]}>
+                              Delete
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
                     )}
-                  </View>
-                )}
-              >
-                <View style={styles.tripCardRow}>
-                  <View style={styles.tripCard}>
+                  >
+                    <View style={styles.tripCardRow}>
+                      <View style={styles.tripCard}>
+                        <Pressable
+                          onPress={() => handleTripCardPress(trip.localId)}
+                          style={styles.tripBodyPressable}
+                        >
+                          <View style={styles.tripHeader}>
+                            <View style={styles.tripHeaderText}>
+                              <Text style={styles.tripTitle}>{trip.title}</Text>
+                              {trip.description ? (
+                                <Text style={styles.tripDescription}>{trip.description}</Text>
+                              ) : null}
+                            </View>
+                            <View style={styles.tripBadge}>
+                              <Text style={styles.tripBadgeText}>{statusLabel}</Text>
+                            </View>
+                          </View>
+
+                          <View style={styles.metaGrid}>
+                            <View style={styles.metaCell}>
+                              <Text style={styles.metaKey}>Mode</Text>
+                              <Text style={styles.metaValue}>{tripModeSummary}</Text>
+                            </View>
+                            <View style={styles.metaCell}>
+                              <Text style={styles.metaKey}>Distance</Text>
+                              <Text style={styles.metaValue}>{formatDistanceKm(distanceMeters)}</Text>
+                            </View>
+                            <View style={styles.metaCell}>
+                              <Text style={styles.metaKey}>Waypoints</Text>
+                              <Text style={styles.metaValue}>{String(waypointCount)}</Text>
+                            </View>
+                            <View style={styles.metaCell}>
+                              <Text style={styles.metaKey}>Photos</Text>
+                              <Text style={styles.metaValue}>{String(photoCount)}</Text>
+                            </View>
+                            <View style={styles.metaCell}>
+                              <Text style={styles.metaKey}>Segments</Text>
+                              <Text style={styles.metaValue}>{String(tripSegmentsForCard.length)}</Text>
+                            </View>
+                            <View style={styles.metaCell}>
+                              <Text style={styles.metaKey}>Duration</Text>
+                              <Text style={styles.metaValue}>
+                                {formatDurationSummary(tripDurationMs)}
+                              </Text>
+                            </View>
+                            <View style={styles.metaCell}>
+                              <Text style={styles.metaKey}>Started</Text>
+                              <Text style={styles.metaValue}>
+                                {new Date(trip.startedAt).toLocaleDateString()}
+                              </Text>
+                            </View>
+                            <View style={styles.metaCell}>
+                              <Text style={styles.metaKey}>Ended</Text>
+                              <Text style={styles.metaValue}>
+                                {trip.endedAt ? new Date(trip.endedAt).toLocaleDateString() : "Active"}
+                              </Text>
+                            </View>
+                          </View>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </Swipeable>
+                );
+              })}
+            </View>
+          )}
+        </>
+      ) : (
+        <>
+          <View style={styles.sharedHeaderRow}>
+            <Text style={styles.sharedHint}>Shared trips are read-only and fetched from the server on demand.</Text>
+            <Pressable onPress={() => void refreshSharedTrips()} style={styles.sharedRefreshButton}>
+              <Text style={styles.sharedRefreshButtonText}>
+                {sharedTripsLoading ? "Refreshing..." : "Refresh"}
+              </Text>
+            </Pressable>
+          </View>
+
+          {sharedTripsError ? <Text style={styles.sharedError}>{sharedTripsError}</Text> : null}
+
+          {sharedTrips.length === 0 && !sharedTripsLoading ? (
+            <Text style={styles.empty}>No trips have been shared with you yet.</Text>
+          ) : (
+            <View style={styles.list}>
+              {sharedTrips.map((sharedTrip) => (
+                <View key={sharedTrip.shareId} style={styles.tripCardRow}>
+                  <View style={[styles.tripCard, styles.sharedTripCard]}>
                     <Pressable
-                      onPress={() => handleTripCardPress(trip.localId)}
+                      onPress={() => router.push(`/trips/shared/${sharedTrip.shareId}`)}
                       style={styles.tripBodyPressable}
                     >
                       <View style={styles.tripHeader}>
                         <View style={styles.tripHeaderText}>
-                          <Text style={styles.tripTitle}>{trip.title}</Text>
-                          {trip.description ? (
-                            <Text style={styles.tripDescription}>{trip.description}</Text>
-                          ) : null}
+                          <Text style={styles.tripTitle}>{sharedTrip.trip.title}</Text>
+                          <Text style={styles.tripDescription}>
+                            Shared by {sharedTrip.owner.displayName}
+                          </Text>
                         </View>
-                        <View style={styles.tripBadge}>
-                          <Text style={styles.tripBadgeText}>{statusLabel}</Text>
+                        <View style={[styles.tripBadge, styles.sharedTripBadge]}>
+                          <Text style={styles.tripBadgeText}>Read only</Text>
                         </View>
                       </View>
 
                       <View style={styles.metaGrid}>
                         <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Mode</Text>
-                          <Text style={styles.metaValue}>{tripModeSummary}</Text>
+                          <Text style={styles.metaKey}>Owner</Text>
+                          <Text style={styles.metaValue}>{sharedTrip.owner.email}</Text>
                         </View>
                         <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Distance</Text>
-                          <Text style={styles.metaValue}>{formatDistanceKm(distanceMeters)}</Text>
+                          <Text style={styles.metaKey}>Mode</Text>
+                          <Text style={styles.metaValue}>
+                            {sharedTrip.trip.segmentCount > 1 ? "Mixed" : sharedTrip.trip.recordingProfile}
+                          </Text>
                         </View>
                         <View style={styles.metaCell}>
                           <Text style={styles.metaKey}>Waypoints</Text>
-                          <Text style={styles.metaValue}>{String(waypointCount)}</Text>
-                        </View>
-                        <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Photos</Text>
-                          <Text style={styles.metaValue}>{String(photoCount)}</Text>
+                          <Text style={styles.metaValue}>{String(sharedTrip.trip.waypointCount)}</Text>
                         </View>
                         <View style={styles.metaCell}>
                           <Text style={styles.metaKey}>Segments</Text>
-                          <Text style={styles.metaValue}>{String(tripSegmentsForCard.length)}</Text>
-                        </View>
-                        <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Duration</Text>
-                          <Text style={styles.metaValue}>
-                            {formatDurationSummary(tripDurationMs)}
-                          </Text>
+                          <Text style={styles.metaValue}>{String(sharedTrip.trip.segmentCount)}</Text>
                         </View>
                         <View style={styles.metaCell}>
                           <Text style={styles.metaKey}>Started</Text>
                           <Text style={styles.metaValue}>
-                            {new Date(trip.startedAt).toLocaleDateString()}
+                            {new Date(sharedTrip.trip.startedAt).toLocaleDateString()}
                           </Text>
                         </View>
                         <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Ended</Text>
+                          <Text style={styles.metaKey}>Shared</Text>
                           <Text style={styles.metaValue}>
-                            {trip.endedAt ? new Date(trip.endedAt).toLocaleDateString() : "Active"}
+                            {new Date(sharedTrip.sharedAt).toLocaleDateString()}
                           </Text>
                         </View>
                       </View>
                     </Pressable>
                   </View>
                 </View>
-              </Swipeable>
-            );
-          })}
-        </View>
+              ))}
+            </View>
+          )}
+        </>
       )}
 
       {pendingUndo ? (
@@ -472,7 +613,34 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     color: "#52624f",
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  modeToggleRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 14,
+  },
+  modeToggleChip: {
+    flex: 1,
+    borderRadius: 999,
+    backgroundColor: "#e8ede2",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  modeToggleChipSelected: {
+    backgroundColor: "#243224",
+  },
+  modeToggleChipDisabled: {
+    opacity: 0.45,
+  },
+  modeToggleText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  modeToggleTextSelected: {
+    color: "#fffdf8",
   },
   filterRow: {
     gap: 10,
@@ -560,6 +728,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ebe1cf",
   },
+  sharedTripCard: {
+    backgroundColor: "#eef3eb",
+    borderColor: "#d9e3d3",
+  },
   tripBodyPressable: {
     gap: 14,
   },
@@ -596,6 +768,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     color: "#355035",
   },
+  sharedTripBadge: {
+    backgroundColor: "#d7e3d2",
+  },
   metaGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -617,6 +792,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#243224",
+  },
+  sharedHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  sharedHint: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#52624f",
+  },
+  sharedRefreshButton: {
+    borderRadius: 999,
+    backgroundColor: "#e6ece1",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  sharedRefreshButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  sharedError: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#a03a32",
+    marginBottom: 12,
   },
   swipeActions: {
     flexDirection: "row",

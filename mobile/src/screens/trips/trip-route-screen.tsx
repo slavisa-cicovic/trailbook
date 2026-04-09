@@ -29,7 +29,9 @@ import { useTripPointsStore } from "../../state/trip-points-store";
 import { useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { useWaypointsStore } from "../../state/waypoints-store";
+import { shareTripWithRecipient, syncTripToServer } from "../../services/trips/server-trip-sharing.service";
 import TripEditModal from "./components/trip-edit-modal";
+import TripShareModal from "./components/trip-share-modal";
 import TripRouteMap, { type TrailbookMapType } from "./components/trip-route-map";
 
 const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
@@ -80,8 +82,14 @@ export default function TripRouteScreen() {
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
   const [tripEditVisible, setTripEditVisible] = useState(false);
+  const [tripShareVisible, setTripShareVisible] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
+  const [shareRecipientEmail, setShareRecipientEmail] = useState("");
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareSuccess, setShareSuccess] = useState<string | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -147,6 +155,69 @@ export default function TripRouteScreen() {
 
   async function handleLogout() {
     await setActiveIdentitySession(null);
+  }
+
+  async function syncSelectedTripIfNeeded() {
+    if (!identitySession?.sessionToken || !selectedTrip) {
+      throw new Error("You must be signed in to sync this trip.");
+    }
+
+    setSyncBusy(true);
+
+    try {
+      const response = await syncTripToServer(identitySession.sessionToken, {
+        trip: selectedTrip,
+        tripSegments: currentUserTripSegments.filter((segment) => segment.tripLocalId === selectedTrip.localId),
+        tripPoints: currentUserTripPoints.filter((point) => point.tripLocalId === selectedTrip.localId),
+        waypoints: currentUserWaypoints.filter((waypoint) => waypoint.tripLocalId === selectedTrip.localId),
+      });
+
+      const syncedAt = response.syncedAt;
+
+      await setTrips(
+        trips.map((trip) =>
+          trip.localId === selectedTrip.localId
+            ? {
+                ...trip,
+                serverId: response.tripId,
+                syncStatus: "synced",
+                updatedAt: syncedAt,
+              }
+            : trip,
+        ),
+      );
+
+      return response.tripId;
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  async function handleShareTrip() {
+    if (!selectedTrip || !identitySession?.sessionToken) {
+      return;
+    }
+
+    setShareBusy(true);
+    setShareError(null);
+    setShareSuccess(null);
+
+    try {
+      const tripId = selectedTrip.serverId ?? (await syncSelectedTripIfNeeded());
+      const response = await shareTripWithRecipient(
+        identitySession.sessionToken,
+        tripId,
+        shareRecipientEmail.trim(),
+      );
+
+      setShareSuccess(`Shared with ${response.recipient.email}`);
+      setShareRecipientEmail("");
+      setTripShareVisible(false);
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : "Unable to share this trip.");
+    } finally {
+      setShareBusy(false);
+    }
   }
 
   function openTripEdit(trip: Trip) {
@@ -219,6 +290,18 @@ export default function TripRouteScreen() {
         onSave={() => void handleSaveTripEdit()}
         visible={tripEditVisible}
       />
+      <TripShareModal
+        busy={shareBusy}
+        errorMessage={shareError}
+        onChangeRecipientEmail={setShareRecipientEmail}
+        onClose={() => {
+          setTripShareVisible(false);
+          setShareError(null);
+        }}
+        onShare={() => void handleShareTrip()}
+        recipientEmail={shareRecipientEmail}
+        visible={tripShareVisible}
+      />
 
       <View style={styles.detailsAccordionCard}>
         <Pressable
@@ -245,6 +328,28 @@ export default function TripRouteScreen() {
             {selectedTrip.description ? (
               <Text style={styles.tripDescription}>{selectedTrip.description}</Text>
             ) : null}
+            {identitySession.mode === "authenticated" ? (
+              <View style={styles.ownerActionsRow}>
+                <Pressable
+                  onPress={() => void syncSelectedTripIfNeeded()}
+                  style={[styles.ownerActionButton, styles.syncButton]}
+                >
+                  <Text style={styles.ownerActionText}>{syncBusy ? "Syncing..." : "Sync"}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setShareError(null);
+                    setTripShareVisible(true);
+                  }}
+                  style={[styles.ownerActionButton, styles.shareButton]}
+                >
+                  <Text style={styles.ownerActionText}>Share</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Text style={styles.demoHint}>Demo trips stay local-only and cannot be shared.</Text>
+            )}
+            {shareSuccess ? <Text style={styles.shareSuccessText}>{shareSuccess}</Text> : null}
             <View style={styles.summaryGrid}>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryKey}>Mode</Text>
@@ -397,6 +502,38 @@ const styles = StyleSheet.create({
   mapTypeRow: {
     flexDirection: "row",
     gap: 8,
+  },
+  ownerActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  ownerActionButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  syncButton: {
+    backgroundColor: "#e6ece1",
+  },
+  shareButton: {
+    backgroundColor: "#dfead9",
+  },
+  ownerActionText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  demoHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#60705d",
+  },
+  shareSuccessText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2f6c42",
   },
   mapTypeChip: {
     borderRadius: 999,

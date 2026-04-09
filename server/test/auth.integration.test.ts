@@ -52,6 +52,11 @@ describe("auth integration", () => {
         mail_outbox,
         password_reset_tokens,
         sessions,
+        trip_points,
+        trip_segments,
+        trip_shares,
+        trips,
+        waypoints,
         subscriptions,
         plans,
         users
@@ -292,5 +297,130 @@ describe("auth integration", () => {
 
     const users = await databaseService.user.findMany();
     assert.equal(users.length, 1);
+  });
+
+  test("owner can sync a trip, share it with another user, and the recipient can read it", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Owner",
+      email: "owner@example.com",
+      password: "password123",
+    });
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Recipient",
+      email: "recipient@example.com",
+      password: "password123",
+    });
+
+    const ownerLogin = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "owner@example.com",
+      password: "password123",
+    });
+    const recipientLogin = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "recipient@example.com",
+      password: "password123",
+    });
+
+    assert.equal(ownerLogin.status, 201);
+    assert.equal(recipientLogin.status, 201);
+
+    const syncResponse = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        localId: "trip-local-1",
+        deviceId: "device-1",
+        title: "Drive to Belgrade",
+        description: "Shared test trip",
+        recordingProfile: "drive",
+        startedAt: "2026-04-09T08:00:00.000Z",
+        endedAt: "2026-04-09T10:00:00.000Z",
+        createdAt: "2026-04-09T08:00:00.000Z",
+        updatedAt: "2026-04-09T10:00:00.000Z",
+        deletedAt: null,
+        segments: [
+          {
+            localId: "segment-1",
+            recordingProfile: "drive",
+            startedAt: "2026-04-09T08:00:00.000Z",
+            endedAt: "2026-04-09T10:00:00.000Z",
+            createdAt: "2026-04-09T08:00:00.000Z",
+            updatedAt: "2026-04-09T10:00:00.000Z",
+          },
+        ],
+        points: [
+          {
+            localId: "point-1",
+            segmentLocalId: "segment-1",
+            latitude: 44.7866,
+            longitude: 20.4489,
+            recordedAt: "2026-04-09T08:30:00.000Z",
+            accuracy: 8,
+            altitude: null,
+            speed: 12,
+          },
+          {
+            localId: "point-2",
+            segmentLocalId: "segment-1",
+            latitude: 44.8125,
+            longitude: 20.4612,
+            recordedAt: "2026-04-09T09:30:00.000Z",
+            accuracy: 9,
+            altitude: null,
+            speed: 13,
+          },
+        ],
+        waypoints: [
+          {
+            localId: "waypoint-1",
+            segmentLocalId: "segment-1",
+            category: "restaurant",
+            latitude: 44.8,
+            longitude: 20.45,
+            title: "Lunch stop",
+            note: "Shared waypoint",
+            createdAt: "2026-04-09T09:00:00.000Z",
+            updatedAt: "2026-04-09T09:00:00.000Z",
+            deletedAt: null,
+          },
+        ],
+      });
+
+    assert.equal(syncResponse.status, 201);
+    assert.ok(syncResponse.body.tripId);
+
+    const shareResponse = await request(app.getHttpServer())
+      .post(`/api/trips/${syncResponse.body.tripId}/shares`)
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        recipientEmail: "recipient@example.com",
+      });
+
+    assert.equal(shareResponse.status, 201);
+    assert.equal(shareResponse.body.recipient.email, "recipient@example.com");
+
+    const recipientSharedTripsResponse = await request(app.getHttpServer())
+      .get("/api/trips/shared/list")
+      .set("Authorization", `Bearer ${recipientLogin.body.sessionToken}`);
+
+    assert.equal(recipientSharedTripsResponse.status, 200);
+    assert.equal(recipientSharedTripsResponse.body.sharedTrips.length, 1);
+    assert.equal(recipientSharedTripsResponse.body.sharedTrips[0]?.trip.title, "Drive to Belgrade");
+
+    const sharedTripDetailResponse = await request(app.getHttpServer())
+      .get(`/api/trips/shared/${shareResponse.body.shareId}`)
+      .set("Authorization", `Bearer ${recipientLogin.body.sessionToken}`);
+
+    assert.equal(sharedTripDetailResponse.status, 200);
+    assert.equal(sharedTripDetailResponse.body.trip.points.length, 2);
+    assert.equal(sharedTripDetailResponse.body.trip.waypoints.length, 1);
+
+    const selfShareResponse = await request(app.getHttpServer())
+      .post(`/api/trips/${syncResponse.body.tripId}/shares`)
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        recipientEmail: "owner@example.com",
+      });
+
+    assert.equal(selfShareResponse.status, 400);
   });
 });

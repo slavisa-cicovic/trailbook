@@ -10,5 +10,6 @@ import { SocialAuthService } from "./social-auth.service";
   imports: [UsersModule, MailModule],
   controllers: [AuthController],
   providers: [AuthService, SocialAuthService],
+  exports: [AuthService],
 })
 export class AuthModule {}

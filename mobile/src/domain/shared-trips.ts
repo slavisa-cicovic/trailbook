@@ -1,0 +1,68 @@
+import type { RecordingProfile, WaypointCategory } from "./trips";
+
+export interface SharedTripOwner {
+  displayName: string;
+  email: string;
+  id: string;
+}
+
+export interface SharedTripSummary {
+  owner: SharedTripOwner;
+  shareId: string;
+  sharedAt: string;
+  trip: {
+    description: string | null;
+    endedAt: string | null;
+    id: string;
+    recordingProfile: RecordingProfile;
+    segmentCount: number;
+    startedAt: string;
+    title: string;
+    waypointCount: number;
+  };
+}
+
+export interface SharedTripDetail {
+  owner: SharedTripOwner;
+  shareId: string;
+  sharedAt: string;
+  trip: {
+    createdAt: string;
+    description: string | null;
+    endedAt: string | null;
+    id: string;
+    points: Array<{
+      accuracy: number | null;
+      altitude: number | null;
+      id: string;
+      latitude: number;
+      longitude: number;
+      recordedAt: string;
+      segmentId: string | null;
+      speed: number | null;
+    }>;
+    recordingProfile: RecordingProfile;
+    segments: Array<{
+      createdAt: string;
+      endedAt: string | null;
+      id: string;
+      recordingProfile: RecordingProfile;
+      startedAt: string;
+      updatedAt: string;
+    }>;
+    startedAt: string;
+    title: string;
+    updatedAt: string;
+    waypoints: Array<{
+      category: WaypointCategory;
+      createdAt: string;
+      id: string;
+      latitude: number;
+      longitude: number;
+      note: string | null;
+      segmentId: string | null;
+      title: string;
+      updatedAt: string;
+    }>;
+  };
+}
