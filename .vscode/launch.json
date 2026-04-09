@@ -2,6 +2,34 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Server DB: Up",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run db:up --workspace server",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Server DB: Init",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run db:init --workspace server",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Server DB: Down",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run db:down --workspace server",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Server: Test Auth",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run test --workspace server",
+      "cwd": "${workspaceFolder}"
+    },
+    {
       "name": "Server: Nest Start (Dev)",
       "type": "node-terminal",
       "request": "launch",

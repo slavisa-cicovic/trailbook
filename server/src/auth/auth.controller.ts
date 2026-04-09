@@ -1,17 +1,16 @@
-import { Body, Controller, Get, Post, Query, Res } from "@nestjs/common";
-import type { Response } from "express";
+import { Body, Controller, Get, Inject, Post, Req, Res } from "@nestjs/common";
+import type { Request, Response } from "express";
 
+import { SESSION_COOKIE_NAME } from "./auth.constants";
 import { AuthService } from "./auth.service";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 
-const SESSION_COOKIE_NAME = "trailbook_session";
-
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post("register")
   register(@Body() input: RegisterDto) {
@@ -19,8 +18,11 @@ export class AuthController {
   }
 
   @Post("login")
-  login(@Body() input: LoginDto, @Res({ passthrough: true }) response: Response) {
-    const result = this.authService.login(input);
+  async login(@Body() input: LoginDto, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    const result = await this.authService.login(input, {
+      ipAddress: request.ip,
+      userAgent: request.get("user-agent") || null,
+    });
 
     response.cookie(SESSION_COOKIE_NAME, result.session.id, {
       httpOnly: true,
@@ -35,9 +37,9 @@ export class AuthController {
   }
 
   @Post("logout")
-  logout(@Query("sessionId") sessionId: string | undefined, @Res({ passthrough: true }) response: Response) {
+  async logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     response.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
-    return this.authService.logout(sessionId);
+    return this.authService.logout(request.cookies?.[SESSION_COOKIE_NAME]);
   }
 
   @Post("forgot-password")
@@ -51,8 +53,8 @@ export class AuthController {
   }
 
   @Get("me")
-  me(@Query("sessionId") sessionId: string | undefined) {
-    return this.authService.getCurrentUser(sessionId);
+  me(@Req() request: Request) {
+    return this.authService.getCurrentUser(request.cookies?.[SESSION_COOKIE_NAME]);
   }
 
   @Get("google")

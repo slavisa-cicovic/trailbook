@@ -13,3 +13,9 @@ export interface UserRecord {
   updatedAt: string;
   lastLoginAt: string | null;
 }
+
+export interface CreateLocalUserInput {
+  displayName: string;
+  email: string;
+  passwordHash: string;
+}

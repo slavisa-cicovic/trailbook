@@ -1,76 +1,141 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
+import type { AuthProvider as PrismaAuthProvider, User as PrismaUser } from "@prisma/client";
 
-import type { AuthProvider, UserRecord } from "./user.types";
+import { DatabaseService } from "../database/database.service";
+import type { AuthProvider, CreateLocalUserInput, UserRecord } from "./user.types";
 
 @Injectable()
 export class UsersService {
-  private readonly users = new Map<string, UserRecord>();
+  constructor(@Inject(DatabaseService) private readonly databaseService: DatabaseService) {}
 
-  findById(userId: string): UserRecord | null {
-    return this.users.get(userId) ?? null;
+  async findById(userId: string): Promise<UserRecord | null> {
+    const user = await this.databaseService.user.findUnique({
+      where: { id: userId },
+      include: { externalIdentities: true },
+    });
+
+    return user ? this.toUserRecord(user) : null;
   }
 
-  findByEmail(email: string): UserRecord | null {
-    const normalizedEmail = email.trim().toLowerCase();
+  async findByEmail(email: string): Promise<UserRecord | null> {
+    const user = await this.databaseService.user.findUnique({
+      where: { email: this.normalizeEmail(email) },
+      include: { externalIdentities: true },
+    });
 
-    for (const user of this.users.values()) {
-      if (user.email === normalizedEmail) {
-        return user;
-      }
+    return user ? this.toUserRecord(user) : null;
+  }
+
+  async createLocalUser(input: CreateLocalUserInput): Promise<UserRecord> {
+    const normalizedEmail = this.normalizeEmail(input.email);
+    const normalizedDisplayName = input.displayName.trim();
+
+    const user = await this.databaseService.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email: normalizedEmail,
+          displayName: normalizedDisplayName,
+          passwordHash: input.passwordHash,
+        },
+      });
+
+      await tx.externalIdentity.create({
+        data: {
+          userId: createdUser.id,
+          provider: "local",
+          providerSubject: normalizedEmail,
+          email: normalizedEmail,
+        },
+      });
+
+      const demoPlan = await tx.plan.upsert({
+        where: { code: "demo" },
+        update: {},
+        create: {
+          code: "demo",
+          name: "Demo",
+          billingType: "none",
+        },
+      });
+
+      await tx.subscription.create({
+        data: {
+          userId: createdUser.id,
+          planId: demoPlan.id,
+          status: "active",
+          startedAt: new Date(),
+        },
+      });
+
+      return tx.user.findUniqueOrThrow({
+        where: { id: createdUser.id },
+        include: { externalIdentities: true },
+      });
+    });
+
+    return this.toUserRecord(user);
+  }
+
+  async recordLogin(userId: string): Promise<UserRecord | null> {
+    const user = await this.databaseService.user
+      .update({
+        where: { id: userId },
+        data: { lastLoginAt: new Date() },
+        include: { externalIdentities: true },
+      })
+      .catch(() => null);
+
+    return user ? this.toUserRecord(user) : null;
+  }
+
+  async attachProvider(userId: string, provider: AuthProvider): Promise<UserRecord | null> {
+    const existingUser = await this.findById(userId);
+
+    if (!existingUser || existingUser.authProviderSummary.includes(provider)) {
+      return existingUser;
     }
 
-    return null;
+    const user = await this.databaseService.$transaction(async (tx) => {
+      await tx.externalIdentity.create({
+        data: {
+          userId,
+          provider: provider as PrismaAuthProvider,
+          providerSubject: `${provider}:${userId}`,
+        },
+      });
+
+      return tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        include: { externalIdentities: true },
+      });
+    });
+
+    return this.toUserRecord(user);
   }
 
-  createLocalUser(input: { displayName: string; email: string; passwordHash: string }): UserRecord {
-    const timestamp = new Date().toISOString();
-    const user: UserRecord = {
-      id: `user-${timestamp}`,
-      email: input.email.trim().toLowerCase(),
-      displayName: input.displayName.trim(),
-      role: "user",
-      passwordHash: input.passwordHash,
-      authProviderSummary: ["local"],
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      lastLoginAt: null,
-    };
-
-    this.users.set(user.id, user);
-    return user;
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
   }
 
-  recordLogin(userId: string): UserRecord | null {
-    const user = this.users.get(userId);
+  private toUserRecord(
+    user: PrismaUser & {
+      externalIdentities: Array<{ provider: PrismaAuthProvider }>;
+    },
+  ): UserRecord {
+    const providers = Array.from(
+      new Set<AuthProvider>(user.externalIdentities.map((identity) => identity.provider as AuthProvider)),
+    );
 
-    if (!user) {
-      return null;
-    }
-
-    const updatedUser: UserRecord = {
-      ...user,
-      lastLoginAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    return {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      role: user.role,
+      passwordHash: user.passwordHash,
+      authProviderSummary: providers,
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+      lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
     };
-
-    this.users.set(userId, updatedUser);
-    return updatedUser;
-  }
-
-  attachProvider(userId: string, provider: AuthProvider): UserRecord | null {
-    const user = this.users.get(userId);
-
-    if (!user || user.authProviderSummary.includes(provider)) {
-      return user ?? null;
-    }
-
-    const updatedUser: UserRecord = {
-      ...user,
-      authProviderSummary: [...user.authProviderSummary, provider],
-      updatedAt: new Date().toISOString(),
-    };
-
-    this.users.set(userId, updatedUser);
-    return updatedUser;
   }
 }
