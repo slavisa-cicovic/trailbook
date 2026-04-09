@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Redirect, useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
@@ -46,6 +47,7 @@ export default function LoginScreen() {
   const [socialProviders, setSocialProviders] = useState<SocialProviderAvailability>(emptyProviderAvailability);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -208,19 +210,30 @@ export default function LoginScreen() {
         value={credentials.email}
       />
 
-      <FormField
-        autoCapitalize="none"
-        autoCorrect={false}
-        label="Password"
-        onChangeText={(password) => updateSessionCredentials({ password })}
-        onSubmitEditing={() => passwordInputRef.current?.blur()}
-        placeholder="password"
-        ref={passwordInputRef}
-        returnKeyType="done"
-        secureTextEntry
-        submitBehavior="submit"
-        value={credentials.password}
-      />
+      <Text style={styles.passwordLabel}>Password</Text>
+      <View style={styles.passwordRow}>
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={(password) => updateSessionCredentials({ password })}
+          onSubmitEditing={() => passwordInputRef.current?.blur()}
+          placeholder="password"
+          placeholderTextColor="#8c9a86"
+          ref={passwordInputRef}
+          returnKeyType="done"
+          secureTextEntry={!passwordVisible}
+          style={styles.passwordInput}
+          submitBehavior="submit"
+          value={credentials.password}
+        />
+        <Pressable onPress={() => setPasswordVisible((current) => !current)} style={styles.passwordToggle}>
+          <MaterialIcons
+            color="#2f5d39"
+            name={passwordVisible ? "visibility-off" : "visibility"}
+            size={20}
+          />
+        </Pressable>
+      </View>
 
       <PrimaryButton
         disabled={busyAction !== null || credentials.email.trim().length === 0 || credentials.password.length === 0}
@@ -305,6 +318,32 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 6,
     marginBottom: 12,
+  },
+  passwordLabel: {
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    color: "#7b8a75",
+  },
+  passwordRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#d7ddcf",
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    marginBottom: 6,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#243224",
+  },
+  passwordToggle: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   linkText: {
     color: "#2f5d39",
