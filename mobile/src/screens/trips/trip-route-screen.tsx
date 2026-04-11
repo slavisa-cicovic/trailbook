@@ -368,7 +368,6 @@ export default function TripRouteScreen() {
   }
 
   const distanceText = formatDistanceKm(calculateTripDistanceMeters(selectedTripPoints));
-  const modeSummary = buildTripModeSummary(currentUserTripSegments, selectedTrip.localId);
   const segmentEditTarget =
     segmentEditSegmentId === null
       ? null
@@ -505,10 +504,6 @@ export default function TripRouteScreen() {
             {shareSuccess ? <Text style={styles.shareSuccessText}>{shareSuccess}</Text> : null}
             <View style={styles.summaryGrid}>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryKey}>Mode</Text>
-                <Text style={styles.summaryValue}>{modeSummary}</Text>
-              </View>
-              <View style={styles.summaryItem}>
                 <Text style={styles.summaryKey}>Waypoints</Text>
                 <Text style={styles.summaryValue}>{String(selectedTripWaypoints.length)}</Text>
               </View>
@@ -519,10 +514,6 @@ export default function TripRouteScreen() {
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryKey}>Distance</Text>
                 <Text style={styles.summaryValue}>{distanceText}</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryKey}>Segments</Text>
-                <Text style={styles.summaryValue}>{String(selectedTripSegments.length)}</Text>
               </View>
             </View>
             {selectedTripSegments.length > 0 ? (
@@ -700,13 +691,11 @@ const styles = StyleSheet.create({
   },
   summaryGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    rowGap: 10,
-    marginHorizontal: -4,
+    alignItems: "flex-start",
+    gap: 10,
   },
   summaryItem: {
-    width: "50%",
-    paddingHorizontal: 4,
+    flex: 1,
     gap: 2,
   },
   summaryKey: {
