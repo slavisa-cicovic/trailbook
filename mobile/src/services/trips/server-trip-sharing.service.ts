@@ -1,7 +1,7 @@
 import type { SharedTripDetail, SharedTripSummary } from "../../domain/shared-trips";
-import type { Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
+import type { Trip, TripPoint, TripSegment, Waypoint, WaypointAttachment } from "../../domain/trips";
 
-function getApiBaseUrl() {
+export function getApiBaseUrl() {
   return process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3001/api";
 }
 
@@ -28,6 +28,7 @@ async function request<T>(path: string, sessionToken: string, init?: RequestInit
 export async function syncTripToServer(
   sessionToken: string,
   input: {
+    attachments: WaypointAttachment[];
     trip: Trip;
     tripPoints: TripPoint[];
     tripSegments: TripSegment[];
@@ -47,6 +48,16 @@ export async function syncTripToServer(
       createdAt: input.trip.createdAt,
       updatedAt: input.trip.updatedAt,
       deletedAt: input.trip.deletedAt,
+      attachments: input.attachments.map((attachment) => ({
+        localId: attachment.localId,
+        waypointLocalId: attachment.waypointLocalId,
+        type: attachment.type,
+        mimeType: attachment.mimeType,
+        fileSize: attachment.fileSize,
+        createdAt: attachment.createdAt,
+        updatedAt: attachment.updatedAt,
+        deletedAt: attachment.deletedAt,
+      })),
       segments: input.tripSegments.map((segment) => ({
         localId: segment.localId,
         recordingProfile: segment.recordingProfile,
@@ -79,6 +90,50 @@ export async function syncTripToServer(
       })),
     }),
   });
+}
+
+export async function uploadTripAttachmentToServer(
+  sessionToken: string,
+  tripId: string,
+  input: {
+    attachmentLocalId: string;
+    localUri: string;
+    mimeType: string | null;
+  },
+) {
+  const formData = new FormData();
+  formData.append("attachmentLocalId", input.attachmentLocalId);
+  formData.append(
+    "file",
+    {
+      uri: input.localUri,
+      name: `${input.attachmentLocalId}.jpg`,
+      type: input.mimeType || "image/jpeg",
+    } as never,
+  );
+
+  const response = await fetch(`${getApiBaseUrl()}/trips/${tripId}/attachments/upload`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+    body: formData,
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { attachmentId: string; attachmentLocalId: string; waypointId: string; message?: string | string[] }
+    | null;
+
+  if (!response.ok) {
+    const message = Array.isArray(payload?.message) ? payload.message.join(", ") : payload?.message;
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  return payload as { attachmentId: string; attachmentLocalId: string; waypointId: string };
+}
+
+export function buildTripAttachmentContentUrl(sessionToken: string, attachmentId: string) {
+  return `${getApiBaseUrl()}/trips/attachments/${attachmentId}/content?token=${encodeURIComponent(sessionToken)}`;
 }
 
 export async function shareTripWithRecipient(sessionToken: string, tripId: string, recipientEmail: string) {

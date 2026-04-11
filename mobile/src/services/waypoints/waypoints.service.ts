@@ -40,6 +40,16 @@ export function getSuggestedWaypointTitle(category: WaypointCategory): string {
   return getWaypointCategoryOption(category).label;
 }
 
+export function createAttachmentTimestamp(baseTimestamp: string, index = 0): string {
+  const baseTime = new Date(baseTimestamp).getTime();
+
+  if (Number.isNaN(baseTime)) {
+    return new Date().toISOString();
+  }
+
+  return new Date(baseTime + index).toISOString();
+}
+
 export function createPhotoAttachmentForWaypoint(
   waypoint: Waypoint,
   photo: PickedPhoto,

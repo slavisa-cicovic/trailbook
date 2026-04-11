@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { rm } from "node:fs/promises";
 import { after, before, beforeEach, describe, test } from "node:test";
 
 import type { INestApplication } from "@nestjs/common";
@@ -23,6 +24,7 @@ describe("auth integration", () => {
   const originalGoogleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const originalAuthBaseUrl = process.env.AUTH_BASE_URL;
   const originalWebAppUrl = process.env.WEB_APP_URL;
+  const originalMediaStorageDir = process.env.MEDIA_STORAGE_DIR;
 
   before(async () => {
     app = await createApp();
@@ -36,6 +38,7 @@ describe("auth integration", () => {
     process.env.GOOGLE_CLIENT_SECRET = originalGoogleClientSecret;
     process.env.AUTH_BASE_URL = originalAuthBaseUrl;
     process.env.WEB_APP_URL = originalWebAppUrl;
+    process.env.MEDIA_STORAGE_DIR = originalMediaStorageDir;
     await app.close();
   });
 
@@ -45,6 +48,7 @@ describe("auth integration", () => {
     process.env.GOOGLE_CLIENT_SECRET = "google-test-secret";
     process.env.AUTH_BASE_URL = "http://localhost:3001";
     process.env.WEB_APP_URL = "http://localhost:3000";
+    process.env.MEDIA_STORAGE_DIR = "/tmp/trailbook-test-media";
 
     await databaseService.$executeRawUnsafe(`
       TRUNCATE TABLE
@@ -54,6 +58,7 @@ describe("auth integration", () => {
         sessions,
         trip_points,
         trip_segments,
+        waypoint_attachments,
         trip_shares,
         trips,
         waypoints,
@@ -62,6 +67,8 @@ describe("auth integration", () => {
         users
       RESTART IDENTITY CASCADE
     `);
+
+    await rm("/tmp/trailbook-test-media", { force: true, recursive: true }).catch(() => undefined);
   });
 
   test("register creates a persisted local user with demo subscription", async () => {
@@ -337,6 +344,18 @@ describe("auth integration", () => {
         createdAt: "2026-04-09T08:00:00.000Z",
         updatedAt: "2026-04-09T10:00:00.000Z",
         deletedAt: null,
+        attachments: [
+          {
+            localId: "attachment-1",
+            waypointLocalId: "waypoint-1",
+            type: "photo",
+            mimeType: "image/jpeg",
+            fileSize: 12,
+            createdAt: "2026-04-09T09:00:00.000Z",
+            updatedAt: "2026-04-09T09:00:00.000Z",
+            deletedAt: null,
+          },
+        ],
         segments: [
           {
             localId: "segment-1",
@@ -388,6 +407,18 @@ describe("auth integration", () => {
     assert.equal(syncResponse.status, 201);
     assert.ok(syncResponse.body.tripId);
 
+    const uploadResponse = await request(app.getHttpServer())
+      .post(`/api/trips/${syncResponse.body.tripId}/attachments/upload`)
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .field("attachmentLocalId", "attachment-1")
+      .attach("file", Buffer.from("fake-image-content"), {
+        contentType: "image/jpeg",
+        filename: "lunch-stop.jpg",
+      });
+
+    assert.equal(uploadResponse.status, 201);
+    assert.equal(uploadResponse.body.attachmentLocalId, "attachment-1");
+
     const shareResponse = await request(app.getHttpServer())
       .post(`/api/trips/${syncResponse.body.tripId}/shares`)
       .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
@@ -413,6 +444,15 @@ describe("auth integration", () => {
     assert.equal(sharedTripDetailResponse.status, 200);
     assert.equal(sharedTripDetailResponse.body.trip.points.length, 2);
     assert.equal(sharedTripDetailResponse.body.trip.waypoints.length, 1);
+    assert.equal(sharedTripDetailResponse.body.trip.attachments.length, 1);
+
+    const attachmentContentResponse = await request(app.getHttpServer())
+      .get(`/api/trips/attachments/${uploadResponse.body.attachmentId}/content`)
+      .set("Authorization", `Bearer ${recipientLogin.body.sessionToken}`);
+
+    assert.equal(attachmentContentResponse.status, 200);
+    assert.match(String(attachmentContentResponse.headers["content-type"] ?? ""), /^image\/jpeg/);
+    assert.equal(Buffer.isBuffer(attachmentContentResponse.body), true);
 
     const selfShareResponse = await request(app.getHttpServer())
       .post(`/api/trips/${syncResponse.body.tripId}/shares`)

@@ -76,6 +76,7 @@ import {
   markWaypointDeleted,
 } from "../../services/trips/trips-management.service";
 import {
+  createAttachmentTimestamp,
   createPhotoAttachmentForWaypoint,
   createWaypointForTrip,
   getSuggestedWaypointTitle,
@@ -537,7 +538,7 @@ export default function RecordingScreen() {
     const nextAttachments = [
       ...waypointAttachments,
       ...waypointDraft.photos.map((photo, index) =>
-        createPhotoAttachmentForWaypoint(nextWaypoint, photo, `${createdAt}-${index}`),
+        createPhotoAttachmentForWaypoint(nextWaypoint, photo, createAttachmentTimestamp(createdAt, index)),
       ),
     ];
 
@@ -636,7 +637,7 @@ export default function RecordingScreen() {
     await setWaypointAttachments([
       ...waypointAttachments,
       ...photos.map((photo, index) =>
-        createPhotoAttachmentForWaypoint(waypoint, photo, `${createdAt}-${index}`),
+        createPhotoAttachmentForWaypoint(waypoint, photo, createAttachmentTimestamp(createdAt, index)),
       ),
     ]);
   }

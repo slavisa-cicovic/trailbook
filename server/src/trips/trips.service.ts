@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 
 import { DatabaseService } from "../database/database.service";
 import { UsersService } from "../users/users.service";
+import { MediaStorageService } from "./media-storage.service";
 import type { ShareTripDto } from "./dto/share-trip.dto";
 import type { SyncTripDto } from "./dto/sync-trip.dto";
 
@@ -10,7 +11,22 @@ export class TripsService {
   constructor(
     @Inject(DatabaseService) private readonly databaseService: DatabaseService,
     @Inject(UsersService) private readonly usersService: UsersService,
+    @Inject(MediaStorageService) private readonly mediaStorageService: MediaStorageService,
   ) {}
+
+  private parseDateOrFallback(value: string | null | undefined, fallback: string | Date) {
+    if (!value) {
+      return new Date(fallback);
+    }
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return new Date(fallback);
+    }
+
+    return parsed;
+  }
 
   async syncTrip(ownerUserId: string, payload: SyncTripDto) {
     const trip = await this.databaseService.$transaction(async (tx) => {
@@ -52,6 +68,7 @@ export class TripsService {
       await tx.tripSegment.deleteMany({ where: { tripId: upsertedTrip.id } });
 
       const segmentIdByLocalId = new Map<string, string>();
+      const waypointIdByLocalId = new Map<string, string>();
 
       for (const segment of payload.segments) {
         const createdSegment = await tx.tripSegment.create({
@@ -86,7 +103,7 @@ export class TripsService {
       }
 
       for (const waypoint of payload.waypoints) {
-        await tx.waypoint.create({
+        const createdWaypoint = await tx.waypoint.create({
           data: {
             tripId: upsertedTrip.id,
             segmentId: waypoint.segmentLocalId ? (segmentIdByLocalId.get(waypoint.segmentLocalId) ?? null) : null,
@@ -99,6 +116,70 @@ export class TripsService {
             createdAt: new Date(waypoint.createdAt),
             updatedAt: new Date(waypoint.updatedAt),
             deletedAt: waypoint.deletedAt ? new Date(waypoint.deletedAt) : null,
+          },
+        });
+
+        waypointIdByLocalId.set(waypoint.localId, createdWaypoint.id);
+      }
+
+      const attachmentLocalIds = payload.attachments.map((attachment) => attachment.localId);
+
+      if (attachmentLocalIds.length > 0) {
+        await tx.waypointAttachment.deleteMany({
+          where: {
+            tripId: upsertedTrip.id,
+            localSourceId: {
+              notIn: attachmentLocalIds,
+            },
+          },
+        });
+      } else {
+        await tx.waypointAttachment.deleteMany({
+          where: {
+            tripId: upsertedTrip.id,
+          },
+        });
+      }
+
+      for (const attachment of payload.attachments) {
+        const waypointId = waypointIdByLocalId.get(attachment.waypointLocalId);
+
+        if (!waypointId) {
+          continue;
+        }
+
+        await tx.waypointAttachment.upsert({
+          where: {
+            tripId_localSourceId: {
+              tripId: upsertedTrip.id,
+              localSourceId: attachment.localId,
+            },
+          },
+          create: {
+            tripId: upsertedTrip.id,
+            waypointId,
+            ownerUserId,
+            localSourceId: attachment.localId,
+            waypointLocalSourceId: attachment.waypointLocalId,
+            type: attachment.type,
+            mimeType: attachment.mimeType,
+            fileSizeBytes: attachment.fileSize,
+            createdAt: this.parseDateOrFallback(attachment.createdAt, payload.updatedAt),
+            updatedAt: this.parseDateOrFallback(attachment.updatedAt, payload.updatedAt),
+            deletedAt: attachment.deletedAt
+              ? this.parseDateOrFallback(attachment.deletedAt, payload.updatedAt)
+              : null,
+          },
+          update: {
+            waypointId,
+            waypointLocalSourceId: attachment.waypointLocalId,
+            type: attachment.type,
+            mimeType: attachment.mimeType,
+            fileSizeBytes: attachment.fileSize,
+            updatedAt: this.parseDateOrFallback(attachment.updatedAt, payload.updatedAt),
+            deletedAt: attachment.deletedAt
+              ? this.parseDateOrFallback(attachment.deletedAt, payload.updatedAt)
+              : null,
           },
         });
       }
@@ -274,6 +355,9 @@ export class TripsService {
         owner: true,
         trip: {
           include: {
+            attachments: {
+              orderBy: { createdAt: "asc" },
+            },
             points: {
               orderBy: { recordedAt: "asc" },
             },
@@ -309,6 +393,16 @@ export class TripsService {
         startedAt: share.trip.startedAt.toISOString(),
         title: share.trip.title,
         updatedAt: share.trip.updatedAt.toISOString(),
+        attachments: share.trip.attachments
+          .filter((attachment) => attachment.deletedAt === null && attachment.storageKey !== null)
+          .map((attachment) => ({
+            createdAt: attachment.createdAt.toISOString(),
+            fileSizeBytes: attachment.fileSizeBytes,
+            id: attachment.id,
+            mimeType: attachment.mimeType,
+            updatedAt: attachment.updatedAt.toISOString(),
+            waypointId: attachment.waypointId,
+          })),
         points: share.trip.points.map((point) => ({
           accuracy: point.accuracy,
           altitude: point.altitude,
@@ -341,6 +435,102 @@ export class TripsService {
             updatedAt: waypoint.updatedAt.toISOString(),
           })),
       },
+    };
+  }
+
+  async uploadTripAttachment(
+    ownerUserId: string,
+    tripId: string,
+    attachmentLocalId: string,
+    file: {
+      buffer: Buffer;
+      mimetype?: string;
+      originalname?: string;
+      size?: number;
+    } | null,
+  ) {
+    if (!file?.buffer || file.buffer.length === 0) {
+      throw new BadRequestException("Attachment file is required.");
+    }
+
+    const trip = await this.databaseService.trip.findUnique({
+      where: { id: tripId },
+    });
+
+    if (!trip || trip.ownerUserId !== ownerUserId) {
+      throw new NotFoundException("Trip not found.");
+    }
+
+    const attachment = await this.databaseService.waypointAttachment.findUnique({
+      where: {
+        tripId_localSourceId: {
+          tripId,
+          localSourceId: attachmentLocalId,
+        },
+      },
+    });
+
+    if (!attachment || attachment.ownerUserId !== ownerUserId) {
+      throw new NotFoundException("Attachment metadata not found.");
+    }
+
+    const storedFile = await this.mediaStorageService.storeTripAttachment({
+      attachmentId: attachment.id,
+      mimeType: file.mimetype ?? attachment.mimeType,
+      originalFilename: file.originalname ?? null,
+      tripId,
+      fileBuffer: file.buffer,
+    });
+
+    const updatedAttachment = await this.databaseService.waypointAttachment.update({
+      where: { id: attachment.id },
+      data: {
+        storageKey: storedFile.storageKey,
+        originalFilename: file.originalname ?? attachment.originalFilename,
+        mimeType: file.mimetype ?? attachment.mimeType,
+        fileSizeBytes: file.size ?? attachment.fileSizeBytes,
+        updatedAt: new Date(),
+      },
+    });
+
+    return {
+      attachmentId: updatedAttachment.id,
+      attachmentLocalId: updatedAttachment.localSourceId,
+      waypointId: updatedAttachment.waypointId,
+    };
+  }
+
+  async getAttachmentContent(consumerUserId: string, attachmentId: string) {
+    const attachment = await this.databaseService.waypointAttachment.findUnique({
+      where: { id: attachmentId },
+      include: {
+        trip: {
+          include: {
+            shares: {
+              where: { status: "active" },
+            },
+          },
+        },
+      },
+    });
+
+    if (!attachment || attachment.deletedAt !== null || !attachment.storageKey) {
+      throw new NotFoundException("Attachment not found.");
+    }
+
+    const hasAccess =
+      attachment.ownerUserId === consumerUserId ||
+      attachment.trip.shares.some((share) => share.recipientUserId === consumerUserId);
+
+    if (!hasAccess) {
+      throw new ForbiddenException("You do not have access to this attachment.");
+    }
+
+    const absolutePath = await this.mediaStorageService.resolveStoragePath(attachment.storageKey);
+
+    return {
+      absolutePath,
+      mimeType: attachment.mimeType,
     };
   }
 }

@@ -26,10 +26,14 @@ import {
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { useTripSegmentsStore } from "../../state/trip-segments-store";
 import { useTripPointsStore } from "../../state/trip-points-store";
-import { useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
+import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { useWaypointsStore } from "../../state/waypoints-store";
-import { shareTripWithRecipient, syncTripToServer } from "../../services/trips/server-trip-sharing.service";
+import {
+  shareTripWithRecipient,
+  syncTripToServer,
+  uploadTripAttachmentToServer,
+} from "../../services/trips/server-trip-sharing.service";
 import TripEditModal from "./components/trip-edit-modal";
 import TripShareModal from "./components/trip-share-modal";
 import TripRouteMap, { type TrailbookMapType } from "./components/trip-route-map";
@@ -166,6 +170,7 @@ export default function TripRouteScreen() {
 
     try {
       const response = await syncTripToServer(identitySession.sessionToken, {
+        attachments: selectedTripAttachments,
         trip: selectedTrip,
         tripSegments: currentUserTripSegments.filter((segment) => segment.tripLocalId === selectedTrip.localId),
         tripPoints: currentUserTripPoints.filter((point) => point.tripLocalId === selectedTrip.localId),
@@ -173,6 +178,17 @@ export default function TripRouteScreen() {
       });
 
       const syncedAt = response.syncedAt;
+      const uploadedAttachments = [];
+
+      for (const attachment of selectedTripAttachments) {
+        const uploadedAttachment = await uploadTripAttachmentToServer(identitySession.sessionToken, response.tripId, {
+          attachmentLocalId: attachment.localId,
+          localUri: attachment.localUri,
+          mimeType: attachment.mimeType,
+        });
+
+        uploadedAttachments.push(uploadedAttachment);
+      }
 
       await setTrips(
         trips.map((trip) =>
@@ -186,6 +202,25 @@ export default function TripRouteScreen() {
             : trip,
         ),
       );
+
+      if (uploadedAttachments.length > 0) {
+        const uploadedAttachmentIds = new Map(
+          uploadedAttachments.map((attachment) => [attachment.attachmentLocalId, attachment.attachmentId]),
+        );
+
+        await setWaypointAttachments(
+          waypointAttachments.map((attachment) =>
+            uploadedAttachmentIds.has(attachment.localId)
+              ? {
+                  ...attachment,
+                  serverId: uploadedAttachmentIds.get(attachment.localId) ?? attachment.serverId,
+                  syncStatus: "synced",
+                  updatedAt: syncedAt,
+                }
+              : attachment,
+          ),
+        );
+      }
 
       return response.tripId;
     } finally {

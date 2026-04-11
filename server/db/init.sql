@@ -62,6 +62,14 @@ BEGIN
 END
 $$;
 
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'waypoint_attachment_type') THEN
+    CREATE TYPE waypoint_attachment_type AS ENUM ('photo');
+  END IF;
+END
+$$;
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
@@ -222,6 +230,28 @@ CREATE TABLE IF NOT EXISTS waypoints (
 
 CREATE INDEX IF NOT EXISTS waypoints_trip_id_idx ON waypoints(trip_id);
 CREATE INDEX IF NOT EXISTS waypoints_segment_id_idx ON waypoints(segment_id);
+
+CREATE TABLE IF NOT EXISTS waypoint_attachments (
+  id TEXT PRIMARY KEY,
+  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  waypoint_id TEXT NOT NULL REFERENCES waypoints(id) ON DELETE CASCADE,
+  owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  local_source_id TEXT NOT NULL,
+  waypoint_local_source_id TEXT NOT NULL,
+  type waypoint_attachment_type NOT NULL,
+  mime_type TEXT,
+  original_filename TEXT,
+  storage_key TEXT,
+  file_size_bytes INTEGER,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(trip_id, local_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS waypoint_attachments_trip_id_idx ON waypoint_attachments(trip_id);
+CREATE INDEX IF NOT EXISTS waypoint_attachments_waypoint_id_idx ON waypoint_attachments(waypoint_id);
+CREATE INDEX IF NOT EXISTS waypoint_attachments_owner_user_id_idx ON waypoint_attachments(owner_user_id);
 
 CREATE TABLE IF NOT EXISTS trip_shares (
   id TEXT PRIMARY KEY,

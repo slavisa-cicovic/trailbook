@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Req, UnauthorizedException } from "@nestjs/common";
-import type { Request } from "express";
+import { Body, Controller, Delete, Get, Inject, Param, Post, Req, Res, UnauthorizedException, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import type { Request, Response } from "express";
 
 import { AuthService } from "../auth/auth.service";
 import type { ShareTripDto } from "./dto/share-trip.dto";
@@ -53,10 +54,50 @@ export class TripsController {
     return this.tripsService.getSharedTrip(user.id, shareId);
   }
 
+  @Post(":tripId/attachments/upload")
+  @UseInterceptors(FileInterceptor("file"))
+  async uploadTripAttachment(
+    @Param("tripId") tripId: string,
+    @Body("attachmentLocalId") attachmentLocalId: string,
+    @UploadedFile()
+    uploadedFile:
+      | {
+          buffer: Buffer;
+          mimetype?: string;
+          originalname?: string;
+          size?: number;
+        }
+      | undefined,
+    @Req() request: Request,
+  ) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.tripsService.uploadTripAttachment(user.id, tripId, attachmentLocalId, uploadedFile ?? null);
+  }
+
+  @Get("attachments/:attachmentId/content")
+  async getAttachmentContent(
+    @Param("attachmentId") attachmentId: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    const user = await this.requireAuthenticatedUser(request);
+    const attachment = await this.tripsService.getAttachmentContent(user.id, attachmentId);
+
+    if (attachment.mimeType) {
+      response.type(attachment.mimeType);
+    }
+
+    response.sendFile(attachment.absolutePath);
+  }
+
   private getSessionToken(request: Request) {
     const header = request.get("authorization");
     const bearerToken = header?.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : null;
-    return bearerToken || request.cookies?.trailbook_session;
+    const queryToken =
+      typeof request.query?.token === "string" && request.query.token.trim().length > 0
+        ? request.query.token.trim()
+        : null;
+    return bearerToken || request.cookies?.trailbook_session || queryToken;
   }
 
   private async requireAuthenticatedUser(request: Request) {

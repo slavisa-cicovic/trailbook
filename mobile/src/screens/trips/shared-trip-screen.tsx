@@ -130,7 +130,7 @@ export default function SharedTripScreen() {
   const waypointMarkers = useMemo(
     () =>
       (sharedTrip?.trip.waypoints ?? []).map((waypoint) => ({
-        hasPhotos: false,
+        hasPhotos: (sharedTrip?.trip.attachments ?? []).some((attachment) => attachment.waypointId === waypoint.id),
         waypoint: {
           localId: waypoint.id,
           serverId: waypoint.id,

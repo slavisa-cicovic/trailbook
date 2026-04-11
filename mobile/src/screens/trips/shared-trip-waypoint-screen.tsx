@@ -1,13 +1,18 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getWaypointCategoryOption } from "../../constants/waypoint-categories";
+import type { WaypointAttachment } from "../../domain/trips";
 import type { SharedTripDetail } from "../../domain/shared-trips";
-import { getSharedTrip } from "../../services/trips/server-trip-sharing.service";
+import {
+  buildTripAttachmentContentUrl,
+  getSharedTrip,
+} from "../../services/trips/server-trip-sharing.service";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import WaypointPhotoViewerModal from "./components/waypoint-photo-viewer-modal";
 
 export default function SharedTripWaypointScreen() {
   const router = useRouter();
@@ -18,6 +23,7 @@ export default function SharedTripWaypointScreen() {
   const [sharedTrip, setSharedTrip] = useState<SharedTripDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -66,6 +72,35 @@ export default function SharedTripWaypointScreen() {
   const selectedWaypointCategory = selectedWaypoint
     ? getWaypointCategoryOption(selectedWaypoint.category)
     : null;
+  const attachments = useMemo(() => {
+    const sessionToken = identitySession?.sessionToken;
+
+    if (!sharedTrip || !selectedWaypoint || !sessionToken) {
+      return [];
+    }
+
+    return sharedTrip.trip.attachments
+      .filter((attachment) => attachment.waypointId === selectedWaypoint.id)
+      .map(
+        (attachment) =>
+          ({
+            localId: attachment.id,
+            serverId: attachment.id,
+            waypointLocalId: selectedWaypoint.id,
+            deviceId: "shared-trip",
+            userId: sharedTrip.owner.id,
+            type: "photo",
+            localUri: buildTripAttachmentContentUrl(sessionToken, attachment.id),
+            mimeType: attachment.mimeType,
+            fileSize: attachment.fileSizeBytes,
+            createdAt: attachment.createdAt,
+            updatedAt: attachment.updatedAt,
+            deletedAt: null,
+            syncStatus: "synced",
+          }) satisfies WaypointAttachment,
+      );
+  }, [identitySession?.sessionToken, selectedWaypoint, sharedTrip]);
+  const photoViewerVisible = selectedPhotoAttachmentId !== null && attachments.length > 0;
 
   if (!identitySession) {
     return <Redirect href="/login" />;
@@ -141,9 +176,40 @@ export default function SharedTripWaypointScreen() {
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Photos</Text>
-              <Text style={styles.infoValue}>Not shared in V1</Text>
+              <Text style={styles.infoValue}>{attachments.length === 0 ? "No shared photos" : `${attachments.length} photo(s)`}</Text>
             </View>
           </View>
+
+          <WaypointPhotoViewerModal
+            attachments={attachments}
+            onClose={() => setSelectedPhotoAttachmentId(null)}
+            onRemoveCurrent={() => undefined}
+            readOnly
+            selectedAttachmentId={selectedPhotoAttachmentId}
+            visible={photoViewerVisible}
+          />
+
+          <View style={styles.photoHeader}>
+            <Text style={styles.sectionTitle}>Photos</Text>
+          </View>
+
+          {attachments.length === 0 ? (
+            <View style={styles.emptyPhotos}>
+              <Text style={styles.emptyText}>No photos were shared for this waypoint.</Text>
+            </View>
+          ) : (
+            <View style={styles.photoGrid}>
+              {attachments.map((attachment) => (
+                <Pressable
+                  key={attachment.localId}
+                  onPress={() => setSelectedPhotoAttachmentId(attachment.localId)}
+                  style={styles.photoCard}
+                >
+                  <Image source={{ uri: attachment.localUri }} style={styles.photoImage} />
+                </Pressable>
+              ))}
+            </View>
+          )}
         </>
       ) : null}
     </ScreenLayout>
@@ -250,5 +316,39 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#243224",
+  },
+  photoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  emptyPhotos: {
+    borderRadius: 18,
+    backgroundColor: "#f6f1e5",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
+    padding: 20,
+  },
+  photoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -6,
+    rowGap: 12,
+  },
+  photoCard: {
+    width: "50%",
+    paddingHorizontal: 6,
+  },
+  photoImage: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 16,
+    backgroundColor: "#d9e3d3",
   },
 });

@@ -42,7 +42,19 @@ export interface SyncWaypointDto {
   updatedAt: string;
 }
 
+export interface SyncWaypointAttachmentDto {
+  createdAt: string;
+  deletedAt: string | null;
+  fileSize: number | null;
+  localId: string;
+  mimeType: string | null;
+  type: "photo";
+  updatedAt: string;
+  waypointLocalId: string;
+}
+
 export interface SyncTripDto {
+  attachments: SyncWaypointAttachmentDto[];
   createdAt: string;
   deletedAt: string | null;
   description: string | null;

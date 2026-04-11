@@ -54,6 +54,14 @@ export interface SharedTripDetail {
     startedAt: string;
     title: string;
     updatedAt: string;
+    attachments: Array<{
+      createdAt: string;
+      fileSizeBytes: number | null;
+      id: string;
+      mimeType: string | null;
+      updatedAt: string;
+      waypointId: string;
+    }>;
     waypoints: Array<{
       category: WaypointCategory;
       createdAt: string;

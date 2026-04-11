@@ -18,6 +18,7 @@ interface WaypointPhotoViewerModalProps {
   attachments: WaypointAttachment[];
   onClose: () => void;
   onRemoveCurrent: (attachmentLocalId: string) => void;
+  readOnly?: boolean;
   selectedAttachmentId: string | null;
   visible: boolean;
 }
@@ -28,6 +29,7 @@ export default function WaypointPhotoViewerModal({
   attachments,
   onClose,
   onRemoveCurrent,
+  readOnly = false,
   selectedAttachmentId,
   visible,
 }: WaypointPhotoViewerModalProps) {
@@ -88,7 +90,7 @@ export default function WaypointPhotoViewerModal({
               <Pressable onPress={onClose} style={styles.secondaryButton}>
                 <Text style={styles.secondaryButtonText}>Close</Text>
               </Pressable>
-              {currentAttachment ? (
+              {currentAttachment && !readOnly ? (
                 <Pressable
                   onPress={() => onRemoveCurrent(currentAttachment.localId)}
                   style={styles.removeButton}

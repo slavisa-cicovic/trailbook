@@ -21,7 +21,10 @@ import {
   type WaypointUpdateInput,
   updateWaypointMetadata,
 } from "../../services/trips/trips-management.service";
-import { createPhotoAttachmentForWaypoint } from "../../services/waypoints/waypoints.service";
+import {
+  createAttachmentTimestamp,
+  createPhotoAttachmentForWaypoint,
+} from "../../services/waypoints/waypoints.service";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import {
   setWaypointAttachments,
@@ -176,7 +179,7 @@ export default function TripWaypointScreen() {
     await setWaypointAttachments([
       ...waypointAttachments,
       ...photos.map((photo, index) =>
-        createPhotoAttachmentForWaypoint(selectedWaypoint, photo, `${createdAt}-${index}`),
+        createPhotoAttachmentForWaypoint(selectedWaypoint, photo, createAttachmentTimestamp(createdAt, index)),
       ),
     ]);
   }

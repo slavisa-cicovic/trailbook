@@ -82,6 +82,12 @@ enum TripShareStatus {
   @@map("trip_share_status")
 }
 
+enum WaypointAttachmentType {
+  photo
+
+  @@map("waypoint_attachment_type")
+}
+
 model User {
   id                  String              @id @default(cuid())
   email               String              @unique
@@ -99,6 +105,7 @@ model User {
   ownedTrips          Trip[]              @relation("OwnedTrips")
   ownedTripShares     TripShare[]         @relation("OwnerTripShares")
   receivedTripShares  TripShare[]         @relation("RecipientTripShares")
+  waypointAttachments WaypointAttachment[]
 
   @@map("users")
 }
@@ -217,6 +224,7 @@ model Trip {
   points           TripPoint[]
   waypoints        Waypoint[]
   shares           TripShare[]
+  attachments      WaypointAttachment[]
 
   @@unique([ownerUserId, localSourceId])
   @@index([ownerUserId])
@@ -276,11 +284,38 @@ model Waypoint {
   deletedAt     DateTime?        @map("deleted_at")
   trip          Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
   segment       TripSegment?     @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  attachments   WaypointAttachment[]
 
   @@unique([tripId, localSourceId])
   @@index([tripId])
   @@index([segmentId])
   @@map("waypoints")
+}
+
+model WaypointAttachment {
+  id                  String                 @id @default(cuid())
+  tripId              String                 @map("trip_id")
+  waypointId          String                 @map("waypoint_id")
+  ownerUserId         String                 @map("owner_user_id")
+  localSourceId       String                 @map("local_source_id")
+  waypointLocalSourceId String               @map("waypoint_local_source_id")
+  type                WaypointAttachmentType
+  mimeType            String?                @map("mime_type")
+  originalFilename    String?                @map("original_filename")
+  storageKey          String?                @map("storage_key")
+  fileSizeBytes       Int?                   @map("file_size_bytes")
+  createdAt           DateTime               @map("created_at")
+  updatedAt           DateTime               @map("updated_at")
+  deletedAt           DateTime?              @map("deleted_at")
+  trip                Trip                   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  waypoint            Waypoint               @relation(fields: [waypointId], references: [id], onDelete: Cascade)
+  owner               User                   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, localSourceId])
+  @@index([tripId])
+  @@index([waypointId])
+  @@index([ownerUserId])
+  @@map("waypoint_attachments")
 }
 
 model TripShare {
