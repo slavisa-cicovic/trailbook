@@ -95,6 +95,38 @@ export default function TripsScreen() {
     buildTripSummary(trip, currentUserTripPoints, currentUserWaypoints, currentUserWaypointAttachments),
   );
   const tripsAggregateSummary = buildTripsAggregateSummary(filteredTrips, currentUserTripPoints);
+  const summaryRows = [
+    {
+      label: "Walk",
+      distanceMeters: tripsAggregateSummary.walkDistanceMeters,
+      durationMs: tripsAggregateSummary.walkDurationMs,
+      tripCount: tripsAggregateSummary.walkTripCount,
+    },
+    {
+      label: "Bike",
+      distanceMeters: tripsAggregateSummary.bikeDistanceMeters,
+      durationMs: tripsAggregateSummary.bikeDurationMs,
+      tripCount: tripsAggregateSummary.bikeTripCount,
+    },
+    {
+      label: "Drive",
+      distanceMeters: tripsAggregateSummary.driveDistanceMeters,
+      durationMs: tripsAggregateSummary.driveDurationMs,
+      tripCount: tripsAggregateSummary.driveTripCount,
+    },
+    {
+      label: "Boat",
+      distanceMeters: tripsAggregateSummary.boatDistanceMeters,
+      durationMs: tripsAggregateSummary.boatDurationMs,
+      tripCount: tripsAggregateSummary.boatTripCount,
+    },
+    {
+      label: "Plane",
+      distanceMeters: tripsAggregateSummary.planeDistanceMeters,
+      durationMs: tripsAggregateSummary.planeDurationMs,
+      tripCount: tripsAggregateSummary.planeTripCount,
+    },
+  ].filter((row) => row.distanceMeters > 0 || row.durationMs > 0);
   const selectedTrip = visibleTrips.find((trip) => trip.localId === selectedTripId) ?? null;
 
   useEffect(() => {
@@ -318,66 +350,20 @@ export default function TripsScreen() {
               <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>time</Text>
               <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>Trips</Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Walk</Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDistanceKm(tripsAggregateSummary.walkDistanceMeters)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDurationSummary(tripsAggregateSummary.walkDurationMs)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {String(tripsAggregateSummary.walkTripCount)}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Bike</Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDistanceKm(tripsAggregateSummary.bikeDistanceMeters)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDurationSummary(tripsAggregateSummary.bikeDurationMs)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {String(tripsAggregateSummary.bikeTripCount)}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Drive</Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDistanceKm(tripsAggregateSummary.driveDistanceMeters)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDurationSummary(tripsAggregateSummary.driveDurationMs)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {String(tripsAggregateSummary.driveTripCount)}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Boat</Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDistanceKm(tripsAggregateSummary.boatDistanceMeters)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDurationSummary(tripsAggregateSummary.boatDurationMs)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {String(tripsAggregateSummary.boatTripCount)}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Plane</Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDistanceKm(tripsAggregateSummary.planeDistanceMeters)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDurationSummary(tripsAggregateSummary.planeDurationMs)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {String(tripsAggregateSummary.planeTripCount)}
-              </Text>
-            </View>
+            {summaryRows.map((row) => (
+              <View key={row.label} style={styles.summaryRow}>
+                <Text style={[styles.summaryModeText, styles.summaryModeCell]}>{row.label}</Text>
+                <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                  {formatDistanceKm(row.distanceMeters)}
+                </Text>
+                <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                  {formatDurationSummary(row.durationMs)}
+                </Text>
+                <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                  {String(row.tripCount)}
+                </Text>
+              </View>
+            ))}
             <View style={[styles.summaryRow, styles.summaryTotalRow]}>
               <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Total</Text>
               <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
