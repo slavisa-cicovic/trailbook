@@ -3,7 +3,7 @@ import {
   getRecordingProfileColor,
   getRecordingProfileLabel,
 } from "../../constants/recording-profiles";
-import type { RecordingProfile, Trip, TripPoint, TripSegment } from "../../domain/trips";
+import type { RecordingProfile, Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
 import { calculateTripDistanceMeters, getVisibleTripPointsForTrip } from "../trip-points/trip-points.service";
 import { formatDurationSummary } from "../trips/trips-management.service";
 
@@ -29,6 +29,22 @@ export interface SegmentPolyline {
   color: string;
   coordinates: Array<{ latitude: number; longitude: number }>;
   segmentLocalId: string;
+}
+
+export interface UpdateTripSegmentModeResult {
+  tripPoints: TripPoint[];
+  tripSegments: TripSegment[];
+  waypoints: Waypoint[];
+}
+
+function getNextSyncStatus(currentStatus: TripSegment["syncStatus"]): TripSegment["syncStatus"] {
+  return currentStatus === "local-only" ? "local-only" : "pending-sync";
+}
+
+function getNextEntitySyncStatus<T extends { syncStatus: "local-only" | "pending-sync" | "synced" | "sync-error" }>(
+  entity: T,
+): T["syncStatus"] {
+  return entity.syncStatus === "local-only" ? "local-only" : "pending-sync";
 }
 
 export function createInitialTripSegment(trip: Trip, startedAt: string): TripSegment {
@@ -171,4 +187,97 @@ export function buildSegmentPolylines(
       };
     })
     .filter((segment) => segment.coordinates.length > 1);
+}
+
+export function updateTripSegmentMode(
+  tripSegments: TripSegment[],
+  tripPoints: TripPoint[],
+  waypoints: Waypoint[],
+  tripLocalId: string,
+  segmentLocalId: string,
+  recordingProfile: RecordingProfile,
+  updatedAt: string,
+): UpdateTripSegmentModeResult {
+  const orderedTripSegments = getVisibleTripSegmentsForTrip(tripSegments, tripLocalId);
+  const targetIndex = orderedTripSegments.findIndex((segment) => segment.localId === segmentLocalId);
+
+  if (targetIndex === -1) {
+    throw new Error("The selected segment could not be found.");
+  }
+
+  const updatedOrderedSegments = orderedTripSegments.map((segment) =>
+    segment.localId === segmentLocalId
+      ? {
+          ...segment,
+          recordingProfile,
+          updatedAt,
+          syncStatus: getNextSyncStatus(segment.syncStatus),
+        }
+      : segment,
+  );
+
+  let mergeStartIndex = targetIndex;
+  let mergeEndIndex = targetIndex;
+
+  while (
+    mergeStartIndex > 0 &&
+    updatedOrderedSegments[mergeStartIndex - 1].recordingProfile ===
+      updatedOrderedSegments[targetIndex].recordingProfile
+  ) {
+    mergeStartIndex -= 1;
+  }
+
+  while (
+    mergeEndIndex < updatedOrderedSegments.length - 1 &&
+    updatedOrderedSegments[mergeEndIndex + 1].recordingProfile ===
+      updatedOrderedSegments[targetIndex].recordingProfile
+  ) {
+    mergeEndIndex += 1;
+  }
+
+  const segmentsToMerge = updatedOrderedSegments.slice(mergeStartIndex, mergeEndIndex + 1);
+  const survivingSegment = {
+    ...segmentsToMerge[0],
+    recordingProfile,
+    startedAt: segmentsToMerge[0].startedAt,
+    endedAt: segmentsToMerge[segmentsToMerge.length - 1].endedAt,
+    updatedAt,
+    syncStatus: getNextSyncStatus(segmentsToMerge[0].syncStatus),
+  };
+  const removedSegmentIds = new Set(segmentsToMerge.slice(1).map((segment) => segment.localId));
+
+  const nextTripSegments = tripSegments
+    .filter((segment) => !removedSegmentIds.has(segment.localId))
+    .map((segment) =>
+      segment.localId === survivingSegment.localId
+        ? survivingSegment
+        : segment,
+    );
+
+  const nextTripPoints = tripPoints.map((tripPoint) =>
+    tripPoint.tripLocalId === tripLocalId && tripPoint.segmentLocalId && removedSegmentIds.has(tripPoint.segmentLocalId)
+      ? {
+          ...tripPoint,
+          segmentLocalId: survivingSegment.localId,
+          syncStatus: getNextEntitySyncStatus(tripPoint),
+        }
+      : tripPoint,
+  );
+
+  const nextWaypoints = waypoints.map((waypoint) =>
+    waypoint.tripLocalId === tripLocalId && waypoint.segmentLocalId && removedSegmentIds.has(waypoint.segmentLocalId)
+      ? {
+          ...waypoint,
+          segmentLocalId: survivingSegment.localId,
+          updatedAt,
+          syncStatus: getNextEntitySyncStatus(waypoint),
+        }
+      : waypoint,
+  );
+
+  return {
+    tripSegments: nextTripSegments,
+    tripPoints: nextTripPoints,
+    waypoints: nextWaypoints,
+  };
 }

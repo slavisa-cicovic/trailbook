@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
@@ -10,6 +10,7 @@ import {
   buildSegmentPolylines,
   buildTripModeSummary,
   buildTripSegmentsSummary,
+  updateTripSegmentMode,
 } from "../../services/trip-segments/trip-segments.service";
 import {
   getVisibleAttachmentsForWaypoints,
@@ -24,11 +25,11 @@ import {
   getVisibleTripPointsForTrip,
 } from "../../services/trip-points/trip-points.service";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
-import { useTripSegmentsStore } from "../../state/trip-segments-store";
-import { useTripPointsStore } from "../../state/trip-points-store";
+import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
+import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
-import { useWaypointsStore } from "../../state/waypoints-store";
+import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import {
   shareTripWithRecipient,
   syncTripToServer,
@@ -43,6 +44,8 @@ const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
   { label: "Satellite", value: "satellite" },
   { label: "Hybrid", value: "hybrid" },
 ];
+
+const editableModeOptions = ["walk", "bike", "drive", "boat", "plane"] as const;
 
 function buildTripMapRegion(
   coordinates: Array<{ latitude: number; longitude: number }>,
@@ -94,6 +97,7 @@ export default function TripRouteScreen() {
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [segmentEditSegmentId, setSegmentEditSegmentId] = useState<string | null>(null);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -272,6 +276,67 @@ export default function TripRouteScreen() {
     setTripEditVisible(false);
   }
 
+  async function handleUpdateSegmentMode(nextMode: (typeof editableModeOptions)[number]) {
+    if (!selectedTrip || !segmentEditSegmentId) {
+      return;
+    }
+
+    if (selectedTrip.endedAt === null) {
+      Alert.alert("Active trip", "Stop the active route before editing segment modes.");
+      return;
+    }
+
+    const updatedAt = new Date().toISOString();
+
+    try {
+      const nextState = updateTripSegmentMode(
+        currentUserTripSegments,
+        currentUserTripPoints,
+        currentUserWaypoints,
+        selectedTrip.localId,
+        segmentEditSegmentId,
+        nextMode,
+        updatedAt,
+      );
+
+      const nextTripSegments = tripSegments
+        .map((segment) => nextState.tripSegments.find((candidate) => candidate.localId === segment.localId) ?? segment)
+        .filter(
+          (segment) =>
+            segment.tripLocalId !== selectedTrip.localId ||
+            nextState.tripSegments.some((candidate) => candidate.localId === segment.localId),
+        );
+      const nextTripPoints = tripPoints.map(
+        (tripPoint) => nextState.tripPoints.find((candidate) => candidate.localId === tripPoint.localId) ?? tripPoint,
+      );
+      const nextWaypoints = waypoints.map(
+        (waypoint) => nextState.waypoints.find((candidate) => candidate.localId === waypoint.localId) ?? waypoint,
+      );
+
+      await setTripSegments(nextTripSegments);
+      await setTripPoints(nextTripPoints);
+      await setWaypoints(nextWaypoints);
+      await setTrips(
+        trips.map((trip) =>
+          trip.localId === selectedTrip.localId
+            ? {
+                ...trip,
+                updatedAt,
+                syncStatus: trip.syncStatus === "local-only" ? "local-only" : "pending-sync",
+              }
+            : trip,
+        ),
+      );
+
+      setSegmentEditSegmentId(null);
+    } catch (error) {
+      Alert.alert(
+        "Segment update failed",
+        error instanceof Error ? error.message : "Unable to update this segment mode.",
+      );
+    }
+  }
+
   function handleSelectWaypoint(waypoint: Waypoint) {
     if (!selectedTrip) {
       return;
@@ -303,7 +368,11 @@ export default function TripRouteScreen() {
   }
 
   const distanceText = formatDistanceKm(calculateTripDistanceMeters(selectedTripPoints));
-  const modeSummary = buildTripModeSummary(tripSegments, selectedTrip.localId);
+  const modeSummary = buildTripModeSummary(currentUserTripSegments, selectedTrip.localId);
+  const segmentEditTarget =
+    segmentEditSegmentId === null
+      ? null
+      : selectedTripSegments.find(({ segment }) => segment.localId === segmentEditSegmentId)?.segment ?? null;
 
   return (
     <ScreenLayout
@@ -317,6 +386,46 @@ export default function TripRouteScreen() {
       showBottomNavigation
       title="Route"
     >
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setSegmentEditSegmentId(null)}
+        transparent
+        visible={segmentEditTarget !== null}
+      >
+        <View style={styles.segmentEditOverlay}>
+          <View style={styles.segmentEditCard}>
+            <Text style={styles.segmentEditTitle}>Change segment mode</Text>
+            {segmentEditTarget ? (
+              <Text style={styles.segmentEditSubtitle}>
+                Current: {getRecordingProfileLabel(segmentEditTarget.recordingProfile)}
+              </Text>
+            ) : null}
+            <View style={styles.segmentEditOptions}>
+              {editableModeOptions.map((option) => {
+                const selected = segmentEditTarget?.recordingProfile === option;
+
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => void handleUpdateSegmentMode(option)}
+                    style={[styles.segmentEditOption, selected && styles.segmentEditOptionSelected]}
+                  >
+                    <Text
+                      style={[styles.segmentEditOptionText, selected && styles.segmentEditOptionTextSelected]}
+                    >
+                      {getRecordingProfileLabel(option)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable onPress={() => setSegmentEditSegmentId(null)} style={styles.segmentEditCancelButton}>
+              <Text style={styles.segmentEditCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <TripEditModal
         draft={tripDraft}
         onChangeDescription={(description) => setTripDraft((current) => ({ ...current, description }))}
@@ -413,7 +522,17 @@ export default function TripRouteScreen() {
                 {selectedTripSegments.map(({ segment, distanceMeters, durationLabel }) => (
                   <View key={segment.localId} style={styles.segmentRow}>
                     <View style={styles.segmentHeader}>
-                      <Text style={styles.segmentMode}>{getRecordingProfileLabel(segment.recordingProfile)}</Text>
+                      <View style={styles.segmentHeaderLead}>
+                        <Text style={styles.segmentMode}>{getRecordingProfileLabel(segment.recordingProfile)}</Text>
+                        {selectedTrip.endedAt !== null ? (
+                          <Pressable
+                            onPress={() => setSegmentEditSegmentId(segment.localId)}
+                            style={styles.segmentEditIconButton}
+                          >
+                            <MaterialIcons color="#52624f" name="edit" size={16} />
+                          </Pressable>
+                        ) : null}
+                      </View>
                       <Text style={styles.segmentDistance}>{formatDistanceKm(distanceMeters)}</Text>
                     </View>
                     <Text style={styles.segmentMeta}>
@@ -634,10 +753,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
+  segmentHeaderLead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   segmentMode: {
     fontSize: 14,
     fontWeight: "700",
     color: "#243224",
+  },
+  segmentEditIconButton: {
+    borderRadius: 999,
+    backgroundColor: "#eef2ea",
+    padding: 6,
   },
   segmentDistance: {
     fontSize: 13,
@@ -646,6 +775,60 @@ const styles = StyleSheet.create({
   },
   segmentMeta: {
     fontSize: 13,
+    color: "#52624f",
+  },
+  segmentEditOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(22, 29, 22, 0.36)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  segmentEditCard: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: 20,
+    backgroundColor: "#fffdf8",
+    padding: 20,
+    gap: 14,
+  },
+  segmentEditTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  segmentEditSubtitle: {
+    fontSize: 13,
+    color: "#60705d",
+  },
+  segmentEditOptions: {
+    gap: 8,
+  },
+  segmentEditOption: {
+    borderRadius: 14,
+    backgroundColor: "#eef2ea",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  segmentEditOptionSelected: {
+    backgroundColor: "#243224",
+  },
+  segmentEditOptionText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  segmentEditOptionTextSelected: {
+    color: "#fffdf8",
+  },
+  segmentEditCancelButton: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  segmentEditCancelText: {
+    fontSize: 14,
+    fontWeight: "700",
     color: "#52624f",
   },
 });
