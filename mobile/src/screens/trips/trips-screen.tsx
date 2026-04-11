@@ -579,6 +579,12 @@ export default function TripsScreen() {
                             {new Date(sharedTrip.sharedAt).toLocaleDateString()}
                           </Text>
                         </View>
+                        <View style={styles.metaCell}>
+                          <Text style={styles.metaKey}>Updated</Text>
+                          <Text style={styles.metaValue}>
+                            {new Date(sharedTrip.trip.updatedAt).toLocaleDateString()}
+                          </Text>
+                        </View>
                       </View>
                     </Pressable>
                   </View>

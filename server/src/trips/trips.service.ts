@@ -259,6 +259,7 @@ export class TripsService {
           recordingProfile: share.trip.recordingProfile,
           startedAt: share.trip.startedAt.toISOString(),
           endedAt: share.trip.endedAt ? share.trip.endedAt.toISOString() : null,
+          updatedAt: share.trip.updatedAt.toISOString(),
           segmentCount: share.trip.segments.length,
           waypointCount: share.trip.waypoints.filter((waypoint) => waypoint.deletedAt === null).length,
         },

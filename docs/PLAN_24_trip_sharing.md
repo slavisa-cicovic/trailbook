@@ -71,6 +71,7 @@ V1 should be read-only for the recipient.
 The owner can:
 
 - keep editing their own trip
+- sync later trip changes to the same server-side trip
 - decide later whether to revoke sharing
 
 The recipient can:
@@ -83,6 +84,24 @@ The recipient cannot in V1:
 - edit the shared trip
 - delete the owner trip
 - re-share the owner trip
+
+## Owner Update Model
+
+V1 sharing should not create per-recipient trip copies.
+
+Instead:
+
+- the owner keeps one canonical server-side trip
+- active share records grant read access to that same server-side trip
+- when the owner edits the trip locally and syncs again, the same server-side trip is updated
+
+This keeps the model simple:
+
+- one owner
+- one shared server trip
+- many read-only recipients
+
+It also avoids a harder and less correct model where each recipient would receive a divergent copy.
 
 ## V1 Share Granularity
 
@@ -244,6 +263,13 @@ Preferred V1 model:
 - recipient opens `Shared with me`
 - app fetches current shared trips from the server
 - user can manually refresh, for example pull-to-refresh or a refresh action
+
+This same refresh model also applies after owner updates:
+
+- owner edits the trip
+- owner syncs the trip again
+- recipient refreshes the shared list or shared trip detail
+- recipient sees the latest owner changes
 
 This means V1 does not require:
 

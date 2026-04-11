@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
@@ -78,47 +79,43 @@ export default function SharedTripScreen() {
   const { shareId } = useLocalSearchParams<{ shareId?: string | string[] }>();
   const resolvedShareId = Array.isArray(shareId) ? shareId[0] : shareId;
   const [sharedTrip, setSharedTrip] = useState<SharedTripDetail | null>(null);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadSharedTrip() {
-      if (!identitySession?.sessionToken || !resolvedShareId) {
-        return;
-      }
-
-      setLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const nextSharedTrip = await getSharedTrip(identitySession.sessionToken, resolvedShareId);
-
-        if (active) {
-          setSharedTrip(nextSharedTrip);
-        }
-      } catch (error) {
-        if (active) {
-          setErrorMessage(error instanceof Error ? error.message : "Unable to load shared trip.");
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
+  async function refreshSharedTrip() {
+    if (!identitySession?.sessionToken || !resolvedShareId) {
+      return;
     }
 
-    void loadSharedTrip();
+    setLoading(true);
+    setErrorMessage(null);
 
-    return () => {
-      active = false;
-    };
+    try {
+      const nextSharedTrip = await getSharedTrip(identitySession.sessionToken, resolvedShareId);
+      setSharedTrip(nextSharedTrip);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to load shared trip.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshSharedTrip();
   }, [identitySession?.sessionToken, resolvedShareId]);
 
   async function handleLogout() {
     await setActiveIdentitySession(null);
+  }
+
+  function handleSelectWaypoint(waypoint: Waypoint) {
+    if (!resolvedShareId) {
+      return;
+    }
+
+    router.push(`/trips/shared/${resolvedShareId}/waypoints/${waypoint.localId}`);
   }
 
   const routeCoordinates = useMemo(
@@ -204,37 +201,60 @@ export default function SharedTripScreen() {
 
       {sharedTrip ? (
         <>
-          <View style={styles.headerCard}>
-            <View style={styles.readOnlyBadge}>
-              <Text style={styles.readOnlyBadgeText}>Read only</Text>
-            </View>
-            <Text style={styles.tripTitle}>{sharedTrip.trip.title}</Text>
-            <Text style={styles.ownerText}>
-              Shared by {sharedTrip.owner.displayName} ({sharedTrip.owner.email})
-            </Text>
-            {sharedTrip.trip.description ? (
-              <Text style={styles.tripDescription}>{sharedTrip.trip.description}</Text>
-            ) : null}
-            <View style={styles.summaryGrid}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryKey}>Mode</Text>
-                <Text style={styles.summaryValue}>
-                  {sharedTrip.trip.segments.length > 1 ? "Mixed" : getRecordingProfileLabel(sharedTrip.trip.recordingProfile)}
+          <View style={styles.detailsAccordionCard}>
+            <Pressable
+              onPress={() => setDetailsExpanded((current) => !current)}
+              style={styles.detailsAccordionTrigger}
+            >
+              <Text numberOfLines={1} style={styles.tripTitle}>
+                {sharedTrip.trip.title}
+              </Text>
+              <View style={styles.detailsAccordionActions}>
+                <Pressable onPress={() => void refreshSharedTrip()} style={styles.refreshButton}>
+                  <Text style={styles.refreshButtonText}>{loading ? "Refreshing..." : "Refresh"}</Text>
+                </Pressable>
+                <MaterialIcons
+                  color="#243224"
+                  name={detailsExpanded ? "expand-less" : "expand-more"}
+                  size={22}
+                />
+              </View>
+            </Pressable>
+
+            {detailsExpanded ? (
+              <View style={styles.detailsAccordionBody}>
+                <Text style={styles.ownerText}>
+                  Shared by {sharedTrip.owner.displayName} ({sharedTrip.owner.email})
                 </Text>
+                {sharedTrip.trip.description ? (
+                  <Text style={styles.tripDescription}>{sharedTrip.trip.description}</Text>
+                ) : null}
+                <View style={styles.summaryGrid}>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryKey}>Mode</Text>
+                    <Text style={styles.summaryValue}>
+                      {sharedTrip.trip.segments.length > 1 ? "Mixed" : getRecordingProfileLabel(sharedTrip.trip.recordingProfile)}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryKey}>Distance</Text>
+                    <Text style={styles.summaryValue}>{formatDistanceKm(calculateDistanceMeters(routeCoordinates))}</Text>
+                  </View>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryKey}>Waypoints</Text>
+                    <Text style={styles.summaryValue}>{String(sharedTrip.trip.waypoints.length)}</Text>
+                  </View>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryKey}>Segments</Text>
+                    <Text style={styles.summaryValue}>{String(sharedTrip.trip.segments.length)}</Text>
+                  </View>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryKey}>Updated</Text>
+                    <Text style={styles.summaryValue}>{new Date(sharedTrip.trip.updatedAt).toLocaleString()}</Text>
+                  </View>
+                </View>
               </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryKey}>Distance</Text>
-                <Text style={styles.summaryValue}>{formatDistanceKm(calculateDistanceMeters(routeCoordinates))}</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryKey}>Waypoints</Text>
-                <Text style={styles.summaryValue}>{String(sharedTrip.trip.waypoints.length)}</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryKey}>Segments</Text>
-                <Text style={styles.summaryValue}>{String(sharedTrip.trip.segments.length)}</Text>
-              </View>
-            </View>
+            ) : null}
           </View>
 
           <View style={styles.mapTypeRow}>
@@ -258,7 +278,7 @@ export default function SharedTripScreen() {
           <TripRouteMap
             coordinates={routeCoordinates}
             mapType={mapType}
-            onSelectWaypoint={() => undefined}
+            onSelectWaypoint={handleSelectWaypoint}
             region={mapRegion}
             segmentPolylines={segmentPolylines}
             waypointMarkers={waypointMarkers}
@@ -275,32 +295,49 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 12,
   },
-  headerCard: {
+  detailsAccordionCard: {
     borderRadius: 20,
     backgroundColor: "#eef3eb",
     borderWidth: 1,
     borderColor: "#d9e3d3",
-    padding: 16,
+    overflow: "hidden",
+  },
+  detailsAccordionTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+  },
+  detailsAccordionActions: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
+    flexShrink: 0,
   },
-  readOnlyBadge: {
-    alignSelf: "flex-start",
-    borderRadius: 999,
-    backgroundColor: "#cfdccc",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  refreshButton: {
+    borderRadius: 14,
+    backgroundColor: "#dfe8d9",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  readOnlyBadgeText: {
-    fontSize: 11,
+  refreshButtonText: {
+    fontSize: 13,
     fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-    color: "#355035",
+    color: "#243224",
   },
   tripTitle: {
+    flex: 1,
     fontSize: 20,
     fontWeight: "700",
     color: "#243224",
+  },
+  detailsAccordionBody: {
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    paddingBottom: 16,
   },
   ownerText: {
     fontSize: 13,

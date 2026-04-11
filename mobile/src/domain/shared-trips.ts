@@ -18,6 +18,7 @@ export interface SharedTripSummary {
     segmentCount: number;
     startedAt: string;
     title: string;
+    updatedAt: string;
     waypointCount: number;
   };
 }
