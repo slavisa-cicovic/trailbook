@@ -456,9 +456,6 @@ export default function TripRouteScreen() {
             {selectedTrip.title}
           </Text>
           <View style={styles.detailsAccordionActions}>
-            <Pressable onPress={() => openTripEdit(selectedTrip)} style={styles.headerEditButton}>
-              <Text style={styles.headerEditButtonText}>Edit</Text>
-            </Pressable>
             <MaterialIcons
               color="#243224"
               name={detailsExpanded ? "expand-less" : "expand-more"}
@@ -469,30 +466,42 @@ export default function TripRouteScreen() {
 
         {detailsExpanded ? (
           <View style={styles.detailsAccordionBody}>
+            <View style={styles.tripActionToolbar}>
+              <Pressable
+                accessibilityLabel="Edit trip"
+                onPress={() => openTripEdit(selectedTrip)}
+                style={styles.headerIconButton}
+              >
+                <MaterialIcons color="#243224" name="edit" size={18} />
+              </Pressable>
+              {identitySession.mode === "authenticated" ? (
+                <>
+                  <Pressable
+                    accessibilityLabel={syncBusy ? "Syncing trip" : "Sync trip"}
+                    onPress={() => void syncSelectedTripIfNeeded()}
+                    style={[styles.headerIconButton, styles.syncButton]}
+                  >
+                    <MaterialIcons color="#243224" name="sync" size={18} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel="Share trip"
+                    onPress={() => {
+                      setShareError(null);
+                      setTripShareVisible(true);
+                    }}
+                    style={[styles.headerIconButton, styles.shareButton]}
+                  >
+                    <MaterialIcons color="#243224" name="share" size={18} />
+                  </Pressable>
+                </>
+              ) : null}
+            </View>
             {selectedTrip.description ? (
               <Text style={styles.tripDescription}>{selectedTrip.description}</Text>
             ) : null}
-            {identitySession.mode === "authenticated" ? (
-              <View style={styles.ownerActionsRow}>
-                <Pressable
-                  onPress={() => void syncSelectedTripIfNeeded()}
-                  style={[styles.ownerActionButton, styles.syncButton]}
-                >
-                  <Text style={styles.ownerActionText}>{syncBusy ? "Syncing..." : "Sync"}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setShareError(null);
-                    setTripShareVisible(true);
-                  }}
-                  style={[styles.ownerActionButton, styles.shareButton]}
-                >
-                  <Text style={styles.ownerActionText}>Share</Text>
-                </Pressable>
-              </View>
-            ) : (
+            {identitySession.mode !== "authenticated" ? (
               <Text style={styles.demoHint}>Demo trips stay local-only and cannot be shared.</Text>
-            )}
+            ) : null}
             {shareSuccess ? <Text style={styles.shareSuccessText}>{shareSuccess}</Text> : null}
             <View style={styles.summaryGrid}>
               <View style={styles.summaryItem}>
@@ -631,6 +640,11 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingTop: 14,
   },
+  tripActionToolbar: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
   tripTitle: {
     flex: 1,
     fontSize: 20,
@@ -642,42 +656,20 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: "#4f5f4f",
   },
-  headerEditButton: {
+  headerIconButton: {
     borderRadius: 999,
     backgroundColor: "#e6ece1",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  headerEditButtonText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#243224",
+    padding: 10,
   },
   mapTypeRow: {
     flexDirection: "row",
     gap: 8,
-  },
-  ownerActionsRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  ownerActionButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    paddingVertical: 12,
   },
   syncButton: {
     backgroundColor: "#e6ece1",
   },
   shareButton: {
     backgroundColor: "#dfead9",
-  },
-  ownerActionText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#243224",
   },
   demoHint: {
     fontSize: 13,
