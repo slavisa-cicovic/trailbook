@@ -2,6 +2,7 @@ export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error"
 export type RecordingStatus = "idle" | "recording" | "interrupted";
 export type WaypointAttachmentType = "photo";
 export type RecordingProfile = "walk" | "bike" | "drive" | "boat" | "plane";
+export type RecordingMode = RecordingProfile | "auto";
 export type WaypointCategory =
   | "generic"
   | "departure"
@@ -105,5 +106,8 @@ export interface RecordingSessionSummary {
   userId: string | null;
   userEmail: string | null;
   deviceId: string | null;
+  recordingMode: RecordingMode;
   recordingProfile: RecordingProfile;
+  autoCandidateProfile: RecordingProfile | null;
+  autoCandidateSince: string | null;
 }

@@ -31,7 +31,7 @@ import {
   WAYPOINT_CATEGORY_OPTIONS,
   getWaypointCategoryOption,
 } from "../../constants/waypoint-categories";
-import type { RecordingProfile } from "../../domain/trips";
+import type { RecordingMode, RecordingProfile } from "../../domain/trips";
 import type { TrailbookMapType } from "../trips/components/trip-route-map";
 import {
   getBackgroundLocationAccess,
@@ -51,11 +51,13 @@ import {
   continueInterruptedRecording,
   createRecordingSession,
   createTripForRecording,
+  getConcreteRecordingProfileForMode,
   type RecordingDraftInput,
   stopRecordingSession,
   updateRecordingSegment,
   updateRecordingLastPoint,
 } from "../../services/recording/recording.service";
+import { applyAutoRecordingTransition } from "../../services/recording/auto-recording.service";
 import {
   closeActiveTripSegment,
   createInitialTripSegment,
@@ -127,7 +129,7 @@ export default function RecordingScreen() {
   const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>({
     title: "",
     description: "",
-    recordingProfile: DEFAULT_RECORDING_PROFILE,
+    recordingMode: DEFAULT_RECORDING_PROFILE,
   });
   const [waypointDraft, setWaypointDraft] = useState<WaypointDraftInput>({
     category: DEFAULT_WAYPOINT_CATEGORY,
@@ -159,9 +161,13 @@ export default function RecordingScreen() {
     : activeTrip
       ? getOpenTripSegmentForTrip(currentUserTripSegments, activeTrip.localId)
       : null;
+  const activeRecordingMode = recordingSession.recordingMode;
   const activeRecordingProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
   const activeTripPoints = activeTrip ? getVisibleTripPointsForTrip(currentUserTripPoints, activeTrip.localId) : [];
-  const activeRecordingProfileLabel = getRecordingProfileLabel(activeRecordingProfile);
+  const activeRecordingProfileLabel =
+    activeRecordingMode === "auto"
+      ? `Auto • ${getRecordingProfileLabel(activeRecordingProfile)}`
+      : getRecordingProfileLabel(activeRecordingProfile);
   const lastPoint = recordingSession.lastPointRecordedAt ?? "n/a";
   const activeTripCount = currentUserTrips.filter((trip) => trip.endedAt === null).length;
   const recentWaypoints = activeTrip
@@ -296,7 +302,7 @@ export default function RecordingScreen() {
           ? await watchImmediateForegroundLocation((nextLocation) => {
               setCurrentLocation(nextLocation);
             })
-          : await watchForegroundLocation(activeRecordingProfile, (nextLocation) => {
+          : await watchForegroundLocation(recordingSession.recordingMode, (nextLocation) => {
               setCurrentLocation(nextLocation);
             });
     }
@@ -307,7 +313,7 @@ export default function RecordingScreen() {
       active = false;
       stopWatchingLocation?.();
     };
-  }, [activeRecordingProfile, recordingSession.status]);
+  }, [recordingSession.recordingMode, recordingSession.status]);
 
   useEffect(() => {
     if (locationPermissionGranted !== true || currentLocation) {
@@ -352,15 +358,44 @@ export default function RecordingScreen() {
       recordingSession.activeSegmentId,
       currentLocation,
     );
+    const nextTripPoints = appendTripPointIfUseful(tripPoints, nextTripPoint);
 
-    void setTripPoints(appendTripPointIfUseful(tripPoints, nextTripPoint));
-    void setRecordingSession(updateRecordingLastPoint(recordingSession, currentLocation.recordedAt));
+    if (nextTripPoints === tripPoints) {
+      return;
+    }
+
+    void (async () => {
+      const nextRecordingSession = updateRecordingLastPoint(recordingSession, currentLocation.recordedAt);
+      const autoTransition = applyAutoRecordingTransition(
+        nextRecordingSession,
+        activeTrip,
+        tripSegments,
+        nextTripPoints,
+        currentLocation.recordedAt,
+      );
+
+      if (autoTransition.changed) {
+        await setTripSegments(autoTransition.tripSegments);
+      }
+
+      await setTripPoints(nextTripPoints);
+      await setRecordingSession(autoTransition.session);
+
+      if (
+        autoTransition.changed &&
+        backgroundRecordingSupported !== false &&
+        backgroundLocationPermissionGranted !== false
+      ) {
+        await restartBackgroundLocationTracking(autoTransition.session.recordingMode);
+      }
+    })();
   }, [
     activeTrip,
     backgroundLocationPermissionGranted,
     backgroundRecordingSupported,
     currentLocation,
     recordingSession,
+    tripSegments,
     tripPoints,
   ]);
 
@@ -389,6 +424,7 @@ export default function RecordingScreen() {
     let backgroundPermissionGranted = backgroundLocationPermissionGranted ?? false;
 
     const startedAt = new Date().toISOString();
+    const concreteRecordingProfile = getConcreteRecordingProfileForMode(recordingDraft.recordingMode);
     const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft);
     const nextSegment = createInitialTripSegment(nextTrip, startedAt);
     const nextSession = createRecordingSession(
@@ -396,7 +432,8 @@ export default function RecordingScreen() {
       nextTrip.localId,
       nextSegment.localId,
       startedAt,
-      recordingDraft.recordingProfile,
+      recordingDraft.recordingMode,
+      concreteRecordingProfile,
     );
 
     try {
@@ -407,7 +444,7 @@ export default function RecordingScreen() {
       setRecordingDraft({
         title: "",
         description: "",
-        recordingProfile: DEFAULT_RECORDING_PROFILE,
+        recordingMode: DEFAULT_RECORDING_PROFILE,
       });
 
       if (supportsBackgroundRecording) {
@@ -416,7 +453,7 @@ export default function RecordingScreen() {
           setBackgroundLocationPermissionGranted(backgroundPermissionGranted);
 
           if (backgroundPermissionGranted) {
-            await startBackgroundLocationTracking(recordingDraft.recordingProfile);
+            await startBackgroundLocationTracking(recordingDraft.recordingMode);
           } else {
             promptOpenBackgroundLocationSettings(
               "Recording has started, but it will continue only while Trailbook stays active until background location is enabled. In Trailbook permissions, allow location all the time.",
@@ -463,7 +500,7 @@ export default function RecordingScreen() {
     try {
       await setRecordingSession(nextSession);
       if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
-        await startBackgroundLocationTracking(nextSession.recordingProfile);
+        await startBackgroundLocationTracking(nextSession.recordingMode);
       }
     } catch {
       await setRecordingSession(recordingSession);
@@ -481,17 +518,45 @@ export default function RecordingScreen() {
     await setActiveIdentitySession(null);
   }
 
-  async function handleSelectRecordingProfile(profile: RecordingProfile) {
+  async function handleSelectRecordingProfile(mode: RecordingMode) {
     if (!recordingSession.activeTripId || !activeTrip) {
       setRecordingDraft((current) => ({
         ...current,
-        recordingProfile: profile,
+        recordingMode: mode,
       }));
       setProfileModalVisible(false);
       return;
     }
 
     if (!recordingSession.activeSegmentId) {
+      return;
+    }
+
+    if (mode === "auto") {
+      await setRecordingSession({
+        ...recordingSession,
+        recordingMode: "auto",
+        autoCandidateProfile: null,
+        autoCandidateSince: null,
+      });
+      if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
+        await restartBackgroundLocationTracking("auto");
+      }
+      setProfileModalVisible(false);
+      return;
+    }
+
+    if (recordingSession.recordingMode === "auto" && recordingSession.recordingProfile === mode) {
+      await setRecordingSession({
+        ...recordingSession,
+        recordingMode: mode,
+        autoCandidateProfile: null,
+        autoCandidateSince: null,
+      });
+      if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
+        await restartBackgroundLocationTracking(mode);
+      }
+      setProfileModalVisible(false);
       return;
     }
 
@@ -504,14 +569,17 @@ export default function RecordingScreen() {
     const { nextSegment, tripSegments: nextTripSegments } = startNextTripSegment(
       activeTrip,
       closedSegments,
-      profile,
+      mode,
       changedAt,
     );
 
     await setTripSegments(nextTripSegments);
-    await setRecordingSession(updateRecordingSegment(recordingSession, nextSegment.localId, profile));
+    await setRecordingSession({
+      ...updateRecordingSegment(recordingSession, nextSegment.localId, mode),
+      recordingMode: mode,
+    });
     if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
-      await restartBackgroundLocationTracking(profile);
+      await restartBackgroundLocationTracking(mode);
     }
     setProfileModalVisible(false);
   }
@@ -990,12 +1058,12 @@ export default function RecordingScreen() {
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Recording mode</Text>
               <Text style={styles.modalSubtitle}>
-                Choose how often Trailbook should refresh location updates.
+                Choose a fixed mode or let Trailbook infer segments automatically.
               </Text>
 
               <View style={styles.profileList}>
                 {RECORDING_PROFILE_OPTIONS.map((option) => {
-                  const selected = option.value === activeRecordingProfile;
+                  const selected = option.value === activeRecordingMode;
 
                   return (
                     <Pressable
@@ -1107,7 +1175,7 @@ export default function RecordingScreen() {
               <Text style={styles.fieldLabel}>Recording mode</Text>
               <View style={styles.profileList}>
                 {RECORDING_PROFILE_OPTIONS.map((option) => {
-                  const selected = option.value === recordingDraft.recordingProfile;
+                  const selected = option.value === recordingDraft.recordingMode;
 
                   return (
                     <Pressable
@@ -1115,7 +1183,7 @@ export default function RecordingScreen() {
                       onPress={() =>
                         setRecordingDraft((current) => ({
                           ...current,
-                          recordingProfile: option.value,
+                          recordingMode: option.value,
                         }))
                       }
                       style={[styles.profileOption, selected && styles.profileOptionSelected]}

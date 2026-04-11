@@ -1,6 +1,7 @@
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
 import type {
+  RecordingMode,
   RecordingProfile,
   RecordingSessionSummary,
   Trip,
@@ -10,8 +11,12 @@ import { getOpenTripSegmentForTrip } from "../trip-segments/trip-segments.servic
 
 export interface RecordingDraftInput {
   description: string;
-  recordingProfile: RecordingProfile;
+  recordingMode: RecordingMode;
   title: string;
+}
+
+export function getConcreteRecordingProfileForMode(recordingMode: RecordingMode): RecordingProfile {
+  return recordingMode === "auto" ? DEFAULT_RECORDING_PROFILE : recordingMode;
 }
 
 export function createRecordingSession(
@@ -19,6 +24,7 @@ export function createRecordingSession(
   activeTripId: string,
   activeSegmentId: string,
   startedAt: string,
+  recordingMode: RecordingMode,
   recordingProfile: RecordingProfile,
 ): RecordingSessionSummary {
   return {
@@ -31,7 +37,10 @@ export function createRecordingSession(
     userId: identitySession.userId,
     userEmail: identitySession.userEmail,
     deviceId: identitySession.deviceId,
+    recordingMode,
     recordingProfile,
+    autoCandidateProfile: null,
+    autoCandidateSince: null,
   };
 }
 
@@ -40,6 +49,8 @@ export function createTripForRecording(
   startedAt: string,
   draft: RecordingDraftInput,
 ): Trip {
+  const concreteRecordingProfile = getConcreteRecordingProfileForMode(draft.recordingMode);
+
   return {
     localId: `trip-${startedAt}`,
     serverId: null,
@@ -47,7 +58,7 @@ export function createTripForRecording(
     userId: identitySession.userId,
     title: draft.title.trim(),
     description: draft.description.trim() || null,
-    recordingProfile: draft.recordingProfile,
+    recordingProfile: concreteRecordingProfile,
     startedAt,
     endedAt: null,
     createdAt: startedAt,
@@ -116,7 +127,10 @@ export function reconcileRecordingSessionWithTrips(
         activeSegmentId: null,
         startedAt: null,
         interruptedAt: null,
+        recordingMode: DEFAULT_RECORDING_PROFILE,
         recordingProfile: DEFAULT_RECORDING_PROFILE,
+        autoCandidateProfile: null,
+        autoCandidateSince: null,
       };
     }
 
@@ -135,6 +149,7 @@ export function reconcileRecordingSessionWithTrips(
       interruptedAt: null,
       userId: session.userId ?? unfinishedTrip.userId,
       deviceId: session.deviceId ?? unfinishedTrip.deviceId,
+      recordingMode: session.recordingMode ?? (openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile),
       recordingProfile:
         session.recordingProfile ?? openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
     };
@@ -149,6 +164,7 @@ export function reconcileRecordingSessionWithTrips(
       interruptedAt: session.interruptedAt ?? now,
       userId: session.userId ?? unfinishedTrip.userId,
       deviceId: session.deviceId ?? unfinishedTrip.deviceId,
+      recordingMode: session.recordingMode ?? (openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile),
       recordingProfile:
         session.recordingProfile ?? openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
     };
@@ -163,7 +179,10 @@ export function reconcileRecordingSessionWithTrips(
     interruptedAt: now,
     userId: session.userId ?? unfinishedTrip.userId,
     deviceId: session.deviceId ?? unfinishedTrip.deviceId,
+    recordingMode: openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
     recordingProfile: openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
+    autoCandidateProfile: null,
+    autoCandidateSince: null,
   };
 }
 
@@ -182,11 +201,15 @@ export function closeActiveTrip(trips: Trip[], activeTripId: string, endedAt: st
 
 export function updateRecordingProfile(
   session: RecordingSessionSummary,
+  recordingMode: RecordingMode,
   recordingProfile: RecordingProfile,
 ): RecordingSessionSummary {
   return {
     ...session,
+    recordingMode,
     recordingProfile,
+    autoCandidateProfile: null,
+    autoCandidateSince: null,
   };
 }
 
@@ -199,5 +222,19 @@ export function updateRecordingSegment(
     ...session,
     activeSegmentId,
     recordingProfile,
+    autoCandidateProfile: null,
+    autoCandidateSince: null,
+  };
+}
+
+export function updateRecordingAutoCandidate(
+  session: RecordingSessionSummary,
+  autoCandidateProfile: RecordingProfile | null,
+  autoCandidateSince: string | null,
+): RecordingSessionSummary {
+  return {
+    ...session,
+    autoCandidateProfile,
+    autoCandidateSince,
   };
 }

@@ -2,7 +2,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 
 import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
-import type { RecordingProfile } from "../../domain/trips";
+import type { RecordingMode, RecordingProfile } from "../../domain/trips";
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "./background-location.constants";
 
 export interface CurrentLocationSnapshot {
@@ -69,8 +69,14 @@ export async function getCurrentForegroundLocation(): Promise<CurrentLocationSna
   }
 }
 
-export function getTrackingOptionsForProfile(profile: RecordingProfile): TrackingOptions {
+export function getTrackingOptionsForProfile(profile: RecordingMode): TrackingOptions {
   switch (profile) {
+    case "auto":
+      return {
+        accuracy: Location.Accuracy.Balanced,
+        distanceInterval: 25,
+        timeInterval: 60 * 1000,
+      };
     case "walk":
       return {
         accuracy: Location.Accuracy.High,
@@ -110,8 +116,10 @@ export function getTrackingOptionsForProfile(profile: RecordingProfile): Trackin
   }
 }
 
-function getBackgroundActivityTypeForProfile(profile: RecordingProfile): Location.LocationActivityType {
+function getBackgroundActivityTypeForProfile(profile: RecordingMode): Location.LocationActivityType {
   switch (profile) {
+    case "auto":
+      return Location.LocationActivityType.OtherNavigation;
     case "drive":
       return Location.LocationActivityType.AutomotiveNavigation;
     case "plane":
@@ -125,7 +133,7 @@ function getBackgroundActivityTypeForProfile(profile: RecordingProfile): Locatio
   }
 }
 
-function buildBackgroundTrackingOptions(profile: RecordingProfile): Location.LocationTaskOptions {
+function buildBackgroundTrackingOptions(profile: RecordingMode): Location.LocationTaskOptions {
   const trackingOptions = getTrackingOptionsForProfile(profile);
 
   return {
@@ -161,7 +169,7 @@ function backgroundTrackingOptionsMatch(
 }
 
 export async function startBackgroundLocationTracking(
-  profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
+  profile: RecordingMode = DEFAULT_RECORDING_PROFILE,
 ): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
@@ -188,7 +196,7 @@ export async function stopBackgroundLocationTracking(): Promise<void> {
 }
 
 export async function restartBackgroundLocationTracking(
-  profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
+  profile: RecordingMode = DEFAULT_RECORDING_PROFILE,
 ): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
@@ -209,7 +217,7 @@ export async function restartBackgroundLocationTracking(
 export async function syncBackgroundLocationTracking(
   status: "idle" | "recording" | "interrupted",
   activeTripId: string | null,
-  profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
+  profile: RecordingMode = DEFAULT_RECORDING_PROFILE,
 ): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
@@ -243,7 +251,7 @@ export async function syncBackgroundLocationTracking(
 }
 
 export async function watchForegroundLocation(
-  profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
+  profile: RecordingMode = DEFAULT_RECORDING_PROFILE,
   onLocation: (snapshot: CurrentLocationSnapshot) => void,
 ): Promise<() => void> {
   const trackingOptions = getTrackingOptionsForProfile(profile);

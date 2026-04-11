@@ -248,7 +248,10 @@ export default function TripsScreen() {
       userId: trip.userId,
       userEmail: identitySession.userEmail,
       deviceId: trip.deviceId,
+      recordingMode: activeSegment?.recordingProfile ?? trip.recordingProfile,
       recordingProfile: activeSegment?.recordingProfile ?? trip.recordingProfile,
+      autoCandidateProfile: null,
+      autoCandidateSince: null,
     });
 
     router.replace("/recording");

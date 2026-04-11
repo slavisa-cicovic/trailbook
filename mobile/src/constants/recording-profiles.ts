@@ -1,10 +1,10 @@
-import type { RecordingProfile } from "../domain/trips";
+import type { RecordingMode, RecordingProfile } from "../domain/trips";
 
 export interface RecordingProfileOption {
   description: string;
   hint: string;
   label: string;
-  value: RecordingProfile;
+  value: RecordingMode;
 }
 
 export type LegacyRecordingProfile =
@@ -18,6 +18,12 @@ export type LegacyRecordingProfile =
 export const DEFAULT_RECORDING_PROFILE: RecordingProfile = "walk";
 
 export const RECORDING_PROFILE_OPTIONS: RecordingProfileOption[] = [
+  {
+    value: "auto",
+    label: "Auto",
+    description: "App decides",
+    hint: "Trailbook infers segment modes and lets you correct them later if needed.",
+  },
   {
     value: "walk",
     label: "Walk",
@@ -73,7 +79,17 @@ export function normalizeRecordingProfile(
   }
 }
 
-export function getRecordingProfileLabel(profile: RecordingProfile): string {
+export function normalizeRecordingMode(
+  mode: RecordingMode | LegacyRecordingProfile | null | undefined,
+): RecordingMode {
+  if (mode === "auto") {
+    return "auto";
+  }
+
+  return normalizeRecordingProfile(mode);
+}
+
+export function getRecordingProfileLabel(profile: RecordingMode): string {
   return (
     RECORDING_PROFILE_OPTIONS.find((option) => option.value === profile)?.label ??
     RECORDING_PROFILE_OPTIONS[0].label

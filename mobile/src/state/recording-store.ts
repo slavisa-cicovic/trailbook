@@ -17,7 +17,10 @@ export const initialRecordingSession: RecordingSessionSummary = {
   userId: null,
   userEmail: null,
   deviceId: null,
+  recordingMode: DEFAULT_RECORDING_PROFILE,
   recordingProfile: DEFAULT_RECORDING_PROFILE,
+  autoCandidateProfile: null,
+  autoCandidateSince: null,
 };
 
 interface RecordingState {
