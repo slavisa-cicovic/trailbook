@@ -398,6 +398,8 @@ export default function TripsScreen() {
             <View style={styles.list}>
               {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => {
                 const statusLabel = trip.endedAt === null ? "Active" : trip.syncStatus;
+                const showStatusBadge =
+                  trip.endedAt === null || identitySession.mode === "authenticated";
                 const tripModeSummary = buildTripModeSummary(currentUserTripSegments, trip.localId);
                 const tripSegmentsForCard = getVisibleTripSegmentsForTrip(currentUserTripSegments, trip.localId);
                 const tripDurationMs = Math.max(
@@ -458,9 +460,11 @@ export default function TripsScreen() {
                                 <Text style={styles.tripDescription}>{trip.description}</Text>
                               ) : null}
                             </View>
-                            <View style={styles.tripBadge}>
-                              <Text style={styles.tripBadgeText}>{statusLabel}</Text>
-                            </View>
+                            {showStatusBadge ? (
+                              <View style={styles.tripBadge}>
+                                <Text style={styles.tripBadgeText}>{statusLabel}</Text>
+                              </View>
+                            ) : null}
                           </View>
 
                           <View style={styles.metaGrid}>
