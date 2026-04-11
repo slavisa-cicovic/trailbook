@@ -1,4 +1,4 @@
-import { useState, type PropsWithChildren } from "react";
+import { type PropsWithChildren } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import {
@@ -39,8 +39,6 @@ const navigationItems = [
 export default function ScreenLayout({
   children,
   title,
-  accountEmail,
-  accountMode,
   contentStyle,
   contentVariant = "card",
   onBack,
@@ -50,7 +48,6 @@ export default function ScreenLayout({
 }: ScreenLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const themeMode = useThemeStore((state) => state.mode);
   const systemColorScheme = useColorScheme();
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
@@ -77,55 +74,13 @@ export default function ScreenLayout({
                 <Text style={[styles.headerTitle, { color: theme.primaryText }]}>{title ?? ""}</Text>
               </View>
               {onLogout ? (
-                <View style={styles.accountArea}>
-                  <Pressable
-                    onPress={() => setAccountMenuOpen((current) => !current)}
-                    style={[styles.accountButton, { backgroundColor: theme.accentMuted }]}
-                  >
-                    <Text numberOfLines={1} style={[styles.accountEmail, { color: theme.accent }]}>
-                      {accountEmail ?? "Account"}
-                    </Text>
-                    <View style={styles.accountMetaRow}>
-                      <Text style={[styles.accountChevron, { color: theme.mutedText }]}>
-                        {accountMenuOpen ? "Close" : "Account"}
-                      </Text>
-                      {accountMode === "demo" ? (
-                        <View style={[styles.demoBadge, { backgroundColor: theme.accent }]}>
-                          <Text style={[styles.demoBadgeText, { color: theme.surface }]}>Demo</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </Pressable>
-
-                  {accountMenuOpen ? (
-                    <View
-                      style={[
-                        styles.accountMenu,
-                        { backgroundColor: theme.card, borderColor: theme.border },
-                      ]}
-                    >
-                      {accountEmail ? (
-                        <Text numberOfLines={1} style={[styles.accountMenuEmail, { color: theme.mutedText }]}>
-                          {accountEmail}
-                        </Text>
-                      ) : null}
-                      {accountMode === "demo" ? (
-                        <Text style={[styles.accountMenuMode, { color: theme.mutedText }]}>
-                          Demo mode
-                        </Text>
-                      ) : null}
-                      <Pressable
-                        onPress={() => {
-                          setAccountMenuOpen(false);
-                          onLogout();
-                        }}
-                        style={[styles.logoutButton, { backgroundColor: theme.accent }]}
-                      >
-                        <Text style={[styles.logoutText, { color: theme.surface }]}>Logout</Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                </View>
+                <Pressable
+                  accessibilityLabel="Logout"
+                  onPress={onLogout}
+                  style={[styles.logoutIconButton, { backgroundColor: theme.accentMuted }]}
+                >
+                  <MaterialIcons color={theme.accent} name="logout" size={20} />
+                </Pressable>
               ) : (
                 <View style={styles.headerSpacer} />
               )}
@@ -251,75 +206,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
-  accountArea: {
-    position: "relative",
-    alignItems: "flex-end",
-    zIndex: 30,
-  },
-  accountButton: {
-    maxWidth: 190,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 2,
-  },
-  accountEmail: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  accountChevron: {
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  accountMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  demoBadge: {
+  logoutIconButton: {
     borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  demoBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  accountMenu: {
-    position: "absolute",
-    top: 54,
-    right: 0,
-    minWidth: 190,
-    borderRadius: 16,
-    padding: 12,
-    gap: 10,
-    borderWidth: 1,
-    shadowColor: "#243224",
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
-    zIndex: 40,
-  },
-  accountMenuEmail: {
-    fontSize: 13,
-  },
-  accountMenuMode: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  logoutButton: {
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     paddingVertical: 10,
-    alignItems: "center",
-  },
-  logoutText: {
-    fontSize: 14,
-    fontWeight: "700",
   },
   headerSpacer: {
     width: 72,
