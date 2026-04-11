@@ -1,4 +1,5 @@
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 
 export interface PickedPhoto {
   fileSize: number | null;
@@ -6,9 +7,47 @@ export interface PickedPhoto {
   mimeType: string | null;
 }
 
-function normalizePhotoAsset(asset: ImagePicker.ImagePickerAsset): PickedPhoto {
+const PHOTO_STORAGE_DIR = `${FileSystem.documentDirectory}waypoint-photos`;
+
+async function ensurePhotoStorageDirectory() {
+  await FileSystem.makeDirectoryAsync(PHOTO_STORAGE_DIR, { intermediates: true });
+}
+
+function resolvePhotoExtension(asset: ImagePicker.ImagePickerAsset) {
+  const uriMatch = asset.uri.match(/\.[a-zA-Z0-9]+(?=($|\?))/);
+
+  if (uriMatch?.[0]) {
+    return uriMatch[0].toLowerCase();
+  }
+
+  switch (asset.mimeType) {
+    case "image/jpeg":
+      return ".jpg";
+    case "image/png":
+      return ".png";
+    case "image/webp":
+      return ".webp";
+    case "image/heic":
+    case "image/heif":
+      return ".heic";
+    default:
+      return ".jpg";
+  }
+}
+
+async function normalizePhotoAsset(asset: ImagePicker.ImagePickerAsset): Promise<PickedPhoto> {
+  await ensurePhotoStorageDirectory();
+
+  const fileName = `photo-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${resolvePhotoExtension(asset)}`;
+  const destination = `${PHOTO_STORAGE_DIR}/${fileName}`;
+
+  await FileSystem.copyAsync({
+    from: asset.uri,
+    to: destination,
+  });
+
   return {
-    localUri: asset.uri,
+    localUri: destination,
     mimeType: asset.mimeType ?? null,
     fileSize: asset.fileSize ?? null,
   };
@@ -54,7 +93,7 @@ export async function pickPhotosFromLibrary(): Promise<PickedPhoto[]> {
     return [];
   }
 
-  return result.assets.map(normalizePhotoAsset);
+  return Promise.all(result.assets.map((asset) => normalizePhotoAsset(asset)));
 }
 
 export async function capturePhotoWithCamera(): Promise<PickedPhoto | null> {
