@@ -50,8 +50,12 @@ import {
   closeActiveTrip,
   continueInterruptedRecording,
   createRecordingSession,
+  createPausedRecordingState,
+  createResumedRecordingState,
   createTripForRecording,
   getConcreteRecordingProfileForMode,
+  pauseActiveTrip,
+  resumePausedTrip,
   type RecordingDraftInput,
   stopRecordingSession,
   updateRecordingSegment,
@@ -64,6 +68,7 @@ import {
   getOpenTripSegmentForTrip,
   startNextTripSegment,
 } from "../../services/trip-segments/trip-segments.service";
+import { getVisibleTripPausesForTrip } from "../../services/trip-pauses/trip-pauses.service";
 import {
   capturePhotoWithCamera,
   pickPhotosFromLibrary,
@@ -90,6 +95,7 @@ import {
 } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
+import { setTripPauses, useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
 import {
   setWaypointAttachments,
@@ -108,6 +114,7 @@ export default function RecordingScreen() {
   const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
+  const tripPauses = useTripPausesStore((state) => state.tripPauses);
   const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
@@ -145,6 +152,9 @@ export default function RecordingScreen() {
   const currentUserTripSegments = activeIdentitySession
     ? tripSegments.filter((segment) => segment.userId === activeIdentitySession.userId)
     : [];
+  const currentUserTripPauses = activeIdentitySession
+    ? tripPauses.filter((tripPause) => tripPause.userId === activeIdentitySession.userId)
+    : [];
   const currentUserTripPoints = activeIdentitySession
     ? tripPoints.filter((tripPoint) => tripPoint.userId === activeIdentitySession.userId)
     : [];
@@ -155,7 +165,11 @@ export default function RecordingScreen() {
     ? waypointAttachments.filter((attachment) => attachment.userId === activeIdentitySession.userId)
     : [];
 
-  const activeTrip = currentUserTrips.find((trip) => trip.localId === recordingSession.activeTripId) ?? null;
+  const activeTrip =
+    currentUserTrips.find(
+      (trip) => trip.localId === recordingSession.activeTripId && trip.status === "active",
+    ) ?? null;
+  const pausedTrips = currentUserTrips.filter((trip) => trip.status === "paused");
   const activeSegment = recordingSession.activeSegmentId
     ? currentUserTripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ?? null
     : activeTrip
@@ -169,7 +183,7 @@ export default function RecordingScreen() {
       ? `Auto • ${getRecordingProfileLabel(activeRecordingProfile)}`
       : getRecordingProfileLabel(activeRecordingProfile);
   const lastPoint = recordingSession.lastPointRecordedAt ?? "n/a";
-  const activeTripCount = currentUserTrips.filter((trip) => trip.endedAt === null).length;
+  const activeTripCount = currentUserTrips.filter((trip) => trip.status === "active").length;
   const recentWaypoints = activeTrip
     ? currentUserWaypoints
         .filter((waypoint) => waypoint.tripLocalId === activeTrip.localId && waypoint.deletedAt === null)
@@ -217,6 +231,8 @@ export default function RecordingScreen() {
     selectedPhotoIndex !== -1 && selectedPhotoIndex < selectedPhotoWaypointAttachments.length - 1;
   const sessionTriggerLabel = activeTrip
     ? `${activeTrip.title} • ${activeRecordingProfileLabel}`
+    : pausedTrips.length > 0
+      ? `${pausedTrips.length} paused trip${pausedTrips.length === 1 ? "" : "s"}`
     : recordingSession.status === "idle"
       ? "No active route"
       : "Session details";
@@ -404,6 +420,11 @@ export default function RecordingScreen() {
       return;
     }
 
+    if (currentUserTrips.some((trip) => trip.status === "active")) {
+      Alert.alert("Active route", "Pause or stop the current active route before starting a new one.");
+      return;
+    }
+
     const foregroundGranted =
       locationPermissionGranted ?? (await requestForegroundLocationAccess());
 
@@ -477,6 +498,32 @@ export default function RecordingScreen() {
     }
   }
 
+  async function handlePauseRecording() {
+    if (!activeTrip || !recordingSession.activeSegmentId) {
+      return;
+    }
+
+    const pausedAt = new Date().toISOString();
+
+    if (backgroundRecordingSupported !== false) {
+      await stopBackgroundLocationTracking();
+    }
+
+    const nextState = createPausedRecordingState(
+      activeTrip,
+      recordingSession,
+      tripSegments,
+      tripPauses,
+      pausedAt,
+    );
+
+    await setTripSegments(nextState.tripSegments);
+    await setTripPauses(nextState.tripPauses);
+    await setTrips(pauseActiveTrip(trips, activeTrip.localId, pausedAt));
+    await setRecordingSession(nextState.session);
+    setSessionMenuVisible(false);
+  }
+
   async function handleStopRecording() {
     if (!recordingSession.activeTripId || !recordingSession.activeSegmentId) {
       return;
@@ -492,6 +539,44 @@ export default function RecordingScreen() {
     );
     await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt));
     await setRecordingSession(stopRecordingSession(recordingSession));
+  }
+
+  async function handleResumePausedTrip(tripLocalId: string) {
+    if (!activeIdentitySession) {
+      return;
+    }
+
+    if (currentUserTrips.some((trip) => trip.status === "active")) {
+      Alert.alert("Active route", "Stop or pause the current active route before resuming another one.");
+      return;
+    }
+
+    const tripToResume = currentUserTrips.find((trip) => trip.localId === tripLocalId && trip.status === "paused");
+
+    if (!tripToResume) {
+      Alert.alert("Paused route missing", "The selected paused route is no longer available.");
+      return;
+    }
+
+    const resumedAt = new Date().toISOString();
+    const nextState = createResumedRecordingState(
+      activeIdentitySession,
+      tripToResume,
+      tripSegments,
+      tripPauses,
+      resumedAt,
+    );
+
+    await setTripSegments(nextState.tripSegments);
+    await setTripPauses(nextState.tripPauses);
+    await setTrips(resumePausedTrip(trips, tripToResume.localId, resumedAt));
+    await setRecordingSession(nextState.session);
+
+    if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
+      await startBackgroundLocationTracking(nextState.session.recordingMode);
+    }
+
+    setSessionMenuVisible(false);
   }
 
   async function handleContinueInterruptedRecording() {
@@ -1357,7 +1442,8 @@ export default function RecordingScreen() {
                   <Text style={styles.metaLine}>Route: {activeTrip?.title ?? "n/a"}</Text>
                   <Text style={styles.metaLine}>Mode: {activeRecordingProfileLabel}</Text>
                   <Text style={styles.metaLine}>Last point: {lastPoint}</Text>
-                  <Text style={styles.metaLine}>Open trips: {String(activeTripCount)}</Text>
+                  <Text style={styles.metaLine}>Active trips: {String(activeTripCount)}</Text>
+                  <Text style={styles.metaLine}>Paused trips: {String(pausedTrips.length)}</Text>
                   <View style={styles.inlineActions}>
                     {canChangeMode ? (
                       <Pressable
@@ -1368,6 +1454,14 @@ export default function RecordingScreen() {
                         style={styles.modeButton}
                       >
                         <Text style={styles.modeButtonText}>Change mode</Text>
+                      </Pressable>
+                    ) : null}
+                    {activeTrip && recordingSession.status === "recording" ? (
+                      <Pressable
+                        onPress={() => void handlePauseRecording()}
+                        style={styles.pauseButton}
+                      >
+                        <Text style={styles.pauseButtonText}>Pause</Text>
                       </Pressable>
                     ) : null}
                     {activeTrip ? (
@@ -1388,6 +1482,41 @@ export default function RecordingScreen() {
                     </Text>
                   ) : null}
                 </View>
+
+                {pausedTrips.length > 0 ? (
+                  <View style={styles.waypointsPanel}>
+                    <Text style={styles.metaTitle}>Paused trips</Text>
+                    <View style={styles.pausedTripList}>
+                      {pausedTrips.map((pausedTrip) => {
+                        const visiblePauses = getVisibleTripPausesForTrip(currentUserTripPauses, pausedTrip.localId);
+                        const openPause = visiblePauses[visiblePauses.length - 1] ?? null;
+
+                        return (
+                          <View key={pausedTrip.localId} style={styles.pausedTripCard}>
+                            <View style={styles.pausedTripTextBlock}>
+                              <Text style={styles.pausedTripTitle}>{pausedTrip.title}</Text>
+                              <Text style={styles.pausedTripMeta}>
+                                Paused{" "}
+                                {openPause
+                                  ? new Date(openPause.startedAt).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "earlier"}
+                              </Text>
+                            </View>
+                            <Pressable
+                              onPress={() => void handleResumePausedTrip(pausedTrip.localId)}
+                              style={styles.resumeTripButton}
+                            >
+                              <Text style={styles.resumeTripButtonText}>Resume</Text>
+                            </Pressable>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ) : null}
 
                 {activeTrip ? (
                   <View style={styles.waypointsPanel}>
@@ -1976,6 +2105,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#fffdf8",
   },
+  pauseButton: {
+    borderRadius: 999,
+    backgroundColor: "#d5832b",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  pauseButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fffdf8",
+  },
   metaWarning: {
     marginTop: 4,
     fontSize: 13,
@@ -1989,6 +2129,42 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
     maxHeight: 320,
+  },
+  pausedTripList: {
+    gap: 10,
+  },
+  pausedTripCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderRadius: 16,
+    backgroundColor: "#eef3e7",
+    padding: 12,
+  },
+  pausedTripTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  pausedTripTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  pausedTripMeta: {
+    fontSize: 13,
+    color: "#60705d",
+  },
+  resumeTripButton: {
+    borderRadius: 999,
+    backgroundColor: "#243224",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  resumeTripButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fffdf8",
   },
   waypointsScrollContent: {
     gap: 10,

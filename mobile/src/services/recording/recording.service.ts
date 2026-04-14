@@ -5,9 +5,19 @@ import type {
   RecordingProfile,
   RecordingSessionSummary,
   Trip,
+  TripPause,
   TripSegment,
 } from "../../domain/trips";
-import { getOpenTripSegmentForTrip } from "../trip-segments/trip-segments.service";
+import {
+  getOpenTripSegmentForTrip,
+  getVisibleTripSegmentsForTrip,
+  startNextTripSegment,
+} from "../trip-segments/trip-segments.service";
+import {
+  closeTripPause,
+  createTripPause,
+  getOpenTripPauseForTrip,
+} from "../trip-pauses/trip-pauses.service";
 
 export interface RecordingDraftInput {
   description: string;
@@ -59,6 +69,7 @@ export function createTripForRecording(
     title: draft.title.trim(),
     description: draft.description.trim() || null,
     recordingProfile: concreteRecordingProfile,
+    status: "active",
     startedAt,
     endedAt: null,
     createdAt: startedAt,
@@ -116,9 +127,11 @@ export function reconcileRecordingSessionWithTrips(
   tripSegments: TripSegment[],
   now: string,
 ): RecordingSessionSummary {
-  const unfinishedTrip = [...trips].reverse().find((trip) => trip.endedAt === null);
+  const activeTrip = [...trips]
+    .reverse()
+    .find((trip) => trip.deletedAt === null && trip.status === "active" && trip.endedAt === null);
 
-  if (!unfinishedTrip) {
+  if (!activeTrip) {
     if (session.status === "recording" || session.status === "interrupted") {
       return {
         ...session,
@@ -137,50 +150,50 @@ export function reconcileRecordingSessionWithTrips(
     return session;
   }
 
-  const openSegment = getOpenTripSegmentForTrip(tripSegments, unfinishedTrip.localId);
+  const openSegment = getOpenTripSegmentForTrip(tripSegments, activeTrip.localId);
 
   if (session.status === "recording") {
     return {
       ...session,
       status: "recording",
-      activeTripId: unfinishedTrip.localId,
+      activeTripId: activeTrip.localId,
       activeSegmentId: session.activeSegmentId ?? openSegment?.localId ?? null,
-      startedAt: session.startedAt ?? unfinishedTrip.startedAt,
+      startedAt: session.startedAt ?? activeTrip.startedAt,
       interruptedAt: null,
-      userId: session.userId ?? unfinishedTrip.userId,
-      deviceId: session.deviceId ?? unfinishedTrip.deviceId,
-      recordingMode: session.recordingMode ?? (openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile),
+      userId: session.userId ?? activeTrip.userId,
+      deviceId: session.deviceId ?? activeTrip.deviceId,
+      recordingMode: session.recordingMode ?? (openSegment?.recordingProfile ?? activeTrip.recordingProfile),
       recordingProfile:
-        session.recordingProfile ?? openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
+        session.recordingProfile ?? openSegment?.recordingProfile ?? activeTrip.recordingProfile,
     };
   }
 
   if (session.status === "interrupted") {
     return {
       ...session,
-      activeTripId: unfinishedTrip.localId,
+      activeTripId: activeTrip.localId,
       activeSegmentId: session.activeSegmentId ?? openSegment?.localId ?? null,
-      startedAt: session.startedAt ?? unfinishedTrip.startedAt,
+      startedAt: session.startedAt ?? activeTrip.startedAt,
       interruptedAt: session.interruptedAt ?? now,
-      userId: session.userId ?? unfinishedTrip.userId,
-      deviceId: session.deviceId ?? unfinishedTrip.deviceId,
-      recordingMode: session.recordingMode ?? (openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile),
+      userId: session.userId ?? activeTrip.userId,
+      deviceId: session.deviceId ?? activeTrip.deviceId,
+      recordingMode: session.recordingMode ?? (openSegment?.recordingProfile ?? activeTrip.recordingProfile),
       recordingProfile:
-        session.recordingProfile ?? openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
+        session.recordingProfile ?? openSegment?.recordingProfile ?? activeTrip.recordingProfile,
     };
   }
 
   return {
     ...session,
     status: "interrupted",
-    activeTripId: unfinishedTrip.localId,
+    activeTripId: activeTrip.localId,
     activeSegmentId: openSegment?.localId ?? null,
-    startedAt: unfinishedTrip.startedAt,
+    startedAt: activeTrip.startedAt,
     interruptedAt: now,
-    userId: session.userId ?? unfinishedTrip.userId,
-    deviceId: session.deviceId ?? unfinishedTrip.deviceId,
-    recordingMode: openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
-    recordingProfile: openSegment?.recordingProfile ?? unfinishedTrip.recordingProfile,
+    userId: session.userId ?? activeTrip.userId,
+    deviceId: session.deviceId ?? activeTrip.deviceId,
+    recordingMode: openSegment?.recordingProfile ?? activeTrip.recordingProfile,
+    recordingProfile: openSegment?.recordingProfile ?? activeTrip.recordingProfile,
     autoCandidateProfile: null,
     autoCandidateSince: null,
   };
@@ -191,9 +204,113 @@ export function closeActiveTrip(trips: Trip[], activeTripId: string, endedAt: st
     trip.localId === activeTripId
       ? {
           ...trip,
+          status: "ended",
           endedAt,
           updatedAt: endedAt,
           syncStatus: "pending-sync",
+        }
+      : trip,
+  );
+}
+
+export function pauseActiveTrip(trips: Trip[], activeTripId: string, pausedAt: string): Trip[] {
+  return trips.map((trip) =>
+    trip.localId === activeTripId
+      ? {
+          ...trip,
+          status: "paused",
+          updatedAt: pausedAt,
+          syncStatus: trip.syncStatus === "local-only" ? "local-only" : "pending-sync",
+        }
+      : trip,
+  );
+}
+
+export function createPausedRecordingState(
+  activeTrip: Trip,
+  session: RecordingSessionSummary,
+  tripSegments: TripSegment[],
+  tripPauses: TripPause[],
+  pausedAt: string,
+): {
+  session: RecordingSessionSummary;
+  tripPauses: TripPause[];
+  tripSegments: TripSegment[];
+} {
+  if (!session.activeSegmentId) {
+    throw new Error("There is no active segment to pause.");
+  }
+
+  return {
+    tripSegments: tripSegments.map((segment) =>
+      segment.localId === session.activeSegmentId
+        ? {
+            ...segment,
+            endedAt: pausedAt,
+            updatedAt: pausedAt,
+            syncStatus: segment.syncStatus === "local-only" ? "local-only" : "pending-sync",
+          }
+        : segment,
+    ),
+    tripPauses: [...tripPauses, createTripPause(activeTrip, pausedAt)],
+    session: stopRecordingSession(session),
+  };
+}
+
+export function createResumedRecordingState(
+  identitySession: AuthenticatedDeviceSession,
+  trip: Trip,
+  tripSegments: TripSegment[],
+  tripPauses: TripPause[],
+  resumedAt: string,
+): {
+  recordingProfile: RecordingProfile;
+  session: RecordingSessionSummary;
+  tripPauses: TripPause[];
+  tripSegments: TripSegment[];
+} {
+  const openPause = getOpenTripPauseForTrip(tripPauses, trip.localId);
+
+  if (!openPause) {
+    throw new Error("This trip is not currently paused.");
+  }
+
+  const orderedSegments = getVisibleTripSegmentsForTrip(tripSegments, trip.localId);
+  const lastSegment = orderedSegments[orderedSegments.length - 1] ?? null;
+  const nextRecordingProfile = lastSegment?.recordingProfile ?? trip.recordingProfile;
+  const { nextSegment, tripSegments: nextTripSegments } = startNextTripSegment(
+    {
+      ...trip,
+      status: "active",
+    },
+    tripSegments,
+    nextRecordingProfile,
+    resumedAt,
+  );
+
+  return {
+    recordingProfile: nextRecordingProfile,
+    tripSegments: nextTripSegments,
+    tripPauses: closeTripPause(tripPauses, openPause.localId, resumedAt),
+    session: createRecordingSession(
+      identitySession,
+      trip.localId,
+      nextSegment.localId,
+      resumedAt,
+      nextRecordingProfile,
+      nextRecordingProfile,
+    ),
+  };
+}
+
+export function resumePausedTrip(trips: Trip[], tripLocalId: string, resumedAt: string): Trip[] {
+  return trips.map((trip) =>
+    trip.localId === tripLocalId
+      ? {
+          ...trip,
+          status: "active",
+          updatedAt: resumedAt,
+          syncStatus: trip.syncStatus === "local-only" ? "local-only" : "pending-sync",
         }
       : trip,
   );

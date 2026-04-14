@@ -23,9 +23,11 @@ import {
   updateTripMetadata,
   type TripUpdateInput,
 } from "../../services/trips/trips-management.service";
+import { createResumedRecordingState, resumePausedTrip } from "../../services/recording/recording.service";
 import { setRecordingSession } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
-import { useTripSegmentsStore } from "../../state/trip-segments-store";
+import { setTripPauses, useTripPausesStore } from "../../state/trip-pauses-store";
+import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { useTripPointsStore } from "../../state/trip-points-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
@@ -56,6 +58,7 @@ export default function TripsScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const trips = useTripsStore((state) => state.trips);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
+  const tripPauses = useTripPausesStore((state) => state.tripPauses);
   const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
@@ -172,8 +175,8 @@ export default function TripsScreen() {
   }
 
   async function handleDeleteTrip(trip: Trip) {
-    if (trip.endedAt === null) {
-      Alert.alert("Active trip", "Stop the active route before deleting it.");
+    if (trip.status !== "ended") {
+      Alert.alert("Open trip", "Stop the route before deleting it.");
       return;
     }
 
@@ -233,6 +236,29 @@ export default function TripsScreen() {
 
   async function handleResumeTrip(trip: Trip) {
     if (!identitySession) {
+      return;
+    }
+
+    if (currentUserTrips.some((candidate) => candidate.status === "active" && candidate.localId !== trip.localId)) {
+      Alert.alert("Active trip", "Pause or stop the current active trip before resuming another one.");
+      return;
+    }
+
+    if (trip.status === "paused") {
+      const resumedAt = new Date().toISOString();
+      const nextState = createResumedRecordingState(
+        identitySession,
+        trip,
+        tripSegments,
+        tripPauses,
+        resumedAt,
+      );
+
+      await setTripSegments(nextState.tripSegments);
+      await setTripPauses(nextState.tripPauses);
+      await setTrips(resumePausedTrip(trips, trip.localId, resumedAt));
+      await setRecordingSession(nextState.session);
+      router.replace("/recording");
       return;
     }
 
@@ -386,9 +412,10 @@ export default function TripsScreen() {
           ) : (
             <View style={styles.list}>
               {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => {
-                const statusLabel = trip.endedAt === null ? "Active" : trip.syncStatus;
+                const statusLabel =
+                  trip.status === "active" ? "Active" : trip.status === "paused" ? "Paused" : trip.syncStatus;
                 const showStatusBadge =
-                  trip.endedAt === null || identitySession.mode === "authenticated";
+                  trip.status !== "ended" || identitySession.mode === "authenticated";
                 const tripModeSummary = buildTripModeSummary(currentUserTripSegments, trip.localId);
                 const tripSegmentsForCard = getVisibleTripSegmentsForTrip(currentUserTripSegments, trip.localId);
                 const tripDurationMs = Math.max(
@@ -414,7 +441,7 @@ export default function TripsScreen() {
                         >
                           <Text style={styles.swipeActionText}>Open</Text>
                         </Pressable>
-                        {trip.endedAt === null ? (
+                        {trip.status !== "ended" ? (
                           <Pressable
                             onPress={() => void handleResumeTrip(trip)}
                             style={[styles.swipeAction, styles.resumeSwipeAction]}
@@ -492,7 +519,11 @@ export default function TripsScreen() {
                             <View style={styles.metaCell}>
                               <Text style={styles.metaKey}>Ended</Text>
                               <Text style={styles.metaValue}>
-                                {trip.endedAt ? new Date(trip.endedAt).toLocaleDateString() : "Active"}
+                                {trip.endedAt
+                                  ? new Date(trip.endedAt).toLocaleDateString()
+                                  : trip.status === "paused"
+                                    ? "Paused"
+                                    : "Active"}
                               </Text>
                             </View>
                           </View>

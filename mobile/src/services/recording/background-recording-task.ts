@@ -38,6 +38,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
       (trip) =>
         trip.localId === recordingSession.activeTripId &&
         trip.deletedAt === null &&
+        trip.status === "active" &&
         trip.endedAt === null,
     ) ?? null;
 

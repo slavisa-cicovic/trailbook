@@ -1,5 +1,6 @@
 export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error";
 export type RecordingStatus = "idle" | "recording" | "interrupted";
+export type TripStatus = "active" | "paused" | "ended";
 export type WaypointAttachmentType = "photo";
 export type RecordingProfile = "walk" | "bike" | "drive" | "boat" | "plane";
 export type RecordingMode = RecordingProfile | "auto";
@@ -24,11 +25,25 @@ export interface Trip {
   title: string;
   description: string | null;
   recordingProfile: RecordingProfile;
+  status: TripStatus;
   startedAt: string;
   endedAt: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  syncStatus: SyncStatus;
+}
+
+export interface TripPause {
+  localId: string;
+  serverId: string | null;
+  tripLocalId: string;
+  deviceId: string;
+  userId: string;
+  startedAt: string;
+  endedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
   syncStatus: SyncStatus;
 }
 
