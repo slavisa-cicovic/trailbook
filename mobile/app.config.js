@@ -42,6 +42,10 @@ module.exports = {
       bundleIdentifier: "com.slavisacicovic.trailbook",
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        NSAppTransportSecurity: {
+          NSAllowsArbitraryLoads: true,
+          NSAllowsLocalNetworking: true,
+        },
       },
       config: {
         usesNonExemptEncryption: false,
