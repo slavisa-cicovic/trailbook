@@ -247,6 +247,29 @@ export class TripsService {
     };
   }
 
+  async listShareRecipients(ownerUserId: string) {
+    const shares = await this.databaseService.tripShare.findMany({
+      where: {
+        ownerUserId,
+      },
+      include: {
+        recipient: true,
+      },
+      distinct: ["recipientUserId"],
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return {
+      recipients: shares.map((share) => ({
+        displayName: share.recipient.displayName,
+        email: share.recipient.email,
+        id: share.recipient.id,
+      })),
+    };
+  }
+
   async listTripShares(ownerUserId: string, tripId: string) {
     const trip = await this.databaseService.trip.findUnique({
       where: { id: tripId },

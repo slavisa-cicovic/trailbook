@@ -508,7 +508,6 @@ export default function TripsScreen() {
       ) : (
         <>
           <View style={styles.sharedHeaderRow}>
-            <Text style={styles.sharedHint}>Shared trips are read-only and fetched from the server on demand.</Text>
             <Pressable onPress={() => void refreshSharedTrips()} style={styles.sharedRefreshButton}>
               <Text style={styles.sharedRefreshButtonText}>
                 {sharedTripsLoading ? "Refreshing..." : "Refresh"}
@@ -795,15 +794,8 @@ const styles = StyleSheet.create({
   sharedHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
+    justifyContent: "flex-end",
     marginBottom: 12,
-  },
-  sharedHint: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#52624f",
   },
   sharedRefreshButton: {
     borderRadius: 999,

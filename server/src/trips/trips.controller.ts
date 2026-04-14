@@ -26,6 +26,12 @@ export class TripsController {
     return this.tripsService.shareTrip(user.id, tripId, input);
   }
 
+  @Get("shares/recipients")
+  async listShareRecipients(@Req() request: Request) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.tripsService.listShareRecipients(user.id);
+  }
+
   @Get(":tripId/shares")
   async listTripShares(@Param("tripId") tripId: string, @Req() request: Request) {
     const user = await this.requireAuthenticatedUser(request);

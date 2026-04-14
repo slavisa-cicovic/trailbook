@@ -160,6 +160,16 @@ export async function listTripShares(sessionToken: string, tripId: string) {
   }>(`/trips/${tripId}/shares`, sessionToken, { method: "GET" });
 }
 
+export async function listShareRecipients(sessionToken: string) {
+  return request<{
+    recipients: Array<{
+      displayName: string;
+      email: string;
+      id: string;
+    }>;
+  }>("/trips/shares/recipients", sessionToken, { method: "GET" });
+}
+
 export async function listSharedTrips(sessionToken: string) {
   return request<{ sharedTrips: SharedTripSummary[] }>("/trips/shared/list", sessionToken, {
     method: "GET",

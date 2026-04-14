@@ -15,23 +15,50 @@ import { SafeAreaView } from "react-native-safe-area-context";
 interface TripShareModalProps {
   busy?: boolean;
   errorMessage?: string | null;
+  existingShares?: Array<{
+    createdAt: string;
+    id: string;
+    recipient: { displayName: string; email: string; id: string };
+    revokedAt: string | null;
+    status: "active" | "revoked";
+  }>;
   onChangeRecipientEmail: (value: string) => void;
   onClose: () => void;
   onShare: () => void;
   recipientEmail: string;
+  recipientSuggestions?: Array<{ displayName: string; email: string; id: string }>;
+  successMessage?: string | null;
   visible: boolean;
 }
 
 export default function TripShareModal({
   busy = false,
   errorMessage = null,
+  existingShares = [],
   onChangeRecipientEmail,
   onClose,
   onShare,
   recipientEmail,
+  recipientSuggestions = [],
+  successMessage = null,
   visible,
 }: TripShareModalProps) {
   const canShare = recipientEmail.trim().length > 0 && !busy;
+  const normalizedRecipientEmail = recipientEmail.trim().toLowerCase();
+  const activeShareEmails = new Set(
+    existingShares
+      .filter((share) => share.status === "active" && share.revokedAt === null)
+      .map((share) => share.recipient.email.toLowerCase()),
+  );
+  const filteredSuggestions =
+    normalizedRecipientEmail.length >= 3
+      ? recipientSuggestions.filter(
+          (recipient) =>
+            !activeShareEmails.has(recipient.email.toLowerCase()) &&
+            (recipient.email.toLowerCase().includes(normalizedRecipientEmail) ||
+              recipient.displayName.toLowerCase().includes(normalizedRecipientEmail)),
+        )
+      : [];
 
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
@@ -47,8 +74,22 @@ export default function TripShareModal({
             <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
               <Text style={styles.modalTitle}>Share trip</Text>
               <Text style={styles.modalSubtitle}>
-                Share this trip with an existing Trailbook account. Shared trips are read-only for the recipient.
+                Share this trip with one or more existing Trailbook accounts.
               </Text>
+
+              {existingShares.filter((share) => share.status === "active" && share.revokedAt === null).length > 0 ? (
+                <View style={styles.shareList}>
+                  <Text style={styles.shareListTitle}>Already shared with</Text>
+                  {existingShares
+                    .filter((share) => share.status === "active" && share.revokedAt === null)
+                    .map((share) => (
+                      <View key={share.id} style={styles.shareListItem}>
+                        <Text style={styles.shareRecipientName}>{share.recipient.displayName}</Text>
+                        <Text style={styles.shareRecipientEmail}>{share.recipient.email}</Text>
+                      </View>
+                    ))}
+                </View>
+              ) : null}
 
               <Text style={styles.fieldLabel}>Recipient email</Text>
               <TextInput
@@ -62,11 +103,27 @@ export default function TripShareModal({
                 value={recipientEmail}
               />
 
+              {filteredSuggestions.length > 0 ? (
+                <View style={styles.suggestionList}>
+                  {filteredSuggestions.map((recipient) => (
+                    <Pressable
+                      key={recipient.id}
+                      onPress={() => onChangeRecipientEmail(recipient.email)}
+                      style={styles.suggestionItem}
+                    >
+                      <Text style={styles.suggestionName}>{recipient.displayName}</Text>
+                      <Text style={styles.suggestionEmail}>{recipient.email}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+
               {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+              {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
 
               <View style={styles.modalActions}>
                 <Pressable onPress={onClose} style={styles.secondaryButton}>
-                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  <Text style={styles.secondaryButtonText}>Close</Text>
                 </Pressable>
                 <Pressable
                   disabled={!canShare}
@@ -152,6 +209,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#a03a32",
+  },
+  successText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2f6c42",
+  },
+  shareList: {
+    gap: 8,
+    borderRadius: 14,
+    backgroundColor: "#fffdf8",
+    borderWidth: 1,
+    borderColor: "#ddd7c8",
+    padding: 14,
+  },
+  shareListTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  shareListItem: {
+    gap: 2,
+    borderTopWidth: 1,
+    borderTopColor: "#eee7d9",
+    paddingTop: 8,
+  },
+  shareRecipientName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#243224",
+  },
+  shareRecipientEmail: {
+    fontSize: 13,
+    color: "#52624f",
+  },
+  suggestionList: {
+    gap: 8,
+    borderRadius: 14,
+    backgroundColor: "#fffdf8",
+    borderWidth: 1,
+    borderColor: "#ddd7c8",
+    padding: 10,
+  },
+  suggestionItem: {
+    gap: 2,
+    borderTopWidth: 1,
+    borderTopColor: "#eee7d9",
+    paddingTop: 8,
+  },
+  suggestionName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#243224",
+  },
+  suggestionEmail: {
+    fontSize: 13,
+    color: "#52624f",
   },
   modalActions: {
     flexDirection: "row",
