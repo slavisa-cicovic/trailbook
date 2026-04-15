@@ -209,8 +209,15 @@ export default function TripRouteScreen() {
 
       const syncedAt = response.syncedAt;
       const uploadedAttachments = [];
+      const attachmentsToUpload = selectedTripAttachments.filter(
+        (attachment) =>
+          attachment.deletedAt === null &&
+          (!attachment.serverId ||
+            attachment.syncStatus !== "synced" ||
+            !attachment.localUri.startsWith("http")),
+      );
 
-      for (const attachment of selectedTripAttachments) {
+      for (const attachment of attachmentsToUpload) {
         const uploadedAttachment = await uploadTripAttachmentToServer(identitySession.sessionToken, response.tripId, {
           attachmentLocalId: attachment.localId,
           localUri: attachment.localUri,

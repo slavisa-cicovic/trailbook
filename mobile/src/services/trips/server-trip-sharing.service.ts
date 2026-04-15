@@ -1,4 +1,5 @@
 import type { SharedTripDetail, SharedTripSummary } from "../../domain/shared-trips";
+import type { OwnedServerTripDetail, OwnedServerTripSummary } from "../../domain/server-trips";
 import type { Trip, TripPoint, TripSegment, Waypoint, WaypointAttachment } from "../../domain/trips";
 
 export function getApiBaseUrl() {
@@ -130,6 +131,18 @@ export async function uploadTripAttachmentToServer(
   }
 
   return payload as { attachmentId: string; attachmentLocalId: string; waypointId: string };
+}
+
+export async function listOwnedTripsFromServer(sessionToken: string) {
+  return request<{ trips: OwnedServerTripSummary[] }>("/trips/mine", sessionToken, {
+    method: "GET",
+  });
+}
+
+export async function getOwnedTripFromServer(sessionToken: string, tripId: string) {
+  return request<{ trip: OwnedServerTripDetail }>(`/trips/mine/${tripId}`, sessionToken, {
+    method: "GET",
+  });
 }
 
 export function buildTripAttachmentContentUrl(sessionToken: string, attachmentId: string) {

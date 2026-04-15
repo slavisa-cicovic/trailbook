@@ -28,7 +28,191 @@ export class TripsService {
     return parsed;
   }
 
+  private dedupeByLocalId<T extends { localId: string }>(items: T[]) {
+    const seen = new Set<string>();
+    const deduped: T[] = [];
+
+    for (const item of items) {
+      if (seen.has(item.localId)) {
+        continue;
+      }
+
+      seen.add(item.localId);
+      deduped.push(item);
+    }
+
+    return deduped;
+  }
+
+  private toOwnedTripSummary(
+    trip: {
+      id: string;
+      title: string;
+      description: string | null;
+      recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+      startedAt: Date;
+      endedAt: Date | null;
+      updatedAt: Date;
+      segments: Array<{ id: string }>;
+      waypoints: Array<{ deletedAt: Date | null }>;
+    },
+  ) {
+    return {
+      trip: {
+        description: trip.description,
+        endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
+        id: trip.id,
+        recordingProfile: trip.recordingProfile,
+        segmentCount: trip.segments.length,
+        startedAt: trip.startedAt.toISOString(),
+        title: trip.title,
+        updatedAt: trip.updatedAt.toISOString(),
+        waypointCount: trip.waypoints.filter((waypoint) => waypoint.deletedAt === null).length,
+      },
+    };
+  }
+
+  private toOwnedTripDetail(
+    trip: {
+      id: string;
+      localSourceId: string;
+      ownerDeviceId: string;
+      ownerUserId: string;
+      createdAt: Date;
+      description: string | null;
+      endedAt: Date | null;
+      recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+      startedAt: Date;
+      title: string;
+      updatedAt: Date;
+      deletedAt: Date | null;
+      attachments: Array<{
+        id: string;
+        localSourceId: string;
+        waypointId: string;
+        waypointLocalSourceId: string;
+        mimeType: string | null;
+        fileSizeBytes: number | null;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+        storageKey: string | null;
+      }>;
+      points: Array<{
+        id: string;
+        localSourceId: string;
+        latitude: number;
+        longitude: number;
+        recordedAt: Date;
+        accuracy: number | null;
+        altitude: number | null;
+        speed: number | null;
+        segmentId: string | null;
+      }>;
+      segments: Array<{
+        id: string;
+        localSourceId: string;
+        recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+        startedAt: Date;
+        endedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+      }>;
+      waypoints: Array<{
+        id: string;
+        localSourceId: string;
+        category:
+          | "generic"
+          | "departure"
+          | "fuel"
+          | "border"
+          | "port"
+          | "ferry"
+          | "restaurant"
+          | "cafe"
+          | "viewpoint"
+          | "monument"
+          | "beach";
+        latitude: number;
+        longitude: number;
+        title: string;
+        note: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+        segmentId: string | null;
+      }>;
+    },
+  ) {
+    return {
+      trip: {
+        createdAt: trip.createdAt.toISOString(),
+        deletedAt: trip.deletedAt ? trip.deletedAt.toISOString() : null,
+        description: trip.description,
+        deviceId: trip.ownerDeviceId,
+        endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
+        id: trip.id,
+        localId: trip.localSourceId,
+        recordingProfile: trip.recordingProfile,
+        startedAt: trip.startedAt.toISOString(),
+        title: trip.title,
+        updatedAt: trip.updatedAt.toISOString(),
+        attachments: trip.attachments
+          .filter((attachment) => attachment.deletedAt === null && attachment.storageKey !== null)
+          .map((attachment) => ({
+            createdAt: attachment.createdAt.toISOString(),
+            fileSizeBytes: attachment.fileSizeBytes,
+            id: attachment.id,
+            localId: attachment.localSourceId,
+            mimeType: attachment.mimeType,
+            updatedAt: attachment.updatedAt.toISOString(),
+            waypointId: attachment.waypointId,
+            waypointLocalId: attachment.waypointLocalSourceId,
+          })),
+        points: trip.points.map((point) => ({
+          accuracy: point.accuracy,
+          altitude: point.altitude,
+          id: point.id,
+          latitude: point.latitude,
+          localId: point.localSourceId,
+          longitude: point.longitude,
+          recordedAt: point.recordedAt.toISOString(),
+          segmentId: point.segmentId,
+          speed: point.speed,
+        })),
+        segments: trip.segments.map((segment) => ({
+          createdAt: segment.createdAt.toISOString(),
+          endedAt: segment.endedAt ? segment.endedAt.toISOString() : null,
+          id: segment.id,
+          localId: segment.localSourceId,
+          recordingProfile: segment.recordingProfile,
+          startedAt: segment.startedAt.toISOString(),
+          updatedAt: segment.updatedAt.toISOString(),
+        })),
+        waypoints: trip.waypoints
+          .filter((waypoint) => waypoint.deletedAt === null)
+          .map((waypoint) => ({
+            category: waypoint.category,
+            createdAt: waypoint.createdAt.toISOString(),
+            id: waypoint.id,
+            latitude: waypoint.latitude,
+            localId: waypoint.localSourceId,
+            longitude: waypoint.longitude,
+            note: waypoint.note,
+            segmentId: waypoint.segmentId,
+            title: waypoint.title,
+            updatedAt: waypoint.updatedAt.toISOString(),
+          })),
+      },
+    };
+  }
+
   async syncTrip(ownerUserId: string, payload: SyncTripDto) {
+    const dedupedSegments = this.dedupeByLocalId(payload.segments);
+    const dedupedPoints = this.dedupeByLocalId(payload.points);
+    const dedupedWaypoints = this.dedupeByLocalId(payload.waypoints);
+    const dedupedAttachments = this.dedupeByLocalId(payload.attachments);
+
     const trip = await this.databaseService.$transaction(async (tx) => {
       const upsertedTrip = await tx.trip.upsert({
         where: {
@@ -70,7 +254,7 @@ export class TripsService {
       const segmentIdByLocalId = new Map<string, string>();
       const waypointIdByLocalId = new Map<string, string>();
 
-      for (const segment of payload.segments) {
+      for (const segment of dedupedSegments) {
         const createdSegment = await tx.tripSegment.create({
           data: {
             tripId: upsertedTrip.id,
@@ -86,7 +270,7 @@ export class TripsService {
         segmentIdByLocalId.set(segment.localId, createdSegment.id);
       }
 
-      for (const point of payload.points) {
+      for (const point of dedupedPoints) {
         await tx.tripPoint.create({
           data: {
             tripId: upsertedTrip.id,
@@ -102,7 +286,7 @@ export class TripsService {
         });
       }
 
-      for (const waypoint of payload.waypoints) {
+      for (const waypoint of dedupedWaypoints) {
         const createdWaypoint = await tx.waypoint.create({
           data: {
             tripId: upsertedTrip.id,
@@ -122,7 +306,7 @@ export class TripsService {
         waypointIdByLocalId.set(waypoint.localId, createdWaypoint.id);
       }
 
-      const attachmentLocalIds = payload.attachments.map((attachment) => attachment.localId);
+      const attachmentLocalIds = dedupedAttachments.map((attachment) => attachment.localId);
 
       if (attachmentLocalIds.length > 0) {
         await tx.waypointAttachment.deleteMany({
@@ -141,7 +325,7 @@ export class TripsService {
         });
       }
 
-      for (const attachment of payload.attachments) {
+      for (const attachment of dedupedAttachments) {
         const waypointId = waypointIdByLocalId.get(attachment.waypointLocalId);
 
         if (!waypointId) {
@@ -192,6 +376,52 @@ export class TripsService {
       tripLocalId: payload.localId,
       syncedAt: new Date().toISOString(),
     };
+  }
+
+  async listOwnedTrips(ownerUserId: string) {
+    const trips = await this.databaseService.trip.findMany({
+      where: {
+        ownerUserId,
+        deletedAt: null,
+      },
+      include: {
+        segments: true,
+        waypoints: true,
+      },
+      orderBy: {
+        startedAt: "desc",
+      },
+    });
+
+    return {
+      trips: trips.map((trip) => this.toOwnedTripSummary(trip).trip),
+    };
+  }
+
+  async getOwnedTrip(ownerUserId: string, tripId: string) {
+    const trip = await this.databaseService.trip.findUnique({
+      where: { id: tripId },
+      include: {
+        attachments: {
+          orderBy: { createdAt: "asc" },
+        },
+        points: {
+          orderBy: { recordedAt: "asc" },
+        },
+        segments: {
+          orderBy: { startedAt: "asc" },
+        },
+        waypoints: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!trip || trip.ownerUserId !== ownerUserId || trip.deletedAt !== null) {
+      throw new NotFoundException("Trip not found.");
+    }
+
+    return this.toOwnedTripDetail(trip);
   }
 
   async shareTrip(ownerUserId: string, tripId: string, input: ShareTripDto) {

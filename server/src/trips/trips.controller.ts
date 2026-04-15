@@ -20,6 +20,18 @@ export class TripsController {
     return this.tripsService.syncTrip(user.id, payload);
   }
 
+  @Get("mine")
+  async listOwnedTrips(@Req() request: Request) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.tripsService.listOwnedTrips(user.id);
+  }
+
+  @Get("mine/:tripId")
+  async getOwnedTrip(@Param("tripId") tripId: string, @Req() request: Request) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.tripsService.getOwnedTrip(user.id, tripId);
+  }
+
   @Post(":tripId/shares")
   async shareTrip(@Param("tripId") tripId: string, @Body() input: ShareTripDto, @Req() request: Request) {
     const user = await this.requireAuthenticatedUser(request);
