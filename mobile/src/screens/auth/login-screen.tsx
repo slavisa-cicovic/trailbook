@@ -13,6 +13,7 @@ import {
   loginWithBackend,
   signInWithSocialProvider,
 } from "../../services/auth/mobile-auth.service";
+import { showEnterDemoModeDialog } from "../../services/demo/demo-mode.service";
 import { canCreateTemporarySession, createTemporarySession } from "../../services/auth/temporary-login.service";
 import {
   clearSessionCredentials,
@@ -140,6 +141,12 @@ export default function LoginScreen() {
     } finally {
       setBusyAction(null);
     }
+  }
+
+  function handlePromptEnterDemo() {
+    showEnterDemoModeDialog(() => {
+      void handleEnterDemo();
+    });
   }
 
   async function handleForgotPasswordInline() {
@@ -281,7 +288,7 @@ export default function LoginScreen() {
 
       <PrimaryButton
         disabled={busyAction !== null}
-        onPress={() => void handleEnterDemo()}
+        onPress={handlePromptEnterDemo}
         variant="secondary"
       >
         {busyAction === "demo" ? "Opening Demo..." : "Enter Demo"}

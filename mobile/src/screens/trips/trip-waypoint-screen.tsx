@@ -10,6 +10,11 @@ import {
 } from "../../constants/waypoint-categories";
 import type { WaypointAttachment } from "../../domain/trips";
 import {
+  DEMO_PHOTO_LIMIT_PER_TRIP,
+  getRemainingDemoPhotoSlotsForTrip,
+  isDemoSession,
+} from "../../services/demo/demo-mode.service";
+import {
   capturePhotoWithCamera,
   pickPhotosFromLibrary,
 } from "../../services/media/photo-picker.service";
@@ -154,6 +159,22 @@ export default function TripWaypointScreen() {
       return;
     }
 
+    if (selectedTrip && isDemoSession(identitySession)) {
+      const remainingPhotoSlots = getRemainingDemoPhotoSlotsForTrip(
+        selectedTrip.localId,
+        currentUserWaypoints,
+        currentUserWaypointAttachments,
+      );
+
+      if (remainingPhotoSlots <= 0) {
+        Alert.alert(
+          "Demo photo limit reached",
+          `Demo mode allows up to ${DEMO_PHOTO_LIMIT_PER_TRIP} photos per trip.`,
+        );
+        return;
+      }
+    }
+
     const createdAt = new Date().toISOString();
 
     if (source === "camera") {
@@ -173,6 +194,30 @@ export default function TripWaypointScreen() {
     const photos = await pickPhotosFromLibrary();
 
     if (photos.length === 0) {
+      return;
+    }
+
+    if (selectedTrip && isDemoSession(identitySession)) {
+      const remainingPhotoSlots = getRemainingDemoPhotoSlotsForTrip(
+        selectedTrip.localId,
+        currentUserWaypoints,
+        currentUserWaypointAttachments,
+      );
+      const limitedPhotos = photos.slice(0, remainingPhotoSlots);
+
+      if (limitedPhotos.length < photos.length) {
+        Alert.alert(
+          "Demo photo limit",
+          `Only ${remainingPhotoSlots} more photo(s) can be added to this trip in demo mode.`,
+        );
+      }
+
+      await setWaypointAttachments([
+        ...waypointAttachments,
+        ...limitedPhotos.map((photo, index) =>
+          createPhotoAttachmentForWaypoint(selectedWaypoint, photo, createAttachmentTimestamp(createdAt, index)),
+        ),
+      ]);
       return;
     }
 

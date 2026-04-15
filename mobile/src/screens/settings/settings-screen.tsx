@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View, useColorScheme } from "react-native"
 
 import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
 import ScreenLayout from "../../components/layout/screen-layout";
+import { showDemoModeInfoDialog } from "../../services/demo/demo-mode.service";
 import { logoutFromBackend } from "../../services/auth/mobile-auth.service";
 import { restoreOwnedTripsFromServer } from "../../services/trips/trip-restore.service";
 import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
@@ -84,12 +85,7 @@ export default function SettingsScreen() {
       showBottomNavigation
       title="Settings"
     >
-      <Text style={[styles.subtitle, { color: theme.mutedText }]}>
-        {identitySession.mode === "demo"
-          ? "Demo mode stays local on this device and cannot sync or share routes."
-          : "Authenticated account details for the current device session."}
-      </Text>
-
+      
       <Text style={[styles.label, { color: theme.mutedText }]}>Theme</Text>
       <View style={styles.themeRow}>
         <Pressable
@@ -158,18 +154,19 @@ export default function SettingsScreen() {
       </Text>
       <Text style={[styles.themeHint, { color: theme.mutedText }]}>{identitySession.userEmail}</Text>
       <Text style={[styles.label, { color: theme.mutedText }]}>Session mode</Text>
-      <Text style={[styles.value, { color: theme.primaryText }]}>
-        {identitySession.mode === "demo" ? "Demo" : "Authenticated"}
-      </Text>
+      {identitySession.mode === "demo" ? (
+        <Pressable onPress={showDemoModeInfoDialog} style={styles.modeButton}>
+          <Text style={[styles.value, styles.modeButtonText, { color: theme.primaryText }]}>
+            Demo Session Mode
+          </Text>
+        </Pressable>
+      ) : (
+        <Text style={[styles.value, { color: theme.primaryText }]}>Authenticated</Text>
+      )}
       <Text style={[styles.label, { color: theme.mutedText }]}>Providers</Text>
       <Text style={[styles.value, { color: theme.primaryText }]}>
         {identitySession.providers.map((provider) => provider[0].toUpperCase() + provider.slice(1)).join(", ")}
       </Text>
-      <Text style={[styles.label, { color: theme.mutedText }]}>Role</Text>
-      <Text style={[styles.value, { color: theme.primaryText }]}>
-        {identitySession.role[0].toUpperCase() + identitySession.role.slice(1)}
-      </Text>
-
       {identitySession.mode === "authenticated" ? (
         <>
           <Text style={[styles.label, { color: theme.mutedText }]}>Device transfer</Text>
@@ -216,6 +213,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     marginBottom: 8,
+  },
+  modeButton: {
+    alignSelf: "flex-start",
+  },
+  modeButtonText: {
+    textDecorationLine: "underline",
   },
   themeRow: {
     flexDirection: "row",

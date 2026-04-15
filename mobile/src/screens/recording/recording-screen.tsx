@@ -74,6 +74,13 @@ import {
   pickPhotosFromLibrary,
 } from "../../services/media/photo-picker.service";
 import {
+  DEMO_MONTHLY_TRIP_LIMIT,
+  DEMO_PHOTO_LIMIT_PER_TRIP,
+  getRemainingDemoPhotoSlotsForTrip,
+  getRemainingDemoTripSlots,
+  isDemoSession,
+} from "../../services/demo/demo-mode.service";
+import {
   appendTripPointIfUseful,
   createTripPointForLocation,
   getVisibleTripPointsForTrip,
@@ -236,6 +243,19 @@ export default function RecordingScreen() {
     : recordingSession.status === "idle"
       ? "No active route"
       : "Session details";
+
+  function getDemoRemainingPhotoSlots(pendingDraftPhotoCount = 0) {
+    if (!activeTrip) {
+      return 0;
+    }
+
+    return getRemainingDemoPhotoSlotsForTrip(
+      activeTrip.localId,
+      currentUserWaypoints,
+      currentUserWaypointAttachments,
+      pendingDraftPhotoCount,
+    );
+  }
 
   async function refreshCurrentLocation() {
     const nextLocation = await getCurrentForegroundLocation();
@@ -418,6 +438,18 @@ export default function RecordingScreen() {
   async function handleStartRecording() {
     if (!activeIdentitySession) {
       return;
+    }
+
+    if (isDemoSession(activeIdentitySession)) {
+      const remainingTripSlots = getRemainingDemoTripSlots(currentUserTrips, activeIdentitySession.userId);
+
+      if (remainingTripSlots <= 0) {
+        Alert.alert(
+          "Demo limit reached",
+          `Demo mode allows up to ${DEMO_MONTHLY_TRIP_LIMIT} trips per calendar month.`,
+        );
+        return;
+      }
     }
 
     if (currentUserTrips.some((trip) => trip.status === "active")) {
@@ -707,6 +739,18 @@ export default function RecordingScreen() {
   }
 
   async function handleTakePhoto() {
+    if (activeIdentitySession && isDemoSession(activeIdentitySession)) {
+      const remainingPhotoSlots = getDemoRemainingPhotoSlots(waypointDraft.photos.length);
+
+      if (remainingPhotoSlots <= 0) {
+        Alert.alert(
+          "Demo photo limit reached",
+          `Demo mode allows up to ${DEMO_PHOTO_LIMIT_PER_TRIP} photos per trip.`,
+        );
+        return;
+      }
+    }
+
     const photo = await capturePhotoWithCamera();
 
     if (!photo) {
@@ -725,6 +769,33 @@ export default function RecordingScreen() {
 
     if (photos.length === 0) {
       Alert.alert("Photos not added", "Trailbook could not get photos from the library.");
+      return;
+    }
+
+    if (activeIdentitySession && isDemoSession(activeIdentitySession)) {
+      const remainingPhotoSlots = getDemoRemainingPhotoSlots(waypointDraft.photos.length);
+
+      if (remainingPhotoSlots <= 0) {
+        Alert.alert(
+          "Demo photo limit reached",
+          `Demo mode allows up to ${DEMO_PHOTO_LIMIT_PER_TRIP} photos per trip.`,
+        );
+        return;
+      }
+
+      const limitedPhotos = photos.slice(0, remainingPhotoSlots);
+
+      if (limitedPhotos.length < photos.length) {
+        Alert.alert(
+          "Demo photo limit",
+          `Only ${remainingPhotoSlots} more photo(s) can be added to this trip in demo mode.`,
+        );
+      }
+
+      setWaypointDraft((current) => ({
+        ...current,
+        photos: [...current.photos, ...limitedPhotos],
+      }));
       return;
     }
 
@@ -765,6 +836,18 @@ export default function RecordingScreen() {
       return;
     }
 
+    if (activeIdentitySession && isDemoSession(activeIdentitySession)) {
+      const remainingPhotoSlots = getDemoRemainingPhotoSlots();
+
+      if (remainingPhotoSlots <= 0) {
+        Alert.alert(
+          "Demo photo limit reached",
+          `Demo mode allows up to ${DEMO_PHOTO_LIMIT_PER_TRIP} photos per trip.`,
+        );
+        return;
+      }
+    }
+
     const createdAt = new Date().toISOString();
 
     if (source === "camera") {
@@ -784,6 +867,26 @@ export default function RecordingScreen() {
     const photos = await pickPhotosFromLibrary();
 
     if (photos.length === 0) {
+      return;
+    }
+
+    if (activeIdentitySession && isDemoSession(activeIdentitySession)) {
+      const remainingPhotoSlots = getDemoRemainingPhotoSlots();
+      const limitedPhotos = photos.slice(0, remainingPhotoSlots);
+
+      if (limitedPhotos.length < photos.length) {
+        Alert.alert(
+          "Demo photo limit",
+          `Only ${remainingPhotoSlots} more photo(s) can be added to this trip in demo mode.`,
+        );
+      }
+
+      await setWaypointAttachments([
+        ...waypointAttachments,
+        ...limitedPhotos.map((photo, index) =>
+          createPhotoAttachmentForWaypoint(waypoint, photo, createAttachmentTimestamp(createdAt, index)),
+        ),
+      ]);
       return;
     }
 
