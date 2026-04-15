@@ -428,6 +428,7 @@ export default function TripRouteScreen() {
   }
 
   const distanceText = formatDistanceKm(calculateTripDistanceMeters(selectedTripPoints));
+  const syncIconColor = selectedTrip.syncStatus === "synced" ? "#243224" : "#b45309";
   const segmentEditTarget =
     segmentEditSegmentId === null
       ? null
@@ -545,7 +546,7 @@ export default function TripRouteScreen() {
                     onPress={() => void syncSelectedTripIfNeeded()}
                     style={[styles.headerIconButton, styles.syncButton]}
                   >
-                    <MaterialIcons color="#243224" name="sync" size={18} />
+                    <MaterialIcons color={syncIconColor} name="sync" size={18} />
                   </Pressable>
                   <Pressable
                     accessibilityLabel="Share trip"
