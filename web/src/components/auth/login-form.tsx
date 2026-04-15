@@ -8,7 +8,7 @@ import { useState } from "react";
 import { login } from "../../lib/auth-api";
 import { SocialSigninButtons } from "./social-signin-buttons";
 
-export function LoginForm() {
+export function LoginForm({ verificationStatus }: { verificationStatus?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,6 +34,15 @@ export function LoginForm() {
   return (
     <>
       <Stack component="form" spacing={2} onSubmit={handleSubmit}>
+        {verificationStatus === "verified" ? (
+          <Alert severity="success">Email verified. You can log in now.</Alert>
+        ) : null}
+        {verificationStatus === "check-email" ? (
+          <Alert severity="info">Check your email and verify your address before logging in.</Alert>
+        ) : null}
+        {verificationStatus && verificationStatus !== "verified" && verificationStatus !== "check-email" ? (
+          <Alert severity="error">Email verification failed. Request a new link or try again.</Alert>
+        ) : null}
         <TextField fullWidth label="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
         <TextField
           fullWidth

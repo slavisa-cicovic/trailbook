@@ -8,6 +8,7 @@ export interface UserRecord {
   displayName: string;
   role: UserRole;
   passwordHash: string | null;
+  emailVerifiedAt: string | null;
   authProviderSummary: AuthProvider[];
   createdAt: string;
   updatedAt: string;

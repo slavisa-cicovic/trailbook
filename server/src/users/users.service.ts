@@ -52,47 +52,47 @@ export class UsersService {
     return identity?.user ? this.toUserRecord(identity.user) : null;
   }
 
-  async createLocalUser(input: CreateLocalUserInput): Promise<UserRecord> {
+  async createLocalUser(input: CreateLocalUserInput, transaction?: Prisma.TransactionClient): Promise<UserRecord> {
     const normalizedEmail = this.normalizeEmail(input.email);
     const normalizedDisplayName = input.displayName.trim();
+    const tx = transaction ?? this.databaseService;
 
-    const user = await this.databaseService.$transaction((tx) =>
-      this.createUserWithInitialIdentity(
-        tx,
-        {
-          displayName: normalizedDisplayName,
-          email: normalizedEmail,
-          passwordHash: input.passwordHash,
-        },
-        {
-          provider: "local",
-          providerSubject: normalizedEmail,
-          email: normalizedEmail,
-        },
-      ),
+    const user = await this.createUserWithInitialIdentity(
+      tx,
+      {
+        displayName: normalizedDisplayName,
+        email: normalizedEmail,
+        passwordHash: input.passwordHash,
+        emailVerifiedAt: null,
+      },
+      {
+        provider: "local",
+        providerSubject: normalizedEmail,
+        email: normalizedEmail,
+      },
     );
 
     return this.toUserRecord(user);
   }
 
-  async createSocialUser(input: CreateSocialUserInput): Promise<UserRecord> {
+  async createSocialUser(input: CreateSocialUserInput, transaction?: Prisma.TransactionClient): Promise<UserRecord> {
     const normalizedEmail = this.normalizeEmail(input.email);
     const normalizedDisplayName = input.displayName.trim();
+    const tx = transaction ?? this.databaseService;
 
-    const user = await this.databaseService.$transaction((tx) =>
-      this.createUserWithInitialIdentity(
-        tx,
-        {
-          displayName: normalizedDisplayName,
-          email: normalizedEmail,
-          passwordHash: null,
-        },
-        {
-          provider: input.provider,
-          providerSubject: input.providerSubject,
-          email: normalizedEmail,
-        },
-      ),
+    const user = await this.createUserWithInitialIdentity(
+      tx,
+      {
+        displayName: normalizedDisplayName,
+        email: normalizedEmail,
+        passwordHash: null,
+        emailVerifiedAt: new Date(),
+      },
+      {
+        provider: input.provider,
+        providerSubject: input.providerSubject,
+        email: normalizedEmail,
+      },
     );
 
     return this.toUserRecord(user);
@@ -180,6 +180,7 @@ export class UsersService {
     userInput: {
       displayName: string;
       email: string;
+      emailVerifiedAt: Date | null;
       passwordHash: string | null;
     },
     identityInput: {
@@ -193,6 +194,7 @@ export class UsersService {
         email: userInput.email,
         displayName: userInput.displayName,
         passwordHash: userInput.passwordHash,
+        emailVerifiedAt: userInput.emailVerifiedAt,
       },
     });
 
@@ -245,6 +247,7 @@ export class UsersService {
       displayName: user.displayName,
       role: user.role,
       passwordHash: user.passwordHash,
+      emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : null,
       authProviderSummary: providers,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),

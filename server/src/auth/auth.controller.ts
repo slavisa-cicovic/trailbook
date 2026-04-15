@@ -23,6 +23,20 @@ export class AuthController {
     return this.authService.register(input);
   }
 
+  @Get("verify-email")
+  async verifyEmail(@Query("token") token: string | undefined, @Res() response: Response) {
+    if (!token) {
+      return response.redirect(this.buildVerificationRedirectUrl("missing_token"));
+    }
+
+    try {
+      await this.authService.verifyEmail(token);
+      return response.redirect(this.buildVerificationRedirectUrl("verified"));
+    } catch (error) {
+      return response.redirect(this.buildVerificationRedirectUrl(this.toErrorReason(error)));
+    }
+  }
+
   @Post("login")
   async login(@Body() input: LoginDto, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
     const result = await this.authService.login(input, {
@@ -38,21 +52,8 @@ export class AuthController {
   }
 
   @Post("mobile/register")
-  async registerMobile(@Body() input: RegisterDto, @Req() request: Request) {
-    await this.authService.register(input);
-
-    const result = await this.authService.login(
-      {
-        email: input.email,
-        password: input.password,
-      },
-      {
-        ipAddress: request.ip,
-        userAgent: request.get("user-agent") || null,
-      },
-    );
-
-    return this.toMobileAuthResponse(result);
+  async registerMobile(@Body() input: RegisterDto) {
+    return this.authService.register(input);
   }
 
   @Post("mobile/login")
@@ -246,6 +247,13 @@ export class AuthController {
     const header = request.get("authorization");
     const bearerToken = header?.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : null;
     return bearerToken || request.cookies?.[SESSION_COOKIE_NAME];
+  }
+
+  private buildVerificationRedirectUrl(status: string) {
+    const webAppUrl = process.env.WEB_APP_URL || "http://localhost:3000";
+    const redirectUrl = new URL("/login", webAppUrl);
+    redirectUrl.searchParams.set("verification", status);
+    return redirectUrl.toString();
   }
 
   private toMobileAuthResponse(result: Awaited<ReturnType<AuthService["login"]>>) {

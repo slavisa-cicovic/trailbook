@@ -156,13 +156,8 @@ describe("web auth components", () => {
 
   test("register form sends user data and redirects to login", async () => {
     vi.mocked(authApi.register).mockResolvedValue({
-      user: {
-        id: "u1",
-        email: "slavisa@example.com",
-        displayName: "Slavisa",
-        role: "user",
-        providers: ["local"],
-      },
+      success: true,
+      email: "slavisa@example.com",
     });
 
     const user = userEvent.setup();
@@ -181,7 +176,7 @@ describe("web auth components", () => {
       });
     });
 
-    expect(push).toHaveBeenCalledWith("/login?registered=1");
+    expect(push).toHaveBeenCalledWith("/login?verification=check-email");
   });
 
   test("forgot password form shows generic success message after server call", async () => {

@@ -5,22 +5,12 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import ScreenLayout from "../../components/layout/screen-layout";
 import FormField from "../../components/ui/form-field";
 import PrimaryButton from "../../components/ui/primary-button";
-import { createBackendAuthenticatedSession } from "../../domain/identity";
 import { registerWithBackend } from "../../services/auth/mobile-auth.service";
-import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
-import {
-  reconcileHydratedRecordingState,
-  setRecordingSession,
-  useRecordingStore,
-} from "../../state/recording-store";
-import { getTripSegmentsStateSnapshot } from "../../state/trip-segments-store";
-import { getTripsStateSnapshot } from "../../state/trips-store";
+import { useSessionStore } from "../../state/session-store";
 
 export default function RegisterScreen() {
   const router = useRouter();
   const identitySession = useSessionStore((state) => state.identitySession);
-  const deviceId = useSessionStore((state) => state.deviceId);
-  const recordingSession = useRecordingStore((state) => state.session);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const [displayName, setDisplayName] = useState("");
@@ -28,32 +18,12 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  async function finalizeSignIn(sessionToken: string, user: Parameters<typeof createBackendAuthenticatedSession>[0]) {
-    if (!deviceId) {
-      return;
-    }
-
-    const session = createBackendAuthenticatedSession(user, sessionToken, deviceId);
-
-    await setActiveIdentitySession(session);
-    await setRecordingSession({
-      ...recordingSession,
-      userId: session.userId,
-      userEmail: session.userEmail,
-      deviceId: session.deviceId,
-    });
-    await reconcileHydratedRecordingState(
-      getTripsStateSnapshot().trips,
-      getTripSegmentsStateSnapshot().tripSegments,
-    );
-
-    router.replace("/recording");
-  }
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   async function handleRegister() {
     setBusy(true);
     setErrorMessage(null);
+    setInfoMessage(null);
 
     try {
       const result = await registerWithBackend({
@@ -61,8 +31,7 @@ export default function RegisterScreen() {
         email: email.trim(),
         password,
       });
-
-      await finalizeSignIn(result.sessionToken, result.user);
+      setInfoMessage(`Verification email sent to ${result.email}. Verify your address before logging in.`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Registration failed.");
     } finally {
@@ -129,6 +98,7 @@ export default function RegisterScreen() {
       </View>
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      {infoMessage ? <Text style={styles.infoText}>{infoMessage}</Text> : null}
     </ScreenLayout>
   );
 }
@@ -158,6 +128,12 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 12,
     color: "#9f2f2f",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  infoText: {
+    marginTop: 12,
+    color: "#2f5d39",
     fontSize: 14,
     fontWeight: "600",
   },

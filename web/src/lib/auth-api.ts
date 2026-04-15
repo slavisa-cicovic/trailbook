@@ -66,7 +66,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function register(input: RegisterInput) {
-  return request<{ user: AuthUser }>("/auth/register", {
+  return request<{ success: boolean; email: string }>("/auth/register", {
     method: "POST",
     body: JSON.stringify(input),
   });

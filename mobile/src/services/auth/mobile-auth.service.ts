@@ -8,6 +8,11 @@ export interface MobileAuthResult {
   user: AuthenticatedUserSummary;
 }
 
+export interface RegisterResult {
+  success: boolean;
+  email: string;
+}
+
 type SocialAuthProvider = Exclude<AuthProvider, "local">;
 
 WebBrowser.maybeCompleteAuthSession();
@@ -69,7 +74,7 @@ export async function registerWithBackend(input: {
   email: string;
   password: string;
 }) {
-  return request<MobileAuthResult>("/auth/mobile/register", {
+  return request<RegisterResult>("/auth/mobile/register", {
     method: "POST",
     body: JSON.stringify(input),
   });

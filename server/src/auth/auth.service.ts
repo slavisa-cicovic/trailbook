@@ -16,6 +16,7 @@ import { createOpaqueToken, hashOpaqueToken } from "./auth.utils";
 export class AuthService {
   private readonly sessionTtlDays = Number(process.env.SESSION_TTL_DAYS || 30);
   private readonly passwordResetTtlMinutes = Number(process.env.PASSWORD_RESET_TTL_MINUTES || 30);
+  private readonly emailVerificationTtlHours = Number(process.env.EMAIL_VERIFICATION_TTL_HOURS || 24);
 
   constructor(
     @Inject(DatabaseService)
@@ -32,14 +33,58 @@ export class AuthService {
     }
 
     const passwordHash = await hash(input.password, 12);
-    const user = await this.usersService.createLocalUser({
-      displayName: input.displayName,
-      email: input.email,
-      passwordHash,
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * this.emailVerificationTtlHours);
+    const token = createOpaqueToken();
+    const normalizedEmail = input.email.trim().toLowerCase();
+    const verifyUrl = this.buildEmailVerificationUrl(token);
+    const subject = "Verify your Trailbook email";
+    const textBody = [
+      "Welcome to Trailbook.",
+      "",
+      `Verify your email: ${verifyUrl}`,
+      "",
+      `This link expires at ${expiresAt.toISOString()}.`,
+    ].join("\n");
+    const htmlBody = [
+      "<p>Welcome to Trailbook.</p>",
+      `<p><a href="${verifyUrl}">Verify your email</a></p>`,
+      `<p>This link expires at ${expiresAt.toISOString()}.</p>`,
+    ].join("");
+
+    const { outbox, user } = await this.databaseService.$transaction(async (tx) => {
+      const userRecord = await this.usersService.createLocalUser({
+        displayName: input.displayName,
+        email: normalizedEmail,
+        passwordHash,
+      });
+
+      await tx.emailVerificationToken.create({
+        data: {
+          userId: userRecord.id,
+          tokenHash: hashOpaqueToken(token),
+          expiresAt,
+        },
+      });
+
+      const createdOutbox = await tx.mailOutbox.create({
+        data: {
+          userId: userRecord.id,
+          toEmail: userRecord.email,
+          subject,
+          textBody,
+          htmlBody,
+          status: "pending",
+        },
+      });
+
+      return { outbox: createdOutbox, user: userRecord };
     });
 
+    await this.mailService.dispatchOutboxMessage(outbox.id);
+
     return {
-      user: this.toAuthUser(user),
+      success: true,
+      email: user.email,
     };
   }
 
@@ -48,6 +93,10 @@ export class AuthService {
 
     if (!user || !user.passwordHash || !(await compare(input.password, user.passwordHash))) {
       throw new UnauthorizedException("Invalid email or password.");
+    }
+
+    if (!user.emailVerifiedAt) {
+      throw new UnauthorizedException("Email is not verified.");
     }
 
     return this.completeLoginForUser(user.id, metadata);
@@ -167,6 +216,37 @@ export class AuthService {
     };
   }
 
+  async verifyEmail(token: string) {
+    const request = await this.databaseService.emailVerificationToken.findUnique({
+      where: {
+        tokenHash: hashOpaqueToken(token),
+      },
+    });
+
+    if (!request || request.usedAt) {
+      throw new BadRequestException("Verification token is invalid.");
+    }
+
+    if (request.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException("Verification token has expired.");
+    }
+
+    await this.databaseService.$transaction([
+      this.databaseService.user.update({
+        where: { id: request.userId },
+        data: { emailVerifiedAt: new Date() },
+      }),
+      this.databaseService.emailVerificationToken.update({
+        where: { id: request.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    return {
+      success: true,
+    };
+  }
+
   async getCurrentUser(sessionToken: string | undefined) {
     if (!sessionToken) {
       return { user: null };
@@ -207,6 +287,11 @@ export class AuthService {
   private buildResetUrl(token: string) {
     const webAppUrl = process.env.WEB_APP_URL || "http://localhost:3000";
     return `${webAppUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  }
+
+  private buildEmailVerificationUrl(token: string) {
+    const authBaseUrl = process.env.AUTH_BASE_URL || "http://localhost:3001";
+    return `${authBaseUrl}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
   }
 
   private async createSession(userId: string, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {

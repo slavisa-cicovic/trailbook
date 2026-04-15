@@ -53,6 +53,7 @@ describe("auth integration", () => {
     await databaseService.$executeRawUnsafe(`
       TRUNCATE TABLE
         external_identities,
+        email_verification_tokens,
         mail_outbox,
         password_reset_tokens,
         sessions,
@@ -71,7 +72,7 @@ describe("auth integration", () => {
     await rm("/tmp/trailbook-test-media", { force: true, recursive: true }).catch(() => undefined);
   });
 
-  test("register creates a persisted local user with demo subscription", async () => {
+  test("register creates an unverified local user, verification token, and demo subscription", async () => {
     const response = await request(app.getHttpServer()).post("/api/auth/register").send({
       displayName: "Slavisa",
       email: "slavisa@example.com",
@@ -79,9 +80,8 @@ describe("auth integration", () => {
     });
 
     assert.equal(response.status, 201);
-    assert.equal(response.body.user.email, "slavisa@example.com");
-    assert.equal(response.body.user.role, "user");
-    assert.deepEqual(response.body.user.providers, ["local"]);
+    assert.equal(response.body.success, true);
+    assert.equal(response.body.email, "slavisa@example.com");
 
     const user = await databaseService.user.findUnique({
       where: { email: "slavisa@example.com" },
@@ -90,15 +90,58 @@ describe("auth integration", () => {
 
     assert.ok(user);
     assert.ok(user.passwordHash);
+    assert.equal(user.emailVerifiedAt, null);
     assert.equal(user?.subscriptions.length, 1);
+
+    const verificationTokens = await databaseService.emailVerificationToken.findMany();
+    assert.equal(verificationTokens.length, 1);
+    assert.equal(verificationTokens[0]?.usedAt, null);
+
+    const outbox = await databaseService.mailOutbox.findMany();
+    assert.equal(outbox.length, 1);
+    assert.equal(outbox[0]?.status, "sent");
+    assert.equal(outbox[0]?.toEmail, "slavisa@example.com");
   });
 
-  test("login sets session cookie and me returns the authenticated user", async () => {
+  test("login rejects unverified local users", async () => {
     await request(app.getHttpServer()).post("/api/auth/register").send({
       displayName: "Slavisa",
       email: "slavisa@example.com",
       password: "password123",
     });
+
+    const loginResponse = await request(app.getHttpServer()).post("/api/auth/login").send({
+      email: "slavisa@example.com",
+      password: "password123",
+    });
+
+    assert.equal(loginResponse.status, 401);
+    assert.equal(loginResponse.body.message, "Email is not verified.");
+  });
+
+  test("verify-email activates the user and login sets session cookie", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Slavisa",
+      email: "slavisa@example.com",
+      password: "password123",
+    });
+
+    const verificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+    const verifyTokenMatch = verificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(verifyTokenMatch?.[1]);
+
+    const verifyResponse = await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(verifyTokenMatch![1]))}`,
+    );
+    assert.equal(verifyResponse.status, 302);
+    assert.match(verifyResponse.headers.location ?? "", /verification=verified/);
 
     const agent = request.agent(app.getHttpServer());
     const loginResponse = await agent.post("/api/auth/login").send({
@@ -120,6 +163,17 @@ describe("auth integration", () => {
       email: "slavisa@example.com",
       password: "password123",
     });
+
+    const verificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+      },
+    });
+    const verifyTokenMatch = verificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(verifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(verifyTokenMatch![1]))}`,
+    );
 
     const agent = request.agent(app.getHttpServer());
     await agent.post("/api/auth/login").send({
@@ -146,6 +200,17 @@ describe("auth integration", () => {
       password: "password123",
     });
 
+    const verificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+      },
+    });
+    const verifyTokenMatch = verificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(verifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(verifyTokenMatch![1]))}`,
+    );
+
     const forgotResponse = await request(app.getHttpServer()).post("/api/auth/forgot-password").send({
       email: "slavisa@example.com",
     });
@@ -159,9 +224,17 @@ describe("auth integration", () => {
     assert.equal(tokens[0]?.usedAt, null);
 
     const outbox = await databaseService.mailOutbox.findMany();
-    assert.equal(outbox.length, 1);
-    assert.equal(outbox[0]?.status, "sent");
-    assert.equal(outbox[0]?.toEmail, "slavisa@example.com");
+    assert.equal(outbox.length, 2);
+    const resetOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Trailbook password reset",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+    assert.equal(resetOutbox.status, "sent");
+    assert.equal(resetOutbox.toEmail, "slavisa@example.com");
   });
 
   test("reset-password updates the password and invalidates existing sessions", async () => {
@@ -170,6 +243,17 @@ describe("auth integration", () => {
       email: "slavisa@example.com",
       password: "password123",
     });
+
+    const verificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+      },
+    });
+    const verifyTokenMatch = verificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(verifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(verifyTokenMatch![1]))}`,
+    );
 
     const agent = request.agent(app.getHttpServer());
     await agent.post("/api/auth/login").send({
@@ -181,7 +265,14 @@ describe("auth integration", () => {
       email: "slavisa@example.com",
     });
 
-    const outbox = await databaseService.mailOutbox.findFirstOrThrow();
+    const outbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Trailbook password reset",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
     const resetTokenMatch = outbox.htmlBody.match(/token=([^"&]+)/);
     assert.ok(resetTokenMatch?.[1]);
 
@@ -317,6 +408,30 @@ describe("auth integration", () => {
       email: "recipient@example.com",
       password: "password123",
     });
+
+    const ownerVerificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "owner@example.com",
+      },
+    });
+    const ownerVerifyTokenMatch = ownerVerificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(ownerVerifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(ownerVerifyTokenMatch![1]))}`,
+    );
+
+    const recipientVerificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "recipient@example.com",
+      },
+    });
+    const recipientVerifyTokenMatch = recipientVerificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(recipientVerifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(recipientVerifyTokenMatch![1]))}`,
+    );
 
     const ownerLogin = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
       email: "owner@example.com",
