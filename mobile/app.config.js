@@ -58,6 +58,7 @@ module.exports = {
     },
     android: {
       package: "com.slavisacicovic.trailbook",
+      usesCleartextTraffic: true,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#f3efe6",
