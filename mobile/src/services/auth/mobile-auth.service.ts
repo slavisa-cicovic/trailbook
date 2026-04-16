@@ -5,6 +5,9 @@ import type { AuthenticatedUserSummary, AuthProvider } from "../../domain/identi
 
 export interface MobileAuthResult {
   sessionToken: string;
+  sessionExpiresAt: string;
+  refreshToken: string;
+  refreshExpiresAt: string;
   user: AuthenticatedUserSummary;
 }
 
@@ -84,6 +87,13 @@ export async function loginWithBackend(input: { email: string; password: string 
   return request<MobileAuthResult>("/auth/mobile/login", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export async function refreshMobileSessionWithBackend(refreshToken: string) {
+  return request<MobileAuthResult>("/auth/mobile/refresh", {
+    method: "POST",
+    body: JSON.stringify({ refreshToken }),
   });
 }
 

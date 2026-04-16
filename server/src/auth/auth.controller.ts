@@ -6,6 +6,7 @@ import { AuthService } from "./auth.service";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { RefreshSessionDto } from "./dto/refresh-session.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { SocialAuthService } from "./social-auth.service";
 
@@ -59,6 +60,16 @@ export class AuthController {
   @Post("mobile/login")
   async loginMobile(@Body() input: LoginDto, @Req() request: Request) {
     const result = await this.authService.login(input, {
+      ipAddress: request.ip,
+      userAgent: request.get("user-agent") || null,
+    });
+
+    return this.toMobileAuthResponse(result);
+  }
+
+  @Post("mobile/refresh")
+  async refreshMobile(@Body() input: RefreshSessionDto, @Req() request: Request) {
+    const result = await this.authService.refreshMobileSession(input.refreshToken, {
       ipAddress: request.ip,
       userAgent: request.get("user-agent") || null,
     });
@@ -258,7 +269,10 @@ export class AuthController {
 
   private toMobileAuthResponse(result: Awaited<ReturnType<AuthService["login"]>>) {
     return {
-      sessionToken: result.session.id,
+      sessionToken: result.accessToken.token,
+      sessionExpiresAt: result.accessToken.expiresAt,
+      refreshToken: result.session.id,
+      refreshExpiresAt: result.session.expiresAt,
       user: result.user,
     };
   }

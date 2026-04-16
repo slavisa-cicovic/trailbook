@@ -44,9 +44,12 @@ interface SocialStateContext {
 }
 
 interface AuthHandoffEntry {
+  accessToken: string;
+  accessTokenExpiresAt: string;
   createdAt: number;
   expiresAt: number;
-  sessionToken: string;
+  refreshToken: string;
+  refreshTokenExpiresAt: string;
   user: Awaited<ReturnType<AuthService["getCurrentUser"]>>["user"];
 }
 
@@ -116,7 +119,13 @@ export class SocialAuthService {
         throw new UnauthorizedException("Unable to establish a mobile social session.");
       }
 
-      const handoffCode = this.createAuthHandoff(loginResult.session.id, loginResult.user);
+      const handoffCode = this.createAuthHandoff({
+        accessToken: loginResult.accessToken.token,
+        accessTokenExpiresAt: loginResult.accessToken.expiresAt,
+        refreshToken: loginResult.session.id,
+        refreshTokenExpiresAt: loginResult.session.expiresAt,
+        user: loginResult.user,
+      });
       const redirectUrl = new URL(stateContext.redirectUri || "trailbook://auth/callback");
       redirectUrl.searchParams.set("handoffCode", handoffCode);
       redirectUrl.searchParams.set("provider", provider);
@@ -148,7 +157,10 @@ export class SocialAuthService {
     this.authHandoffs.delete(code);
 
     return {
-      sessionToken: handoff.sessionToken,
+      sessionToken: handoff.accessToken,
+      sessionExpiresAt: handoff.accessTokenExpiresAt,
+      refreshToken: handoff.refreshToken,
+      refreshExpiresAt: handoff.refreshTokenExpiresAt,
       user: handoff.user,
     };
   }
@@ -211,16 +223,22 @@ export class SocialAuthService {
     }
   }
 
-  private createAuthHandoff(
-    sessionToken: string,
-    user: Awaited<ReturnType<AuthService["getCurrentUser"]>>["user"],
-  ) {
+  private createAuthHandoff(input: {
+    accessToken: string;
+    accessTokenExpiresAt: string;
+    refreshToken: string;
+    refreshTokenExpiresAt: string;
+    user: Awaited<ReturnType<AuthService["getCurrentUser"]>>["user"];
+  }) {
     const code = createOpaqueToken();
 
     this.pruneExpiredHandoffs();
     this.authHandoffs.set(code, {
-      sessionToken,
-      user,
+      accessToken: input.accessToken,
+      accessTokenExpiresAt: input.accessTokenExpiresAt,
+      refreshToken: input.refreshToken,
+      refreshTokenExpiresAt: input.refreshTokenExpiresAt,
+      user: input.user,
       createdAt: Date.now(),
       expiresAt: Date.now() + this.handoffTtlMs,
     });

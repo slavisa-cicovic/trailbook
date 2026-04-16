@@ -105,7 +105,14 @@ export default function LoginScreen() {
       });
 
       await finalizeSession(
-        createBackendAuthenticatedSession(result.user, result.sessionToken, deviceId),
+        createBackendAuthenticatedSession(
+          result.user,
+          result.sessionToken,
+          result.refreshToken,
+          deviceId,
+          result.sessionExpiresAt,
+          result.refreshExpiresAt,
+        ),
       );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Login failed.");
@@ -182,7 +189,14 @@ export default function LoginScreen() {
       const result = await signInWithSocialProvider(provider);
 
       await finalizeSession(
-        createBackendAuthenticatedSession(result.user, result.sessionToken, deviceId),
+        createBackendAuthenticatedSession(
+          result.user,
+          result.sessionToken,
+          result.refreshToken,
+          deviceId,
+          result.sessionExpiresAt,
+          result.refreshExpiresAt,
+        ),
       );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : `${provider} sign-in failed.`);

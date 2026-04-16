@@ -24,6 +24,9 @@ export interface AuthenticatedDeviceSession {
   providers: AuthProvider[];
   role: "user" | "admin";
   sessionToken: string | null;
+  sessionExpiresAt: string | null;
+  refreshToken: string | null;
+  refreshExpiresAt: string | null;
 }
 
 export function normalizeUserIdFromEmail(email: string): string {
@@ -53,13 +56,19 @@ export function createDemoDeviceSession(deviceId: string): AuthenticatedDeviceSe
     providers: ["local"],
     role: "user",
     sessionToken: null,
+    sessionExpiresAt: null,
+    refreshToken: null,
+    refreshExpiresAt: null,
   };
 }
 
 export function createBackendAuthenticatedSession(
   user: AuthenticatedUserSummary,
   sessionToken: string,
+  refreshToken: string,
   deviceId: string,
+  sessionExpiresAt: string,
+  refreshExpiresAt: string,
 ): AuthenticatedDeviceSession {
   return {
     userId: user.id,
@@ -71,6 +80,9 @@ export function createBackendAuthenticatedSession(
     providers: user.providers,
     role: user.role,
     sessionToken,
+    sessionExpiresAt,
+    refreshToken,
+    refreshExpiresAt,
   };
 }
 

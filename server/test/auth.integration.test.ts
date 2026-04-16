@@ -53,6 +53,7 @@ describe("auth integration", () => {
     await databaseService.$executeRawUnsafe(`
       TRUNCATE TABLE
         external_identities,
+        access_tokens,
         email_verification_tokens,
         mail_outbox,
         password_reset_tokens,
@@ -157,6 +158,47 @@ describe("auth integration", () => {
     assert.equal(meResponse.body.user.email, "slavisa@example.com");
   });
 
+  test("mobile login returns access and refresh tokens and me works with the access token", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Slavisa",
+      email: "slavisa@example.com",
+      password: "password123",
+    });
+
+    const verificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+      },
+    });
+    const verifyTokenMatch = verificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(verifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(verifyTokenMatch![1]))}`,
+    );
+
+    const loginResponse = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "slavisa@example.com",
+      password: "password123",
+    });
+
+    assert.equal(loginResponse.status, 201);
+    assert.ok(loginResponse.body.sessionToken);
+    assert.ok(loginResponse.body.refreshToken);
+    assert.ok(loginResponse.body.sessionExpiresAt);
+    assert.ok(loginResponse.body.refreshExpiresAt);
+
+    const meResponse = await request(app.getHttpServer())
+      .get("/api/auth/mobile/me")
+      .set("Authorization", `Bearer ${loginResponse.body.sessionToken}`);
+
+    assert.equal(meResponse.status, 200);
+    assert.equal(meResponse.body.user.email, "slavisa@example.com");
+
+    const accessTokens = await databaseService.accessToken.findMany();
+    assert.equal(accessTokens.length, 1);
+    assert.equal(accessTokens[0]?.revokedAt, null);
+  });
+
   test("logout revokes the current session", async () => {
     await request(app.getHttpServer()).post("/api/auth/register").send({
       displayName: "Slavisa",
@@ -191,6 +233,55 @@ describe("auth integration", () => {
     const sessions = await databaseService.session.findMany();
     assert.equal(sessions.length, 1);
     assert.ok(sessions[0]?.revokedAt);
+    const accessTokens = await databaseService.accessToken.findMany();
+    assert.equal(accessTokens.length, 1);
+    assert.ok(accessTokens[0]?.revokedAt);
+  });
+
+  test("mobile refresh rotates tokens and invalidates the previous access token", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Slavisa",
+      email: "slavisa@example.com",
+      password: "password123",
+    });
+
+    const verificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+      },
+    });
+    const verifyTokenMatch = verificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(verifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(verifyTokenMatch![1]))}`,
+    );
+
+    const loginResponse = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "slavisa@example.com",
+      password: "password123",
+    });
+
+    const refreshResponse = await request(app.getHttpServer()).post("/api/auth/mobile/refresh").send({
+      refreshToken: loginResponse.body.refreshToken,
+    });
+
+    assert.equal(refreshResponse.status, 201);
+    assert.ok(refreshResponse.body.sessionToken);
+    assert.ok(refreshResponse.body.refreshToken);
+    assert.notEqual(refreshResponse.body.sessionToken, loginResponse.body.sessionToken);
+    assert.notEqual(refreshResponse.body.refreshToken, loginResponse.body.refreshToken);
+
+    const oldMeResponse = await request(app.getHttpServer())
+      .get("/api/auth/mobile/me")
+      .set("Authorization", `Bearer ${loginResponse.body.sessionToken}`);
+    assert.equal(oldMeResponse.status, 200);
+    assert.equal(oldMeResponse.body.user, null);
+
+    const nextMeResponse = await request(app.getHttpServer())
+      .get("/api/auth/mobile/me")
+      .set("Authorization", `Bearer ${refreshResponse.body.sessionToken}`);
+    assert.equal(nextMeResponse.status, 200);
+    assert.equal(nextMeResponse.body.user.email, "slavisa@example.com");
   });
 
   test("forgot-password creates a persisted reset token for an existing user", async () => {
@@ -299,6 +390,9 @@ describe("auth integration", () => {
     const tokens = await databaseService.passwordResetToken.findMany();
     assert.equal(tokens.length, 1);
     assert.ok(tokens[0]?.usedAt);
+    const accessTokens = await databaseService.accessToken.findMany();
+    assert.equal(accessTokens.length, 2);
+    assert.ok(accessTokens.some((accessToken) => accessToken.revokedAt));
   });
 
   test("google login start redirects to consent screen and sets a state cookie", async () => {

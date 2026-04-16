@@ -5,6 +5,7 @@ import {
   type AuthenticatedDeviceSession,
   type TemporaryUserCredentials,
 } from "../domain/identity";
+import { refreshMobileSessionWithBackend } from "../services/auth/mobile-auth.service";
 import { getOrCreateDeviceId } from "../storage/device-storage";
 import { loadSession, saveSession } from "../storage/session-storage";
 
@@ -53,7 +54,29 @@ export function useSessionStore<T>(selector: (snapshot: SessionState) => T): T {
 
 export async function hydrateSessionStore(): Promise<void> {
   const deviceId = await getOrCreateDeviceId();
-  const identitySession = await loadSession();
+  let identitySession = await loadSession();
+
+  if (identitySession?.mode === "authenticated" && identitySession.refreshToken) {
+    try {
+      const refreshedSession = await refreshMobileSessionWithBackend(identitySession.refreshToken);
+      identitySession = {
+        ...identitySession,
+        userId: refreshedSession.user.id,
+        userEmail: refreshedSession.user.email.trim().toLowerCase(),
+        displayName: refreshedSession.user.displayName,
+        providers: refreshedSession.user.providers,
+        role: refreshedSession.user.role,
+        sessionToken: refreshedSession.sessionToken,
+        sessionExpiresAt: refreshedSession.sessionExpiresAt,
+        refreshToken: refreshedSession.refreshToken,
+        refreshExpiresAt: refreshedSession.refreshExpiresAt,
+      };
+      await saveSession(identitySession);
+    } catch {
+      identitySession = null;
+      await saveSession(null);
+    }
+  }
 
   setState((currentState) => ({
     ...currentState,

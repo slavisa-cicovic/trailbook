@@ -7,3 +7,14 @@ export interface AuthUserResponse {
   providers: AuthProvider[];
   role: UserRole;
 }
+
+export interface AuthAccessTokenResponse {
+  token: string;
+  expiresAt: string;
+}
+
+export interface AuthSessionResponse {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+}

@@ -9,12 +9,13 @@ import type { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import type { LoginDto } from "./dto/login.dto";
 import type { RegisterDto } from "./dto/register.dto";
 import type { ResetPasswordDto } from "./dto/reset-password.dto";
-import type { AuthUserResponse } from "./auth.types";
+import type { AuthAccessTokenResponse, AuthSessionResponse, AuthUserResponse } from "./auth.types";
 import { createOpaqueToken, hashOpaqueToken } from "./auth.utils";
 
 @Injectable()
 export class AuthService {
   private readonly sessionTtlDays = Number(process.env.SESSION_TTL_DAYS || 30);
+  private readonly accessTokenTtlMinutes = Number(process.env.ACCESS_TOKEN_TTL_MINUTES || 60);
   private readonly passwordResetTtlMinutes = Number(process.env.PASSWORD_RESET_TTL_MINUTES || 30);
   private readonly emailVerificationTtlHours = Number(process.env.EMAIL_VERIFICATION_TTL_HOURS || 24);
 
@@ -104,18 +105,79 @@ export class AuthService {
 
   async logout(sessionToken: string | undefined) {
     if (sessionToken) {
-      await this.databaseService.session.updateMany({
+      const session = await this.findSessionByAnyToken(sessionToken);
+
+      if (session) {
+        await this.revokeSession(session.id);
+      }
+    }
+
+    return { success: true };
+  }
+
+  async refreshMobileSession(
+    refreshToken: string,
+    metadata?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
+    const session = await this.findActiveSessionByRefreshToken(refreshToken);
+
+    if (!session) {
+      throw new UnauthorizedException("Refresh token is invalid or expired.");
+    }
+
+    const rotatedRefreshToken = createOpaqueToken();
+    const nextRefreshExpiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * this.sessionTtlDays);
+    const nextAccessToken = createOpaqueToken();
+    const nextAccessExpiresAt = new Date(Date.now() + 1000 * 60 * this.accessTokenTtlMinutes);
+
+    await this.databaseService.$transaction(async (tx) => {
+      await tx.session.update({
+        where: { id: session.id },
+        data: {
+          tokenHash: hashOpaqueToken(rotatedRefreshToken),
+          expiresAt: nextRefreshExpiresAt,
+          userAgent: metadata?.userAgent || session.userAgent,
+          ipAddress: metadata?.ipAddress || session.ipAddress,
+        },
+      });
+
+      await tx.accessToken.updateMany({
         where: {
-          tokenHash: hashOpaqueToken(sessionToken),
+          sessionId: session.id,
           revokedAt: null,
         },
         data: {
           revokedAt: new Date(),
         },
       });
+
+      await tx.accessToken.create({
+        data: {
+          sessionId: session.id,
+          tokenHash: hashOpaqueToken(nextAccessToken),
+          expiresAt: nextAccessExpiresAt,
+        },
+      });
+    });
+
+    const user = await this.usersService.findById(session.userId);
+
+    if (!user) {
+      throw new UnauthorizedException("Unable to refresh session for this user.");
     }
 
-    return { success: true };
+    return {
+      accessToken: {
+        token: nextAccessToken,
+        expiresAt: nextAccessExpiresAt.toISOString(),
+      },
+      session: {
+        id: rotatedRefreshToken,
+        createdAt: session.createdAt.toISOString(),
+        expiresAt: nextRefreshExpiresAt.toISOString(),
+      },
+      user: this.toAuthUser(user),
+    };
   }
 
   async forgotPassword(input: ForgotPasswordDto) {
@@ -191,16 +253,30 @@ export class AuthService {
 
     const passwordHash = await hash(input.password, 12);
 
-    await this.databaseService.$transaction([
-      this.databaseService.user.update({
+    await this.databaseService.$transaction(async (tx) => {
+      await tx.user.update({
         where: { id: request.userId },
         data: { passwordHash },
-      }),
-      this.databaseService.passwordResetToken.update({
+      });
+
+      await tx.passwordResetToken.update({
         where: { id: request.id },
         data: { usedAt: new Date() },
-      }),
-      this.databaseService.session.updateMany({
+      });
+
+      const activeSessions = await tx.session.findMany({
+        where: {
+          userId: request.userId,
+          revokedAt: null,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      const activeSessionIds = activeSessions.map((session) => session.id);
+
+      await tx.session.updateMany({
         where: {
           userId: request.userId,
           revokedAt: null,
@@ -208,8 +284,22 @@ export class AuthService {
         data: {
           revokedAt: new Date(),
         },
-      }),
-    ]);
+      });
+
+      if (activeSessionIds.length > 0) {
+        await tx.accessToken.updateMany({
+          where: {
+            sessionId: {
+              in: activeSessionIds,
+            },
+            revokedAt: null,
+          },
+          data: {
+            revokedAt: new Date(),
+          },
+        });
+      }
+    });
 
     return {
       success: true,
@@ -252,13 +342,9 @@ export class AuthService {
       return { user: null };
     }
 
-    const session = await this.databaseService.session.findUnique({
-      where: {
-        tokenHash: hashOpaqueToken(sessionToken),
-      },
-    });
+    const session = await this.findSessionByAnyToken(sessionToken);
 
-    if (!session || session.revokedAt || session.expiresAt.getTime() < Date.now()) {
+    if (!session) {
       return { user: null };
     }
 
@@ -276,9 +362,10 @@ export class AuthService {
       throw new UnauthorizedException("Unable to establish a session for this user.");
     }
 
-    const session = await this.createSession(loggedInUser.id, metadata);
+    const { accessToken, session } = await this.createSession(loggedInUser.id, metadata);
 
     return {
+      accessToken,
       session,
       user: this.toAuthUser(loggedInUser),
     };
@@ -294,23 +381,108 @@ export class AuthService {
     return `${authBaseUrl}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
   }
 
-  private async createSession(userId: string, metadata?: { ipAddress?: string | null; userAgent?: string | null }) {
-    const token = createOpaqueToken();
-    const session = await this.databaseService.session.create({
-      data: {
-        userId,
-        tokenHash: hashOpaqueToken(token),
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * this.sessionTtlDays),
-        userAgent: metadata?.userAgent || null,
-        ipAddress: metadata?.ipAddress || null,
-      },
+  private async createSession(
+    userId: string,
+    metadata?: { ipAddress?: string | null; userAgent?: string | null },
+  ): Promise<{ accessToken: AuthAccessTokenResponse; session: AuthSessionResponse }> {
+    const refreshToken = createOpaqueToken();
+    const accessToken = createOpaqueToken();
+    const refreshExpiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * this.sessionTtlDays);
+    const accessExpiresAt = new Date(Date.now() + 1000 * 60 * this.accessTokenTtlMinutes);
+
+    const session = await this.databaseService.$transaction(async (tx) => {
+      const createdSession = await tx.session.create({
+        data: {
+          userId,
+          tokenHash: hashOpaqueToken(refreshToken),
+          expiresAt: refreshExpiresAt,
+          userAgent: metadata?.userAgent || null,
+          ipAddress: metadata?.ipAddress || null,
+        },
+      });
+
+      await tx.accessToken.create({
+        data: {
+          sessionId: createdSession.id,
+          tokenHash: hashOpaqueToken(accessToken),
+          expiresAt: accessExpiresAt,
+        },
+      });
+
+      return createdSession;
     });
 
     return {
-      id: token,
-      createdAt: session.createdAt.toISOString(),
-      expiresAt: session.expiresAt.toISOString(),
+      accessToken: {
+        token: accessToken,
+        expiresAt: accessExpiresAt.toISOString(),
+      },
+      session: {
+        id: refreshToken,
+        createdAt: session.createdAt.toISOString(),
+        expiresAt: session.expiresAt.toISOString(),
+      },
     };
+  }
+
+  private async findActiveSessionByRefreshToken(refreshToken: string) {
+    const session = await this.databaseService.session.findUnique({
+      where: {
+        tokenHash: hashOpaqueToken(refreshToken),
+      },
+    });
+
+    if (!session || session.revokedAt || session.expiresAt.getTime() < Date.now()) {
+      return null;
+    }
+
+    return session;
+  }
+
+  private async findSessionByAnyToken(token: string) {
+    const accessToken = await this.databaseService.accessToken.findUnique({
+      where: {
+        tokenHash: hashOpaqueToken(token),
+      },
+      include: {
+        session: true,
+      },
+    });
+
+    if (
+      accessToken &&
+      !accessToken.revokedAt &&
+      accessToken.expiresAt.getTime() >= Date.now() &&
+      !accessToken.session.revokedAt &&
+      accessToken.session.expiresAt.getTime() >= Date.now()
+    ) {
+      return accessToken.session;
+    }
+
+    return this.findActiveSessionByRefreshToken(token);
+  }
+
+  private async revokeSession(sessionId: string) {
+    await this.databaseService.$transaction([
+      this.databaseService.session.updateMany({
+        where: {
+          id: sessionId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+        },
+      }),
+      this.databaseService.accessToken.updateMany({
+        where: {
+          sessionId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+        },
+      }),
+    ]);
   }
 
   private toAuthUser(user: UserRecord): AuthUserResponse {
