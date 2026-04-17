@@ -99,7 +99,7 @@ export function getRecordingProfileLabel(profile: RecordingMode): string {
 export function getRecordingProfileColor(profile: RecordingProfile): string {
   switch (profile) {
     case "walk":
-      return "#2f7d4b";
+      return "#d4f542";
     case "bike":
       return "#2f6db3";
     case "drive":
