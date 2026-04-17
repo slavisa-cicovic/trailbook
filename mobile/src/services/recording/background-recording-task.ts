@@ -76,6 +76,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
     const appendedTripPoints = appendTripPointIfUseful(
       nextTripPoints,
       createTripPointForLocation(activeTrip, nextRecordingSession.activeSegmentId ?? activeSegment?.localId ?? null, snapshot),
+      nextRecordingSession.recordingMode,
     );
 
     if (appendedTripPoints !== nextTripPoints) {

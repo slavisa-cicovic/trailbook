@@ -75,13 +75,13 @@ export function getTrackingOptionsForProfile(profile: RecordingMode): TrackingOp
       return {
         accuracy: Location.Accuracy.Balanced,
         distanceInterval: 25,
-        timeInterval: 60 * 1000,
+        timeInterval: 20 * 1000,
       };
     case "walk":
       return {
         accuracy: Location.Accuracy.High,
         distanceInterval: 12,
-        timeInterval: 60 * 1000,
+        timeInterval: 15 * 1000,
       };
     case "bike":
       return {

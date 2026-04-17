@@ -395,7 +395,11 @@ export default function RecordingScreen() {
       recordingSession.activeSegmentId,
       currentLocation,
     );
-    const nextTripPoints = appendTripPointIfUseful(tripPoints, nextTripPoint);
+    const nextTripPoints = appendTripPointIfUseful(
+      tripPoints,
+      nextTripPoint,
+      recordingSession.recordingMode,
+    );
 
     if (nextTripPoints === tripPoints) {
       return;
