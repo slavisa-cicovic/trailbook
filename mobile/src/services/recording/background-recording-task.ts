@@ -12,10 +12,12 @@ import { updateRecordingLastPoint } from "./recording.service";
 import { setRecordingSession } from "../../state/recording-store";
 import { setTripSegments } from "../../state/trip-segments-store";
 import { setTripPoints } from "../../state/trip-points-store";
+import { setWaypoints } from "../../state/waypoints-store";
 import { loadRecordingSession } from "../../storage/recording-storage";
 import { loadTripPoints } from "../../storage/trip-points-storage";
 import { loadTripSegments } from "../../storage/trip-segments-storage";
 import { loadTrips } from "../../storage/trips-storage";
+import { loadWaypoints } from "../../storage/waypoints-storage";
 
 interface BackgroundLocationTaskData {
   locations: Location.LocationObject[];
@@ -57,6 +59,8 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
     null;
 
   let nextTripPoints = await loadTripPoints();
+  const waypoints = await loadWaypoints();
+  let nextWaypoints = waypoints;
   let nextTripSegments = tripSegments;
   let pointsChanged = false;
   let lastRecordedAt = recordingSession.lastPointRecordedAt;
@@ -83,11 +87,13 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
         activeTrip,
         nextTripSegments,
         nextTripPoints,
+        nextWaypoints,
         snapshot.recordedAt,
       );
 
       nextRecordingSession = autoTransition.session;
       nextTripSegments = autoTransition.tripSegments;
+      nextWaypoints = autoTransition.waypoints;
     }
 
     lastRecordedAt = snapshot.recordedAt;
@@ -99,6 +105,9 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
     writes.push(setTripPoints(nextTripPoints));
     if (nextTripSegments !== tripSegments) {
       writes.push(setTripSegments(nextTripSegments));
+    }
+    if (nextWaypoints !== waypoints) {
+      writes.push(setWaypoints(nextWaypoints));
     }
   }
 

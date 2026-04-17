@@ -1,7 +1,8 @@
-import type { RecordingProfile, RecordingSessionSummary, Trip, TripPoint, TripSegment } from "../../domain/trips";
+import type { RecordingProfile, RecordingSessionSummary, Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
 import {
   closeActiveTripSegment,
   getOpenTripSegmentForTrip,
+  normalizeAutoClosedTripSegment,
   startNextTripSegment,
 } from "../trip-segments/trip-segments.service";
 import { getVisibleTripPointsForTrip } from "../trip-points/trip-points.service";
@@ -11,6 +12,7 @@ interface AutoRecordingTransitionResult {
   changed: boolean;
   session: RecordingSessionSummary;
   tripSegments: TripSegment[];
+  waypoints: Waypoint[];
 }
 
 interface TimedSpeedSample {
@@ -302,6 +304,7 @@ export function applyAutoRecordingTransition(
   trip: Trip,
   tripSegments: TripSegment[],
   tripPoints: TripPoint[],
+  waypoints: Waypoint[],
   recordedAt: string,
 ): AutoRecordingTransitionResult {
   if (recordingSession.recordingMode !== "auto" || !recordingSession.activeSegmentId) {
@@ -309,6 +312,7 @@ export function applyAutoRecordingTransition(
       changed: false,
       session: recordingSession,
       tripSegments,
+      waypoints,
     };
   }
 
@@ -326,6 +330,7 @@ export function applyAutoRecordingTransition(
           ? recordingSession
           : updateRecordingAutoCandidate(recordingSession, null, null),
       tripSegments,
+      waypoints,
     };
   }
 
@@ -334,6 +339,7 @@ export function applyAutoRecordingTransition(
       changed: false,
       session: updateRecordingAutoCandidate(recordingSession, inferredProfile, recordedAt),
       tripSegments,
+      waypoints,
     };
   }
 
@@ -351,20 +357,29 @@ export function applyAutoRecordingTransition(
       changed: false,
       session: recordingSession,
       tripSegments,
+      waypoints,
     };
   }
 
   const closedSegments = closeActiveTripSegment(tripSegments, activeSegment.localId, recordedAt);
-  const { nextSegment, tripSegments: nextTripSegments } = startNextTripSegment(
+  const { nextSegment, tripSegments: stagedTripSegments } = startNextTripSegment(
     trip,
     closedSegments,
     inferredProfile,
+    recordedAt,
+  );
+  const normalizedState = normalizeAutoClosedTripSegment(
+    stagedTripSegments,
+    tripPoints,
+    waypoints,
+    trip.localId,
     recordedAt,
   );
 
   return {
     changed: true,
     session: updateRecordingSegment(recordingSession, nextSegment.localId, inferredProfile),
-    tripSegments: nextTripSegments,
+    tripSegments: normalizedState.tripSegments,
+    waypoints: normalizedState.waypoints,
   };
 }

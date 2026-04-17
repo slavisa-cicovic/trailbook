@@ -37,6 +37,9 @@ export interface UpdateTripSegmentModeResult {
   waypoints: Waypoint[];
 }
 
+const AUTO_MIN_PLANE_SEGMENT_MS = 30 * 60 * 1000;
+const AUTO_MIN_DRIVE_SEGMENT_MS = 10 * 60 * 1000;
+
 function getNextSyncStatus(currentStatus: TripSegment["syncStatus"]): TripSegment["syncStatus"] {
   return currentStatus === "local-only" ? "local-only" : "pending-sync";
 }
@@ -45,6 +48,35 @@ function getNextEntitySyncStatus<T extends { syncStatus: "local-only" | "pending
   entity: T,
 ): T["syncStatus"] {
   return entity.syncStatus === "local-only" ? "local-only" : "pending-sync";
+}
+
+function isGroundProfile(profile: RecordingProfile) {
+  return profile === "walk" || profile === "bike" || profile === "drive";
+}
+
+function resolveShortDriveFallback(
+  orderedTripSegments: TripSegment[],
+  targetIndex: number,
+): RecordingProfile | null {
+  const previousProfile = targetIndex > 0 ? orderedTripSegments[targetIndex - 1]?.recordingProfile ?? null : null;
+  const nextProfile =
+    targetIndex < orderedTripSegments.length - 1
+      ? orderedTripSegments[targetIndex + 1]?.recordingProfile ?? null
+      : null;
+
+  if (previousProfile && nextProfile && previousProfile === nextProfile && isGroundProfile(previousProfile)) {
+    return previousProfile;
+  }
+
+  if (previousProfile && isGroundProfile(previousProfile)) {
+    return previousProfile;
+  }
+
+  if (nextProfile && isGroundProfile(nextProfile)) {
+    return nextProfile;
+  }
+
+  return null;
 }
 
 export function createInitialTripSegment(trip: Trip, startedAt: string): TripSegment {
@@ -279,5 +311,74 @@ export function updateTripSegmentMode(
     tripSegments: nextTripSegments,
     tripPoints: nextTripPoints,
     waypoints: nextWaypoints,
+  };
+}
+
+export function normalizeAutoClosedTripSegment(
+  tripSegments: TripSegment[],
+  tripPoints: TripPoint[],
+  waypoints: Waypoint[],
+  tripLocalId: string,
+  updatedAt: string,
+): UpdateTripSegmentModeResult {
+  const orderedTripSegments = getVisibleTripSegmentsForTrip(tripSegments, tripLocalId);
+  const targetIndex = [...orderedTripSegments]
+    .map((segment, index) => ({ index, segment }))
+    .reverse()
+    .find(({ segment }) => segment.endedAt !== null)?.index;
+
+  if (targetIndex === undefined) {
+    return {
+      tripSegments,
+      tripPoints,
+      waypoints,
+    };
+  }
+
+  const targetSegment = orderedTripSegments[targetIndex];
+  const targetSummary = buildTripSegmentsSummary(tripSegments, tripPoints, tripLocalId).find(
+    (summary) => summary.segment.localId === targetSegment.localId,
+  );
+
+  if (!targetSummary) {
+    return {
+      tripSegments,
+      tripPoints,
+      waypoints,
+    };
+  }
+
+  if (targetSegment.recordingProfile === "plane" && targetSummary.durationMs < AUTO_MIN_PLANE_SEGMENT_MS) {
+    return updateTripSegmentMode(
+      tripSegments,
+      tripPoints,
+      waypoints,
+      tripLocalId,
+      targetSegment.localId,
+      "drive",
+      updatedAt,
+    );
+  }
+
+  if (targetSegment.recordingProfile === "drive" && targetSummary.durationMs < AUTO_MIN_DRIVE_SEGMENT_MS) {
+    const fallbackProfile = resolveShortDriveFallback(orderedTripSegments, targetIndex);
+
+    if (fallbackProfile && fallbackProfile !== "drive") {
+      return updateTripSegmentMode(
+        tripSegments,
+        tripPoints,
+        waypoints,
+        tripLocalId,
+        targetSegment.localId,
+        fallbackProfile,
+        updatedAt,
+      );
+    }
+  }
+
+  return {
+    tripSegments,
+    tripPoints,
+    waypoints,
   };
 }

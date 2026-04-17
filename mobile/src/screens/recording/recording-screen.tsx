@@ -66,6 +66,7 @@ import {
   closeActiveTripSegment,
   createInitialTripSegment,
   getOpenTripSegmentForTrip,
+  normalizeAutoClosedTripSegment,
   startNextTripSegment,
 } from "../../services/trip-segments/trip-segments.service";
 import { getVisibleTripPausesForTrip } from "../../services/trip-pauses/trip-pauses.service";
@@ -407,11 +408,13 @@ export default function RecordingScreen() {
         activeTrip,
         tripSegments,
         nextTripPoints,
+        waypoints,
         currentLocation.recordedAt,
       );
 
       if (autoTransition.changed) {
         await setTripSegments(autoTransition.tripSegments);
+        await setWaypoints(autoTransition.waypoints);
       }
 
       await setTripPoints(nextTripPoints);
@@ -548,8 +551,23 @@ export default function RecordingScreen() {
       tripPauses,
       pausedAt,
     );
+    const normalizedState =
+      recordingSession.recordingMode === "auto"
+        ? normalizeAutoClosedTripSegment(
+            nextState.tripSegments,
+            tripPoints,
+            waypoints,
+            activeTrip.localId,
+            pausedAt,
+          )
+        : {
+            tripSegments: nextState.tripSegments,
+            tripPoints,
+            waypoints,
+          };
 
-    await setTripSegments(nextState.tripSegments);
+    await setTripSegments(normalizedState.tripSegments);
+    await setWaypoints(normalizedState.waypoints);
     await setTripPauses(nextState.tripPauses);
     await setTrips(pauseActiveTrip(trips, activeTrip.localId, pausedAt));
     await setRecordingSession(nextState.session);
@@ -566,9 +584,23 @@ export default function RecordingScreen() {
     if (backgroundRecordingSupported !== false) {
       await stopBackgroundLocationTracking();
     }
-    await setTripSegments(
-      closeActiveTripSegment(tripSegments, recordingSession.activeSegmentId, endedAt),
-    );
+    const closedTripSegments = closeActiveTripSegment(tripSegments, recordingSession.activeSegmentId, endedAt);
+    const normalizedState =
+      recordingSession.recordingMode === "auto" && activeTrip
+        ? normalizeAutoClosedTripSegment(
+            closedTripSegments,
+            tripPoints,
+            waypoints,
+            activeTrip.localId,
+            endedAt,
+          )
+        : {
+            tripSegments: closedTripSegments,
+            tripPoints,
+            waypoints,
+          };
+    await setTripSegments(normalizedState.tripSegments);
+    await setWaypoints(normalizedState.waypoints);
     await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt));
     await setRecordingSession(stopRecordingSession(recordingSession));
   }
