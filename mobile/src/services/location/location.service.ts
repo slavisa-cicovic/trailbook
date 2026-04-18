@@ -85,9 +85,9 @@ export function getTrackingOptionsForProfile(profile: RecordingMode): TrackingOp
       };
     case "bike":
       return {
-        accuracy: Location.Accuracy.Balanced,
-        distanceInterval: 30,
-        timeInterval: 2 * 60 * 1000,
+        accuracy: Location.Accuracy.High,
+        distanceInterval: 15,
+        timeInterval: 20 * 1000,
       };
     case "drive":
       return {
