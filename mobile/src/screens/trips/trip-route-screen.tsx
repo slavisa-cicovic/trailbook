@@ -5,7 +5,7 @@ import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
-import type { Trip, Waypoint } from "../../domain/trips";
+import type { Trip, TripPoint, Waypoint } from "../../domain/trips";
 import type { TripTimelineEntry } from "../../services/trip-pauses/trip-pauses.service";
 import {
   buildSegmentPolylines,
@@ -24,6 +24,7 @@ import {
   calculateTripDistanceMeters,
   formatDistanceKm,
   getVisibleTripPointsForTrip,
+  smoothTripRoutePoints,
 } from "../../services/trip-points/trip-points.service";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { useTripPausesStore } from "../../state/trip-pauses-store";
@@ -92,6 +93,7 @@ export default function TripRouteScreen() {
   const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
+  const currentUserId = identitySession?.userId ?? null;
 
   const [tripEditVisible, setTripEditVisible] = useState(false);
   const [tripShareVisible, setTripShareVisible] = useState(false);
@@ -114,7 +116,13 @@ export default function TripRouteScreen() {
   >([]);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [smoothBusy, setSmoothBusy] = useState(false);
   const [segmentEditSegmentId, setSegmentEditSegmentId] = useState<string | null>(null);
+  const [routeSmoothingUndo, setRouteSmoothingUndo] = useState<{
+    previousTrip: Trip;
+    previousTripPoints: TripPoint[];
+    removedPointCount: number;
+  } | null>(null);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -397,6 +405,80 @@ export default function TripRouteScreen() {
     }
   }
 
+  async function handleSmoothRoute() {
+    if (!selectedTrip || !currentUserId || selectedTrip.status !== "ended") {
+      return;
+    }
+
+    const nextSyncStatus: Trip["syncStatus"] =
+      selectedTrip.syncStatus === "local-only" ? "local-only" : "pending-sync";
+    const nextTripPointsState = smoothTripRoutePoints(
+      currentUserTripPoints,
+      selectedTrip.localId,
+      selectedTrip.recordingProfile,
+      nextSyncStatus,
+    );
+
+    if (nextTripPointsState.removedPointCount === 0) {
+      Alert.alert("No changes", "This route does not currently need smoothing.");
+      return;
+    }
+
+    setSmoothBusy(true);
+
+    try {
+      const updatedAt = new Date().toISOString();
+      const nextTrips = trips.map((trip) =>
+        trip.localId === selectedTrip.localId
+          ? {
+              ...trip,
+              updatedAt,
+              syncStatus: nextSyncStatus,
+            }
+          : trip,
+      );
+
+      setRouteSmoothingUndo({
+        previousTrip: selectedTrip,
+        previousTripPoints: currentUserTripPoints.filter((tripPoint) => tripPoint.tripLocalId === selectedTrip.localId),
+        removedPointCount: nextTripPointsState.removedPointCount,
+      });
+
+      await setTripPoints([
+        ...tripPoints.filter((tripPoint) => tripPoint.userId !== currentUserId),
+        ...nextTripPointsState.tripPoints,
+      ]);
+      await setTrips(nextTrips);
+    } finally {
+      setSmoothBusy(false);
+    }
+  }
+
+  async function handleUndoSmoothRoute() {
+    if (
+      !selectedTrip ||
+      !currentUserId ||
+      !routeSmoothingUndo ||
+      routeSmoothingUndo.previousTrip.localId !== selectedTrip.localId
+    ) {
+      return;
+    }
+
+    const restoredTripPoints = [
+      ...tripPoints.filter((tripPoint) => tripPoint.userId !== currentUserId),
+      ...currentUserTripPoints.filter((tripPoint) => tripPoint.tripLocalId !== selectedTrip.localId),
+      ...routeSmoothingUndo.previousTripPoints,
+    ];
+
+    const restoredTrips = trips.map((trip) =>
+      trip.localId === selectedTrip.localId ? routeSmoothingUndo.previousTrip : trip,
+    );
+
+    await setTripPoints(restoredTripPoints);
+    await setTrips(restoredTrips);
+    setRouteSmoothingUndo(null);
+  }
+
   function handleSelectWaypoint(waypoint: Waypoint) {
     if (!selectedTrip) {
       return;
@@ -539,6 +621,15 @@ export default function TripRouteScreen() {
               >
                 <MaterialIcons color="#243224" name="edit" size={18} />
               </Pressable>
+              {selectedTrip.status === "ended" ? (
+                <Pressable
+                  accessibilityLabel={smoothBusy ? "Smoothing route" : "Smooth route"}
+                  onPress={() => void handleSmoothRoute()}
+                  style={[styles.headerIconButton, styles.smoothButton]}
+                >
+                  <MaterialIcons color={smoothBusy ? "#6b7280" : "#243224"} name="auto-fix-high" size={18} />
+                </Pressable>
+              ) : null}
               {identitySession.mode === "authenticated" ? (
                 <>
                   <Pressable
@@ -565,6 +656,16 @@ export default function TripRouteScreen() {
             ) : null}
             {identitySession.mode !== "authenticated" ? (
               <Text style={styles.demoHint}>Demo trips stay local-only and cannot be shared.</Text>
+            ) : null}
+            {routeSmoothingUndo && routeSmoothingUndo.previousTrip.localId === selectedTrip.localId ? (
+              <View style={styles.smoothingNoticeCard}>
+                <Text style={styles.smoothingNoticeText}>
+                  Route smoothing removed {String(routeSmoothingUndo.removedPointCount)} noisy points.
+                </Text>
+                <Pressable onPress={() => void handleUndoSmoothRoute()} style={styles.smoothingUndoButton}>
+                  <Text style={styles.smoothingUndoButtonText}>Undo</Text>
+                </Pressable>
+              </View>
             ) : null}
             {shareSuccess ? <Text style={styles.shareSuccessText}>{shareSuccess}</Text> : null}
             <View style={styles.summaryGrid}>
@@ -751,6 +852,9 @@ const styles = StyleSheet.create({
   shareButton: {
     backgroundColor: "#dfead9",
   },
+  smoothButton: {
+    backgroundColor: "#e8edf5",
+  },
   demoHint: {
     fontSize: 13,
     lineHeight: 18,
@@ -760,6 +864,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#2f6c42",
+  },
+  smoothingNoticeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderRadius: 14,
+    backgroundColor: "#eef4ea",
+    borderWidth: 1,
+    borderColor: "#dbe7d5",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  smoothingNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#355035",
+  },
+  smoothingUndoButton: {
+    borderRadius: 999,
+    backgroundColor: "#243224",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  smoothingUndoButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fffdf8",
   },
   mapTypeChip: {
     borderRadius: 999,
