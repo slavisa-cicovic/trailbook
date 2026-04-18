@@ -49,14 +49,13 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
   }
 
   const tripSegments = await loadTripSegments();
-  const activeSegment =
-    (recordingSession.activeSegmentId
-      ? tripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ?? null
-      : null) ??
-    tripSegments.find(
-      (segment) => segment.tripLocalId === activeTrip.localId && segment.endedAt === null,
-    ) ??
-    null;
+  const activeSegmentById = recordingSession.activeSegmentId
+    ? tripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId)
+    : undefined;
+  const activeOpenSegment = tripSegments.find(
+    (segment) => segment.tripLocalId === activeTrip.localId && segment.endedAt === null,
+  );
+  const activeSegment = activeSegmentById ?? activeOpenSegment ?? null;
 
   let nextTripPoints = await loadTripPoints();
   const waypoints = await loadWaypoints();
