@@ -1284,4 +1284,170 @@ describe("auth integration", () => {
 
     assert.equal(otherPatchResponse.status, 404);
   });
+
+  test("user can save structured trip edits through the web edit endpoint", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Editor Owner",
+      email: "editor-owner@example.com",
+      password: "password123",
+    });
+
+    const verificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "editor-owner@example.com",
+      },
+    });
+    const verifyTokenMatch = verificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(verifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(verifyTokenMatch![1]))}`,
+    );
+
+    const ownerLogin = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "editor-owner@example.com",
+      password: "password123",
+    });
+
+    const syncResponse = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        localId: "editor-trip-1",
+        deviceId: "device-editor-owner",
+        title: "Editable trip",
+        description: "Before web edit",
+        recordingProfile: "walk",
+        startedAt: "2026-04-18T08:00:00.000Z",
+        endedAt: "2026-04-18T08:45:00.000Z",
+        createdAt: "2026-04-18T08:00:00.000Z",
+        updatedAt: "2026-04-18T08:45:00.000Z",
+        deletedAt: null,
+        attachments: [],
+        segments: [
+          {
+            localId: "editor-segment-1",
+            recordingProfile: "walk",
+            startedAt: "2026-04-18T08:00:00.000Z",
+            endedAt: "2026-04-18T08:20:00.000Z",
+            createdAt: "2026-04-18T08:00:00.000Z",
+            updatedAt: "2026-04-18T08:20:00.000Z",
+          },
+          {
+            localId: "editor-segment-2",
+            recordingProfile: "bike",
+            startedAt: "2026-04-18T08:20:00.000Z",
+            endedAt: "2026-04-18T08:45:00.000Z",
+            createdAt: "2026-04-18T08:20:00.000Z",
+            updatedAt: "2026-04-18T08:45:00.000Z",
+          },
+        ],
+        points: [
+          {
+            localId: "editor-point-1",
+            segmentLocalId: "editor-segment-1",
+            latitude: 44.7866,
+            longitude: 20.4489,
+            recordedAt: "2026-04-18T08:05:00.000Z",
+            accuracy: 8,
+            altitude: null,
+            speed: 4,
+          },
+          {
+            localId: "editor-point-2",
+            segmentLocalId: "editor-segment-1",
+            latitude: 44.7876,
+            longitude: 20.4499,
+            recordedAt: "2026-04-18T08:10:00.000Z",
+            accuracy: 8,
+            altitude: null,
+            speed: 4,
+          },
+          {
+            localId: "editor-point-3",
+            segmentLocalId: "editor-segment-2",
+            latitude: 44.7906,
+            longitude: 20.4529,
+            recordedAt: "2026-04-18T08:25:00.000Z",
+            accuracy: 8,
+            altitude: null,
+            speed: 10,
+          },
+        ],
+        waypoints: [
+          {
+            localId: "editor-waypoint-1",
+            segmentLocalId: "editor-segment-1",
+            category: "cafe",
+            latitude: 44.787,
+            longitude: 20.4495,
+            title: "Coffee",
+            note: "Original note",
+            createdAt: "2026-04-18T08:12:00.000Z",
+            updatedAt: "2026-04-18T08:12:00.000Z",
+            deletedAt: null,
+          },
+        ],
+      });
+
+    assert.equal(syncResponse.status, 201);
+
+    const editSaveResponse = await request(app.getHttpServer())
+      .put(`/api/trips/${syncResponse.body.tripId}/edit`)
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        trip: {
+          title: "Edited on web",
+          description: "After web edit",
+        },
+        segments: [
+          {
+            localId: "editor-segment-1",
+            recordingProfile: "bike",
+            startedAt: "2026-04-18T08:00:00.000Z",
+            endedAt: "2026-04-18T08:45:00.000Z",
+            distanceMeters: 1000,
+          },
+        ],
+        points: [
+          {
+            localId: "editor-point-1",
+            segmentLocalId: "editor-segment-1",
+            latitude: 44.7866,
+            longitude: 20.4489,
+            recordedAt: "2026-04-18T08:05:00.000Z",
+          },
+          {
+            localId: "editor-point-3",
+            segmentLocalId: "editor-segment-1",
+            latitude: 44.7906,
+            longitude: 20.4529,
+            recordedAt: "2026-04-18T08:25:00.000Z",
+          },
+        ],
+        waypoints: [
+          {
+            localId: "editor-waypoint-1",
+            segmentLocalId: "editor-segment-1",
+            category: "viewpoint",
+            latitude: 44.787,
+            longitude: 20.4495,
+            title: "Updated waypoint",
+            note: "Updated note",
+            recordedAt: "2026-04-18T08:12:00.000Z",
+            photoCount: 0,
+          },
+        ],
+        pauses: [],
+      });
+
+    assert.equal(editSaveResponse.status, 200);
+    assert.equal(editSaveResponse.body.trip.title, "Edited on web");
+    assert.equal(editSaveResponse.body.trip.description, "After web edit");
+    assert.equal(editSaveResponse.body.segments.length, 1);
+    assert.equal(editSaveResponse.body.segments[0].recordingProfile, "bike");
+    assert.equal(editSaveResponse.body.points.length, 2);
+    assert.equal(editSaveResponse.body.waypoints[0].title, "Updated waypoint");
+    assert.equal(editSaveResponse.body.waypoints[0].category, "viewpoint");
+  });
 });

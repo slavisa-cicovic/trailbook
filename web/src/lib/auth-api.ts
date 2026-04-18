@@ -82,10 +82,14 @@ export interface UserTripDetail {
     segmentCount: number;
   };
   points: Array<{
+    localId: string;
     latitude: number;
     longitude: number;
     recordedAt: string;
     segmentLocalId: string | null;
+    accuracy: number | null;
+    altitude: number | null;
+    speed: number | null;
   }>;
   segments: Array<{
     localId: string;
@@ -96,12 +100,14 @@ export interface UserTripDetail {
   }>;
   waypoints: Array<{
     localId: string;
+    category: "generic" | "departure" | "fuel" | "border" | "port" | "ferry" | "restaurant" | "cafe" | "viewpoint" | "monument" | "beach";
     title: string;
     note: string | null;
     latitude: number;
     longitude: number;
     recordedAt: string;
     photoCount: number;
+    segmentLocalId: string | null;
   }>;
   pauses: Array<{
     startedAt: string;
@@ -230,6 +236,19 @@ export async function getTripDetail(tripId: string) {
 export async function updateTrip(tripId: string, input: { title?: string; description?: string }) {
   return request<{ trip: UserTripDetail["trip"] }>(`/trips/${tripId}`, {
     method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function saveTripEdit(tripId: string, input: {
+  trip: { title: string; description: string | null };
+  segments: UserTripDetail["segments"];
+  points: UserTripDetail["points"];
+  waypoints: UserTripDetail["waypoints"];
+  pauses: UserTripDetail["pauses"];
+}) {
+  return request<UserTripDetail>(`/trips/${tripId}/edit`, {
+    method: "PUT",
     body: JSON.stringify(input),
   });
 }

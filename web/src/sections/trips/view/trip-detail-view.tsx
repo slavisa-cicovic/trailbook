@@ -7,30 +7,19 @@ import {
   Card,
   CardContent,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Paper,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableRow,
-  TextField,
   Typography,
 } from "@mui/material";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { TableHeadCustom, TableNoData } from "../../../components/table";
-import {
-  getCurrentUser,
-  getTripDetail,
-  type AuthUser,
-  type UserTripDetail,
-  updateTrip,
-} from "../../../lib/auth-api";
+import { getCurrentUser, getTripDetail, type AuthUser, type UserTripDetail } from "../../../lib/auth-api";
 import { TripRoutePreview } from "./trip-route-preview";
 
 const TIMELINE_HEAD = [
@@ -87,11 +76,7 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
   const [detail, setDetail] = useState<UserTripDetail | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [titleDraft, setTitleDraft] = useState("");
-  const [descriptionDraft, setDescriptionDraft] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -146,8 +131,6 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
       .then((result) => {
         if (!cancelled) {
           setDetail(result);
-          setTitleDraft(result.trip.title);
-          setDescriptionDraft(result.trip.description ?? "");
         }
       })
       .catch((loadError) => {
@@ -168,32 +151,6 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
   }, [tripId, user]);
 
   const timelineRows = useMemo(() => detail?.segments ?? [], [detail]);
-
-  async function handleSave() {
-    if (!detail) {
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-
-    try {
-      await updateTrip(detail.trip.id, {
-        title: titleDraft,
-        description: descriptionDraft,
-      });
-
-      const refreshed = await getTripDetail(detail.trip.id);
-      setDetail(refreshed);
-      setTitleDraft(refreshed.trip.title);
-      setDescriptionDraft(refreshed.trip.description ?? "");
-      setEditOpen(false);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to update trip.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   if (authLoading || detailLoading) {
     return (
@@ -240,8 +197,8 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
             {formatProfile(detail.trip.recordingProfile)} trip • {formatDateOnly(detail.trip.startedAt)}
           </Typography>
         </Stack>
-        <Button onClick={() => setEditOpen(true)} variant="contained">
-          Edit
+        <Button component={Link} href={`/trips/${detail.trip.id}/edit`} variant="contained">
+          Edit trip
         </Button>
       </Stack>
 
@@ -337,34 +294,6 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
           </TableBody>
         </Table>
       </Paper>
-
-      <Dialog fullWidth maxWidth="sm" onClose={() => !saving && setEditOpen(false)} open={editOpen}>
-        <DialogTitle>Edit trip</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <TextField
-              label="Title"
-              onChange={(event) => setTitleDraft(event.target.value)}
-              value={titleDraft}
-            />
-            <TextField
-              label="Description"
-              minRows={4}
-              multiline
-              onChange={(event) => setDescriptionDraft(event.target.value)}
-              value={descriptionDraft}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={saving} onClick={() => setEditOpen(false)}>
-            Cancel
-          </Button>
-          <Button disabled={saving || titleDraft.trim().length === 0} onClick={handleSave} variant="contained">
-            {saving ? "Saving..." : "Save"}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Stack>
   );
 }

@@ -3,6 +3,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import { DatabaseService } from "../database/database.service";
 import { UsersService } from "../users/users.service";
 import { MediaStorageService } from "./media-storage.service";
+import type { SaveTripEditDto } from "./dto/save-trip-edit.dto";
 import type { ShareTripDto } from "./dto/share-trip.dto";
 import type { SyncTripDto } from "./dto/sync-trip.dto";
 import type { UpdateTripDto } from "./dto/update-trip.dto";
@@ -75,6 +76,34 @@ export class TripsService {
     }
 
     return deduped;
+  }
+
+  private validateTripEditInput(input: SaveTripEditDto) {
+    if (!input?.trip || typeof input.trip.title !== "string" || input.trip.title.trim().length === 0) {
+      throw new BadRequestException("Trip title is required.");
+    }
+
+    if (!Array.isArray(input.segments) || !Array.isArray(input.points) || !Array.isArray(input.waypoints)) {
+      throw new BadRequestException("Trip edit payload is invalid.");
+    }
+
+    for (const segment of input.segments) {
+      if (!segment.localId || !segment.startedAt) {
+        throw new BadRequestException("Each segment must have a localId and startedAt.");
+      }
+    }
+
+    for (const point of input.points) {
+      if (!point.localId || !point.recordedAt) {
+        throw new BadRequestException("Each point must have a localId and recordedAt.");
+      }
+    }
+
+    for (const waypoint of input.waypoints) {
+      if (!waypoint.localId || !waypoint.recordedAt || !waypoint.title) {
+        throw new BadRequestException("Each waypoint must have a localId, title, and recordedAt.");
+      }
+    }
   }
 
   private toOwnedTripSummary(
@@ -607,11 +636,15 @@ export class TripsService {
         segmentCount: trip.segments.length,
       },
       points: trip.points.map((point) => ({
+        localId: point.localSourceId,
         latitude: point.latitude,
         longitude: point.longitude,
         recordedAt: point.recordedAt.toISOString(),
         segmentLocalId:
           trip.segments.find((segment) => segment.id === point.segmentId)?.localSourceId ?? null,
+        accuracy: point.accuracy,
+        altitude: point.altitude,
+        speed: point.speed,
       })),
       segments: trip.segments.map((segment) => {
         const segmentPoints = trip.points.filter((point) => point.segmentId === segment.id);
@@ -626,12 +659,15 @@ export class TripsService {
       }),
       waypoints: trip.waypoints.map((waypoint) => ({
         localId: waypoint.localSourceId,
+        category: waypoint.category,
         title: waypoint.title,
         note: waypoint.note,
         latitude: waypoint.latitude,
         longitude: waypoint.longitude,
         recordedAt: waypoint.createdAt.toISOString(),
         photoCount: photoCountByWaypointId.get(waypoint.id) ?? 0,
+        segmentLocalId:
+          trip.segments.find((segment) => segment.id === waypoint.segmentId)?.localSourceId ?? null,
       })),
       pauses: [],
     };
@@ -678,6 +714,142 @@ export class TripsService {
         syncStatus: "synced" as const,
       },
     };
+  }
+
+  async saveTripEdit(ownerUserId: string, tripId: string, input: SaveTripEditDto) {
+    this.validateTripEditInput(input);
+
+    const trip = await this.databaseService.trip.findUnique({
+      where: { id: tripId },
+      include: {
+        segments: true,
+        waypoints: true,
+      },
+    });
+
+    if (!trip || trip.ownerUserId !== ownerUserId || trip.deletedAt !== null) {
+      throw new NotFoundException("Trip not found.");
+    }
+
+    const dedupedSegments = this.dedupeByLocalId(input.segments);
+    const dedupedPoints = this.dedupeByLocalId(input.points);
+    const dedupedWaypoints = this.dedupeByLocalId(input.waypoints);
+    const now = new Date();
+
+    await this.databaseService.$transaction(async (tx) => {
+      await tx.trip.update({
+        where: { id: tripId },
+        data: {
+          title: input.trip.title.trim(),
+          description: input.trip.description?.trim() || null,
+          updatedAt: now,
+        },
+      });
+
+      const segmentIdByLocalId = new Map<string, string>();
+
+      for (const segment of dedupedSegments) {
+        const savedSegment = await tx.tripSegment.upsert({
+          where: {
+            tripId_localSourceId: {
+              tripId,
+              localSourceId: segment.localId,
+            },
+          },
+          create: {
+            tripId,
+            localSourceId: segment.localId,
+            recordingProfile: segment.recordingProfile,
+            startedAt: new Date(segment.startedAt),
+            endedAt: segment.endedAt ? new Date(segment.endedAt) : null,
+            createdAt: new Date(segment.startedAt),
+            updatedAt: now,
+          },
+          update: {
+            recordingProfile: segment.recordingProfile,
+            startedAt: new Date(segment.startedAt),
+            endedAt: segment.endedAt ? new Date(segment.endedAt) : null,
+            updatedAt: now,
+          },
+        });
+
+        segmentIdByLocalId.set(segment.localId, savedSegment.id);
+      }
+
+      for (const waypoint of dedupedWaypoints) {
+        await tx.waypoint.upsert({
+          where: {
+            tripId_localSourceId: {
+              tripId,
+              localSourceId: waypoint.localId,
+            },
+          },
+          create: {
+            tripId,
+            segmentId: waypoint.segmentLocalId ? (segmentIdByLocalId.get(waypoint.segmentLocalId) ?? null) : null,
+            localSourceId: waypoint.localId,
+            category: waypoint.category,
+            latitude: waypoint.latitude,
+            longitude: waypoint.longitude,
+            title: waypoint.title.trim(),
+            note: waypoint.note?.trim() || null,
+            createdAt: new Date(waypoint.recordedAt),
+            updatedAt: now,
+            deletedAt: null,
+          },
+          update: {
+            segmentId: waypoint.segmentLocalId ? (segmentIdByLocalId.get(waypoint.segmentLocalId) ?? null) : null,
+            category: waypoint.category,
+            latitude: waypoint.latitude,
+            longitude: waypoint.longitude,
+            title: waypoint.title.trim(),
+            note: waypoint.note?.trim() || null,
+            updatedAt: now,
+            deletedAt: null,
+          },
+        });
+      }
+
+      await tx.waypoint.deleteMany({
+        where: {
+          tripId,
+          localSourceId: {
+            notIn: dedupedWaypoints.map((waypoint) => waypoint.localId),
+          },
+        },
+      });
+
+      await tx.tripPoint.deleteMany({
+        where: { tripId },
+      });
+
+      for (const point of dedupedPoints) {
+        await tx.tripPoint.create({
+          data: {
+            tripId,
+            segmentId: point.segmentLocalId ? (segmentIdByLocalId.get(point.segmentLocalId) ?? null) : null,
+            localSourceId: point.localId,
+            latitude: point.latitude,
+            longitude: point.longitude,
+            recordedAt: new Date(point.recordedAt),
+            accuracy: point.accuracy ?? null,
+            altitude: point.altitude ?? null,
+            speed: point.speed ?? null,
+          },
+        });
+      }
+
+      await tx.tripSegment.deleteMany({
+        where: {
+          tripId,
+          localSourceId: {
+            notIn: dedupedSegments.map((segment) => segment.localId),
+          },
+        },
+      });
+    });
+
+    return this.getTripDetail(ownerUserId, tripId);
   }
 
   async shareTrip(ownerUserId: string, tripId: string, input: ShareTripDto) {
