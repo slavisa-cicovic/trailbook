@@ -876,4 +876,242 @@ describe("auth integration", () => {
 
     assert.equal(dashboardResponse.status, 403);
   });
+
+  test("user trip overview returns total and range-filtered owned trips only", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Owner",
+      email: "owner-overview@example.com",
+      password: "password123",
+    });
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Other",
+      email: "other-overview@example.com",
+      password: "password123",
+    });
+
+    const ownerVerificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "owner-overview@example.com",
+      },
+    });
+    const ownerVerifyTokenMatch = ownerVerificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(ownerVerifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(ownerVerifyTokenMatch![1]))}`,
+    );
+
+    const otherVerificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "other-overview@example.com",
+      },
+    });
+    const otherVerifyTokenMatch = otherVerificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(otherVerifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(otherVerifyTokenMatch![1]))}`,
+    );
+
+    const ownerLogin = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "owner-overview@example.com",
+      password: "password123",
+    });
+    const otherLogin = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "other-overview@example.com",
+      password: "password123",
+    });
+
+    assert.equal(ownerLogin.status, 201);
+    assert.equal(otherLogin.status, 201);
+
+    const ownerTripOne = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        localId: "owner-trip-overview-1",
+        deviceId: "device-owner-overview",
+        title: "Owner trip one",
+        description: null,
+        recordingProfile: "bike",
+        startedAt: "2026-04-10T08:00:00.000Z",
+        endedAt: "2026-04-10T09:00:00.000Z",
+        createdAt: "2026-04-10T08:00:00.000Z",
+        updatedAt: "2026-04-10T09:00:00.000Z",
+        deletedAt: null,
+        attachments: [
+          {
+            localId: "owner-attachment-overview-1",
+            waypointLocalId: "owner-waypoint-overview-1",
+            type: "photo",
+            mimeType: "image/jpeg",
+            fileSize: 100,
+            createdAt: "2026-04-10T08:30:00.000Z",
+            updatedAt: "2026-04-10T08:30:00.000Z",
+            deletedAt: null,
+          },
+        ],
+        segments: [
+          {
+            localId: "owner-segment-overview-1",
+            recordingProfile: "bike",
+            startedAt: "2026-04-10T08:00:00.000Z",
+            endedAt: "2026-04-10T09:00:00.000Z",
+            createdAt: "2026-04-10T08:00:00.000Z",
+            updatedAt: "2026-04-10T09:00:00.000Z",
+          },
+        ],
+        points: [
+          {
+            localId: "owner-point-overview-1a",
+            segmentLocalId: "owner-segment-overview-1",
+            latitude: 44.7866,
+            longitude: 20.4489,
+            recordedAt: "2026-04-10T08:10:00.000Z",
+            accuracy: 8,
+            altitude: null,
+            speed: 10,
+          },
+        ],
+        waypoints: [
+          {
+            localId: "owner-waypoint-overview-1",
+            segmentLocalId: "owner-segment-overview-1",
+            category: "cafe",
+            latitude: 44.8,
+            longitude: 20.45,
+            title: "Coffee",
+            note: null,
+            createdAt: "2026-04-10T08:30:00.000Z",
+            updatedAt: "2026-04-10T08:30:00.000Z",
+            deletedAt: null,
+          },
+        ],
+      });
+
+    assert.equal(ownerTripOne.status, 201);
+
+    const ownerUploadResponse = await request(app.getHttpServer())
+      .post(`/api/trips/${ownerTripOne.body.tripId}/attachments/upload`)
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .field("attachmentLocalId", "owner-attachment-overview-1")
+      .attach("file", Buffer.from("owner-photo"), {
+        contentType: "image/jpeg",
+        filename: "owner-overview.jpg",
+      });
+    assert.equal(ownerUploadResponse.status, 201);
+
+    const ownerTripTwo = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        localId: "owner-trip-overview-2",
+        deviceId: "device-owner-overview",
+        title: "Owner trip two",
+        description: null,
+        recordingProfile: "drive",
+        startedAt: "2026-04-18T08:00:00.000Z",
+        endedAt: "2026-04-18T10:00:00.000Z",
+        createdAt: "2026-04-18T08:00:00.000Z",
+        updatedAt: "2026-04-18T10:00:00.000Z",
+        deletedAt: null,
+        attachments: [],
+        segments: [
+          {
+            localId: "owner-segment-overview-2",
+            recordingProfile: "drive",
+            startedAt: "2026-04-18T08:00:00.000Z",
+            endedAt: "2026-04-18T10:00:00.000Z",
+            createdAt: "2026-04-18T08:00:00.000Z",
+            updatedAt: "2026-04-18T10:00:00.000Z",
+          },
+        ],
+        points: [
+          {
+            localId: "owner-point-overview-2a",
+            segmentLocalId: "owner-segment-overview-2",
+            latitude: 44.81,
+            longitude: 20.46,
+            recordedAt: "2026-04-18T08:15:00.000Z",
+            accuracy: 7,
+            altitude: null,
+            speed: 12,
+          },
+        ],
+        waypoints: [
+          {
+            localId: "owner-waypoint-overview-2",
+            segmentLocalId: "owner-segment-overview-2",
+            category: "fuel",
+            latitude: 44.82,
+            longitude: 20.47,
+            title: "Fuel",
+            note: null,
+            createdAt: "2026-04-18T09:00:00.000Z",
+            updatedAt: "2026-04-18T09:00:00.000Z",
+            deletedAt: null,
+          },
+        ],
+      });
+
+    assert.equal(ownerTripTwo.status, 201);
+
+    const otherTrip = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${otherLogin.body.sessionToken}`)
+      .send({
+        localId: "other-trip-overview-1",
+        deviceId: "device-other-overview",
+        title: "Other user trip",
+        description: null,
+        recordingProfile: "walk",
+        startedAt: "2026-04-18T07:00:00.000Z",
+        endedAt: "2026-04-18T07:30:00.000Z",
+        createdAt: "2026-04-18T07:00:00.000Z",
+        updatedAt: "2026-04-18T07:30:00.000Z",
+        deletedAt: null,
+        attachments: [],
+        segments: [
+          {
+            localId: "other-segment-overview-1",
+            recordingProfile: "walk",
+            startedAt: "2026-04-18T07:00:00.000Z",
+            endedAt: "2026-04-18T07:30:00.000Z",
+            createdAt: "2026-04-18T07:00:00.000Z",
+            updatedAt: "2026-04-18T07:30:00.000Z",
+          },
+        ],
+        points: [],
+        waypoints: [],
+      });
+
+    assert.equal(otherTrip.status, 201);
+
+    const totalOverviewResponse = await request(app.getHttpServer())
+      .get("/api/trips/overview")
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`);
+
+    assert.equal(totalOverviewResponse.status, 200);
+    assert.equal(totalOverviewResponse.body.summary.trips, 2);
+    assert.equal(totalOverviewResponse.body.summary.waypoints, 2);
+    assert.equal(totalOverviewResponse.body.summary.photos, 1);
+    assert.equal(totalOverviewResponse.body.trips.length, 2);
+    assert.equal(totalOverviewResponse.body.range.from, null);
+    assert.equal(totalOverviewResponse.body.range.to, null);
+
+    const rangedOverviewResponse = await request(app.getHttpServer())
+      .get("/api/trips/overview")
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .query({
+        from: "2026-04-18T00:00:00.000Z",
+        to: "2026-04-19T00:00:00.000Z",
+      });
+
+    assert.equal(rangedOverviewResponse.status, 200);
+    assert.equal(rangedOverviewResponse.body.summary.trips, 1);
+    assert.equal(rangedOverviewResponse.body.summary.waypoints, 1);
+    assert.equal(rangedOverviewResponse.body.summary.photos, 0);
+    assert.equal(rangedOverviewResponse.body.trips.length, 1);
+    assert.equal(rangedOverviewResponse.body.trips[0].title, "Owner trip two");
+  });
 });

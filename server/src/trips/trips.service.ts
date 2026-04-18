@@ -378,6 +378,97 @@ export class TripsService {
     };
   }
 
+  async getTripOverview(ownerUserId: string, fromInput?: string, toInput?: string) {
+    let from: Date | null = null;
+    let to: Date | null = null;
+
+    if (fromInput || toInput) {
+      if (!fromInput || !toInput) {
+        throw new BadRequestException('Query parameters "from" and "to" must be provided together.');
+      }
+
+      from = new Date(fromInput);
+      to = new Date(toInput);
+
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+        throw new BadRequestException('Query parameters "from" and "to" must be valid ISO dates.');
+      }
+
+      if (from.getTime() >= to.getTime()) {
+        throw new BadRequestException('Query parameter "from" must be earlier than "to".');
+      }
+    }
+
+    const trips = await this.databaseService.trip.findMany({
+      where: {
+        ownerUserId,
+        deletedAt: null,
+        ...(from && to
+          ? {
+              startedAt: {
+                gte: from,
+                lt: to,
+              },
+            }
+          : {}),
+      },
+      include: {
+        waypoints: {
+          where: {
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+          },
+        },
+        attachments: {
+          where: {
+            deletedAt: null,
+            type: "photo",
+          },
+          select: {
+            id: true,
+          },
+        },
+      },
+      orderBy: {
+        startedAt: "desc",
+      },
+    });
+
+    const summary = trips.reduce(
+      (accumulator, trip) => {
+        accumulator.trips += 1;
+        accumulator.waypoints += trip.waypoints.length;
+        accumulator.photos += trip.attachments.length;
+        return accumulator;
+      },
+      {
+        trips: 0,
+        waypoints: 0,
+        photos: 0,
+      },
+    );
+
+    return {
+      range: {
+        from: from ? from.toISOString() : null,
+        to: to ? to.toISOString() : null,
+      },
+      summary,
+      trips: trips.map((trip) => ({
+        id: trip.id,
+        title: trip.title,
+        recordingProfile: trip.recordingProfile,
+        startedAt: trip.startedAt.toISOString(),
+        endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
+        updatedAt: trip.updatedAt.toISOString(),
+        waypointCount: trip.waypoints.length,
+        photoCount: trip.attachments.length,
+      })),
+    };
+  }
+
   async listOwnedTrips(ownerUserId: string) {
     const trips = await this.databaseService.trip.findMany({
       where: {

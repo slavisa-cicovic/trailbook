@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Req, Res, UnauthorizedException, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Inject, Param, Post, Query, Req, Res, UnauthorizedException, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 
@@ -18,6 +18,16 @@ export class TripsController {
   async syncTrip(@Body() payload: SyncTripDto, @Req() request: Request) {
     const user = await this.requireAuthenticatedUser(request);
     return this.tripsService.syncTrip(user.id, payload);
+  }
+
+  @Get("overview")
+  async getTripOverview(
+    @Query("from") from: string | undefined,
+    @Query("to") to: string | undefined,
+    @Req() request: Request,
+  ) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.tripsService.getTripOverview(user.id, from, to);
   }
 
   @Get("mine")

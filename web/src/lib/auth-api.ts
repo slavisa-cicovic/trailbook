@@ -42,6 +42,28 @@ export interface AdminDashboardMetrics {
   };
 }
 
+export interface UserTripOverview {
+  range: {
+    from: string | null;
+    to: string | null;
+  };
+  summary: {
+    trips: number;
+    waypoints: number;
+    photos: number;
+  };
+  trips: Array<{
+    id: string;
+    title: string;
+    recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+    startedAt: string;
+    endedAt: string | null;
+    updatedAt: string;
+    waypointCount: number;
+    photoCount: number;
+  }>;
+}
+
 export type SocialAuthProvider = "google" | "apple" | "facebook";
 export type SocialAuthAvailability = Record<SocialAuthProvider, boolean>;
 
@@ -135,6 +157,21 @@ export async function getAdminDashboardMetrics(input: { from: string; to: string
   });
 
   return request<AdminDashboardMetrics>(`/admin/dashboard?${query.toString()}`, {
+    method: "GET",
+  });
+}
+
+export async function getTripOverview(input?: { from?: string; to?: string }) {
+  const query = new URLSearchParams();
+
+  if (input?.from && input?.to) {
+    query.set("from", input.from);
+    query.set("to", input.to);
+  }
+
+  const suffix = query.toString().length > 0 ? `?${query.toString()}` : "";
+
+  return request<UserTripOverview>(`/trips/overview${suffix}`, {
     method: "GET",
   });
 }
