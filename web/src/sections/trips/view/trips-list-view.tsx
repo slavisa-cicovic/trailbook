@@ -11,7 +11,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   Tabs,
   TextField,
@@ -20,6 +19,15 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  emptyRows,
+  getComparator,
+  TableEmptyRows,
+  TableHeadCustom,
+  TableNoData,
+  TablePaginationCustom,
+  useTable,
+} from "../../../components/table";
 import { getCurrentUser, getTripOverview, type AuthUser, type UserTripOverview } from "../../../lib/auth-api";
 
 type RangeTab = "total" | "today" | "week" | "month" | "year" | "custom";
@@ -118,8 +126,19 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+const TABLE_HEAD = [
+  { id: "title", label: "Title", minWidth: 200 },
+  { id: "recordingProfile", label: "Profile", minWidth: 120 },
+  { id: "startedAt", label: "Started", minWidth: 130 },
+  { id: "endedAt", label: "Ended", minWidth: 130 },
+  { id: "waypointCount", label: "Waypoints", align: "right" as const, minWidth: 110 },
+  { id: "photoCount", label: "Photos", align: "right" as const, minWidth: 90 },
+  { id: "updatedAt", label: "Updated", minWidth: 130 },
+];
+
 export function TripsListView() {
   const router = useRouter();
+  const table = useTable({ defaultOrder: "desc", defaultOrderBy: "startedAt", defaultRowsPerPage: 10 });
   const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
   const [tab, setTab] = useState<RangeTab>("total");
   const [customFrom, setCustomFrom] = useState(() => toDateInputValue(startOfMonth(new Date())));
@@ -154,6 +173,21 @@ export function TripsListView() {
 
     return getPresetRange(tab);
   }, [customFrom, customTo, tab]);
+
+  const sortedTrips = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return [...overview.trips].sort((a, b) =>
+      getComparator(table.order, table.orderBy as keyof (typeof overview.trips)[number])(a, b)
+    );
+  }, [overview, table.order, table.orderBy]);
+
+  const pagedTrips = useMemo(() => {
+    const start = table.page * table.rowsPerPage;
+    return sortedTrips.slice(start, start + table.rowsPerPage);
+  }, [sortedTrips, table.page, table.rowsPerPage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -214,6 +248,7 @@ export function TripsListView() {
       .then((result) => {
         if (!cancelled) {
           setOverview(result);
+          table.onResetPage();
         }
       })
       .catch((loadError) => {
@@ -231,7 +266,7 @@ export function TripsListView() {
     return () => {
       cancelled = true;
     };
-  }, [selectedRange, tab, user]);
+  }, [selectedRange, tab, table.onResetPage, user]);
 
   if (loading) {
     return (
@@ -325,41 +360,47 @@ export function TripsListView() {
 
           <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", overflowX: "auto" }}>
             <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Title</TableCell>
-                  <TableCell>Profile</TableCell>
-                  <TableCell>Started</TableCell>
-                  <TableCell>Ended</TableCell>
-                  <TableCell align="right">Waypoints</TableCell>
-                  <TableCell align="right">Photos</TableCell>
-                  <TableCell>Updated</TableCell>
-                </TableRow>
-              </TableHead>
+              <TableHeadCustom
+                headLabel={TABLE_HEAD}
+                onSort={table.onSort}
+                order={table.order}
+                orderBy={table.orderBy}
+                rowCount={overview.trips.length}
+              />
               <TableBody>
-                {overview.trips.length > 0 ? (
-                  overview.trips.map((trip) => (
-                    <TableRow key={trip.id} hover>
-                      <TableCell>{trip.title}</TableCell>
-                      <TableCell>
-                        <ProfileLabel profile={trip.recordingProfile} />
-                      </TableCell>
-                      <TableCell>{formatDateOnly(trip.startedAt)}</TableCell>
-                      <TableCell>{formatDateOnly(trip.endedAt)}</TableCell>
-                      <TableCell align="right">{trip.waypointCount}</TableCell>
-                      <TableCell align="right">{trip.photoCount}</TableCell>
-                      <TableCell>{formatDateOnly(trip.updatedAt)}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={7}>
-                      <Typography color="text.secondary">No trips found for the selected range.</Typography>
+                {pagedTrips.map((trip) => (
+                  <TableRow hover key={trip.id}>
+                    <TableCell>{trip.title}</TableCell>
+                    <TableCell>
+                      <ProfileLabel profile={trip.recordingProfile} />
                     </TableCell>
+                    <TableCell>{formatDateOnly(trip.startedAt)}</TableCell>
+                    <TableCell>{formatDateOnly(trip.endedAt)}</TableCell>
+                    <TableCell align="right">{trip.waypointCount}</TableCell>
+                    <TableCell align="right">{trip.photoCount}</TableCell>
+                    <TableCell>{formatDateOnly(trip.updatedAt)}</TableCell>
                   </TableRow>
-                )}
+                ))}
+
+                <TableEmptyRows
+                  emptyRows={emptyRows(table.page, table.rowsPerPage, overview.trips.length)}
+                  height={table.dense ? 52 : 72}
+                />
+
+                <TableNoData notFound={overview.trips.length === 0} title="No trips found for the selected range." />
               </TableBody>
             </Table>
+
+            <TablePaginationCustom
+              count={overview.trips.length}
+              dense={table.dense}
+              onChangeDense={table.onChangeDense}
+              onPageChange={table.onChangePage}
+              onRowsPerPageChange={table.onChangeRowsPerPage}
+              page={table.page}
+              rowsPerPage={table.rowsPerPage}
+              rowsPerPageOptions={[5, 10, 25, 50]}
+            />
           </Paper>
         </>
       ) : null}
