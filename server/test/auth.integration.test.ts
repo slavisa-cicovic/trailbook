@@ -1114,4 +1114,174 @@ describe("auth integration", () => {
     assert.equal(rangedOverviewResponse.body.trips.length, 1);
     assert.equal(rangedOverviewResponse.body.trips[0].title, "Owner trip two");
   });
+
+  test("user can fetch owned trip detail and update trip metadata", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Owner Detail",
+      email: "owner-detail@example.com",
+      password: "password123",
+    });
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Other Detail",
+      email: "other-detail@example.com",
+      password: "password123",
+    });
+
+    const ownerVerificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "owner-detail@example.com",
+      },
+    });
+    const ownerVerifyTokenMatch = ownerVerificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(ownerVerifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(ownerVerifyTokenMatch![1]))}`,
+    );
+
+    const otherVerificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "other-detail@example.com",
+      },
+    });
+    const otherVerifyTokenMatch = otherVerificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(otherVerifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(otherVerifyTokenMatch![1]))}`,
+    );
+
+    const ownerLogin = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "owner-detail@example.com",
+      password: "password123",
+    });
+    const otherLogin = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "other-detail@example.com",
+      password: "password123",
+    });
+
+    const syncResponse = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        localId: "owner-trip-detail-1",
+        deviceId: "device-owner-detail",
+        title: "Owner detail trip",
+        description: "Original description",
+        recordingProfile: "bike",
+        startedAt: "2026-04-18T08:00:00.000Z",
+        endedAt: "2026-04-18T08:45:00.000Z",
+        createdAt: "2026-04-18T08:00:00.000Z",
+        updatedAt: "2026-04-18T08:45:00.000Z",
+        deletedAt: null,
+        attachments: [
+          {
+            localId: "owner-trip-detail-photo-1",
+            waypointLocalId: "owner-trip-detail-waypoint-1",
+            type: "photo",
+            mimeType: "image/jpeg",
+            fileSize: 100,
+            createdAt: "2026-04-18T08:20:00.000Z",
+            updatedAt: "2026-04-18T08:20:00.000Z",
+            deletedAt: null,
+          },
+        ],
+        segments: [
+          {
+            localId: "owner-trip-detail-segment-1",
+            recordingProfile: "bike",
+            startedAt: "2026-04-18T08:00:00.000Z",
+            endedAt: "2026-04-18T08:45:00.000Z",
+            createdAt: "2026-04-18T08:00:00.000Z",
+            updatedAt: "2026-04-18T08:45:00.000Z",
+          },
+        ],
+        points: [
+          {
+            localId: "owner-trip-detail-point-1",
+            segmentLocalId: "owner-trip-detail-segment-1",
+            latitude: 44.7866,
+            longitude: 20.4489,
+            recordedAt: "2026-04-18T08:10:00.000Z",
+            accuracy: 8,
+            altitude: null,
+            speed: 10,
+          },
+          {
+            localId: "owner-trip-detail-point-2",
+            segmentLocalId: "owner-trip-detail-segment-1",
+            latitude: 44.7966,
+            longitude: 20.4589,
+            recordedAt: "2026-04-18T08:20:00.000Z",
+            accuracy: 8,
+            altitude: null,
+            speed: 11,
+          },
+        ],
+        waypoints: [
+          {
+            localId: "owner-trip-detail-waypoint-1",
+            segmentLocalId: "owner-trip-detail-segment-1",
+            category: "cafe",
+            latitude: 44.79,
+            longitude: 20.45,
+            title: "Coffee stop",
+            note: "Nice place",
+            createdAt: "2026-04-18T08:20:00.000Z",
+            updatedAt: "2026-04-18T08:20:00.000Z",
+            deletedAt: null,
+          },
+        ],
+      });
+
+    assert.equal(syncResponse.status, 201);
+
+    const uploadResponse = await request(app.getHttpServer())
+      .post(`/api/trips/${syncResponse.body.tripId}/attachments/upload`)
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .field("attachmentLocalId", "owner-trip-detail-photo-1")
+      .attach("file", Buffer.from("trip-photo"), {
+        contentType: "image/jpeg",
+        filename: "detail.jpg",
+      });
+    assert.equal(uploadResponse.status, 201);
+
+    const detailResponse = await request(app.getHttpServer())
+      .get(`/api/trips/${syncResponse.body.tripId}`)
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`);
+
+    assert.equal(detailResponse.status, 200);
+    assert.equal(detailResponse.body.trip.title, "Owner detail trip");
+    assert.equal(detailResponse.body.summary.waypointCount, 1);
+    assert.equal(detailResponse.body.summary.photoCount, 1);
+    assert.equal(detailResponse.body.segments.length, 1);
+    assert.equal(detailResponse.body.points.length, 2);
+
+    const otherDetailResponse = await request(app.getHttpServer())
+      .get(`/api/trips/${syncResponse.body.tripId}`)
+      .set("Authorization", `Bearer ${otherLogin.body.sessionToken}`);
+
+    assert.equal(otherDetailResponse.status, 404);
+
+    const patchResponse = await request(app.getHttpServer())
+      .patch(`/api/trips/${syncResponse.body.tripId}`)
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        title: "Updated owner detail trip",
+        description: "Updated description",
+      });
+
+    assert.equal(patchResponse.status, 200);
+    assert.equal(patchResponse.body.trip.title, "Updated owner detail trip");
+    assert.equal(patchResponse.body.trip.description, "Updated description");
+
+    const otherPatchResponse = await request(app.getHttpServer())
+      .patch(`/api/trips/${syncResponse.body.tripId}`)
+      .set("Authorization", `Bearer ${otherLogin.body.sessionToken}`)
+      .send({
+        title: "Unauthorized change",
+      });
+
+    assert.equal(otherPatchResponse.status, 404);
+  });
 });

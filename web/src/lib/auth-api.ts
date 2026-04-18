@@ -64,6 +64,51 @@ export interface UserTripOverview {
   }>;
 }
 
+export interface UserTripDetail {
+  trip: {
+    id: string;
+    title: string;
+    description: string | null;
+    recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+    startedAt: string;
+    endedAt: string | null;
+    updatedAt: string;
+    syncStatus: "local-only" | "pending-sync" | "synced";
+  };
+  summary: {
+    distanceMeters: number;
+    waypointCount: number;
+    photoCount: number;
+    segmentCount: number;
+  };
+  points: Array<{
+    latitude: number;
+    longitude: number;
+    recordedAt: string;
+    segmentLocalId: string | null;
+  }>;
+  segments: Array<{
+    localId: string;
+    recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+    startedAt: string;
+    endedAt: string | null;
+    distanceMeters: number;
+  }>;
+  waypoints: Array<{
+    localId: string;
+    title: string;
+    note: string | null;
+    latitude: number;
+    longitude: number;
+    recordedAt: string;
+    photoCount: number;
+  }>;
+  pauses: Array<{
+    startedAt: string;
+    endedAt: string | null;
+  }>;
+}
+
 export type SocialAuthProvider = "google" | "apple" | "facebook";
 export type SocialAuthAvailability = Record<SocialAuthProvider, boolean>;
 
@@ -173,5 +218,18 @@ export async function getTripOverview(input?: { from?: string; to?: string }) {
 
   return request<UserTripOverview>(`/trips/overview${suffix}`, {
     method: "GET",
+  });
+}
+
+export async function getTripDetail(tripId: string) {
+  return request<UserTripDetail>(`/trips/${tripId}`, {
+    method: "GET",
+  });
+}
+
+export async function updateTrip(tripId: string, input: { title?: string; description?: string }) {
+  return request<{ trip: UserTripDetail["trip"] }>(`/trips/${tripId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }

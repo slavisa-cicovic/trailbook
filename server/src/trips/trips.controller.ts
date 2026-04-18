@@ -1,10 +1,26 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Query, Req, Res, UnauthorizedException, UploadedFile, UseInterceptors } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  Res,
+  UnauthorizedException,
+  UploadedFile,
+  UseInterceptors,
+} from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 
 import { AuthService } from "../auth/auth.service";
 import type { ShareTripDto } from "./dto/share-trip.dto";
 import type { SyncTripDto } from "./dto/sync-trip.dto";
+import { UpdateTripDto } from "./dto/update-trip.dto";
 import { TripsService } from "./trips.service";
 
 @Controller("trips")
@@ -40,6 +56,18 @@ export class TripsController {
   async getOwnedTrip(@Param("tripId") tripId: string, @Req() request: Request) {
     const user = await this.requireAuthenticatedUser(request);
     return this.tripsService.getOwnedTrip(user.id, tripId);
+  }
+
+  @Get(":tripId")
+  async getTripDetail(@Param("tripId") tripId: string, @Req() request: Request) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.tripsService.getTripDetail(user.id, tripId);
+  }
+
+  @Patch(":tripId")
+  async updateTrip(@Param("tripId") tripId: string, @Body() input: UpdateTripDto, @Req() request: Request) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.tripsService.updateTrip(user.id, tripId, input);
   }
 
   @Post(":tripId/shares")

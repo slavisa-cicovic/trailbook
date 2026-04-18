@@ -5,6 +5,7 @@ import { UsersService } from "../users/users.service";
 import { MediaStorageService } from "./media-storage.service";
 import type { ShareTripDto } from "./dto/share-trip.dto";
 import type { SyncTripDto } from "./dto/sync-trip.dto";
+import type { UpdateTripDto } from "./dto/update-trip.dto";
 
 @Injectable()
 export class TripsService {
@@ -26,6 +27,38 @@ export class TripsService {
     }
 
     return parsed;
+  }
+
+  private calculateDistanceMeters(
+    points: Array<{
+      latitude: number;
+      longitude: number;
+    }>,
+  ) {
+    if (points.length < 2) {
+      return 0;
+    }
+
+    const toRadians = (value: number) => (value * Math.PI) / 180;
+    let total = 0;
+
+    for (let index = 1; index < points.length; index += 1) {
+      const previous = points[index - 1];
+      const current = points[index];
+
+      const latitudeDelta = toRadians(current.latitude - previous.latitude);
+      const longitudeDelta = toRadians(current.longitude - previous.longitude);
+      const latitudeA = toRadians(previous.latitude);
+      const latitudeB = toRadians(current.latitude);
+
+      const haversine =
+        Math.sin(latitudeDelta / 2) ** 2 +
+        Math.cos(latitudeA) * Math.cos(latitudeB) * Math.sin(longitudeDelta / 2) ** 2;
+
+      total += 2 * 6371000 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+    }
+
+    return total;
   }
 
   private dedupeByLocalId<T extends { localId: string }>(items: T[]) {
@@ -513,6 +546,138 @@ export class TripsService {
     }
 
     return this.toOwnedTripDetail(trip);
+  }
+
+  async getTripDetail(ownerUserId: string, tripId: string) {
+    const trip = await this.databaseService.trip.findUnique({
+      where: { id: tripId },
+      include: {
+        attachments: {
+          where: {
+            deletedAt: null,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+        points: {
+          orderBy: { recordedAt: "asc" },
+        },
+        segments: {
+          orderBy: { startedAt: "asc" },
+        },
+        waypoints: {
+          where: {
+            deletedAt: null,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!trip || trip.ownerUserId !== ownerUserId || trip.deletedAt !== null) {
+      throw new NotFoundException("Trip not found.");
+    }
+
+    const photoAttachments = trip.attachments.filter((attachment) => attachment.type === "photo");
+    const photoCountByWaypointId = new Map<string, number>();
+
+    for (const attachment of photoAttachments) {
+      photoCountByWaypointId.set(
+        attachment.waypointId,
+        (photoCountByWaypointId.get(attachment.waypointId) ?? 0) + 1,
+      );
+    }
+
+    const distanceMeters = this.calculateDistanceMeters(trip.points);
+
+    return {
+      trip: {
+        id: trip.id,
+        title: trip.title,
+        description: trip.description,
+        recordingProfile: trip.recordingProfile,
+        startedAt: trip.startedAt.toISOString(),
+        endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
+        updatedAt: trip.updatedAt.toISOString(),
+        syncStatus: "synced" as const,
+      },
+      summary: {
+        distanceMeters,
+        waypointCount: trip.waypoints.length,
+        photoCount: photoAttachments.length,
+        segmentCount: trip.segments.length,
+      },
+      points: trip.points.map((point) => ({
+        latitude: point.latitude,
+        longitude: point.longitude,
+        recordedAt: point.recordedAt.toISOString(),
+        segmentLocalId:
+          trip.segments.find((segment) => segment.id === point.segmentId)?.localSourceId ?? null,
+      })),
+      segments: trip.segments.map((segment) => {
+        const segmentPoints = trip.points.filter((point) => point.segmentId === segment.id);
+
+        return {
+          localId: segment.localSourceId,
+          recordingProfile: segment.recordingProfile,
+          startedAt: segment.startedAt.toISOString(),
+          endedAt: segment.endedAt ? segment.endedAt.toISOString() : null,
+          distanceMeters: this.calculateDistanceMeters(segmentPoints),
+        };
+      }),
+      waypoints: trip.waypoints.map((waypoint) => ({
+        localId: waypoint.localSourceId,
+        title: waypoint.title,
+        note: waypoint.note,
+        latitude: waypoint.latitude,
+        longitude: waypoint.longitude,
+        recordedAt: waypoint.createdAt.toISOString(),
+        photoCount: photoCountByWaypointId.get(waypoint.id) ?? 0,
+      })),
+      pauses: [],
+    };
+  }
+
+  async updateTrip(ownerUserId: string, tripId: string, input: UpdateTripDto) {
+    const trip = await this.databaseService.trip.findUnique({
+      where: { id: tripId },
+    });
+
+    if (!trip || trip.ownerUserId !== ownerUserId || trip.deletedAt !== null) {
+      throw new NotFoundException("Trip not found.");
+    }
+
+    const title = input.title?.trim();
+    const description = input.description?.trim();
+
+    if (title === undefined && description === undefined) {
+      throw new BadRequestException("At least one trip field must be provided.");
+    }
+
+    if (title !== undefined && title.length === 0) {
+      throw new BadRequestException("Trip title must not be empty.");
+    }
+
+    const updatedTrip = await this.databaseService.trip.update({
+      where: { id: tripId },
+      data: {
+        ...(title !== undefined ? { title } : {}),
+        ...(description !== undefined ? { description: description || null } : {}),
+        updatedAt: new Date(),
+      },
+    });
+
+    return {
+      trip: {
+        id: updatedTrip.id,
+        title: updatedTrip.title,
+        description: updatedTrip.description,
+        recordingProfile: updatedTrip.recordingProfile,
+        startedAt: updatedTrip.startedAt.toISOString(),
+        endedAt: updatedTrip.endedAt ? updatedTrip.endedAt.toISOString() : null,
+        updatedAt: updatedTrip.updatedAt.toISOString(),
+        syncStatus: "synced" as const,
+      },
+    };
   }
 
   async shareTrip(ownerUserId: string, tripId: string, input: ShareTripDto) {

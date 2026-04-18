@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import {
   Alert,
+  Button,
   Card,
   CardContent,
   CircularProgress,
@@ -370,7 +372,11 @@ export function TripsListView() {
               <TableBody>
                 {pagedTrips.map((trip) => (
                   <TableRow hover key={trip.id}>
-                    <TableCell>{trip.title}</TableCell>
+                    <TableCell>
+                      <Button component={Link} href={`/trips/${trip.id}`} sx={{ px: 0 }} variant="text">
+                        {trip.title}
+                      </Button>
+                    </TableCell>
                     <TableCell>
                       <ProfileLabel profile={trip.recordingProfile} />
                     </TableCell>
