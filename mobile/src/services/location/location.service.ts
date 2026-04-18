@@ -91,9 +91,9 @@ export function getTrackingOptionsForProfile(profile: RecordingMode): TrackingOp
       };
     case "drive":
       return {
-        accuracy: Location.Accuracy.Balanced,
-        distanceInterval: 120,
-        timeInterval: 3 * 60 * 1000,
+        accuracy: Location.Accuracy.High,
+        distanceInterval: 50,
+        timeInterval: 30 * 1000,
       };
     case "boat":
       return {
