@@ -33,7 +33,7 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
-import { listSharedTrips } from "../../services/trips/server-trip-sharing.service";
+import { listSharedTrips, syncTripToServer } from "../../services/trips/server-trip-sharing.service";
 import TripEditModal from "./components/trip-edit-modal";
 
 interface PendingUndoState {
@@ -174,6 +174,37 @@ export default function TripsScreen() {
     }
   }
 
+  async function syncTripMutationToServer(
+    tripLocalId: string,
+    nextTrips: Trip[],
+    nextWaypoints = waypoints,
+    nextAttachments = waypointAttachments,
+  ) {
+    if (identitySession?.mode !== "authenticated" || !identitySession.sessionToken) {
+      return;
+    }
+
+    const trip = nextTrips.find((candidate) => candidate.localId === tripLocalId);
+
+    if (!trip) {
+      return;
+    }
+
+    const tripWaypoints = nextWaypoints.filter((waypoint) => waypoint.tripLocalId === tripLocalId);
+    const tripWaypointIds = new Set(tripWaypoints.map((waypoint) => waypoint.localId));
+    const tripAttachments = nextAttachments.filter((attachment) =>
+      tripWaypointIds.has(attachment.waypointLocalId),
+    );
+
+    await syncTripToServer(identitySession.sessionToken, {
+      attachments: tripAttachments,
+      trip,
+      tripPoints: currentUserTripPoints.filter((point) => point.tripLocalId === tripLocalId),
+      tripSegments: currentUserTripSegments.filter((segment) => segment.tripLocalId === tripLocalId),
+      waypoints: tripWaypoints,
+    });
+  }
+
   async function handleDeleteTrip(trip: Trip) {
     if (trip.status !== "ended") {
       Alert.alert("Open trip", "Stop the route before deleting it.");
@@ -186,6 +217,16 @@ export default function TripsScreen() {
     await setTrips(nextState.trips);
     await setWaypoints(nextState.waypoints);
     await setWaypointAttachments(nextState.attachments);
+
+    try {
+      await syncTripMutationToServer(trip.localId, nextState.trips, nextState.waypoints, nextState.attachments);
+    } catch (error) {
+      Alert.alert(
+        "Delete sync failed",
+        error instanceof Error ? error.message : "Trip was deleted locally but could not be synced to the server.",
+      );
+    }
+
     setPendingUndo({
       tripLocalId: trip.localId,
       tripTitle: trip.title,
@@ -213,6 +254,21 @@ export default function TripsScreen() {
     await setTrips(nextState.trips);
     await setWaypoints(nextState.waypoints);
     await setWaypointAttachments(nextState.attachments);
+
+    try {
+      await syncTripMutationToServer(
+        pendingUndo.tripLocalId,
+        nextState.trips,
+        nextState.waypoints,
+        nextState.attachments,
+      );
+    } catch (error) {
+      Alert.alert(
+        "Restore sync failed",
+        error instanceof Error ? error.message : "Trip was restored locally but could not be synced to the server.",
+      );
+    }
+
     setPendingUndo(null);
   }
 
