@@ -1,5 +1,6 @@
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
+import { Platform } from "react-native";
 
 import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
 import type { RecordingMode, RecordingProfile } from "../../domain/trips";
@@ -80,8 +81,8 @@ export function getTrackingOptionsForProfile(profile: RecordingMode): TrackingOp
     case "walk":
       return {
         accuracy: Location.Accuracy.High,
-        distanceInterval: 12,
-        timeInterval: 15 * 1000,
+        distanceInterval: Platform.OS === "android" ? 5 : 12,
+        timeInterval: Platform.OS === "android" ? 5 * 1000 : 15 * 1000,
       };
     case "bike":
       return {

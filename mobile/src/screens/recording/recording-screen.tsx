@@ -84,7 +84,9 @@ import {
 import {
   appendTripPointIfUseful,
   createTripPointForLocation,
+  flushTripPointDiagnostics,
   getVisibleTripPointsForTrip,
+  resetTripPointDiagnostics,
 } from "../../services/trip-points/trip-points.service";
 import {
   markWaypointAttachmentDeleted,
@@ -486,6 +488,7 @@ export default function RecordingScreen() {
     const startedAt = new Date().toISOString();
     const concreteRecordingProfile = getConcreteRecordingProfileForMode(recordingDraft.recordingMode);
     const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft);
+    resetTripPointDiagnostics(nextTrip.localId);
     const nextSegment = createInitialTripSegment(nextTrip, startedAt);
     const nextSession = createRecordingSession(
       activeIdentitySession,
@@ -575,6 +578,7 @@ export default function RecordingScreen() {
     await setTripPauses(nextState.tripPauses);
     await setTrips(pauseActiveTrip(trips, activeTrip.localId, pausedAt));
     await setRecordingSession(nextState.session);
+    flushTripPointDiagnostics(activeTrip.localId);
     setSessionMenuVisible(false);
   }
 
@@ -607,6 +611,7 @@ export default function RecordingScreen() {
     await setWaypoints(normalizedState.waypoints);
     await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt));
     await setRecordingSession(stopRecordingSession(recordingSession));
+    flushTripPointDiagnostics(recordingSession.activeTripId);
   }
 
   async function handleResumePausedTrip(tripLocalId: string) {

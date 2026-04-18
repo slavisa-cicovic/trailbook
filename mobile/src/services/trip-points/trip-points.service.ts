@@ -1,5 +1,8 @@
+import { Platform } from "react-native";
+
 import type { CurrentLocationSnapshot } from "../location/location.service";
 import type { RecordingMode, Trip, TripPoint } from "../../domain/trips";
+import { recordTripPointDiagnostic } from "./trip-point-diagnostics.service";
 
 const MIN_SEGMENT_DISTANCE_METERS = 5;
 
@@ -108,7 +111,7 @@ function getRouteSmoothingThresholds(recordingMode: RecordingMode): {
 function getMaxAccuracyMeters(recordingMode: RecordingMode) {
   switch (recordingMode) {
     case "walk":
-      return 35;
+      return Platform.OS === "android" ? 50 : 35;
     case "bike":
       return 30;
     case "drive":
@@ -162,7 +165,7 @@ function getMaxImpliedSpeedKmh(recordingMode: RecordingMode) {
 function getMinMovementMeters(recordingMode: RecordingMode) {
   switch (recordingMode) {
     case "walk":
-      return 8;
+      return Platform.OS === "android" ? 4 : 8;
     case "bike":
       return 25;
     case "drive":
@@ -227,6 +230,7 @@ export function appendTripPointIfUseful(
     .find((tripPoint) => tripPoint.tripLocalId === nextTripPoint.tripLocalId);
 
   if (previousPoint?.recordedAt === nextTripPoint.recordedAt) {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "duplicate-timestamp");
     return tripPoints;
   }
 
@@ -235,6 +239,7 @@ export function appendTripPointIfUseful(
     previousPoint.latitude === nextTripPoint.latitude &&
     previousPoint.longitude === nextTripPoint.longitude
   ) {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "duplicate-coordinates");
     return tripPoints;
   }
 
@@ -243,27 +248,33 @@ export function appendTripPointIfUseful(
     Number.isFinite(nextTripPoint.accuracy) &&
     nextTripPoint.accuracy > getMaxAccuracyMeters(recordingMode)
   ) {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accuracy");
     return tripPoints;
   }
 
   if (!previousPoint) {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted");
     return [...tripPoints, nextTripPoint];
   }
 
   const distanceMeters = calculateDistanceBetweenPoints(previousPoint, nextTripPoint);
 
   if (distanceMeters < getMinMovementMeters(recordingMode)) {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "min-movement");
     return tripPoints;
   }
 
   if (distanceMeters > getMaxJumpDistanceMeters(recordingMode)) {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "jump-distance");
     return tripPoints;
   }
 
   if (getImpliedSpeedKmh(previousPoint, nextTripPoint, distanceMeters) > getMaxImpliedSpeedKmh(recordingMode)) {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "implied-speed");
     return tripPoints;
   }
 
+  recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted");
   return [...tripPoints, nextTripPoint];
 }
 
@@ -391,3 +402,5 @@ export function formatDistanceKm(distanceMeters: number): string {
 
   return `${kilometers.toFixed(2)} km`;
 }
+
+export { flushTripPointDiagnostics, resetTripPointDiagnostics } from "./trip-point-diagnostics.service";
