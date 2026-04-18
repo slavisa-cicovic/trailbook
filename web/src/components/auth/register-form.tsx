@@ -16,6 +16,7 @@ export function RegisterForm() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const passwordTooShort = password.length > 0 && password.length < 8;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,10 +51,17 @@ export function RegisterForm() {
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
+          error={passwordTooShort}
+          helperText={passwordTooShort ? "Password must be at least 8 characters." : " "}
         />
         {error ? <Alert severity="error">{error}</Alert> : null}
         {info ? <Alert severity="success">{info}</Alert> : null}
-        <Button disabled={submitting} size="large" type="submit" variant="contained">
+        <Button
+          disabled={submitting || displayName.trim().length < 2 || email.trim().length === 0 || password.length < 8}
+          size="large"
+          type="submit"
+          variant="contained"
+        >
           {submitting ? "Creating..." : "Create account"}
         </Button>
       </Stack>
