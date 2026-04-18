@@ -26,6 +26,85 @@ function calculateDistanceBetweenPoints(left: TripPoint, right: TripPoint): numb
   return earthRadiusMeters * arc;
 }
 
+function projectRelativeMeters(
+  origin: TripPoint,
+  target: TripPoint,
+): { x: number; y: number } {
+  const earthRadiusMeters = 6371000;
+  const latitudeLeft = toRadians(origin.latitude);
+  const latitudeTarget = toRadians(target.latitude);
+  const longitudeLeft = toRadians(origin.longitude);
+  const longitudeTarget = toRadians(target.longitude);
+  const averageLatitude = (latitudeLeft + latitudeTarget) / 2;
+
+  return {
+    x: (longitudeTarget - longitudeLeft) * Math.cos(averageLatitude) * earthRadiusMeters,
+    y: (latitudeTarget - latitudeLeft) * earthRadiusMeters,
+  };
+}
+
+function calculatePerpendicularDeviationMeters(
+  left: TripPoint,
+  middle: TripPoint,
+  right: TripPoint,
+): number {
+  const middleProjection = projectRelativeMeters(left, middle);
+  const rightProjection = projectRelativeMeters(left, right);
+  const lineLengthSquared = rightProjection.x * rightProjection.x + rightProjection.y * rightProjection.y;
+
+  if (lineLengthSquared <= 0) {
+    return Math.sqrt(middleProjection.x * middleProjection.x + middleProjection.y * middleProjection.y);
+  }
+
+  const projectionFactor =
+    (middleProjection.x * rightProjection.x + middleProjection.y * rightProjection.y) / lineLengthSquared;
+  const clampedProjectionFactor = Math.max(0, Math.min(1, projectionFactor));
+  const closestX = rightProjection.x * clampedProjectionFactor;
+  const closestY = rightProjection.y * clampedProjectionFactor;
+  const deviationX = middleProjection.x - closestX;
+  const deviationY = middleProjection.y - closestY;
+
+  return Math.sqrt(deviationX * deviationX + deviationY * deviationY);
+}
+
+function getRouteSmoothingThresholds(recordingMode: RecordingMode): {
+  maxDeviationMeters: number;
+  maxDirectDistanceMeters: number;
+  maxExcessMeters: number;
+  maxNeighborDistanceMeters: number;
+  spikeMaxAccuracyMeters: number;
+  spikeMaxDirectDistanceMeters: number;
+  spikeMinExcessMeters: number;
+  spikeMinDeviationMeters: number;
+} | null {
+  switch (recordingMode) {
+    case "walk":
+      return {
+        maxDeviationMeters: 8,
+        maxDirectDistanceMeters: 55,
+        maxExcessMeters: 16,
+        maxNeighborDistanceMeters: 35,
+        spikeMaxAccuracyMeters: 30,
+        spikeMaxDirectDistanceMeters: 45,
+        spikeMinExcessMeters: 28,
+        spikeMinDeviationMeters: 14,
+      };
+    case "bike":
+      return {
+        maxDeviationMeters: 10,
+        maxDirectDistanceMeters: 95,
+        maxExcessMeters: 24,
+        maxNeighborDistanceMeters: 60,
+        spikeMaxAccuracyMeters: 30,
+        spikeMaxDirectDistanceMeters: 50,
+        spikeMinExcessMeters: 40,
+        spikeMinDeviationMeters: 18,
+      };
+    default:
+      return null;
+  }
+}
+
 function getMaxAccuracyMeters(recordingMode: RecordingMode) {
   switch (recordingMode) {
     case "walk":
@@ -186,6 +265,103 @@ export function appendTripPointIfUseful(
   }
 
   return [...tripPoints, nextTripPoint];
+}
+
+export function smoothTripRoutePoints(
+  tripPoints: TripPoint[],
+  tripLocalId: string,
+  recordingMode: RecordingMode,
+  nextSyncStatus: TripPoint["syncStatus"],
+): { removedPointCount: number; tripPoints: TripPoint[] } {
+  const thresholds = getRouteSmoothingThresholds(recordingMode);
+
+  if (!thresholds) {
+    return {
+      removedPointCount: 0,
+      tripPoints,
+    };
+  }
+
+  const orderedTripPoints = getVisibleTripPointsForTrip(tripPoints, tripLocalId);
+
+  if (orderedTripPoints.length < 3) {
+    return {
+      removedPointCount: 0,
+      tripPoints,
+    };
+  }
+
+  let currentPoints = orderedTripPoints;
+  let removedPointIds = new Set<string>();
+
+  for (let pass = 0; pass < 2; pass += 1) {
+    if (currentPoints.length < 3) {
+      break;
+    }
+
+    const nextPoints = [currentPoints[0]];
+    let removedThisPass = 0;
+
+    for (let index = 1; index < currentPoints.length - 1; index += 1) {
+      const left = nextPoints[nextPoints.length - 1];
+      const middle = currentPoints[index];
+      const right = currentPoints[index + 1];
+      const leftToMiddle = calculateDistanceBetweenPoints(left, middle);
+      const middleToRight = calculateDistanceBetweenPoints(middle, right);
+      const leftToRight = calculateDistanceBetweenPoints(left, right);
+      const deviationMeters = calculatePerpendicularDeviationMeters(left, middle, right);
+      const excessMeters = leftToMiddle + middleToRight - leftToRight;
+      const spikeLikePoint =
+        (middle.accuracy === null || middle.accuracy <= thresholds.spikeMaxAccuracyMeters) &&
+        leftToRight <= thresholds.spikeMaxDirectDistanceMeters &&
+        excessMeters >= thresholds.spikeMinExcessMeters &&
+        deviationMeters >= thresholds.spikeMinDeviationMeters;
+
+      const canDropPoint =
+        spikeLikePoint ||
+        (leftToMiddle <= thresholds.maxNeighborDistanceMeters &&
+          middleToRight <= thresholds.maxNeighborDistanceMeters &&
+          leftToRight <= thresholds.maxDirectDistanceMeters &&
+          deviationMeters <= thresholds.maxDeviationMeters &&
+          excessMeters <= thresholds.maxExcessMeters);
+
+      if (canDropPoint) {
+        removedPointIds.add(middle.localId);
+        removedThisPass += 1;
+        continue;
+      }
+
+      nextPoints.push(middle);
+    }
+
+    nextPoints.push(currentPoints[currentPoints.length - 1]);
+    currentPoints = nextPoints;
+
+    if (removedThisPass === 0) {
+      break;
+    }
+  }
+
+  if (removedPointIds.size === 0) {
+    return {
+      removedPointCount: 0,
+      tripPoints,
+    };
+  }
+
+  return {
+    removedPointCount: removedPointIds.size,
+    tripPoints: tripPoints
+      .filter((tripPoint) => !(tripPoint.tripLocalId === tripLocalId && removedPointIds.has(tripPoint.localId)))
+      .map((tripPoint) =>
+        tripPoint.tripLocalId === tripLocalId
+          ? {
+              ...tripPoint,
+              syncStatus: nextSyncStatus,
+            }
+          : tripPoint,
+      ),
+  };
 }
 
 export function calculateTripDistanceMeters(tripPoints: TripPoint[]): number {
