@@ -16,6 +16,7 @@ interface AutoRecordingTransitionResult {
 }
 
 interface TimedSpeedSample {
+  moving: boolean;
   recordedAtMs: number;
   speedKmh: number;
 }
@@ -28,6 +29,7 @@ const PLANE_MIN_KMH = 180;
 const PLANE_PEAK_KMH = 250;
 const BOAT_MIN_KMH = 12;
 const BOAT_MAX_KMH = 35;
+const STATIONARY_MAX_KMH = 2;
 
 const WALK_STABILITY_MS = 5 * 60 * 1000;
 const BIKE_STABILITY_MS = 5 * 60 * 1000;
@@ -137,6 +139,7 @@ function buildTimedSpeedSamples(tripPoints: TripPoint[]): TimedSpeedSample[] {
     }
 
     samples.push({
+      moving: speedKmh > STATIONARY_MAX_KMH,
       recordedAtMs: getPointTimeMs(point),
       speedKmh,
     });
@@ -154,6 +157,10 @@ function getStableWindow(samples: TimedSpeedSample[], durationMs: number): Timed
   const threshold = lastRecordedAtMs - durationMs;
 
   return samples.filter((sample) => sample.recordedAtMs >= threshold);
+}
+
+function getMovingStableWindow(samples: TimedSpeedSample[], durationMs: number): TimedSpeedSample[] {
+  return getStableWindow(samples, durationMs).filter((sample) => sample.moving);
 }
 
 function getWindowDurationMs(samples: TimedSpeedSample[]): number {
@@ -194,7 +201,7 @@ function inferBoatFromTripPoints(tripPoints: TripPoint[]): boolean {
   }
 
   const speedSamples = buildTimedSpeedSamples(tripPoints);
-  const boatWindow = getStableWindow(speedSamples, 30 * 60 * 1000);
+  const boatWindow = getMovingStableWindow(speedSamples, 30 * 60 * 1000);
   const boatTripPoints = tripPoints.filter(
     (point) =>
       getPointTimeMs(point) >=
@@ -233,10 +240,10 @@ export function inferAutoRecordingProfile(tripPoints: TripPoint[]): RecordingPro
     return null;
   }
 
-  const walkWindow = getStableWindow(speedSamples, 10 * 60 * 1000);
-  const bikeWindow = getStableWindow(speedSamples, 10 * 60 * 1000);
-  const driveWindow = getStableWindow(speedSamples, 10 * 60 * 1000);
-  const planeWindow = getStableWindow(speedSamples, 6 * 60 * 1000);
+  const walkWindow = getMovingStableWindow(speedSamples, 10 * 60 * 1000);
+  const bikeWindow = getMovingStableWindow(speedSamples, 10 * 60 * 1000);
+  const driveWindow = getMovingStableWindow(speedSamples, 10 * 60 * 1000);
+  const planeWindow = getMovingStableWindow(speedSamples, 6 * 60 * 1000);
 
   if (planeWindow.length >= 3) {
     const planeMedian = median(planeWindow.map((sample) => sample.speedKmh));
