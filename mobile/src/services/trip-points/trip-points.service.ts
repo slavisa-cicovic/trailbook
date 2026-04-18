@@ -31,7 +31,7 @@ function getMaxAccuracyMeters(recordingMode: RecordingMode) {
     case "walk":
       return 35;
     case "bike":
-      return 50;
+      return 30;
     case "drive":
       return 80;
     case "boat":
@@ -85,7 +85,7 @@ function getMinMovementMeters(recordingMode: RecordingMode) {
     case "walk":
       return 8;
     case "bike":
-      return 15;
+      return 25;
     case "drive":
       return 30;
     case "boat":
