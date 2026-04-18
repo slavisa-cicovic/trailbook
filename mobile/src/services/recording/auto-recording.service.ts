@@ -22,7 +22,7 @@ interface TimedSpeedSample {
 }
 
 const WALK_MAX_KMH = 6;
-const BIKE_MIN_KMH = 10;
+const BIKE_MIN_KMH = 8.5;
 const BIKE_MAX_KMH = 35;
 const DRIVE_MIN_KMH = 40;
 const PLANE_MIN_KMH = 180;
@@ -328,12 +328,25 @@ export function applyAutoRecordingTransition(
     tripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ??
     getOpenTripSegmentForTrip(tripSegments, trip.localId);
   const currentProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
+  const keepExistingCandidate =
+    recordingSession.autoCandidateProfile !== null &&
+    recordingSession.autoCandidateProfile !== currentProfile;
 
-  if (!activeSegment || inferredProfile === null || inferredProfile === currentProfile) {
+  if (!activeSegment) {
     return {
       changed: false,
-      session:
-        recordingSession.autoCandidateProfile === null && recordingSession.autoCandidateSince === null
+      session: recordingSession,
+      tripSegments,
+      waypoints,
+    };
+  }
+
+  if (inferredProfile === null || inferredProfile === currentProfile) {
+    return {
+      changed: false,
+      session: keepExistingCandidate
+        ? recordingSession
+        : recordingSession.autoCandidateProfile === null && recordingSession.autoCandidateSince === null
           ? recordingSession
           : updateRecordingAutoCandidate(recordingSession, null, null),
       tripSegments,

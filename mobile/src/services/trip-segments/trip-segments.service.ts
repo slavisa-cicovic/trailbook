@@ -54,6 +54,18 @@ function isGroundProfile(profile: RecordingProfile) {
   return profile === "walk" || profile === "bike" || profile === "drive";
 }
 
+function isRecordedAtWithinSegment(tripPoint: TripPoint, segment: TripSegment) {
+  const recordedAtMs = new Date(tripPoint.recordedAt).getTime();
+  const startedAtMs = new Date(segment.startedAt).getTime();
+  const endedAtMs = new Date(segment.endedAt ?? tripPoint.recordedAt).getTime();
+
+  if (Number.isNaN(recordedAtMs) || Number.isNaN(startedAtMs) || Number.isNaN(endedAtMs)) {
+    return false;
+  }
+
+  return recordedAtMs >= startedAtMs && recordedAtMs <= endedAtMs;
+}
+
 function resolveShortDriveFallback(
   orderedTripSegments: TripSegment[],
   targetIndex: number,
@@ -277,6 +289,7 @@ export function updateTripSegmentMode(
     syncStatus: getNextSyncStatus(segmentsToMerge[0].syncStatus),
   };
   const removedSegmentIds = new Set(segmentsToMerge.slice(1).map((segment) => segment.localId));
+  const mergedSegmentsByLocalId = new Map(segmentsToMerge.map((segment) => [segment.localId, segment]));
 
   const nextTripSegments = tripSegments
     .filter((segment) => !removedSegmentIds.has(segment.localId))
@@ -287,7 +300,13 @@ export function updateTripSegmentMode(
     );
 
   const nextTripPoints = tripPoints.map((tripPoint) =>
-    tripPoint.tripLocalId === tripLocalId && tripPoint.segmentLocalId && removedSegmentIds.has(tripPoint.segmentLocalId)
+    tripPoint.tripLocalId === tripLocalId &&
+    ((tripPoint.segmentLocalId && removedSegmentIds.has(tripPoint.segmentLocalId)) ||
+      (!tripPoint.segmentLocalId &&
+        segmentsToMerge.some((segment) => isRecordedAtWithinSegment(tripPoint, segment))) ||
+      (tripPoint.segmentLocalId !== null &&
+        mergedSegmentsByLocalId.has(tripPoint.segmentLocalId) &&
+        isRecordedAtWithinSegment(tripPoint, mergedSegmentsByLocalId.get(tripPoint.segmentLocalId)!)))
       ? {
           ...tripPoint,
           segmentLocalId: survivingSegment.localId,
