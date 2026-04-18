@@ -26,6 +26,22 @@ export interface AuthUser {
   providers: string[];
 }
 
+export interface AdminDashboardMetrics {
+  range: {
+    from: string;
+    to: string;
+  };
+  overview: {
+    totalUsers: number;
+    newUsers: number;
+    tripsCreated: number;
+    totalTripPoints: number;
+    averageTripPointsPerTrip: number;
+    photosCreated: number;
+    totalPhotoBytes: number;
+  };
+}
+
 export type SocialAuthProvider = "google" | "apple" | "facebook";
 export type SocialAuthAvailability = Record<SocialAuthProvider, boolean>;
 
@@ -108,6 +124,17 @@ export async function getCurrentUser() {
 
 export async function getSocialAuthProviders() {
   return request<SocialAuthAvailability>("/auth/providers", {
+    method: "GET",
+  });
+}
+
+export async function getAdminDashboardMetrics(input: { from: string; to: string }) {
+  const query = new URLSearchParams({
+    from: input.from,
+    to: input.to,
+  });
+
+  return request<AdminDashboardMetrics>(`/admin/dashboard?${query.toString()}`, {
     method: "GET",
   });
 }

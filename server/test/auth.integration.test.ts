@@ -672,4 +672,208 @@ describe("auth integration", () => {
 
     assert.equal(selfShareResponse.status, 400);
   });
+
+  test("admin can read dashboard metrics for a selected range", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Admin",
+      email: "admin@example.com",
+      password: "password123",
+    });
+
+    const adminVerificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "admin@example.com",
+      },
+    });
+    const adminVerifyTokenMatch = adminVerificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(adminVerifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(adminVerifyTokenMatch![1]))}`,
+    );
+
+    const adminUser = await databaseService.user.findUniqueOrThrow({
+      where: { email: "admin@example.com" },
+    });
+
+    await databaseService.user.update({
+      where: { id: adminUser.id },
+      data: { role: "admin" },
+    });
+
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "User One",
+      email: "user1@example.com",
+      password: "password123",
+    });
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "User Two",
+      email: "user2@example.com",
+      password: "password123",
+    });
+
+    const user1VerificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "user1@example.com",
+      },
+    });
+    const user1VerifyTokenMatch = user1VerificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(user1VerifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(user1VerifyTokenMatch![1]))}`,
+    );
+
+    const adminAgent = request.agent(app.getHttpServer());
+    const loginResponse = await adminAgent.post("/api/auth/login").send({
+      email: "admin@example.com",
+      password: "password123",
+    });
+    assert.equal(loginResponse.status, 201);
+
+    const ownerLogin = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "user1@example.com",
+      password: "password123",
+    });
+    assert.equal(ownerLogin.status, 201);
+
+    const syncResponse = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        localId: "trip-local-admin-metric",
+        deviceId: "device-admin-metric",
+        title: "Admin metric trip",
+        description: null,
+        recordingProfile: "drive",
+        startedAt: "2026-04-18T08:00:00.000Z",
+        endedAt: "2026-04-18T09:00:00.000Z",
+        createdAt: "2026-04-18T08:00:00.000Z",
+        updatedAt: "2026-04-18T09:00:00.000Z",
+        deletedAt: null,
+        attachments: [
+          {
+            localId: "attachment-admin-metric",
+            waypointLocalId: "waypoint-admin-metric",
+            type: "photo",
+            mimeType: "image/jpeg",
+            fileSize: 4096,
+            createdAt: "2026-04-18T08:30:00.000Z",
+            updatedAt: "2026-04-18T08:30:00.000Z",
+            deletedAt: null,
+          },
+        ],
+        segments: [
+          {
+            localId: "segment-admin-metric",
+            recordingProfile: "drive",
+            startedAt: "2026-04-18T08:00:00.000Z",
+            endedAt: "2026-04-18T09:00:00.000Z",
+            createdAt: "2026-04-18T08:00:00.000Z",
+            updatedAt: "2026-04-18T09:00:00.000Z",
+          },
+        ],
+        points: [
+          {
+            localId: "point-admin-metric-1",
+            segmentLocalId: "segment-admin-metric",
+            latitude: 44.7866,
+            longitude: 20.4489,
+            recordedAt: "2026-04-18T08:10:00.000Z",
+            accuracy: 8,
+            altitude: null,
+            speed: 10,
+          },
+          {
+            localId: "point-admin-metric-2",
+            segmentLocalId: "segment-admin-metric",
+            latitude: 44.8125,
+            longitude: 20.4612,
+            recordedAt: "2026-04-18T08:20:00.000Z",
+            accuracy: 7,
+            altitude: null,
+            speed: 12,
+          },
+        ],
+        waypoints: [
+          {
+            localId: "waypoint-admin-metric",
+            segmentLocalId: "segment-admin-metric",
+            category: "restaurant",
+            latitude: 44.8,
+            longitude: 20.45,
+            title: "Stop",
+            note: null,
+            createdAt: "2026-04-18T08:30:00.000Z",
+            updatedAt: "2026-04-18T08:30:00.000Z",
+            deletedAt: null,
+          },
+        ],
+      });
+
+    assert.equal(syncResponse.status, 201);
+
+    const uploadResponse = await request(app.getHttpServer())
+      .post(`/api/trips/${syncResponse.body.tripId}/attachments/upload`)
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .field("attachmentLocalId", "attachment-admin-metric")
+      .attach("file", Buffer.from("fake-image-content"), {
+        contentType: "image/jpeg",
+        filename: "metric.jpg",
+      });
+
+    assert.equal(uploadResponse.status, 201);
+
+    const dashboardResponse = await adminAgent
+      .get("/api/admin/dashboard")
+      .query({
+        from: "2026-04-18T00:00:00.000Z",
+        to: "2026-04-19T00:00:00.000Z",
+      });
+
+    assert.equal(dashboardResponse.status, 200);
+    assert.equal(dashboardResponse.body.overview.totalUsers, 3);
+    assert.equal(dashboardResponse.body.overview.newUsers, 3);
+    assert.equal(dashboardResponse.body.overview.tripsCreated, 1);
+    assert.equal(dashboardResponse.body.overview.totalTripPoints, 2);
+    assert.equal(dashboardResponse.body.overview.averageTripPointsPerTrip, 2);
+    assert.equal(dashboardResponse.body.overview.photosCreated, 1);
+    assert.equal(dashboardResponse.body.overview.totalPhotoBytes, 18);
+  });
+
+  test("non-admin user cannot read dashboard metrics", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "User",
+      email: "user@example.com",
+      password: "password123",
+    });
+
+    const verificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "user@example.com",
+      },
+    });
+    const verifyTokenMatch = verificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(verifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(verifyTokenMatch![1]))}`,
+    );
+
+    const agent = request.agent(app.getHttpServer());
+    const loginResponse = await agent.post("/api/auth/login").send({
+      email: "user@example.com",
+      password: "password123",
+    });
+    assert.equal(loginResponse.status, 201);
+
+    const dashboardResponse = await agent
+      .get("/api/admin/dashboard")
+      .query({
+        from: "2026-04-18T00:00:00.000Z",
+        to: "2026-04-19T00:00:00.000Z",
+      });
+
+    assert.equal(dashboardResponse.status, 403);
+  });
 });
