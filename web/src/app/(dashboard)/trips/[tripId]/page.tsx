@@ -10,7 +10,7 @@ export default async function TripDetailPage({
   const { tripId } = await params;
 
   return (
-    <Container maxWidth="lg" sx={{ px: { xs: 0, md: 1 } }}>
+    <Container maxWidth={false} sx={{ maxWidth: 1600, px: { xs: 0, md: 1 }, width: "100%" }}>
       <TripDetailView tripId={tripId} />
     </Container>
   );

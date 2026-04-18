@@ -178,7 +178,7 @@ export function TripRoutePreview({ points, waypoints }: TripRoutePreviewProps) {
         ref={mapRef}
         sx={{
           borderRadius: 2,
-          minHeight: 420,
+          minHeight: 600,
           width: "100%",
         }}
       />
