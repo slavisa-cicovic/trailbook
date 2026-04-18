@@ -94,6 +94,16 @@ function formatAverage(value: number) {
   return Number.isInteger(value) ? `${value}` : value.toFixed(1);
 }
 
+function formatDateOnly(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString();
+}
+
 function MetricCard({ label, value, helper }: { label: string; value: string; helper?: string }) {
   return (
     <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
@@ -293,7 +303,8 @@ export function AdminDashboardView() {
         <Stack spacing={1}>
           <Typography variant="h6">Selected range</Typography>
           <Typography color="text.secondary">
-            {metrics?.range.from ?? selectedRange?.from} to {metrics?.range.to ?? selectedRange?.to}
+            {formatDateOnly(metrics?.range.from ?? selectedRange?.from ?? "")} to{" "}
+            {formatDateOnly(metrics?.range.to ?? selectedRange?.to ?? "")}
           </Typography>
         </Stack>
       </Paper>
