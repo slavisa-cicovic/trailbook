@@ -6,6 +6,8 @@ import { toSnapshot } from "../location/location.service";
 import {
   appendTripPointIfUseful,
   createTripPointForLocation,
+  recordLocationCallback,
+  recordTripPointDiagnostic,
 } from "../trip-points/trip-points.service";
 import { applyAutoRecordingTransition } from "./auto-recording.service";
 import { updateRecordingLastPoint } from "./recording.service";
@@ -67,8 +69,18 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
 
   for (const location of locations) {
     const snapshot = toSnapshot(location);
+    recordLocationCallback(activeTrip.localId, nextRecordingSession.recordingMode, "background", snapshot);
 
     if (lastRecordedAt === snapshot.recordedAt) {
+      recordTripPointDiagnostic(
+        activeTrip.localId,
+        nextRecordingSession.recordingMode,
+        "session-duplicate-recorded-at",
+        {
+          recordedAt: snapshot.recordedAt,
+          source: "background",
+        },
+      );
       continue;
     }
 
@@ -76,6 +88,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
       nextTripPoints,
       createTripPointForLocation(activeTrip, nextRecordingSession.activeSegmentId ?? activeSegment?.localId ?? null, snapshot),
       nextRecordingSession.recordingMode,
+      "background",
     );
 
     if (appendedTripPoints !== nextTripPoints) {

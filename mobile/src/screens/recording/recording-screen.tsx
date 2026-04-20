@@ -86,6 +86,8 @@ import {
   createTripPointForLocation,
   flushTripPointDiagnostics,
   getVisibleTripPointsForTrip,
+  recordLocationCallback,
+  recordTripPointDiagnostic,
   resetTripPointDiagnostics,
 } from "../../services/trip-points/trip-points.service";
 import {
@@ -342,6 +344,14 @@ export default function RecordingScreen() {
               setCurrentLocation(nextLocation);
             })
           : await watchForegroundLocation(recordingSession.recordingMode, (nextLocation) => {
+              if (activeTrip) {
+                recordLocationCallback(
+                  activeTrip.localId,
+                  recordingSession.recordingMode,
+                  "foreground",
+                  nextLocation,
+                );
+              }
               setCurrentLocation(nextLocation);
             });
     }
@@ -352,7 +362,7 @@ export default function RecordingScreen() {
       active = false;
       stopWatchingLocation?.();
     };
-  }, [recordingSession.recordingMode, recordingSession.status]);
+  }, [activeTrip, recordingSession.recordingMode, recordingSession.status]);
 
   useEffect(() => {
     if (locationPermissionGranted !== true || currentLocation) {
@@ -389,6 +399,15 @@ export default function RecordingScreen() {
     }
 
     if (recordingSession.lastPointRecordedAt === currentLocation.recordedAt) {
+      recordTripPointDiagnostic(
+        activeTrip.localId,
+        recordingSession.recordingMode,
+        "session-duplicate-recorded-at",
+        {
+          recordedAt: currentLocation.recordedAt,
+          source: "foreground",
+        },
+      );
       return;
     }
 
@@ -401,6 +420,7 @@ export default function RecordingScreen() {
       tripPoints,
       nextTripPoint,
       recordingSession.recordingMode,
+      "foreground",
     );
 
     if (nextTripPoints === tripPoints) {

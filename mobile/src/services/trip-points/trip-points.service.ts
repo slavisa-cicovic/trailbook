@@ -2,7 +2,10 @@ import { Platform } from "react-native";
 
 import type { CurrentLocationSnapshot } from "../location/location.service";
 import type { RecordingMode, Trip, TripPoint } from "../../domain/trips";
-import { recordTripPointDiagnostic } from "./trip-point-diagnostics.service";
+import {
+  recordTripPointDiagnostic,
+  type LocationCallbackSource,
+} from "./trip-point-diagnostics.service";
 
 const MIN_SEGMENT_DISTANCE_METERS = 5;
 
@@ -224,13 +227,17 @@ export function appendTripPointIfUseful(
   tripPoints: TripPoint[],
   nextTripPoint: TripPoint,
   recordingMode: RecordingMode,
+  callbackSource: LocationCallbackSource,
 ): TripPoint[] {
   const previousPoint = [...tripPoints]
     .reverse()
     .find((tripPoint) => tripPoint.tripLocalId === nextTripPoint.tripLocalId);
 
   if (previousPoint?.recordedAt === nextTripPoint.recordedAt) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "duplicate-timestamp");
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "duplicate-timestamp", {
+      recordedAt: nextTripPoint.recordedAt,
+      source: callbackSource,
+    });
     return tripPoints;
   }
 
@@ -239,7 +246,10 @@ export function appendTripPointIfUseful(
     previousPoint.latitude === nextTripPoint.latitude &&
     previousPoint.longitude === nextTripPoint.longitude
   ) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "duplicate-coordinates");
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "duplicate-coordinates", {
+      recordedAt: nextTripPoint.recordedAt,
+      source: callbackSource,
+    });
     return tripPoints;
   }
 
@@ -248,33 +258,51 @@ export function appendTripPointIfUseful(
     Number.isFinite(nextTripPoint.accuracy) &&
     nextTripPoint.accuracy > getMaxAccuracyMeters(recordingMode)
   ) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accuracy");
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accuracy", {
+      recordedAt: nextTripPoint.recordedAt,
+      source: callbackSource,
+    });
     return tripPoints;
   }
 
   if (!previousPoint) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted");
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted", {
+      recordedAt: nextTripPoint.recordedAt,
+      source: callbackSource,
+    });
     return [...tripPoints, nextTripPoint];
   }
 
   const distanceMeters = calculateDistanceBetweenPoints(previousPoint, nextTripPoint);
 
   if (distanceMeters < getMinMovementMeters(recordingMode)) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "min-movement");
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "min-movement", {
+      recordedAt: nextTripPoint.recordedAt,
+      source: callbackSource,
+    });
     return tripPoints;
   }
 
   if (distanceMeters > getMaxJumpDistanceMeters(recordingMode)) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "jump-distance");
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "jump-distance", {
+      recordedAt: nextTripPoint.recordedAt,
+      source: callbackSource,
+    });
     return tripPoints;
   }
 
   if (getImpliedSpeedKmh(previousPoint, nextTripPoint, distanceMeters) > getMaxImpliedSpeedKmh(recordingMode)) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "implied-speed");
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "implied-speed", {
+      recordedAt: nextTripPoint.recordedAt,
+      source: callbackSource,
+    });
     return tripPoints;
   }
 
-  recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted");
+  recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted", {
+    recordedAt: nextTripPoint.recordedAt,
+    source: callbackSource,
+  });
   return [...tripPoints, nextTripPoint];
 }
 
@@ -403,4 +431,9 @@ export function formatDistanceKm(distanceMeters: number): string {
   return `${kilometers.toFixed(2)} km`;
 }
 
-export { flushTripPointDiagnostics, resetTripPointDiagnostics } from "./trip-point-diagnostics.service";
+export {
+  flushTripPointDiagnostics,
+  recordLocationCallback,
+  recordTripPointDiagnostic,
+  resetTripPointDiagnostics,
+} from "./trip-point-diagnostics.service";
