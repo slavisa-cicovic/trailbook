@@ -109,6 +109,26 @@ function formatDateOnly(value: string | null) {
   return date.toLocaleDateString();
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString([], {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function ProfileLabel({ profile }: { profile: UserTripOverview["trips"][number]["recordingProfile"] }) {
   return <>{profile.charAt(0).toUpperCase() + profile.slice(1)}</>;
 }
@@ -380,11 +400,11 @@ export function TripsListView() {
                     <TableCell>
                       <ProfileLabel profile={trip.recordingProfile} />
                     </TableCell>
-                    <TableCell>{formatDateOnly(trip.startedAt)}</TableCell>
-                    <TableCell>{formatDateOnly(trip.endedAt)}</TableCell>
+                    <TableCell>{formatDateTime(trip.startedAt)}</TableCell>
+                    <TableCell>{formatDateTime(trip.endedAt)}</TableCell>
                     <TableCell align="right">{trip.waypointCount}</TableCell>
                     <TableCell align="right">{trip.photoCount}</TableCell>
-                    <TableCell>{formatDateOnly(trip.updatedAt)}</TableCell>
+                    <TableCell>{formatDateTime(trip.updatedAt)}</TableCell>
                   </TableRow>
                 ))}
 

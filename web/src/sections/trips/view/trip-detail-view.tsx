@@ -43,6 +43,26 @@ function formatDateOnly(value: string | null) {
   return date.toLocaleDateString();
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString([], {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function formatDistanceKm(distanceMeters: number) {
   return `${(distanceMeters / 1000).toFixed(2)} km`;
 }
@@ -194,7 +214,7 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
           </Button>
           <Typography variant="h4">{detail.trip.title}</Typography>
           <Typography color="text.secondary">
-            {formatProfile(detail.trip.recordingProfile)} trip • {formatDateOnly(detail.trip.startedAt)}
+            {formatProfile(detail.trip.recordingProfile)} trip • {formatDateTime(detail.trip.startedAt)}
           </Typography>
         </Stack>
         <Button component={Link} href={`/trips/${detail.trip.id}/edit`} variant="contained">
@@ -230,15 +250,15 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
                 </TableRow>
                 <TableRow>
                   <TableCell>Started</TableCell>
-                  <TableCell>{formatDateOnly(detail.trip.startedAt)}</TableCell>
+                  <TableCell>{formatDateTime(detail.trip.startedAt)}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Ended</TableCell>
-                  <TableCell>{formatDateOnly(detail.trip.endedAt)}</TableCell>
+                  <TableCell>{formatDateTime(detail.trip.endedAt)}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Updated</TableCell>
-                  <TableCell>{formatDateOnly(detail.trip.updatedAt)}</TableCell>
+                  <TableCell>{formatDateTime(detail.trip.updatedAt)}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Sync status</TableCell>
@@ -285,8 +305,8 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
             {timelineRows.map((segment) => (
               <TableRow hover key={segment.localId}>
                 <TableCell>{formatProfile(segment.recordingProfile)}</TableCell>
-                <TableCell>{formatDateOnly(segment.startedAt)}</TableCell>
-                <TableCell>{formatDateOnly(segment.endedAt)}</TableCell>
+                <TableCell>{formatDateTime(segment.startedAt)}</TableCell>
+                <TableCell>{formatDateTime(segment.endedAt)}</TableCell>
                 <TableCell align="right">{formatDistanceKm(segment.distanceMeters)}</TableCell>
               </TableRow>
             ))}
