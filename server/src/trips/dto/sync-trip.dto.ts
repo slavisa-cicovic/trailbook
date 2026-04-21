@@ -77,7 +77,7 @@ export interface SyncTripDiagnosticsRecentEventDto {
 
 export interface SyncTripDiagnosticsDto {
   accepted: number;
-  acceptedAfterLongGap: number;
+  acceptedAfterLongGap?: number;
   backgroundAccepted: number;
   backgroundCallbacks: number;
   backgroundRejected: number;
