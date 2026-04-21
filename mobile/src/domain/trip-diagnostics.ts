@@ -4,6 +4,7 @@ export type TripDiagnosticsPlatform = "android" | "ios" | "web" | "unknown";
 export type TripDiagnosticsSource = "foreground" | "background";
 export type TripDiagnosticsDecision =
   | "accepted"
+  | "accepted-after-long-gap"
   | "duplicate-timestamp"
   | "duplicate-coordinates"
   | "session-duplicate-recorded-at"
@@ -26,6 +27,7 @@ export interface TripDiagnosticsRecentEvent {
 
 export interface TripDiagnostics {
   accepted: number;
+  acceptedAfterLongGap: number;
   backgroundAccepted: number;
   backgroundCallbacks: number;
   backgroundRejected: number;

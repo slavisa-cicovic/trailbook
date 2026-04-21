@@ -248,6 +248,7 @@ CREATE TABLE IF NOT EXISTS trip_diagnostics (
   callback_count INTEGER NOT NULL,
   decision_count INTEGER NOT NULL,
   accepted INTEGER NOT NULL,
+  accepted_after_long_gap INTEGER NOT NULL,
   foreground_callbacks INTEGER NOT NULL,
   background_callbacks INTEGER NOT NULL,
   foreground_accepted INTEGER NOT NULL,
@@ -270,6 +271,7 @@ CREATE TABLE IF NOT EXISTS trip_diagnostics (
 );
 
 CREATE INDEX IF NOT EXISTS trip_diagnostics_trip_id_idx ON trip_diagnostics(trip_id);
+ALTER TABLE trip_diagnostics ADD COLUMN IF NOT EXISTS accepted_after_long_gap INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS waypoints (
   id TEXT PRIMARY KEY,

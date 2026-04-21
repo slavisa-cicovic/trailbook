@@ -8,6 +8,7 @@ import {
 } from "./trip-point-diagnostics.service";
 
 const MIN_SEGMENT_DISTANCE_METERS = 5;
+const LONG_GAP_THRESHOLD_MS = 5 * 60 * 1000;
 
 function toRadians(value: number): number {
   return (value * Math.PI) / 180;
@@ -195,6 +196,16 @@ function getImpliedSpeedKmh(previousPoint: TripPoint, nextTripPoint: TripPoint, 
   return (distanceMeters / deltaSeconds) * 3.6;
 }
 
+function getElapsedMs(previousPoint: TripPoint, nextTripPoint: TripPoint): number {
+  return new Date(nextTripPoint.recordedAt).getTime() - new Date(previousPoint.recordedAt).getTime();
+}
+
+function isLongGap(previousPoint: TripPoint, nextTripPoint: TripPoint): boolean {
+  const elapsedMs = getElapsedMs(previousPoint, nextTripPoint);
+
+  return Number.isFinite(elapsedMs) && elapsedMs >= LONG_GAP_THRESHOLD_MS;
+}
+
 export function createTripPointForLocation(
   trip: Trip,
   segmentLocalId: string | null,
@@ -283,16 +294,26 @@ export function appendTripPointIfUseful(
     return tripPoints;
   }
 
-  if (distanceMeters > getMaxJumpDistanceMeters(recordingMode)) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "jump-distance", {
+  const impliedSpeedKmh = getImpliedSpeedKmh(previousPoint, nextTripPoint, distanceMeters);
+
+  if (impliedSpeedKmh > getMaxImpliedSpeedKmh(recordingMode)) {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "implied-speed", {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,
     });
     return tripPoints;
   }
 
-  if (getImpliedSpeedKmh(previousPoint, nextTripPoint, distanceMeters) > getMaxImpliedSpeedKmh(recordingMode)) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "implied-speed", {
+  if (distanceMeters > getMaxJumpDistanceMeters(recordingMode)) {
+    if (isLongGap(previousPoint, nextTripPoint)) {
+      recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted-after-long-gap", {
+        recordedAt: nextTripPoint.recordedAt,
+        source: callbackSource,
+      });
+      return [...tripPoints, nextTripPoint];
+    }
+
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "jump-distance", {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,
     });

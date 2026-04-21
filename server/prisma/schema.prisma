@@ -272,6 +272,7 @@ model TripDiagnostics {
   callbackCount            Int      @map("callback_count")
   decisionCount            Int      @map("decision_count")
   accepted                 Int
+  acceptedAfterLongGap     Int      @map("accepted_after_long_gap")
   foregroundCallbacks      Int      @map("foreground_callbacks")
   backgroundCallbacks      Int      @map("background_callbacks")
   foregroundAccepted       Int      @map("foreground_accepted")

@@ -54,6 +54,7 @@ function normalizeTripDiagnostics(
 ): TripDiagnostics {
   return {
     accepted: value.accepted ?? 0,
+    acceptedAfterLongGap: value.acceptedAfterLongGap ?? 0,
     backgroundAccepted: value.backgroundAccepted ?? 0,
     backgroundCallbacks: value.backgroundCallbacks ?? 0,
     backgroundRejected: value.backgroundRejected ?? 0,

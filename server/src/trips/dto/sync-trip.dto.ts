@@ -58,6 +58,7 @@ export interface SyncTripDiagnosticsRecentEventDto {
   altitude: number | null;
   decision:
     | "accepted"
+    | "accepted-after-long-gap"
     | "duplicate-timestamp"
     | "duplicate-coordinates"
     | "session-duplicate-recorded-at"
@@ -76,6 +77,7 @@ export interface SyncTripDiagnosticsRecentEventDto {
 
 export interface SyncTripDiagnosticsDto {
   accepted: number;
+  acceptedAfterLongGap: number;
   backgroundAccepted: number;
   backgroundCallbacks: number;
   backgroundRejected: number;

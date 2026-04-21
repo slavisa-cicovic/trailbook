@@ -16,6 +16,7 @@ export type LocationCallbackSource = "foreground" | "background";
 
 export type TripPointDiagnosticReason =
   | "accepted"
+  | "accepted-after-long-gap"
   | "duplicate-timestamp"
   | "duplicate-coordinates"
   | "session-duplicate-recorded-at"
@@ -26,6 +27,7 @@ export type TripPointDiagnosticReason =
 
 interface MutableTripPointDiagnostics {
   accepted: number;
+  acceptedAfterLongGap: number;
   backgroundAccepted: number;
   backgroundCallbacks: number;
   backgroundRejected: number;
@@ -84,6 +86,7 @@ function createEmptyDiagnostics(
 ): MutableTripPointDiagnostics {
   return {
     accepted: 0,
+    acceptedAfterLongGap: 0,
     backgroundAccepted: 0,
     backgroundCallbacks: 0,
     backgroundRejected: 0,
@@ -130,6 +133,7 @@ function mergeDiagnostics(
   source: TripDiagnostics,
 ): MutableTripPointDiagnostics {
   target.accepted += source.accepted;
+  target.acceptedAfterLongGap += source.acceptedAfterLongGap;
   target.backgroundAccepted += source.backgroundAccepted;
   target.backgroundCallbacks += source.backgroundCallbacks;
   target.backgroundRejected += source.backgroundRejected;
@@ -202,6 +206,7 @@ function trimRecentEvents(diagnostics: MutableTripPointDiagnostics) {
 function toTripDiagnosticsSummary(diagnostics: MutableTripPointDiagnostics): TripDiagnostics {
   return {
     accepted: diagnostics.accepted,
+    acceptedAfterLongGap: diagnostics.acceptedAfterLongGap,
     backgroundAccepted: diagnostics.backgroundAccepted,
     backgroundCallbacks: diagnostics.backgroundCallbacks,
     backgroundRejected: diagnostics.backgroundRejected,
@@ -390,6 +395,10 @@ export function recordTripPointDiagnostic(
     case "accepted":
       diagnostics.accepted += 1;
       break;
+    case "accepted-after-long-gap":
+      diagnostics.accepted += 1;
+      diagnostics.acceptedAfterLongGap += 1;
+      break;
     case "duplicate-timestamp":
       diagnostics.duplicateTimestamp += 1;
       break;
@@ -417,7 +426,7 @@ export function recordTripPointDiagnostic(
   diagnostics.updatedAt = new Date().toISOString();
 
   if (options.source === "foreground") {
-    if (reason === "accepted") {
+    if (reason === "accepted" || reason === "accepted-after-long-gap") {
       diagnostics.foregroundAccepted += 1;
     } else {
       diagnostics.foregroundRejected += 1;
@@ -425,7 +434,7 @@ export function recordTripPointDiagnostic(
   }
 
   if (options.source === "background") {
-    if (reason === "accepted") {
+    if (reason === "accepted" || reason === "accepted-after-long-gap") {
       diagnostics.backgroundAccepted += 1;
     } else {
       diagnostics.backgroundRejected += 1;

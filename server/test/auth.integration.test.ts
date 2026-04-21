@@ -930,6 +930,7 @@ describe("auth integration", () => {
           callbackCount: 42,
           decisionCount: 40,
           accepted: 38,
+          acceptedAfterLongGap: 1,
           foregroundCallbacks: 18,
           backgroundCallbacks: 24,
           foregroundAccepted: 16,
@@ -1011,6 +1012,7 @@ describe("auth integration", () => {
     assert.equal(diagnostics?.recordingMode, "walk");
     assert.equal(diagnostics?.callbackCount, 42);
     assert.equal(diagnostics?.accepted, 38);
+    assert.equal(diagnostics?.acceptedAfterLongGap, 1);
     assert.equal(diagnostics?.rejectedByMinMovement, 2);
     assert.deepEqual(diagnostics?.recentEventsJson, [
       {
