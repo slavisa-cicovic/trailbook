@@ -1,5 +1,16 @@
+import { Platform } from "react-native";
+
 import type { CurrentLocationSnapshot } from "../location/location.service";
+import type {
+  TripDiagnostics,
+  TripDiagnosticsPlatform,
+  TripDiagnosticsRecentEvent,
+} from "../../domain/trip-diagnostics";
 import type { RecordingMode } from "../../domain/trips";
+import {
+  loadTripDiagnostics as loadPersistedTripDiagnostics,
+  saveTripDiagnostics,
+} from "../../storage/trip-diagnostics-storage";
 
 export type LocationCallbackSource = "foreground" | "background";
 
@@ -13,21 +24,8 @@ export type TripPointDiagnosticReason =
   | "jump-distance"
   | "implied-speed";
 
-interface LocationCallbackEvent {
-  accuracy: number | null;
-  altitude: number | null;
-  decision: TripPointDiagnosticReason | null;
-  latitude: number;
-  longitude: number;
-  receivedAt: string;
-  recordedAt: string;
-  source: LocationCallbackSource;
-  speed: number | null;
-}
-
-interface TripPointDiagnostics {
+interface MutableTripPointDiagnostics {
   accepted: number;
-  accuracy: number;
   backgroundAccepted: number;
   backgroundCallbacks: number;
   backgroundRejected: number;
@@ -38,16 +36,20 @@ interface TripPointDiagnostics {
   foregroundAccepted: number;
   foregroundCallbacks: number;
   foregroundRejected: number;
-  impliedSpeed: number;
-  jumpDistance: number;
   lastCallbackReceivedAtMs: number | null;
   lastLoggedAtCallbackCount: number;
   lastRecordedAtMs: number | null;
   maxCallbackGapMs: number;
   maxRecordedGapMs: number;
-  minMovement: number;
-  recentEvents: LocationCallbackEvent[];
+  recentEvents: TripDiagnosticsRecentEvent[];
+  recordingMode: RecordingMode;
+  rejectedByAccuracy: number;
+  rejectedByImpliedSpeed: number;
+  rejectedByJumpDistance: number;
+  rejectedByMinMovement: number;
   sessionDuplicateRecordedAt: number;
+  tripLocalId: string;
+  updatedAt: string;
 }
 
 interface RecordTripPointDiagnosticOptions {
@@ -55,14 +57,33 @@ interface RecordTripPointDiagnosticOptions {
   source?: LocationCallbackSource;
 }
 
-const MAX_RECENT_EVENTS = 200;
+const MAX_IN_MEMORY_RECENT_EVENTS = 200;
+const MAX_PERSISTED_RECENT_EVENTS = 20;
+const diagnosticsByTripLocalId = new Map<string, MutableTripPointDiagnostics>();
+let diagnosticsHydrationPromise: Promise<void> | null = null;
+let diagnosticsPersistenceQueue = Promise.resolve();
 
-const diagnosticsByTripLocalId = new Map<string, TripPointDiagnostics>();
+function getPlatform(): TripDiagnosticsPlatform {
+  switch (Platform.OS) {
+    case "android":
+    case "ios":
+    case "web":
+      return Platform.OS;
+    default:
+      return "unknown";
+  }
+}
 
-function createEmptyDiagnostics(): TripPointDiagnostics {
+export function isTripDiagnosticsEnabled() {
+  return process.env.EXPO_PUBLIC_ENABLE_TRIP_DIAGNOSTICS === "true";
+}
+
+function createEmptyDiagnostics(
+  tripLocalId: string,
+  recordingMode: RecordingMode,
+): MutableTripPointDiagnostics {
   return {
     accepted: 0,
-    accuracy: 0,
     backgroundAccepted: 0,
     backgroundCallbacks: 0,
     backgroundRejected: 0,
@@ -73,40 +94,112 @@ function createEmptyDiagnostics(): TripPointDiagnostics {
     foregroundAccepted: 0,
     foregroundCallbacks: 0,
     foregroundRejected: 0,
-    impliedSpeed: 0,
-    jumpDistance: 0,
     lastCallbackReceivedAtMs: null,
     lastLoggedAtCallbackCount: 0,
     lastRecordedAtMs: null,
     maxCallbackGapMs: 0,
     maxRecordedGapMs: 0,
-    minMovement: 0,
     recentEvents: [],
+    recordingMode,
+    rejectedByAccuracy: 0,
+    rejectedByImpliedSpeed: 0,
+    rejectedByJumpDistance: 0,
+    rejectedByMinMovement: 0,
     sessionDuplicateRecordedAt: 0,
+    tripLocalId,
+    updatedAt: new Date().toISOString(),
   };
 }
 
-function getDiagnostics(tripLocalId: string) {
-  const existing = diagnosticsByTripLocalId.get(tripLocalId);
-
-  if (existing) {
-    return existing;
-  }
-
-  const created = createEmptyDiagnostics();
-  diagnosticsByTripLocalId.set(tripLocalId, created);
-  return created;
+function cloneRecentEvent(event: TripDiagnosticsRecentEvent): TripDiagnosticsRecentEvent {
+  return {
+    accuracy: event.accuracy,
+    altitude: event.altitude,
+    decision: event.decision,
+    latitude: event.latitude,
+    longitude: event.longitude,
+    receivedAt: event.receivedAt,
+    recordedAt: event.recordedAt,
+    source: event.source,
+    speed: event.speed,
+  };
 }
 
-function trimRecentEvents(diagnostics: TripPointDiagnostics) {
-  if (diagnostics.recentEvents.length <= MAX_RECENT_EVENTS) {
+function mergeDiagnostics(
+  target: MutableTripPointDiagnostics,
+  source: TripDiagnostics,
+): MutableTripPointDiagnostics {
+  target.accepted += source.accepted;
+  target.backgroundAccepted += source.backgroundAccepted;
+  target.backgroundCallbacks += source.backgroundCallbacks;
+  target.backgroundRejected += source.backgroundRejected;
+  target.callbackCount += source.callbackCount;
+  target.decisionCount += source.decisionCount;
+  target.duplicateCoordinates += source.duplicateCoordinates;
+  target.duplicateTimestamp += source.duplicateTimestamp;
+  target.foregroundAccepted += source.foregroundAccepted;
+  target.foregroundCallbacks += source.foregroundCallbacks;
+  target.foregroundRejected += source.foregroundRejected;
+  target.maxCallbackGapMs = Math.max(target.maxCallbackGapMs, source.maxCallbackGapMs);
+  target.maxRecordedGapMs = Math.max(target.maxRecordedGapMs, source.maxRecordedGapMs);
+  target.recentEvents = [...source.recentEvents.map(cloneRecentEvent), ...target.recentEvents].slice(
+    -MAX_IN_MEMORY_RECENT_EVENTS,
+  );
+  target.recordingMode = source.recordingMode;
+  target.rejectedByAccuracy += source.rejectedByAccuracy;
+  target.rejectedByImpliedSpeed += source.rejectedByImpliedSpeed;
+  target.rejectedByJumpDistance += source.rejectedByJumpDistance;
+  target.rejectedByMinMovement += source.rejectedByMinMovement;
+  target.sessionDuplicateRecordedAt += source.sessionDuplicateRecordedAt;
+  target.updatedAt =
+    new Date(source.updatedAt).getTime() > new Date(target.updatedAt).getTime()
+      ? source.updatedAt
+      : target.updatedAt;
+
+  return target;
+}
+
+function ensureDiagnosticsHydrated() {
+  if (!isTripDiagnosticsEnabled()) {
     return;
   }
 
-  diagnostics.recentEvents.splice(0, diagnostics.recentEvents.length - MAX_RECENT_EVENTS);
+  if (!diagnosticsHydrationPromise) {
+    diagnosticsHydrationPromise = loadPersistedTripDiagnostics()
+      .then((persistedDiagnostics) => {
+        for (const persistedDiagnosticsEntry of persistedDiagnostics) {
+          const existing = diagnosticsByTripLocalId.get(persistedDiagnosticsEntry.tripLocalId);
+
+          if (existing) {
+            mergeDiagnostics(existing, persistedDiagnosticsEntry);
+            continue;
+          }
+
+          diagnosticsByTripLocalId.set(
+            persistedDiagnosticsEntry.tripLocalId,
+            mergeDiagnostics(
+              createEmptyDiagnostics(
+                persistedDiagnosticsEntry.tripLocalId,
+                persistedDiagnosticsEntry.recordingMode,
+              ),
+              persistedDiagnosticsEntry,
+            ),
+          );
+        }
+      })
+      .catch(() => undefined);
+  }
 }
 
-function buildSummary(tripLocalId: string, diagnostics: TripPointDiagnostics) {
+function trimRecentEvents(diagnostics: MutableTripPointDiagnostics) {
+  if (diagnostics.recentEvents.length <= MAX_IN_MEMORY_RECENT_EVENTS) {
+    return;
+  }
+
+  diagnostics.recentEvents.splice(0, diagnostics.recentEvents.length - MAX_IN_MEMORY_RECENT_EVENTS);
+}
+
+function toTripDiagnosticsSummary(diagnostics: MutableTripPointDiagnostics): TripDiagnostics {
   return {
     accepted: diagnostics.accepted,
     backgroundAccepted: diagnostics.backgroundAccepted,
@@ -121,28 +214,71 @@ function buildSummary(tripLocalId: string, diagnostics: TripPointDiagnostics) {
     foregroundRejected: diagnostics.foregroundRejected,
     maxCallbackGapMs: diagnostics.maxCallbackGapMs,
     maxRecordedGapMs: diagnostics.maxRecordedGapMs,
-    rejectedByAccuracy: diagnostics.accuracy,
-    rejectedByImpliedSpeed: diagnostics.impliedSpeed,
-    rejectedByJumpDistance: diagnostics.jumpDistance,
-    rejectedByMinMovement: diagnostics.minMovement,
+    platform: getPlatform(),
+    recentEvents: diagnostics.recentEvents.slice(-MAX_PERSISTED_RECENT_EVENTS).map(cloneRecentEvent),
+    recordingMode: diagnostics.recordingMode,
+    rejectedByAccuracy: diagnostics.rejectedByAccuracy,
+    rejectedByImpliedSpeed: diagnostics.rejectedByImpliedSpeed,
+    rejectedByJumpDistance: diagnostics.rejectedByJumpDistance,
+    rejectedByMinMovement: diagnostics.rejectedByMinMovement,
     sessionDuplicateRecordedAt: diagnostics.sessionDuplicateRecordedAt,
-    tripLocalId,
+    tripLocalId: diagnostics.tripLocalId,
+    updatedAt: diagnostics.updatedAt,
+  };
+}
+
+function buildSummary(diagnostics: MutableTripPointDiagnostics) {
+  return {
+    ...toTripDiagnosticsSummary(diagnostics),
     undecidedCallbacks: diagnostics.callbackCount - diagnostics.decisionCount,
   };
 }
 
-function maybeLogDiagnostics(tripLocalId: string, diagnostics: TripPointDiagnostics) {
+function queueDiagnosticsPersist() {
+  if (!isTripDiagnosticsEnabled()) {
+    return;
+  }
+
+  diagnosticsPersistenceQueue = diagnosticsPersistenceQueue
+    .then(async () => {
+      const serializedDiagnostics = [...diagnosticsByTripLocalId.values()].map(toTripDiagnosticsSummary);
+      await saveTripDiagnostics(serializedDiagnostics);
+    })
+    .catch(() => undefined);
+}
+
+function getDiagnostics(tripLocalId: string, recordingMode: RecordingMode) {
+  if (!isTripDiagnosticsEnabled()) {
+    return null;
+  }
+
+  ensureDiagnosticsHydrated();
+
+  const existing = diagnosticsByTripLocalId.get(tripLocalId);
+
+  if (existing) {
+    existing.recordingMode = recordingMode;
+    return existing;
+  }
+
+  const created = createEmptyDiagnostics(tripLocalId, recordingMode);
+  diagnosticsByTripLocalId.set(tripLocalId, created);
+  queueDiagnosticsPersist();
+  return created;
+}
+
+function maybeLogDiagnostics(diagnostics: MutableTripPointDiagnostics) {
   if (diagnostics.callbackCount - diagnostics.lastLoggedAtCallbackCount < 10) {
     return;
   }
 
   diagnostics.lastLoggedAtCallbackCount = diagnostics.callbackCount;
 
-  console.info("[Trailbook][location-summary]", buildSummary(tripLocalId, diagnostics));
+  console.info("[Trailbook][location-summary]", JSON.stringify(buildSummary(diagnostics)));
 }
 
 function attachDecisionToRecentEvent(
-  diagnostics: TripPointDiagnostics,
+  diagnostics: MutableTripPointDiagnostics,
   reason: TripPointDiagnosticReason,
   options: RecordTripPointDiagnosticOptions,
 ) {
@@ -170,12 +306,18 @@ export function recordLocationCallback(
   source: LocationCallbackSource,
   snapshot: CurrentLocationSnapshot,
 ) {
-  const diagnostics = getDiagnostics(tripLocalId);
+  const diagnostics = getDiagnostics(tripLocalId, recordingMode);
+
+  if (!diagnostics) {
+    return;
+  }
+
   const receivedAt = new Date().toISOString();
   const receivedAtMs = Date.now();
   const recordedAtMs = new Date(snapshot.recordedAt).getTime();
 
   diagnostics.callbackCount += 1;
+  diagnostics.updatedAt = receivedAt;
 
   if (source === "foreground") {
     diagnostics.foregroundCallbacks += 1;
@@ -212,20 +354,24 @@ export function recordLocationCallback(
   });
   trimRecentEvents(diagnostics);
 
-  console.info("[Trailbook][location-callback]", {
-    accuracy: snapshot.accuracy,
-    altitude: snapshot.altitude,
-    latitude: snapshot.latitude,
-    longitude: snapshot.longitude,
-    receivedAt,
-    recordedAt: snapshot.recordedAt,
-    recordingMode,
-    source,
-    speed: snapshot.speed,
-    tripLocalId,
-  });
+  console.info(
+    "[Trailbook][location-callback]",
+    JSON.stringify({
+      accuracy: snapshot.accuracy,
+      altitude: snapshot.altitude,
+      latitude: snapshot.latitude,
+      longitude: snapshot.longitude,
+      receivedAt,
+      recordedAt: snapshot.recordedAt,
+      recordingMode,
+      source,
+      speed: snapshot.speed,
+      tripLocalId,
+    }),
+  );
 
-  maybeLogDiagnostics(tripLocalId, diagnostics);
+  maybeLogDiagnostics(diagnostics);
+  queueDiagnosticsPersist();
 }
 
 export function recordTripPointDiagnostic(
@@ -234,7 +380,11 @@ export function recordTripPointDiagnostic(
   reason: TripPointDiagnosticReason,
   options: RecordTripPointDiagnosticOptions = {},
 ) {
-  const diagnostics = getDiagnostics(tripLocalId);
+  const diagnostics = getDiagnostics(tripLocalId, recordingMode);
+
+  if (!diagnostics) {
+    return;
+  }
 
   switch (reason) {
     case "accepted":
@@ -250,20 +400,21 @@ export function recordTripPointDiagnostic(
       diagnostics.sessionDuplicateRecordedAt += 1;
       break;
     case "accuracy":
-      diagnostics.accuracy += 1;
+      diagnostics.rejectedByAccuracy += 1;
       break;
     case "min-movement":
-      diagnostics.minMovement += 1;
+      diagnostics.rejectedByMinMovement += 1;
       break;
     case "jump-distance":
-      diagnostics.jumpDistance += 1;
+      diagnostics.rejectedByJumpDistance += 1;
       break;
     case "implied-speed":
-      diagnostics.impliedSpeed += 1;
+      diagnostics.rejectedByImpliedSpeed += 1;
       break;
   }
 
   diagnostics.decisionCount += 1;
+  diagnostics.updatedAt = new Date().toISOString();
 
   if (options.source === "foreground") {
     if (reason === "accepted") {
@@ -283,30 +434,78 @@ export function recordTripPointDiagnostic(
 
   attachDecisionToRecentEvent(diagnostics, reason, options);
 
-  console.info("[Trailbook][location-decision]", {
-    reason,
-    recordedAt: options.recordedAt ?? null,
-    recordingMode,
-    source: options.source ?? null,
-    tripLocalId,
-  });
+  console.info(
+    "[Trailbook][location-decision]",
+    JSON.stringify({
+      reason,
+      recordedAt: options.recordedAt ?? null,
+      recordingMode,
+      source: options.source ?? null,
+      tripLocalId,
+    }),
+  );
 
-  maybeLogDiagnostics(tripLocalId, diagnostics);
+  maybeLogDiagnostics(diagnostics);
+  queueDiagnosticsPersist();
 }
 
 export function resetTripPointDiagnostics(tripLocalId: string) {
+  if (!isTripDiagnosticsEnabled()) {
+    return;
+  }
+
   diagnosticsByTripLocalId.delete(tripLocalId);
+  queueDiagnosticsPersist();
 }
 
 export function flushTripPointDiagnostics(tripLocalId: string) {
+  if (!isTripDiagnosticsEnabled()) {
+    return;
+  }
+
+  ensureDiagnosticsHydrated();
+
   const diagnostics = diagnosticsByTripLocalId.get(tripLocalId);
 
   if (!diagnostics) {
     return;
   }
 
-  console.info("[Trailbook][location-summary][final]", {
-    ...buildSummary(tripLocalId, diagnostics),
-    recentEvents: diagnostics.recentEvents.slice(-20),
-  });
+  diagnostics.updatedAt = new Date().toISOString();
+
+  console.info(
+    "[Trailbook][location-summary][final]",
+    JSON.stringify({
+      ...buildSummary(diagnostics),
+      recentEvents: diagnostics.recentEvents.slice(-20).map(cloneRecentEvent),
+    }),
+  );
+
+  queueDiagnosticsPersist();
 }
+
+export async function getTripDiagnosticsForSync(tripLocalId: string): Promise<TripDiagnostics | null> {
+  if (!isTripDiagnosticsEnabled()) {
+    return null;
+  }
+
+  await diagnosticsPersistenceQueue.catch(() => undefined);
+  ensureDiagnosticsHydrated();
+  await diagnosticsHydrationPromise?.catch(() => undefined);
+
+  const diagnostics =
+    diagnosticsByTripLocalId.get(tripLocalId) ??
+    (await loadPersistedTripDiagnostics()).find((entry) => entry.tripLocalId === tripLocalId) ??
+    null;
+
+  if (!diagnostics) {
+    return null;
+  }
+
+  return "lastCallbackReceivedAtMs" in diagnostics
+    ? toTripDiagnosticsSummary(diagnostics)
+    : diagnostics;
+}
+
+void diagnosticsHydrationPromise;
+ensureDiagnosticsHydrated();

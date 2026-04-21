@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import { UsersService } from "../users/users.service";
@@ -15,6 +16,10 @@ export class TripsService {
     @Inject(UsersService) private readonly usersService: UsersService,
     @Inject(MediaStorageService) private readonly mediaStorageService: MediaStorageService,
   ) {}
+
+  private isTripDiagnosticsEnabled() {
+    return process.env.ENABLE_TRIP_DIAGNOSTICS === "true";
+  }
 
   private parseDateOrFallback(value: string | null | undefined, fallback: string | Date) {
     if (!value) {
@@ -426,6 +431,65 @@ export class TripsService {
             deletedAt: attachment.deletedAt
               ? this.parseDateOrFallback(attachment.deletedAt, payload.updatedAt)
               : null,
+          },
+        });
+      }
+
+      if (this.isTripDiagnosticsEnabled() && payload.diagnostics) {
+        await tx.tripDiagnostics.upsert({
+          where: {
+            tripId_deviceId: {
+              tripId: upsertedTrip.id,
+              deviceId: payload.deviceId,
+            },
+          },
+          create: {
+            tripId: upsertedTrip.id,
+            deviceId: payload.deviceId,
+            platform: payload.diagnostics.platform,
+            recordingMode: payload.diagnostics.recordingMode,
+            callbackCount: payload.diagnostics.callbackCount,
+            decisionCount: payload.diagnostics.decisionCount,
+            accepted: payload.diagnostics.accepted,
+            foregroundCallbacks: payload.diagnostics.foregroundCallbacks,
+            backgroundCallbacks: payload.diagnostics.backgroundCallbacks,
+            foregroundAccepted: payload.diagnostics.foregroundAccepted,
+            backgroundAccepted: payload.diagnostics.backgroundAccepted,
+            foregroundRejected: payload.diagnostics.foregroundRejected,
+            backgroundRejected: payload.diagnostics.backgroundRejected,
+            duplicateTimestamp: payload.diagnostics.duplicateTimestamp,
+            duplicateCoordinates: payload.diagnostics.duplicateCoordinates,
+            sessionDuplicateRecordedAt: payload.diagnostics.sessionDuplicateRecordedAt,
+            rejectedByAccuracy: payload.diagnostics.rejectedByAccuracy,
+            rejectedByMinMovement: payload.diagnostics.rejectedByMinMovement,
+            rejectedByJumpDistance: payload.diagnostics.rejectedByJumpDistance,
+            rejectedByImpliedSpeed: payload.diagnostics.rejectedByImpliedSpeed,
+            maxCallbackGapMs: payload.diagnostics.maxCallbackGapMs,
+            maxRecordedGapMs: payload.diagnostics.maxRecordedGapMs,
+            recentEventsJson: payload.diagnostics.recentEvents as unknown as Prisma.InputJsonValue,
+          },
+          update: {
+            platform: payload.diagnostics.platform,
+            recordingMode: payload.diagnostics.recordingMode,
+            callbackCount: payload.diagnostics.callbackCount,
+            decisionCount: payload.diagnostics.decisionCount,
+            accepted: payload.diagnostics.accepted,
+            foregroundCallbacks: payload.diagnostics.foregroundCallbacks,
+            backgroundCallbacks: payload.diagnostics.backgroundCallbacks,
+            foregroundAccepted: payload.diagnostics.foregroundAccepted,
+            backgroundAccepted: payload.diagnostics.backgroundAccepted,
+            foregroundRejected: payload.diagnostics.foregroundRejected,
+            backgroundRejected: payload.diagnostics.backgroundRejected,
+            duplicateTimestamp: payload.diagnostics.duplicateTimestamp,
+            duplicateCoordinates: payload.diagnostics.duplicateCoordinates,
+            sessionDuplicateRecordedAt: payload.diagnostics.sessionDuplicateRecordedAt,
+            rejectedByAccuracy: payload.diagnostics.rejectedByAccuracy,
+            rejectedByMinMovement: payload.diagnostics.rejectedByMinMovement,
+            rejectedByJumpDistance: payload.diagnostics.rejectedByJumpDistance,
+            rejectedByImpliedSpeed: payload.diagnostics.rejectedByImpliedSpeed,
+            maxCallbackGapMs: payload.diagnostics.maxCallbackGapMs,
+            maxRecordedGapMs: payload.diagnostics.maxRecordedGapMs,
+            recentEventsJson: payload.diagnostics.recentEvents as unknown as Prisma.InputJsonValue,
           },
         });
       }

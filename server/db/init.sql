@@ -239,6 +239,38 @@ CREATE TABLE IF NOT EXISTS trip_points (
 CREATE INDEX IF NOT EXISTS trip_points_trip_id_idx ON trip_points(trip_id);
 CREATE INDEX IF NOT EXISTS trip_points_segment_id_idx ON trip_points(segment_id);
 
+CREATE TABLE IF NOT EXISTS trip_diagnostics (
+  id TEXT PRIMARY KEY,
+  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  device_id TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  recording_mode TEXT NOT NULL,
+  callback_count INTEGER NOT NULL,
+  decision_count INTEGER NOT NULL,
+  accepted INTEGER NOT NULL,
+  foreground_callbacks INTEGER NOT NULL,
+  background_callbacks INTEGER NOT NULL,
+  foreground_accepted INTEGER NOT NULL,
+  background_accepted INTEGER NOT NULL,
+  foreground_rejected INTEGER NOT NULL,
+  background_rejected INTEGER NOT NULL,
+  duplicate_timestamp INTEGER NOT NULL,
+  duplicate_coordinates INTEGER NOT NULL,
+  session_duplicate_recorded_at INTEGER NOT NULL,
+  rejected_by_accuracy INTEGER NOT NULL,
+  rejected_by_min_movement INTEGER NOT NULL,
+  rejected_by_jump_distance INTEGER NOT NULL,
+  rejected_by_implied_speed INTEGER NOT NULL,
+  max_callback_gap_ms INTEGER NOT NULL,
+  max_recorded_gap_ms INTEGER NOT NULL,
+  recent_events_json JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(trip_id, device_id)
+);
+
+CREATE INDEX IF NOT EXISTS trip_diagnostics_trip_id_idx ON trip_diagnostics(trip_id);
+
 CREATE TABLE IF NOT EXISTS waypoints (
   id TEXT PRIMARY KEY,
   trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,

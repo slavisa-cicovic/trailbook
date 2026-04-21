@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   tripPauses: "trailbook.mobile.trip-pauses.v1",
   tripSegments: "trailbook.mobile.trip-segments.v1",
   tripPoints: "trailbook.mobile.trip-points.v1",
+  tripDiagnostics: "trailbook.mobile.trip-diagnostics.v1",
   waypoints: "trailbook.mobile.waypoints.v1",
   waypointAttachments: "trailbook.mobile.waypoint-attachments.v1",
 } as const;

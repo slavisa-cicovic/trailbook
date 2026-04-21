@@ -253,6 +253,7 @@ model Trip {
   owner            User             @relation("OwnedTrips", fields: [ownerUserId], references: [id], onDelete: Cascade)
   segments         TripSegment[]
   points           TripPoint[]
+  diagnostics      TripDiagnostics[]
   waypoints        Waypoint[]
   shares           TripShare[]
   attachments      WaypointAttachment[]
@@ -260,6 +261,40 @@ model Trip {
   @@unique([ownerUserId, localSourceId])
   @@index([ownerUserId])
   @@map("trips")
+}
+
+model TripDiagnostics {
+  id                       String   @id @default(cuid())
+  tripId                   String   @map("trip_id")
+  deviceId                 String   @map("device_id")
+  platform                 String
+  recordingMode            String   @map("recording_mode")
+  callbackCount            Int      @map("callback_count")
+  decisionCount            Int      @map("decision_count")
+  accepted                 Int
+  foregroundCallbacks      Int      @map("foreground_callbacks")
+  backgroundCallbacks      Int      @map("background_callbacks")
+  foregroundAccepted       Int      @map("foreground_accepted")
+  backgroundAccepted       Int      @map("background_accepted")
+  foregroundRejected       Int      @map("foreground_rejected")
+  backgroundRejected       Int      @map("background_rejected")
+  duplicateTimestamp       Int      @map("duplicate_timestamp")
+  duplicateCoordinates     Int      @map("duplicate_coordinates")
+  sessionDuplicateRecordedAt Int    @map("session_duplicate_recorded_at")
+  rejectedByAccuracy       Int      @map("rejected_by_accuracy")
+  rejectedByMinMovement    Int      @map("rejected_by_min_movement")
+  rejectedByJumpDistance   Int      @map("rejected_by_jump_distance")
+  rejectedByImpliedSpeed   Int      @map("rejected_by_implied_speed")
+  maxCallbackGapMs         Int      @map("max_callback_gap_ms")
+  maxRecordedGapMs         Int      @map("max_recorded_gap_ms")
+  recentEventsJson         Json?    @map("recent_events_json")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+  trip                     Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, deviceId])
+  @@index([tripId])
+  @@map("trip_diagnostics")
 }
 
 model TripSegment {

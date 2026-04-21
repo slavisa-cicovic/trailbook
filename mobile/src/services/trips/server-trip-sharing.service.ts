@@ -1,6 +1,8 @@
 import type { SharedTripDetail, SharedTripSummary } from "../../domain/shared-trips";
 import type { OwnedServerTripDetail, OwnedServerTripSummary } from "../../domain/server-trips";
+import type { TripDiagnostics } from "../../domain/trip-diagnostics";
 import type { Trip, TripPoint, TripSegment, Waypoint, WaypointAttachment } from "../../domain/trips";
+import { getTripDiagnosticsForSync, isTripDiagnosticsEnabled } from "../trip-points/trip-points.service";
 
 export function getApiBaseUrl() {
   return process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3001/api";
@@ -36,6 +38,59 @@ export async function syncTripToServer(
     waypoints: Waypoint[];
   },
 ) {
+  const diagnostics =
+    isTripDiagnosticsEnabled() ? await getTripDiagnosticsForSync(input.trip.localId) : null;
+
+  const diagnosticsPayload: {
+    accepted: TripDiagnostics["accepted"];
+    backgroundAccepted: TripDiagnostics["backgroundAccepted"];
+    backgroundCallbacks: TripDiagnostics["backgroundCallbacks"];
+    backgroundRejected: TripDiagnostics["backgroundRejected"];
+    callbackCount: TripDiagnostics["callbackCount"];
+    decisionCount: TripDiagnostics["decisionCount"];
+    duplicateCoordinates: TripDiagnostics["duplicateCoordinates"];
+    duplicateTimestamp: TripDiagnostics["duplicateTimestamp"];
+    foregroundAccepted: TripDiagnostics["foregroundAccepted"];
+    foregroundCallbacks: TripDiagnostics["foregroundCallbacks"];
+    foregroundRejected: TripDiagnostics["foregroundRejected"];
+    maxCallbackGapMs: TripDiagnostics["maxCallbackGapMs"];
+    maxRecordedGapMs: TripDiagnostics["maxRecordedGapMs"];
+    platform: TripDiagnostics["platform"];
+    recentEvents: TripDiagnostics["recentEvents"];
+    recordingMode: TripDiagnostics["recordingMode"];
+    rejectedByAccuracy: TripDiagnostics["rejectedByAccuracy"];
+    rejectedByImpliedSpeed: TripDiagnostics["rejectedByImpliedSpeed"];
+    rejectedByJumpDistance: TripDiagnostics["rejectedByJumpDistance"];
+    rejectedByMinMovement: TripDiagnostics["rejectedByMinMovement"];
+    sessionDuplicateRecordedAt: TripDiagnostics["sessionDuplicateRecordedAt"];
+    updatedAt: TripDiagnostics["updatedAt"];
+  } | null = diagnostics
+    ? {
+        accepted: diagnostics.accepted,
+        backgroundAccepted: diagnostics.backgroundAccepted,
+        backgroundCallbacks: diagnostics.backgroundCallbacks,
+        backgroundRejected: diagnostics.backgroundRejected,
+        callbackCount: diagnostics.callbackCount,
+        decisionCount: diagnostics.decisionCount,
+        duplicateCoordinates: diagnostics.duplicateCoordinates,
+        duplicateTimestamp: diagnostics.duplicateTimestamp,
+        foregroundAccepted: diagnostics.foregroundAccepted,
+        foregroundCallbacks: diagnostics.foregroundCallbacks,
+        foregroundRejected: diagnostics.foregroundRejected,
+        maxCallbackGapMs: diagnostics.maxCallbackGapMs,
+        maxRecordedGapMs: diagnostics.maxRecordedGapMs,
+        platform: diagnostics.platform,
+        recentEvents: diagnostics.recentEvents,
+        recordingMode: diagnostics.recordingMode,
+        rejectedByAccuracy: diagnostics.rejectedByAccuracy,
+        rejectedByImpliedSpeed: diagnostics.rejectedByImpliedSpeed,
+        rejectedByJumpDistance: diagnostics.rejectedByJumpDistance,
+        rejectedByMinMovement: diagnostics.rejectedByMinMovement,
+        sessionDuplicateRecordedAt: diagnostics.sessionDuplicateRecordedAt,
+        updatedAt: diagnostics.updatedAt,
+      }
+    : null;
+
   return request<{ syncedAt: string; tripId: string; tripLocalId: string }>("/trips/sync", sessionToken, {
     method: "POST",
     body: JSON.stringify({
@@ -49,6 +104,7 @@ export async function syncTripToServer(
       createdAt: input.trip.createdAt,
       updatedAt: input.trip.updatedAt,
       deletedAt: input.trip.deletedAt,
+      diagnostics: diagnosticsPayload,
       attachments: input.attachments.map((attachment) => ({
         localId: attachment.localId,
         waypointLocalId: attachment.waypointLocalId,

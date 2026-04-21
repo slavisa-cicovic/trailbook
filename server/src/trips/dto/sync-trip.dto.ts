@@ -53,10 +53,57 @@ export interface SyncWaypointAttachmentDto {
   waypointLocalId: string;
 }
 
+export interface SyncTripDiagnosticsRecentEventDto {
+  accuracy: number | null;
+  altitude: number | null;
+  decision:
+    | "accepted"
+    | "duplicate-timestamp"
+    | "duplicate-coordinates"
+    | "session-duplicate-recorded-at"
+    | "accuracy"
+    | "min-movement"
+    | "jump-distance"
+    | "implied-speed"
+    | null;
+  latitude: number;
+  longitude: number;
+  receivedAt: string;
+  recordedAt: string;
+  source: "foreground" | "background";
+  speed: number | null;
+}
+
+export interface SyncTripDiagnosticsDto {
+  accepted: number;
+  backgroundAccepted: number;
+  backgroundCallbacks: number;
+  backgroundRejected: number;
+  callbackCount: number;
+  decisionCount: number;
+  duplicateCoordinates: number;
+  duplicateTimestamp: number;
+  foregroundAccepted: number;
+  foregroundCallbacks: number;
+  foregroundRejected: number;
+  maxCallbackGapMs: number;
+  maxRecordedGapMs: number;
+  platform: "android" | "ios" | "web" | "unknown";
+  recentEvents: SyncTripDiagnosticsRecentEventDto[];
+  recordingMode: "walk" | "bike" | "drive" | "boat" | "plane" | "auto";
+  rejectedByAccuracy: number;
+  rejectedByImpliedSpeed: number;
+  rejectedByJumpDistance: number;
+  rejectedByMinMovement: number;
+  sessionDuplicateRecordedAt: number;
+  updatedAt: string;
+}
+
 export interface SyncTripDto {
   attachments: SyncWaypointAttachmentDto[];
   createdAt: string;
   deletedAt: string | null;
+  diagnostics?: SyncTripDiagnosticsDto | null;
   description: string | null;
   deviceId: string;
   endedAt: string | null;

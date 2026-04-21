@@ -433,6 +433,8 @@ export function formatDistanceKm(distanceMeters: number): string {
 
 export {
   flushTripPointDiagnostics,
+  getTripDiagnosticsForSync,
+  isTripDiagnosticsEnabled,
   recordLocationCallback,
   recordTripPointDiagnostic,
   resetTripPointDiagnostics,

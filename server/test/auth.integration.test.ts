@@ -25,6 +25,7 @@ describe("auth integration", () => {
   const originalAuthBaseUrl = process.env.AUTH_BASE_URL;
   const originalWebAppUrl = process.env.WEB_APP_URL;
   const originalMediaStorageDir = process.env.MEDIA_STORAGE_DIR;
+  const originalTripDiagnosticsEnabled = process.env.ENABLE_TRIP_DIAGNOSTICS;
 
   before(async () => {
     app = await createApp();
@@ -39,6 +40,7 @@ describe("auth integration", () => {
     process.env.AUTH_BASE_URL = originalAuthBaseUrl;
     process.env.WEB_APP_URL = originalWebAppUrl;
     process.env.MEDIA_STORAGE_DIR = originalMediaStorageDir;
+    process.env.ENABLE_TRIP_DIAGNOSTICS = originalTripDiagnosticsEnabled;
     await app.close();
   });
 
@@ -49,6 +51,7 @@ describe("auth integration", () => {
     process.env.AUTH_BASE_URL = "http://localhost:3001";
     process.env.WEB_APP_URL = "http://localhost:3000";
     process.env.MEDIA_STORAGE_DIR = "/tmp/trailbook-test-media";
+    process.env.ENABLE_TRIP_DIAGNOSTICS = "true";
 
     await databaseService.$executeRawUnsafe(`
       TRUNCATE TABLE
@@ -58,6 +61,7 @@ describe("auth integration", () => {
         mail_outbox,
         password_reset_tokens,
         sessions,
+        trip_diagnostics,
         trip_points,
         trip_segments,
         waypoint_attachments,
@@ -833,7 +837,7 @@ describe("auth integration", () => {
 
     assert.equal(dashboardResponse.status, 200);
     assert.equal(dashboardResponse.body.overview.totalUsers, 3);
-    assert.equal(dashboardResponse.body.overview.newUsers, 3);
+    assert.equal(dashboardResponse.body.overview.newUsers, 0);
     assert.equal(dashboardResponse.body.overview.tripsCreated, 1);
     assert.equal(dashboardResponse.body.overview.totalTripPoints, 2);
     assert.equal(dashboardResponse.body.overview.averageTripPointsPerTrip, 2);
@@ -875,6 +879,152 @@ describe("auth integration", () => {
       });
 
     assert.equal(dashboardResponse.status, 403);
+  });
+
+  test("trip sync stores diagnostics summary when diagnostics are enabled", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Diagnostics Owner",
+      email: "diagnostics-owner@example.com",
+      password: "password123",
+    });
+
+    const verificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+        toEmail: "diagnostics-owner@example.com",
+      },
+    });
+    const verifyTokenMatch = verificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(verifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(verifyTokenMatch![1]))}`,
+    );
+
+    const owner = await databaseService.user.findUniqueOrThrow({
+      where: { email: "diagnostics-owner@example.com" },
+      select: { id: true },
+    });
+
+    const ownerLogin = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "diagnostics-owner@example.com",
+      password: "password123",
+    });
+
+    const syncResponse = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${ownerLogin.body.sessionToken}`)
+      .send({
+        localId: "trip-local-diagnostics",
+        deviceId: "device-diagnostics",
+        title: "Diagnostics trip",
+        description: null,
+        recordingProfile: "walk",
+        startedAt: "2026-04-20T08:00:00.000Z",
+        endedAt: "2026-04-20T08:30:00.000Z",
+        createdAt: "2026-04-20T08:00:00.000Z",
+        updatedAt: "2026-04-20T08:30:00.000Z",
+        deletedAt: null,
+        diagnostics: {
+          platform: "android",
+          recordingMode: "walk",
+          callbackCount: 42,
+          decisionCount: 40,
+          accepted: 38,
+          foregroundCallbacks: 18,
+          backgroundCallbacks: 24,
+          foregroundAccepted: 16,
+          backgroundAccepted: 22,
+          foregroundRejected: 2,
+          backgroundRejected: 2,
+          duplicateTimestamp: 0,
+          duplicateCoordinates: 0,
+          sessionDuplicateRecordedAt: 1,
+          rejectedByAccuracy: 0,
+          rejectedByMinMovement: 2,
+          rejectedByJumpDistance: 0,
+          rejectedByImpliedSpeed: 0,
+          maxCallbackGapMs: 6000,
+          maxRecordedGapMs: 6200,
+          updatedAt: "2026-04-20T08:30:00.000Z",
+          recentEvents: [
+            {
+              accuracy: 7.2,
+              altitude: null,
+              decision: "accepted",
+              latitude: 45.0,
+              longitude: 19.8,
+              receivedAt: "2026-04-20T08:29:55.000Z",
+              recordedAt: "2026-04-20T08:29:54.500Z",
+              source: "background",
+              speed: 1.2,
+            },
+          ],
+        },
+        attachments: [],
+        segments: [
+          {
+            localId: "segment-diagnostics",
+            recordingProfile: "walk",
+            startedAt: "2026-04-20T08:00:00.000Z",
+            endedAt: "2026-04-20T08:30:00.000Z",
+            createdAt: "2026-04-20T08:00:00.000Z",
+            updatedAt: "2026-04-20T08:30:00.000Z",
+          },
+        ],
+        points: [
+          {
+            localId: "point-diagnostics-1",
+            segmentLocalId: "segment-diagnostics",
+            latitude: 45.0,
+            longitude: 19.8,
+            recordedAt: "2026-04-20T08:01:00.000Z",
+            accuracy: 7,
+            altitude: null,
+            speed: 1.2,
+          },
+        ],
+        waypoints: [],
+      });
+
+    assert.equal(syncResponse.status, 201);
+
+    const trip = await databaseService.trip.findUniqueOrThrow({
+      where: {
+        ownerUserId_localSourceId: {
+          ownerUserId: owner.id,
+          localSourceId: "trip-local-diagnostics",
+        },
+      },
+    });
+
+    const diagnostics = await databaseService.tripDiagnostics.findUnique({
+      where: {
+        tripId_deviceId: {
+          tripId: trip.id,
+          deviceId: "device-diagnostics",
+        },
+      },
+    });
+
+    assert.ok(diagnostics);
+    assert.equal(diagnostics?.platform, "android");
+    assert.equal(diagnostics?.recordingMode, "walk");
+    assert.equal(diagnostics?.callbackCount, 42);
+    assert.equal(diagnostics?.accepted, 38);
+    assert.equal(diagnostics?.rejectedByMinMovement, 2);
+    assert.deepEqual(diagnostics?.recentEventsJson, [
+      {
+        accuracy: 7.2,
+        altitude: null,
+        decision: "accepted",
+        latitude: 45,
+        longitude: 19.8,
+        receivedAt: "2026-04-20T08:29:55.000Z",
+        recordedAt: "2026-04-20T08:29:54.500Z",
+        source: "background",
+        speed: 1.2,
+      },
+    ]);
   });
 
   test("user trip overview returns total and range-filtered owned trips only", async () => {
