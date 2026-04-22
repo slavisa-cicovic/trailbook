@@ -39,7 +39,8 @@ export default function TripEditModal({
         <StatusBar barStyle="dark-content" />
         <Pressable onPress={onClose} style={styles.modalBackdrop} />
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === "android" ? 8 : 0}
           style={styles.modalKeyboardAvoidingView}
         >
           <View style={styles.modalSheet}>
