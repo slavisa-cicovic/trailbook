@@ -95,6 +95,7 @@ import {
   getVisibleTripPointsForTrip,
   recordLocationCallback,
   recordTripPointDiagnostic,
+  resetPendingTripPointContinuity,
   resetTripPointDiagnostics,
 } from "../../services/trip-points/trip-points.service";
 import {
@@ -453,6 +454,10 @@ export default function RecordingScreen() {
       nextTripPoint,
       recordingSession.recordingMode,
       "foreground",
+      {
+        sessionStartedAt: recordingSession.startedAt,
+        tripStartedAt: activeTrip.startedAt,
+      },
     );
 
     if (nextTripPoints === tripPoints) {
@@ -547,6 +552,7 @@ export default function RecordingScreen() {
     const startedAt = new Date().toISOString();
     const concreteRecordingProfile = getConcreteRecordingProfileForMode(recordingDraft.recordingMode);
     const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft);
+    resetPendingTripPointContinuity(nextTrip.localId);
     resetTripPointDiagnostics(nextTrip.localId);
     const nextSegment = createInitialTripSegment(nextTrip, startedAt);
     const nextSession = createRecordingSession(
@@ -614,6 +620,7 @@ export default function RecordingScreen() {
       await stopBackgroundLocationTracking();
     }
     await stopMotionActivityUpdates();
+    resetPendingTripPointContinuity(activeTrip.localId);
 
     const nextState = createPausedRecordingState(
       activeTrip,
@@ -657,6 +664,7 @@ export default function RecordingScreen() {
       await stopBackgroundLocationTracking();
     }
     await stopMotionActivityUpdates();
+    resetPendingTripPointContinuity(recordingSession.activeTripId);
     const closedTripSegments = closeActiveTripSegment(tripSegments, recordingSession.activeSegmentId, endedAt);
     const normalizedState =
       recordingSession.recordingMode === "auto" && activeTrip

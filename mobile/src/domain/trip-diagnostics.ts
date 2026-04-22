@@ -5,13 +5,18 @@ export type TripDiagnosticsSource = "foreground" | "background";
 export type TripDiagnosticsDecision =
   | "accepted"
   | "accepted-after-long-gap"
+  | "accepted-early-session"
+  | "accepted-after-resume"
+  | "confirmed-pending-continuity"
   | "duplicate-timestamp"
   | "duplicate-coordinates"
   | "session-duplicate-recorded-at"
   | "accuracy"
   | "min-movement"
   | "jump-distance"
-  | "implied-speed";
+  | "implied-speed"
+  | "rejected-pending-continuity"
+  | "removed-as-spike";
 
 export interface TripDiagnosticsRecentEvent {
   accuracy: number | null;

@@ -9,6 +9,21 @@ import {
 
 const MIN_SEGMENT_DISTANCE_METERS = 5;
 const LONG_GAP_THRESHOLD_MS = 5 * 60 * 1000;
+const EARLY_SESSION_THRESHOLD_MS = 2 * 60 * 1000;
+
+interface AppendTripPointContext {
+  sessionStartedAt?: string | null;
+  tripStartedAt?: string | null;
+}
+
+interface PendingContinuityCandidate {
+  anchorPoint: TripPoint;
+  candidatePoint: TripPoint;
+  callbackSource: LocationCallbackSource;
+  recoveryAcceptanceReason: "accepted-early-session" | "accepted-after-resume" | null;
+}
+
+const pendingContinuityByTripLocalId = new Map<string, PendingContinuityCandidate>();
 
 function toRadians(value: number): number {
   return (value * Math.PI) / 180;
@@ -107,6 +122,17 @@ function getRouteSmoothingThresholds(recordingMode: RecordingMode): {
         spikeMinExcessMeters: 40,
         spikeMinDeviationMeters: 18,
       };
+    case "auto":
+      return {
+        maxDeviationMeters: 9,
+        maxDirectDistanceMeters: 70,
+        maxExcessMeters: 20,
+        maxNeighborDistanceMeters: 45,
+        spikeMaxAccuracyMeters: 30,
+        spikeMaxDirectDistanceMeters: 50,
+        spikeMinExcessMeters: 32,
+        spikeMinDeviationMeters: 16,
+      };
     default:
       return null;
   }
@@ -200,10 +226,160 @@ function getElapsedMs(previousPoint: TripPoint, nextTripPoint: TripPoint): numbe
   return new Date(nextTripPoint.recordedAt).getTime() - new Date(previousPoint.recordedAt).getTime();
 }
 
+function getElapsedMsFromTimestamp(startedAt: string | null | undefined, recordedAt: string): number {
+  if (!startedAt) {
+    return Number.NaN;
+  }
+
+  return new Date(recordedAt).getTime() - new Date(startedAt).getTime();
+}
+
 function isLongGap(previousPoint: TripPoint, nextTripPoint: TripPoint): boolean {
   const elapsedMs = getElapsedMs(previousPoint, nextTripPoint);
 
   return Number.isFinite(elapsedMs) && elapsedMs >= LONG_GAP_THRESHOLD_MS;
+}
+
+function isEarlySessionPoint(nextTripPoint: TripPoint, context?: AppendTripPointContext): boolean {
+  const elapsedMs = getElapsedMsFromTimestamp(context?.sessionStartedAt ?? null, nextTripPoint.recordedAt);
+
+  return Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs <= EARLY_SESSION_THRESHOLD_MS;
+}
+
+function getRecoveryAcceptanceReason(
+  nextTripPoint: TripPoint,
+  context?: AppendTripPointContext,
+): "accepted-early-session" | "accepted-after-resume" | null {
+  if (!isEarlySessionPoint(nextTripPoint, context)) {
+    return null;
+  }
+
+  if (
+    context?.tripStartedAt &&
+    context.sessionStartedAt &&
+    context.tripStartedAt !== context.sessionStartedAt
+  ) {
+    return "accepted-after-resume";
+  }
+
+  return "accepted-early-session";
+}
+
+function shouldHoldAsPendingContinuity(
+  previousPoint: TripPoint,
+  nextTripPoint: TripPoint,
+  recordingMode: RecordingMode,
+  distanceMeters: number,
+  impliedSpeedKmh: number,
+  context?: AppendTripPointContext,
+): boolean {
+  const recoveryReason = getRecoveryAcceptanceReason(nextTripPoint, context);
+
+  if (!recoveryReason) {
+    return false;
+  }
+
+  const maxJumpDistanceMeters = getMaxJumpDistanceMeters(recordingMode);
+  const maxAccuracyMeters = getMaxAccuracyMeters(recordingMode);
+  const accuracyMeters =
+    nextTripPoint.accuracy !== null && Number.isFinite(nextTripPoint.accuracy)
+      ? nextTripPoint.accuracy
+      : maxAccuracyMeters;
+
+  if (
+    !Number.isFinite(distanceMeters) ||
+    !Number.isFinite(impliedSpeedKmh) ||
+    distanceMeters < Math.min(maxJumpDistanceMeters * 0.6, 80) ||
+    distanceMeters > maxJumpDistanceMeters ||
+    impliedSpeedKmh > getMaxImpliedSpeedKmh(recordingMode) * 0.75
+  ) {
+    return false;
+  }
+
+  return accuracyMeters >= maxAccuracyMeters * 0.45;
+}
+
+function shouldConfirmPendingContinuity(
+  pendingCandidate: PendingContinuityCandidate,
+  nextTripPoint: TripPoint,
+  recordingMode: RecordingMode,
+): boolean {
+  const pendingToNextDistance = calculateDistanceBetweenPoints(
+    pendingCandidate.candidatePoint,
+    nextTripPoint,
+  );
+  const anchorToNextDistance = calculateDistanceBetweenPoints(
+    pendingCandidate.anchorPoint,
+    nextTripPoint,
+  );
+  const pendingDeviation = calculatePerpendicularDeviationMeters(
+    pendingCandidate.anchorPoint,
+    pendingCandidate.candidatePoint,
+    nextTripPoint,
+  );
+  const pendingToNextSpeed = getImpliedSpeedKmh(
+    pendingCandidate.candidatePoint,
+    nextTripPoint,
+    pendingToNextDistance,
+  );
+
+  if (
+    pendingToNextDistance < getMinMovementMeters(recordingMode) ||
+    pendingToNextSpeed > getMaxImpliedSpeedKmh(recordingMode) ||
+    anchorToNextDistance > getMaxJumpDistanceMeters(recordingMode)
+  ) {
+    return false;
+  }
+
+  return (
+    pendingToNextDistance <= Math.max(getMinMovementMeters(recordingMode) * 4, anchorToNextDistance * 0.85) &&
+    pendingDeviation <= Math.max(18, anchorToNextDistance * 0.3)
+  );
+}
+
+function maybeRollbackRecentSpike(
+  tripPoints: TripPoint[],
+  recordingMode: RecordingMode,
+  callbackSource: LocationCallbackSource,
+): TripPoint[] {
+  const relevantTripPoints = tripPoints.filter(
+    (tripPoint) => tripPoint.tripLocalId === tripPoints[tripPoints.length - 1]?.tripLocalId,
+  );
+  const thresholds = getRouteSmoothingThresholds(recordingMode);
+
+  if (!thresholds || relevantTripPoints.length < 3) {
+    return tripPoints;
+  }
+
+  const left = relevantTripPoints[relevantTripPoints.length - 3];
+  const middle = relevantTripPoints[relevantTripPoints.length - 2];
+  const right = relevantTripPoints[relevantTripPoints.length - 1];
+  const leftToMiddle = calculateDistanceBetweenPoints(left, middle);
+  const middleToRight = calculateDistanceBetweenPoints(middle, right);
+  const leftToRight = calculateDistanceBetweenPoints(left, right);
+  const deviationMeters = calculatePerpendicularDeviationMeters(left, middle, right);
+  const excessMeters = leftToMiddle + middleToRight - leftToRight;
+  const accuracyMeters =
+    middle.accuracy !== null && Number.isFinite(middle.accuracy)
+      ? middle.accuracy
+      : Number.POSITIVE_INFINITY;
+
+  const spikeLikePoint =
+    accuracyMeters <= thresholds.spikeMaxAccuracyMeters &&
+    leftToRight <= thresholds.spikeMaxDirectDistanceMeters &&
+    excessMeters >= thresholds.spikeMinExcessMeters &&
+    deviationMeters >= thresholds.spikeMinDeviationMeters;
+
+  if (!spikeLikePoint) {
+    return tripPoints;
+  }
+
+  recordTripPointDiagnostic(middle.tripLocalId, recordingMode, "removed-as-spike", {
+    recordedAt: middle.recordedAt,
+    source: callbackSource,
+  });
+
+  return tripPoints.filter((tripPoint) => tripPoint.localId !== middle.localId);
 }
 
 export function createTripPointForLocation(
@@ -239,7 +415,47 @@ export function appendTripPointIfUseful(
   nextTripPoint: TripPoint,
   recordingMode: RecordingMode,
   callbackSource: LocationCallbackSource,
+  context?: AppendTripPointContext,
 ): TripPoint[] {
+  const pendingCandidate = pendingContinuityByTripLocalId.get(nextTripPoint.tripLocalId) ?? null;
+
+  if (
+    pendingCandidate &&
+    new Date(nextTripPoint.recordedAt).getTime() > new Date(pendingCandidate.candidatePoint.recordedAt).getTime()
+  ) {
+    pendingContinuityByTripLocalId.delete(nextTripPoint.tripLocalId);
+
+    if (shouldConfirmPendingContinuity(pendingCandidate, nextTripPoint, recordingMode)) {
+      recordTripPointDiagnostic(
+        pendingCandidate.candidatePoint.tripLocalId,
+        recordingMode,
+        "confirmed-pending-continuity",
+        {
+          recordedAt: pendingCandidate.candidatePoint.recordedAt,
+          source: pendingCandidate.callbackSource,
+        },
+      );
+
+      return appendTripPointIfUseful(
+        [...tripPoints, pendingCandidate.candidatePoint],
+        nextTripPoint,
+        recordingMode,
+        callbackSource,
+        context,
+      );
+    }
+
+    recordTripPointDiagnostic(
+      pendingCandidate.candidatePoint.tripLocalId,
+      recordingMode,
+      "rejected-pending-continuity",
+      {
+        recordedAt: pendingCandidate.candidatePoint.recordedAt,
+        source: pendingCandidate.callbackSource,
+      },
+    );
+  }
+
   const previousPoint = [...tripPoints]
     .reverse()
     .find((tripPoint) => tripPoint.tripLocalId === nextTripPoint.tripLocalId);
@@ -304,13 +520,34 @@ export function appendTripPointIfUseful(
     return tripPoints;
   }
 
+  const recoveryAcceptanceReason = getRecoveryAcceptanceReason(nextTripPoint, context);
+
+  if (
+    shouldHoldAsPendingContinuity(
+      previousPoint,
+      nextTripPoint,
+      recordingMode,
+      distanceMeters,
+      impliedSpeedKmh,
+      context,
+    )
+  ) {
+    pendingContinuityByTripLocalId.set(nextTripPoint.tripLocalId, {
+      anchorPoint: previousPoint,
+      candidatePoint: nextTripPoint,
+      callbackSource,
+      recoveryAcceptanceReason,
+    });
+    return tripPoints;
+  }
+
   if (distanceMeters > getMaxJumpDistanceMeters(recordingMode)) {
     if (isLongGap(previousPoint, nextTripPoint)) {
       recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted-after-long-gap", {
         recordedAt: nextTripPoint.recordedAt,
         source: callbackSource,
       });
-      return [...tripPoints, nextTripPoint];
+      return maybeRollbackRecentSpike([...tripPoints, nextTripPoint], recordingMode, callbackSource);
     }
 
     recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "jump-distance", {
@@ -320,11 +557,24 @@ export function appendTripPointIfUseful(
     return tripPoints;
   }
 
-  recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted", {
-    recordedAt: nextTripPoint.recordedAt,
-    source: callbackSource,
-  });
-  return [...tripPoints, nextTripPoint];
+  recordTripPointDiagnostic(
+    nextTripPoint.tripLocalId,
+    recordingMode,
+    recoveryAcceptanceReason ?? "accepted",
+    {
+      recordedAt: nextTripPoint.recordedAt,
+      source: callbackSource,
+    },
+  );
+  return maybeRollbackRecentSpike([...tripPoints, nextTripPoint], recordingMode, callbackSource);
+}
+
+export function resetPendingTripPointContinuity(tripLocalId: string) {
+  pendingContinuityByTripLocalId.delete(tripLocalId);
+}
+
+export function clearAllPendingTripPointContinuity() {
+  pendingContinuityByTripLocalId.clear();
 }
 
 export function smoothTripRoutePoints(

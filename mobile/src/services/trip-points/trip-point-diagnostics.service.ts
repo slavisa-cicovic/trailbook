@@ -17,13 +17,18 @@ export type LocationCallbackSource = "foreground" | "background";
 export type TripPointDiagnosticReason =
   | "accepted"
   | "accepted-after-long-gap"
+  | "accepted-early-session"
+  | "accepted-after-resume"
+  | "confirmed-pending-continuity"
   | "duplicate-timestamp"
   | "duplicate-coordinates"
   | "session-duplicate-recorded-at"
   | "accuracy"
   | "min-movement"
   | "jump-distance"
-  | "implied-speed";
+  | "implied-speed"
+  | "rejected-pending-continuity"
+  | "removed-as-spike";
 
 interface MutableTripPointDiagnostics {
   accepted: number;
@@ -296,13 +301,30 @@ function attachDecisionToRecentEvent(
 
     if (
       event.recordedAt === options.recordedAt &&
-      event.decision === null &&
       (!options.source || event.source === options.source)
     ) {
+      if (event.decision !== null && reason !== "removed-as-spike") {
+        continue;
+      }
+
       event.decision = reason;
       return;
     }
   }
+}
+
+function isAcceptedDecisionReason(reason: TripPointDiagnosticReason) {
+  return (
+    reason === "accepted" ||
+    reason === "accepted-after-long-gap" ||
+    reason === "accepted-early-session" ||
+    reason === "accepted-after-resume" ||
+    reason === "confirmed-pending-continuity"
+  );
+}
+
+function shouldAffectDecisionCounters(reason: TripPointDiagnosticReason) {
+  return reason !== "removed-as-spike";
 }
 
 export function recordLocationCallback(
@@ -399,6 +421,11 @@ export function recordTripPointDiagnostic(
       diagnostics.accepted += 1;
       diagnostics.acceptedAfterLongGap += 1;
       break;
+    case "accepted-early-session":
+    case "accepted-after-resume":
+    case "confirmed-pending-continuity":
+      diagnostics.accepted += 1;
+      break;
     case "duplicate-timestamp":
       diagnostics.duplicateTimestamp += 1;
       break;
@@ -420,23 +447,28 @@ export function recordTripPointDiagnostic(
     case "implied-speed":
       diagnostics.rejectedByImpliedSpeed += 1;
       break;
+    case "rejected-pending-continuity":
+    case "removed-as-spike":
+      break;
   }
 
-  diagnostics.decisionCount += 1;
+  if (shouldAffectDecisionCounters(reason)) {
+    diagnostics.decisionCount += 1;
+  }
   diagnostics.updatedAt = new Date().toISOString();
 
   if (options.source === "foreground") {
-    if (reason === "accepted" || reason === "accepted-after-long-gap") {
+    if (isAcceptedDecisionReason(reason)) {
       diagnostics.foregroundAccepted += 1;
-    } else {
+    } else if (shouldAffectDecisionCounters(reason)) {
       diagnostics.foregroundRejected += 1;
     }
   }
 
   if (options.source === "background") {
-    if (reason === "accepted" || reason === "accepted-after-long-gap") {
+    if (isAcceptedDecisionReason(reason)) {
       diagnostics.backgroundAccepted += 1;
-    } else {
+    } else if (shouldAffectDecisionCounters(reason)) {
       diagnostics.backgroundRejected += 1;
     }
   }

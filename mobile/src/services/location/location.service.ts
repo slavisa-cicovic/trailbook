@@ -74,9 +74,9 @@ export function getTrackingOptionsForProfile(profile: RecordingMode): TrackingOp
   switch (profile) {
     case "auto":
       return {
-        accuracy: Location.Accuracy.Balanced,
-        distanceInterval: 25,
-        timeInterval: 20 * 1000,
+        accuracy: Platform.OS === "ios" ? Location.Accuracy.High : Location.Accuracy.Balanced,
+        distanceInterval: Platform.OS === "ios" ? 12 : 25,
+        timeInterval: Platform.OS === "ios" ? 12 * 1000 : 20 * 1000,
       };
     case "walk":
       return {

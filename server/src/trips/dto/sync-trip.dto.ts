@@ -59,6 +59,9 @@ export interface SyncTripDiagnosticsRecentEventDto {
   decision:
     | "accepted"
     | "accepted-after-long-gap"
+    | "accepted-early-session"
+    | "accepted-after-resume"
+    | "confirmed-pending-continuity"
     | "duplicate-timestamp"
     | "duplicate-coordinates"
     | "session-duplicate-recorded-at"
@@ -66,6 +69,8 @@ export interface SyncTripDiagnosticsRecentEventDto {
     | "min-movement"
     | "jump-distance"
     | "implied-speed"
+    | "rejected-pending-continuity"
+    | "removed-as-spike"
     | null;
   latitude: number;
   longitude: number;

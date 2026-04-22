@@ -90,6 +90,10 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
       createTripPointForLocation(activeTrip, nextRecordingSession.activeSegmentId ?? activeSegment?.localId ?? null, snapshot),
       nextRecordingSession.recordingMode,
       "background",
+      {
+        sessionStartedAt: nextRecordingSession.startedAt,
+        tripStartedAt: activeTrip.startedAt,
+      },
     );
 
     if (appendedTripPoints !== nextTripPoints) {

@@ -33,7 +33,8 @@ const BOAT_MAX_KMH = 35;
 const STATIONARY_MAX_KMH = 2;
 
 const WALK_STABILITY_MS = 5 * 60 * 1000;
-const BIKE_STABILITY_MS = 5 * 60 * 1000;
+const BIKE_STABILITY_MS = 2 * 60 * 1000;
+const MOTION_ASSISTED_BIKE_STABILITY_MS = 90 * 1000;
 const DRIVE_STABILITY_MS = 5 * 60 * 1000;
 const PLANE_STABILITY_MS = 3 * 60 * 1000;
 const BOAT_STABILITY_MS = 20 * 60 * 1000;
@@ -351,6 +352,13 @@ function inferMotionGuidedProfile(
   }
 }
 
+function isMotionAssistedBikeCandidate(motionActivity: MotionActivity | null): boolean {
+  return (
+    motionActivity?.type === "bike" &&
+    (motionActivity.confidence === "medium" || motionActivity.confidence === "high")
+  );
+}
+
 export function inferAutoRecordingProfile(
   tripPoints: TripPoint[],
   motionActivity: MotionActivity | null = null,
@@ -397,6 +405,17 @@ function getAutoStabilityThresholdMs(recordingProfile: RecordingProfile): number
     default:
       return DRIVE_STABILITY_MS;
   }
+}
+
+function getAutoTransitionStabilityThresholdMs(
+  recordingProfile: RecordingProfile,
+  motionActivity: MotionActivity | null,
+): number {
+  if (recordingProfile === "bike" && isMotionAssistedBikeCandidate(motionActivity)) {
+    return MOTION_ASSISTED_BIKE_STABILITY_MS;
+  }
+
+  return getAutoStabilityThresholdMs(recordingProfile);
 }
 
 export function applyAutoRecordingTransition(
@@ -468,7 +487,7 @@ export function applyAutoRecordingTransition(
   if (
     Number.isNaN(candidateSinceMs) ||
     Number.isNaN(recordedAtMs) ||
-    recordedAtMs - candidateSinceMs < getAutoStabilityThresholdMs(inferredProfile)
+    recordedAtMs - candidateSinceMs < getAutoTransitionStabilityThresholdMs(inferredProfile, motionActivity)
   ) {
     return {
       changed: false,
