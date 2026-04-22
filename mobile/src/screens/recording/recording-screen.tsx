@@ -47,6 +47,12 @@ import {
   watchForegroundLocation,
 } from "../../services/location/location.service";
 import {
+  ensureMotionActivityUpdatesForAutoMode,
+  getLatestMotionActivityAsync,
+  isMotionActivityAvailableAsync,
+  stopMotionActivityUpdates,
+} from "../../services/motion/motion-activity.service";
+import {
   closeActiveTrip,
   continueInterruptedRecording,
   createRecordingSession,
@@ -60,6 +66,7 @@ import {
   stopRecordingSession,
   updateRecordingSegment,
   updateRecordingLastPoint,
+  updateRecordingMotionActivity,
 } from "../../services/recording/recording.service";
 import { applyAutoRecordingTransition } from "../../services/recording/auto-recording.service";
 import {
@@ -365,6 +372,31 @@ export default function RecordingScreen() {
   }, [activeTrip, recordingSession.recordingMode, recordingSession.status]);
 
   useEffect(() => {
+    let active = true;
+
+    async function syncMotionActivityUpdates() {
+      const available = await isMotionActivityAvailableAsync();
+
+      if (!active || !available) {
+        return;
+      }
+
+      if (recordingSession.status === "recording" && recordingSession.recordingMode === "auto") {
+        await ensureMotionActivityUpdatesForAutoMode();
+        return;
+      }
+
+      await stopMotionActivityUpdates();
+    }
+
+    void syncMotionActivityUpdates();
+
+    return () => {
+      active = false;
+    };
+  }, [recordingSession.recordingMode, recordingSession.status]);
+
+  useEffect(() => {
     if (locationPermissionGranted !== true || currentLocation) {
       return;
     }
@@ -428,7 +460,12 @@ export default function RecordingScreen() {
     }
 
     void (async () => {
-      const nextRecordingSession = updateRecordingLastPoint(recordingSession, currentLocation.recordedAt);
+      const motionActivity =
+        recordingSession.recordingMode === "auto"
+          ? await getLatestMotionActivityAsync(currentLocation.recordedAt)
+          : null;
+      let nextRecordingSession = updateRecordingMotionActivity(recordingSession, motionActivity);
+      nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, currentLocation.recordedAt);
       const autoTransition = applyAutoRecordingTransition(
         nextRecordingSession,
         activeTrip,
@@ -436,6 +473,7 @@ export default function RecordingScreen() {
         nextTripPoints,
         waypoints,
         currentLocation.recordedAt,
+        motionActivity,
       );
 
       if (autoTransition.changed) {
@@ -462,6 +500,7 @@ export default function RecordingScreen() {
     recordingSession,
     tripSegments,
     tripPoints,
+    waypoints,
   ]);
 
   async function handleStartRecording() {
@@ -481,7 +520,7 @@ export default function RecordingScreen() {
       }
     }
 
-    if (currentUserTrips.some((trip) => trip.status === "active")) {
+    if (currentUserTrips.some((trip) => trip.deletedAt === null && trip.status === "active")) {
       Alert.alert("Active route", "Pause or stop the current active route before starting a new one.");
       return;
     }
@@ -549,6 +588,10 @@ export default function RecordingScreen() {
           );
         }
       }
+
+      if (recordingDraft.recordingMode === "auto") {
+        await ensureMotionActivityUpdatesForAutoMode();
+      }
     } catch {
       await setTrips(trips);
       await setTripSegments(tripSegments);
@@ -570,6 +613,7 @@ export default function RecordingScreen() {
     if (backgroundRecordingSupported !== false) {
       await stopBackgroundLocationTracking();
     }
+    await stopMotionActivityUpdates();
 
     const nextState = createPausedRecordingState(
       activeTrip,
@@ -612,6 +656,7 @@ export default function RecordingScreen() {
     if (backgroundRecordingSupported !== false) {
       await stopBackgroundLocationTracking();
     }
+    await stopMotionActivityUpdates();
     const closedTripSegments = closeActiveTripSegment(tripSegments, recordingSession.activeSegmentId, endedAt);
     const normalizedState =
       recordingSession.recordingMode === "auto" && activeTrip
@@ -639,7 +684,7 @@ export default function RecordingScreen() {
       return;
     }
 
-    if (currentUserTrips.some((trip) => trip.status === "active")) {
+    if (currentUserTrips.some((trip) => trip.deletedAt === null && trip.status === "active")) {
       Alert.alert("Active route", "Stop or pause the current active route before resuming another one.");
       return;
     }
@@ -669,6 +714,10 @@ export default function RecordingScreen() {
       await startBackgroundLocationTracking(nextState.session.recordingMode);
     }
 
+    if (nextState.session.recordingMode === "auto") {
+      await ensureMotionActivityUpdatesForAutoMode();
+    }
+
     setSessionMenuVisible(false);
   }
 
@@ -679,6 +728,9 @@ export default function RecordingScreen() {
       await setRecordingSession(nextSession);
       if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
         await startBackgroundLocationTracking(nextSession.recordingMode);
+      }
+      if (nextSession.recordingMode === "auto") {
+        await ensureMotionActivityUpdatesForAutoMode();
       }
     } catch {
       await setRecordingSession(recordingSession);
@@ -693,6 +745,7 @@ export default function RecordingScreen() {
     if (backgroundRecordingSupported !== false) {
       await stopBackgroundLocationTracking();
     }
+    await stopMotionActivityUpdates();
     await setActiveIdentitySession(null);
   }
 
@@ -717,6 +770,7 @@ export default function RecordingScreen() {
         autoCandidateProfile: null,
         autoCandidateSince: null,
       });
+      await ensureMotionActivityUpdatesForAutoMode();
       if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
         await restartBackgroundLocationTracking("auto");
       }
@@ -731,6 +785,7 @@ export default function RecordingScreen() {
         autoCandidateProfile: null,
         autoCandidateSince: null,
       });
+      await stopMotionActivityUpdates();
       if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
         await restartBackgroundLocationTracking(mode);
       }
@@ -756,6 +811,7 @@ export default function RecordingScreen() {
       ...updateRecordingSegment(recordingSession, nextSegment.localId, mode),
       recordingMode: mode,
     });
+    await stopMotionActivityUpdates();
     if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
       await restartBackgroundLocationTracking(mode);
     }

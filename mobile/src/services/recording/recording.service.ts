@@ -1,5 +1,6 @@
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
+import type { MotionActivity } from "../../domain/motion-activity";
 import type {
   RecordingMode,
   RecordingProfile,
@@ -51,6 +52,10 @@ export function createRecordingSession(
     recordingProfile,
     autoCandidateProfile: null,
     autoCandidateSince: null,
+    motionActivityType: null,
+    motionActivityConfidence: null,
+    motionActivityRecordedAt: null,
+    motionActivitySourcePlatform: null,
   };
 }
 
@@ -87,6 +92,10 @@ export function stopRecordingSession(session: RecordingSessionSummary): Recordin
     activeSegmentId: null,
     startedAt: null,
     interruptedAt: null,
+    motionActivityType: null,
+    motionActivityConfidence: null,
+    motionActivityRecordedAt: null,
+    motionActivitySourcePlatform: null,
   };
 }
 
@@ -144,6 +153,10 @@ export function reconcileRecordingSessionWithTrips(
         recordingProfile: DEFAULT_RECORDING_PROFILE,
         autoCandidateProfile: null,
         autoCandidateSince: null,
+        motionActivityType: null,
+        motionActivityConfidence: null,
+        motionActivityRecordedAt: null,
+        motionActivitySourcePlatform: null,
       };
     }
 
@@ -196,6 +209,10 @@ export function reconcileRecordingSessionWithTrips(
     recordingProfile: openSegment?.recordingProfile ?? activeTrip.recordingProfile,
     autoCandidateProfile: null,
     autoCandidateSince: null,
+    motionActivityType: null,
+    motionActivityConfidence: null,
+    motionActivityRecordedAt: null,
+    motionActivitySourcePlatform: null,
   };
 }
 
@@ -353,5 +370,18 @@ export function updateRecordingAutoCandidate(
     ...session,
     autoCandidateProfile,
     autoCandidateSince,
+  };
+}
+
+export function updateRecordingMotionActivity(
+  session: RecordingSessionSummary,
+  motionActivity: MotionActivity | null,
+): RecordingSessionSummary {
+  return {
+    ...session,
+    motionActivityType: motionActivity?.type ?? null,
+    motionActivityConfidence: motionActivity?.confidence ?? null,
+    motionActivityRecordedAt: motionActivity?.recordedAt ?? null,
+    motionActivitySourcePlatform: motionActivity?.sourcePlatform ?? null,
   };
 }

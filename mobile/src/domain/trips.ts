@@ -1,3 +1,9 @@
+import type {
+  MotionActivityConfidence,
+  MotionActivitySourcePlatform,
+  MotionActivityType,
+} from "./motion-activity";
+
 export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error";
 export type RecordingStatus = "idle" | "recording" | "interrupted";
 export type TripStatus = "active" | "paused" | "ended";
@@ -125,4 +131,8 @@ export interface RecordingSessionSummary {
   recordingProfile: RecordingProfile;
   autoCandidateProfile: RecordingProfile | null;
   autoCandidateSince: string | null;
+  motionActivityType: MotionActivityType | null;
+  motionActivityConfidence: MotionActivityConfidence | null;
+  motionActivityRecordedAt: string | null;
+  motionActivitySourcePlatform: MotionActivitySourcePlatform | null;
 }

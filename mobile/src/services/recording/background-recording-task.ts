@@ -3,6 +3,7 @@ import * as TaskManager from "expo-task-manager";
 
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "../location/background-location.constants";
 import { toSnapshot } from "../location/location.service";
+import { getLatestMotionActivityAsync } from "../motion/motion-activity.service";
 import {
   appendTripPointIfUseful,
   createTripPointForLocation,
@@ -10,7 +11,7 @@ import {
   recordTripPointDiagnostic,
 } from "../trip-points/trip-points.service";
 import { applyAutoRecordingTransition } from "./auto-recording.service";
-import { updateRecordingLastPoint } from "./recording.service";
+import { updateRecordingLastPoint, updateRecordingMotionActivity } from "./recording.service";
 import { setRecordingSession } from "../../state/recording-store";
 import { setTripSegments } from "../../state/trip-segments-store";
 import { setTripPoints } from "../../state/trip-points-store";
@@ -94,6 +95,12 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
     if (appendedTripPoints !== nextTripPoints) {
       nextTripPoints = appendedTripPoints;
       pointsChanged = true;
+      const motionActivity =
+        nextRecordingSession.recordingMode === "auto"
+          ? await getLatestMotionActivityAsync(snapshot.recordedAt)
+          : null;
+
+      nextRecordingSession = updateRecordingMotionActivity(nextRecordingSession, motionActivity);
       nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, snapshot.recordedAt);
       const autoTransition = applyAutoRecordingTransition(
         nextRecordingSession,
@@ -102,6 +109,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
         nextTripPoints,
         nextWaypoints,
         snapshot.recordedAt,
+        motionActivity,
       );
 
       nextRecordingSession = autoTransition.session;
@@ -129,7 +137,11 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
     nextRecordingSession.activeSegmentId !== recordingSession.activeSegmentId ||
     nextRecordingSession.autoCandidateProfile !== recordingSession.autoCandidateProfile ||
     nextRecordingSession.autoCandidateSince !== recordingSession.autoCandidateSince ||
-    nextRecordingSession.recordingProfile !== recordingSession.recordingProfile
+    nextRecordingSession.recordingProfile !== recordingSession.recordingProfile ||
+    nextRecordingSession.motionActivityType !== recordingSession.motionActivityType ||
+    nextRecordingSession.motionActivityConfidence !== recordingSession.motionActivityConfidence ||
+    nextRecordingSession.motionActivityRecordedAt !== recordingSession.motionActivityRecordedAt ||
+    nextRecordingSession.motionActivitySourcePlatform !== recordingSession.motionActivitySourcePlatform
   ) {
     writes.push(setRecordingSession(nextRecordingSession));
   }

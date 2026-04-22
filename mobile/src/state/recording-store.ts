@@ -21,6 +21,10 @@ export const initialRecordingSession: RecordingSessionSummary = {
   recordingProfile: DEFAULT_RECORDING_PROFILE,
   autoCandidateProfile: null,
   autoCandidateSince: null,
+  motionActivityType: null,
+  motionActivityConfidence: null,
+  motionActivityRecordedAt: null,
+  motionActivitySourcePlatform: null,
 };
 
 interface RecordingState {

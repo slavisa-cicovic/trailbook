@@ -6,6 +6,11 @@ import {
   normalizeRecordingProfile,
 } from "../constants/recording-profiles";
 import { STORAGE_KEYS } from "../constants/storage-keys";
+import {
+  normalizeMotionActivityConfidence,
+  normalizeMotionActivitySourcePlatform,
+  normalizeMotionActivityType,
+} from "../domain/motion-activity";
 import type { RecordingSessionSummary } from "../domain/trips";
 
 function normalizeRecordingSession(
@@ -30,6 +35,14 @@ function normalizeRecordingSession(
     autoCandidateProfile:
       value.autoCandidateProfile ? normalizeRecordingProfile(value.autoCandidateProfile) : null,
     autoCandidateSince: value.autoCandidateSince ?? null,
+    motionActivityType: value.motionActivityType ? normalizeMotionActivityType(value.motionActivityType) : null,
+    motionActivityConfidence: value.motionActivityConfidence
+      ? normalizeMotionActivityConfidence(value.motionActivityConfidence)
+      : null,
+    motionActivityRecordedAt: value.motionActivityRecordedAt ?? null,
+    motionActivitySourcePlatform: value.motionActivitySourcePlatform
+      ? normalizeMotionActivitySourcePlatform(value.motionActivitySourcePlatform)
+      : null,
   };
 }
 

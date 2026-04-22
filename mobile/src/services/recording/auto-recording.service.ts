@@ -1,4 +1,5 @@
 import type { RecordingProfile, RecordingSessionSummary, Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
+import type { MotionActivity } from "../../domain/motion-activity";
 import {
   closeActiveTripSegment,
   getOpenTripSegmentForTrip,
@@ -36,6 +37,7 @@ const BIKE_STABILITY_MS = 5 * 60 * 1000;
 const DRIVE_STABILITY_MS = 5 * 60 * 1000;
 const PLANE_STABILITY_MS = 3 * 60 * 1000;
 const BOAT_STABILITY_MS = 20 * 60 * 1000;
+const MOTION_ACTIVITY_MAX_AGE_MS = 10 * 60 * 1000;
 
 function toRadians(value: number): number {
   return (value * Math.PI) / 180;
@@ -232,7 +234,7 @@ function inferBoatFromTripPoints(tripPoints: TripPoint[]): boolean {
   );
 }
 
-export function inferAutoRecordingProfile(tripPoints: TripPoint[]): RecordingProfile | null {
+function inferLocationOnlyAutoRecordingProfile(tripPoints: TripPoint[]): RecordingProfile | null {
   const visibleTripPoints = [...tripPoints].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
   const speedSamples = buildTimedSpeedSamples(visibleTripPoints);
 
@@ -289,6 +291,97 @@ export function inferAutoRecordingProfile(tripPoints: TripPoint[]): RecordingPro
   return null;
 }
 
+function isFreshMotionActivity(
+  motionActivity: MotionActivity | null,
+  tripPoints: TripPoint[],
+): motionActivity is MotionActivity {
+  if (!motionActivity) {
+    return false;
+  }
+
+  const latestTripPoint = tripPoints[tripPoints.length - 1] ?? null;
+
+  if (!latestTripPoint) {
+    return false;
+  }
+
+  const latestPointMs = getPointTimeMs(latestTripPoint);
+  const motionRecordedAtMs = new Date(motionActivity.recordedAt).getTime();
+
+  if (Number.isNaN(latestPointMs) || Number.isNaN(motionRecordedAtMs)) {
+    return false;
+  }
+
+  return latestPointMs - motionRecordedAtMs <= MOTION_ACTIVITY_MAX_AGE_MS;
+}
+
+function inferMotionGuidedProfile(
+  tripPoints: TripPoint[],
+  motionActivity: MotionActivity | null,
+): RecordingProfile | null {
+  const visibleTripPoints = [...tripPoints].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  const speedSamples = buildTimedSpeedSamples(visibleTripPoints);
+  const movingSamples = speedSamples.filter((sample) => sample.moving);
+
+  if (!isFreshMotionActivity(motionActivity, visibleTripPoints)) {
+    return null;
+  }
+
+  const movingMedian = movingSamples.length > 0 ? median(movingSamples.map((sample) => sample.speedKmh)) : 0;
+  const maxSpeed = speedSamples.length > 0 ? Math.max(...speedSamples.map((sample) => sample.speedKmh)) : 0;
+
+  switch (motionActivity.type) {
+    case "drive":
+      if (motionActivity.confidence === "high" || movingMedian >= 8 || maxSpeed >= 14) {
+        return "drive";
+      }
+      return null;
+    case "bike":
+      if (motionActivity.confidence !== "low" || movingMedian >= 7 || maxSpeed >= 10) {
+        return "bike";
+      }
+      return null;
+    case "walk":
+      if (maxSpeed < 12 && movingMedian <= (motionActivity.confidence === "low" ? WALK_MAX_KMH : 8)) {
+        return "walk";
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
+export function inferAutoRecordingProfile(
+  tripPoints: TripPoint[],
+  motionActivity: MotionActivity | null = null,
+): RecordingProfile | null {
+  const locationProfile = inferLocationOnlyAutoRecordingProfile(tripPoints);
+
+  if (locationProfile === "plane" || locationProfile === "boat") {
+    return locationProfile;
+  }
+
+  const motionProfile = inferMotionGuidedProfile(tripPoints, motionActivity);
+
+  if (motionProfile === null) {
+    return locationProfile;
+  }
+
+  if (locationProfile === null || locationProfile === motionProfile) {
+    return motionProfile;
+  }
+
+  if (motionProfile === "drive") {
+    return "drive";
+  }
+
+  if (motionProfile === "bike" && locationProfile === "walk") {
+    return "bike";
+  }
+
+  return locationProfile;
+}
+
 function getAutoStabilityThresholdMs(recordingProfile: RecordingProfile): number {
   switch (recordingProfile) {
     case "walk":
@@ -313,6 +406,7 @@ export function applyAutoRecordingTransition(
   tripPoints: TripPoint[],
   waypoints: Waypoint[],
   recordedAt: string,
+  motionActivity: MotionActivity | null = null,
 ): AutoRecordingTransitionResult {
   if (recordingSession.recordingMode !== "auto" || !recordingSession.activeSegmentId) {
     return {
@@ -323,7 +417,10 @@ export function applyAutoRecordingTransition(
     };
   }
 
-  const inferredProfile = inferAutoRecordingProfile(getVisibleTripPointsForTrip(tripPoints, trip.localId));
+  const inferredProfile = inferAutoRecordingProfile(
+    getVisibleTripPointsForTrip(tripPoints, trip.localId),
+    motionActivity,
+  );
   const activeSegment =
     tripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ??
     getOpenTripSegmentForTrip(tripSegments, trip.localId);

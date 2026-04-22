@@ -23,8 +23,12 @@ import {
   updateTripMetadata,
   type TripUpdateInput,
 } from "../../services/trips/trips-management.service";
-import { createResumedRecordingState, resumePausedTrip } from "../../services/recording/recording.service";
-import { setRecordingSession } from "../../state/recording-store";
+import {
+  createResumedRecordingState,
+  resumePausedTrip,
+  stopRecordingSession,
+} from "../../services/recording/recording.service";
+import { setRecordingSession, useRecordingStore } from "../../state/recording-store";
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { setTripPauses, useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
@@ -56,6 +60,7 @@ export default function TripsScreen() {
   const router = useRouter();
   const suppressTapUntilRef = useRef(0);
   const identitySession = useSessionStore((state) => state.identitySession);
+  const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const tripPauses = useTripPausesStore((state) => state.tripPauses);
@@ -218,6 +223,10 @@ export default function TripsScreen() {
     await setWaypoints(nextState.waypoints);
     await setWaypointAttachments(nextState.attachments);
 
+    if (recordingSession.activeTripId === trip.localId) {
+      await setRecordingSession(stopRecordingSession(recordingSession));
+    }
+
     try {
       await syncTripMutationToServer(trip.localId, nextState.trips, nextState.waypoints, nextState.attachments);
     } catch (error) {
@@ -295,7 +304,12 @@ export default function TripsScreen() {
       return;
     }
 
-    if (currentUserTrips.some((candidate) => candidate.status === "active" && candidate.localId !== trip.localId)) {
+    if (
+      currentUserTrips.some(
+        (candidate) =>
+          candidate.deletedAt === null && candidate.status === "active" && candidate.localId !== trip.localId,
+      )
+    ) {
       Alert.alert("Active trip", "Pause or stop the current active trip before resuming another one.");
       return;
     }
@@ -334,6 +348,10 @@ export default function TripsScreen() {
       recordingProfile: activeSegment?.recordingProfile ?? trip.recordingProfile,
       autoCandidateProfile: null,
       autoCandidateSince: null,
+      motionActivityType: null,
+      motionActivityConfidence: null,
+      motionActivityRecordedAt: null,
+      motionActivitySourcePlatform: null,
     });
 
     router.replace("/recording");

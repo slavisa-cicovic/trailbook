@@ -42,6 +42,8 @@ module.exports = {
       bundleIdentifier: "com.slavisacicovic.trailbook",
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        NSMotionUsageDescription:
+          "Trailbook uses motion activity to distinguish walking, cycling, and driving more reliably in auto mode.",
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: true,
           NSAllowsLocalNetworking: true,
