@@ -1,5 +1,6 @@
 export const STORAGE_KEYS = {
   session: "trailbook.mobile.session.v1",
+  recordingConfig: "trailbook.mobile.recording-config.v1",
   theme: "trailbook.mobile.theme.v1",
   recording: "trailbook.mobile.recording.v1",
   trips: "trailbook.mobile.trips.v1",

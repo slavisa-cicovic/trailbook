@@ -4,6 +4,8 @@ import { Platform } from "react-native";
 
 import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
 import type { RecordingMode, RecordingProfile } from "../../domain/trips";
+import type { RecordingConfigAccuracy, TrackingProfileConfig } from "../../domain/recording-config";
+import { getRuntimeTrackingProfileConfig } from "../recording/recording-config.service";
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "./background-location.constants";
 
 export interface CurrentLocationSnapshot {
@@ -15,7 +17,7 @@ export interface CurrentLocationSnapshot {
   speed: number | null;
 }
 
-interface TrackingOptions {
+export interface TrackingOptions {
   accuracy: Location.Accuracy;
   distanceInterval: number;
   timeInterval: number;
@@ -71,6 +73,16 @@ export async function getCurrentForegroundLocation(): Promise<CurrentLocationSna
 }
 
 export function getTrackingOptionsForProfile(profile: RecordingMode): TrackingOptions {
+  const runtimeConfig = getRuntimeTrackingProfileConfig(profile);
+
+  if (runtimeConfig) {
+    return toTrackingOptions(runtimeConfig);
+  }
+
+  return getFallbackTrackingOptionsForProfile(profile);
+}
+
+function getFallbackTrackingOptionsForProfile(profile: RecordingMode): TrackingOptions {
   switch (profile) {
     case "auto":
       return {
@@ -114,6 +126,33 @@ export function getTrackingOptionsForProfile(profile: RecordingMode): TrackingOp
         distanceInterval: 120,
         timeInterval: 3 * 60 * 1000,
       };
+  }
+}
+
+function toTrackingOptions(config: TrackingProfileConfig): TrackingOptions {
+  return {
+    accuracy: toExpoAccuracy(config.accuracy),
+    distanceInterval: config.distanceInterval,
+    timeInterval: config.timeIntervalMs,
+  };
+}
+
+function toExpoAccuracy(accuracy: RecordingConfigAccuracy): Location.Accuracy {
+  switch (accuracy) {
+    case "lowest":
+      return Location.Accuracy.Lowest;
+    case "low":
+      return Location.Accuracy.Low;
+    case "balanced":
+      return Location.Accuracy.Balanced;
+    case "high":
+      return Location.Accuracy.High;
+    case "highest":
+      return Location.Accuracy.Highest;
+    case "bestForNavigation":
+      return Location.Accuracy.BestForNavigation;
+    default:
+      return Location.Accuracy.Balanced;
   }
 }
 

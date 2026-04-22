@@ -6,7 +6,10 @@ import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
 import ScreenLayout from "../../components/layout/screen-layout";
 import { showDemoModeInfoDialog } from "../../services/demo/demo-mode.service";
 import { logoutFromBackend } from "../../services/auth/mobile-auth.service";
+import { syncBackgroundLocationTracking } from "../../services/location/location.service";
+import { syncResolvedRecordingConfig } from "../../services/recording/recording-config.service";
 import { restoreOwnedTripsFromServer } from "../../services/trips/trip-restore.service";
+import { useRecordingStore } from "../../state/recording-store";
 import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { clearSessionCredentials, setActiveIdentitySession, useSessionStore } from "../../state/session-store";
@@ -22,12 +25,17 @@ export default function SettingsScreen() {
   const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
+  const recordingStatus = useRecordingStore((state) => state.session.status);
+  const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
+  const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
   const themeMode = useThemeStore((state) => state.mode);
   const systemColorScheme = useColorScheme();
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
   const theme = getAppTheme(resolvedThemeMode);
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [recordingConfigBusy, setRecordingConfigBusy] = useState(false);
+  const [recordingConfigMessage, setRecordingConfigMessage] = useState<string | null>(null);
 
   async function handleLogout() {
     if (identitySession?.sessionToken) {
@@ -70,6 +78,29 @@ export default function SettingsScreen() {
       setRestoreMessage(error instanceof Error ? error.message : "Restore failed.");
     } finally {
       setRestoreBusy(false);
+    }
+  }
+
+  async function handleUpdateRecordingConfig() {
+    if (!identitySession || identitySession.mode !== "authenticated") {
+      return;
+    }
+
+    setRecordingConfigBusy(true);
+    setRecordingConfigMessage(null);
+
+    try {
+      await syncResolvedRecordingConfig(identitySession);
+      await syncBackgroundLocationTracking(
+        recordingStatus,
+        activeRecordingTripId,
+        activeRecordingProfile,
+      );
+      setRecordingConfigMessage("Recording config updated.");
+    } catch (error) {
+      setRecordingConfigMessage(error instanceof Error ? error.message : "Recording config update failed.");
+    } finally {
+      setRecordingConfigBusy(false);
     }
   }
 
@@ -167,6 +198,32 @@ export default function SettingsScreen() {
       <Text style={[styles.value, { color: theme.primaryText }]}>
         {identitySession.providers.map((provider) => provider[0].toUpperCase() + provider.slice(1)).join(", ")}
       </Text>
+      {identitySession.mode === "authenticated" ? (
+        <>
+          <Text style={[styles.label, { color: theme.mutedText }]}>Recording config</Text>
+          <Pressable
+            onPress={() => void handleUpdateRecordingConfig()}
+            style={[styles.restoreButton, { backgroundColor: theme.accentMuted }]}
+          >
+            <Text style={[styles.restoreButtonText, { color: theme.accent }]}>
+              {recordingConfigBusy ? "Updating..." : "Update recording config"}
+            </Text>
+          </Pressable>
+          <Text style={[styles.themeHint, { color: theme.mutedText }]}>
+            Pulls the latest resolved recording profile config from the server and applies it immediately.
+          </Text>
+          {recordingConfigMessage ? (
+            <Text
+              style={[
+                styles.restoreMessage,
+                { color: recordingConfigMessage === "Recording config updated." ? theme.accent : "#9f2f2f" },
+              ]}
+            >
+              {recordingConfigMessage}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
       {identitySession.mode === "authenticated" ? (
         <>
           <Text style={[styles.label, { color: theme.mutedText }]}>Device transfer</Text>

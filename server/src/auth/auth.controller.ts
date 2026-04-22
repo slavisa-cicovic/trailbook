@@ -5,6 +5,7 @@ import { SESSION_COOKIE_NAME } from "./auth.constants";
 import { AuthService } from "./auth.service";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
+import { MobileRecordingConfigService } from "./mobile-recording-config.service";
 import { RegisterDto } from "./dto/register.dto";
 import { RefreshSessionDto } from "./dto/refresh-session.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
@@ -16,6 +17,8 @@ type SocialProvider = "google" | "facebook" | "apple";
 export class AuthController {
   constructor(
     @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(MobileRecordingConfigService)
+    private readonly mobileRecordingConfigService: MobileRecordingConfigService,
     @Inject(SocialAuthService) private readonly socialAuthService: SocialAuthService,
   ) {}
 
@@ -106,6 +109,12 @@ export class AuthController {
   @Get("mobile/me")
   meMobile(@Req() request: Request) {
     return this.authService.getCurrentUser(this.getSessionToken(request));
+  }
+
+  @Get("mobile/recording-config")
+  async getMobileRecordingConfig(@Req() request: Request) {
+    const { user } = await this.authService.getCurrentUser(this.getSessionToken(request));
+    return this.mobileRecordingConfigService.getResolvedConfigForUser(user);
   }
 
   @Get("providers")

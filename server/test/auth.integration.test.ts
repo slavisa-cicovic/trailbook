@@ -203,6 +203,40 @@ describe("auth integration", () => {
     assert.equal(accessTokens[0]?.revokedAt, null);
   });
 
+  test("mobile recording config returns resolved tracking profiles for the authenticated user", async () => {
+    await request(app.getHttpServer()).post("/api/auth/register").send({
+      displayName: "Slavisa",
+      email: "slavisa@example.com",
+      password: "password123",
+    });
+
+    const verificationOutbox = await databaseService.mailOutbox.findFirstOrThrow({
+      where: {
+        subject: "Verify your Trailbook email",
+      },
+    });
+    const verifyTokenMatch = verificationOutbox.htmlBody.match(/token=([^"&]+)/);
+    assert.ok(verifyTokenMatch?.[1]);
+    await request(app.getHttpServer()).get(
+      `/api/auth/verify-email?token=${encodeURIComponent(decodeURIComponent(verifyTokenMatch![1]))}`,
+    );
+
+    const loginResponse = await request(app.getHttpServer()).post("/api/auth/mobile/login").send({
+      email: "slavisa@example.com",
+      password: "password123",
+    });
+
+    const configResponse = await request(app.getHttpServer())
+      .get("/api/auth/mobile/recording-config")
+      .set("Authorization", `Bearer ${loginResponse.body.sessionToken}`);
+
+    assert.equal(configResponse.status, 200);
+    assert.equal(configResponse.body.version, 1);
+    assert.equal(configResponse.body.profiles.ios.auto.distanceInterval, 12);
+    assert.equal(configResponse.body.profiles.android.auto.distanceInterval, 25);
+    assert.equal(configResponse.body.profiles.ios.drive.timeIntervalMs, 30000);
+  });
+
   test("logout revokes the current session", async () => {
     await request(app.getHttpServer()).post("/api/auth/register").send({
       displayName: "Slavisa",
