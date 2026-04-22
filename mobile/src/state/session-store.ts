@@ -31,6 +31,8 @@ let state: SessionState = {
   identitySession: null,
 };
 
+let refreshInFlight: Promise<AuthenticatedDeviceSession | null> | null = null;
+
 function emitChange() {
   listeners.forEach((listener) => listener());
 }
@@ -49,6 +51,10 @@ function getSnapshot() {
   return state;
 }
 
+export function getSessionStateSnapshot(): SessionState {
+  return state;
+}
+
 export function useSessionStore<T>(selector: (snapshot: SessionState) => T): T {
   return useSyncExternalStore(subscribe, () => selector(getSnapshot()), () => selector(getSnapshot()));
 }
@@ -60,18 +66,7 @@ export async function hydrateSessionStore(): Promise<void> {
   if (identitySession?.mode === "authenticated" && identitySession.refreshToken) {
     try {
       const refreshedSession = await refreshMobileSessionWithBackend(identitySession.refreshToken);
-      identitySession = {
-        ...identitySession,
-        userId: refreshedSession.user.id,
-        userEmail: refreshedSession.user.email.trim().toLowerCase(),
-        displayName: refreshedSession.user.displayName,
-        providers: refreshedSession.user.providers,
-        role: refreshedSession.user.role,
-        sessionToken: refreshedSession.sessionToken,
-        sessionExpiresAt: refreshedSession.sessionExpiresAt,
-        refreshToken: refreshedSession.refreshToken,
-        refreshExpiresAt: refreshedSession.refreshExpiresAt,
-      };
+      identitySession = mergeRefreshedIdentitySession(identitySession, refreshedSession);
       await saveSession(identitySession);
     } catch (error) {
       if (error instanceof BackendRequestError && (error.status === 401 || error.status === 403)) {
@@ -91,6 +86,63 @@ export async function hydrateSessionStore(): Promise<void> {
     },
     deviceId: identitySession?.deviceId ?? deviceId,
   }));
+}
+
+export async function refreshActiveIdentitySessionIfPossible(): Promise<AuthenticatedDeviceSession | null> {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+
+  const activeSession = state.identitySession;
+
+  if (
+    !activeSession ||
+    activeSession.mode !== "authenticated" ||
+    !activeSession.refreshToken
+  ) {
+    return activeSession;
+  }
+
+  const refreshToken = activeSession.refreshToken;
+
+  refreshInFlight = (async () => {
+    try {
+      const refreshedSession = await refreshMobileSessionWithBackend(refreshToken);
+      const nextSession = mergeRefreshedIdentitySession(activeSession, refreshedSession);
+
+      setState((currentState) => ({
+        ...currentState,
+        identitySession: nextSession,
+        credentials: {
+          email: nextSession.userEmail,
+          password: "",
+        },
+        deviceId: nextSession.deviceId,
+      }));
+
+      await saveSession(nextSession);
+      return nextSession;
+    } catch (error) {
+      if (error instanceof BackendRequestError && (error.status === 401 || error.status === 403)) {
+        setState((currentState) => ({
+          ...currentState,
+          identitySession: null,
+          credentials: {
+            email: "",
+            password: "",
+          },
+        }));
+        await saveSession(null);
+        return null;
+      }
+
+      return activeSession;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
 }
 
 export function updateSessionCredentials(partial: Partial<TemporaryUserCredentials>) {
@@ -127,4 +179,22 @@ export function clearSessionCredentials() {
       password: "",
     },
   }));
+}
+
+function mergeRefreshedIdentitySession(
+  identitySession: AuthenticatedDeviceSession,
+  refreshedSession: Awaited<ReturnType<typeof refreshMobileSessionWithBackend>>,
+): AuthenticatedDeviceSession {
+  return {
+    ...identitySession,
+    userId: refreshedSession.user.id,
+    userEmail: refreshedSession.user.email.trim().toLowerCase(),
+    displayName: refreshedSession.user.displayName,
+    providers: refreshedSession.user.providers,
+    role: refreshedSession.user.role,
+    sessionToken: refreshedSession.sessionToken,
+    sessionExpiresAt: refreshedSession.sessionExpiresAt,
+    refreshToken: refreshedSession.refreshToken,
+    refreshExpiresAt: refreshedSession.refreshExpiresAt,
+  };
 }

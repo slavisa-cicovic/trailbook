@@ -2,6 +2,8 @@ import type { SharedTripDetail, SharedTripSummary } from "../../domain/shared-tr
 import type { OwnedServerTripDetail, OwnedServerTripSummary } from "../../domain/server-trips";
 import type { TripDiagnostics } from "../../domain/trip-diagnostics";
 import type { Trip, TripPoint, TripSegment, Waypoint, WaypointAttachment } from "../../domain/trips";
+import { BackendRequestError } from "../api/mobile-api.service";
+import { getSessionStateSnapshot, refreshActiveIdentitySessionIfPossible } from "../../state/session-store";
 import { getTripDiagnosticsForSync, isTripDiagnosticsEnabled } from "../trip-points/trip-points.service";
 
 export function getApiBaseUrl() {
@@ -9,6 +11,25 @@ export function getApiBaseUrl() {
 }
 
 async function request<T>(path: string, sessionToken: string, init?: RequestInit) {
+  try {
+    return await requestWithToken<T>(path, sessionToken, init);
+  } catch (error) {
+    if (!(error instanceof BackendRequestError) || (error.status !== 401 && error.status !== 403)) {
+      throw error;
+    }
+
+    const refreshedSession = await refreshActiveIdentitySessionIfPossible();
+    const latestToken = refreshedSession?.sessionToken ?? getSessionStateSnapshot().identitySession?.sessionToken;
+
+    if (!latestToken || latestToken === sessionToken) {
+      throw error;
+    }
+
+    return requestWithToken<T>(path, latestToken, init);
+  }
+}
+
+async function requestWithToken<T>(path: string, sessionToken: string, init?: RequestInit) {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers: {
@@ -22,7 +43,7 @@ async function request<T>(path: string, sessionToken: string, init?: RequestInit
 
   if (!response.ok) {
     const message = Array.isArray(payload?.message) ? payload.message.join(", ") : payload?.message;
-    throw new Error(message || `Request failed with status ${response.status}`);
+    throw new BackendRequestError(message || `Request failed with status ${response.status}`, response.status);
   }
 
   return (payload || {}) as T;
