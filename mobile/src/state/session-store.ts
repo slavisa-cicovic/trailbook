@@ -5,6 +5,7 @@ import {
   type AuthenticatedDeviceSession,
   type TemporaryUserCredentials,
 } from "../domain/identity";
+import { BackendRequestError } from "../services/api/mobile-api.service";
 import { refreshMobileSessionWithBackend } from "../services/auth/mobile-auth.service";
 import { getOrCreateDeviceId } from "../storage/device-storage";
 import { loadSession, saveSession } from "../storage/session-storage";
@@ -72,9 +73,11 @@ export async function hydrateSessionStore(): Promise<void> {
         refreshExpiresAt: refreshedSession.refreshExpiresAt,
       };
       await saveSession(identitySession);
-    } catch {
-      identitySession = null;
-      await saveSession(null);
+    } catch (error) {
+      if (error instanceof BackendRequestError && (error.status === 401 || error.status === 403)) {
+        identitySession = null;
+        await saveSession(null);
+      }
     }
   }
 

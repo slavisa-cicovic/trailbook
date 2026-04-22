@@ -1,3 +1,13 @@
+export class BackendRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "BackendRequestError";
+  }
+}
+
 function getApiBaseUrl() {
   const configuredBaseUrl =
     process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_SERVER_API_URL;
@@ -32,10 +42,10 @@ export async function requestFromBackend<T>(path: string, init?: RequestInit, se
     clearTimeout(timeoutId);
 
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Trailbook could not reach the server in time.");
+      throw new BackendRequestError("Trailbook could not reach the server in time.");
     }
 
-    throw new Error("Trailbook could not connect to the server.");
+    throw new BackendRequestError("Trailbook could not connect to the server.");
   }
 
   clearTimeout(timeoutId);
@@ -44,7 +54,7 @@ export async function requestFromBackend<T>(path: string, init?: RequestInit, se
 
   if (!response.ok) {
     const message = Array.isArray(payload?.message) ? payload.message.join(", ") : payload?.message;
-    throw new Error(message || `Request failed with status ${response.status}`);
+    throw new BackendRequestError(message || `Request failed with status ${response.status}`, response.status);
   }
 
   return (payload || {}) as T;
