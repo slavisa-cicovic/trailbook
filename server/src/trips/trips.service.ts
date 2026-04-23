@@ -467,6 +467,7 @@ export class TripsService {
             rejectedByImpliedSpeed: payload.diagnostics.rejectedByImpliedSpeed,
             maxCallbackGapMs: payload.diagnostics.maxCallbackGapMs,
             maxRecordedGapMs: payload.diagnostics.maxRecordedGapMs,
+            accuracyHistogramJson: payload.diagnostics.accuracyHistogram as unknown as Prisma.InputJsonValue,
             recentEventsJson: payload.diagnostics.recentEvents as unknown as Prisma.InputJsonValue,
           },
           update: {
@@ -491,6 +492,7 @@ export class TripsService {
             rejectedByImpliedSpeed: payload.diagnostics.rejectedByImpliedSpeed,
             maxCallbackGapMs: payload.diagnostics.maxCallbackGapMs,
             maxRecordedGapMs: payload.diagnostics.maxRecordedGapMs,
+            accuracyHistogramJson: payload.diagnostics.accuracyHistogram as unknown as Prisma.InputJsonValue,
             recentEventsJson: payload.diagnostics.recentEvents as unknown as Prisma.InputJsonValue,
           },
         });

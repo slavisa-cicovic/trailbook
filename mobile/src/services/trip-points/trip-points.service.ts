@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 
 import type { CurrentLocationSnapshot } from "../location/location.service";
 import type { RecordingMode, Trip, TripPoint } from "../../domain/trips";
+import { getRuntimePointFilterProfileConfig } from "../recording/recording-config.service";
 import {
   recordTripPointDiagnostic,
   type LocationCallbackSource,
@@ -139,6 +140,12 @@ function getRouteSmoothingThresholds(recordingMode: RecordingMode): {
 }
 
 function getMaxAccuracyMeters(recordingMode: RecordingMode) {
+  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
+
+  if (runtimeConfig) {
+    return runtimeConfig.maxAccuracyMeters;
+  }
+
   switch (recordingMode) {
     case "walk":
       return Platform.OS === "android" ? 50 : 35;
@@ -157,6 +164,12 @@ function getMaxAccuracyMeters(recordingMode: RecordingMode) {
 }
 
 function getMaxJumpDistanceMeters(recordingMode: RecordingMode) {
+  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
+
+  if (runtimeConfig) {
+    return runtimeConfig.maxJumpDistanceMeters;
+  }
+
   switch (recordingMode) {
     case "walk":
       return 120;
@@ -175,6 +188,12 @@ function getMaxJumpDistanceMeters(recordingMode: RecordingMode) {
 }
 
 function getMaxImpliedSpeedKmh(recordingMode: RecordingMode) {
+  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
+
+  if (runtimeConfig) {
+    return runtimeConfig.maxImpliedSpeedKmh;
+  }
+
   switch (recordingMode) {
     case "walk":
       return 12;
@@ -193,6 +212,12 @@ function getMaxImpliedSpeedKmh(recordingMode: RecordingMode) {
 }
 
 function getMinMovementMeters(recordingMode: RecordingMode) {
+  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
+
+  if (runtimeConfig) {
+    return runtimeConfig.minMovementMeters;
+  }
+
   switch (recordingMode) {
     case "walk":
       return Platform.OS === "android" ? 4 : 8;

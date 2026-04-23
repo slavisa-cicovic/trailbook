@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 
 import type { CurrentLocationSnapshot } from "../location/location.service";
 import type {
+  TripDiagnosticsAccuracyHistogram,
   TripDiagnostics,
   TripDiagnosticsPlatform,
   TripDiagnosticsRecentEvent,
@@ -33,6 +34,7 @@ export type TripPointDiagnosticReason =
 interface MutableTripPointDiagnostics {
   accepted: number;
   acceptedAfterLongGap: number;
+  accuracyHistogram: TripDiagnosticsAccuracyHistogram;
   backgroundAccepted: number;
   backgroundCallbacks: number;
   backgroundRejected: number;
@@ -92,6 +94,16 @@ function createEmptyDiagnostics(
   return {
     accepted: 0,
     acceptedAfterLongGap: 0,
+    accuracyHistogram: {
+      gte120m: 0,
+      lt10m: 0,
+      lt20m: 0,
+      lt30m: 0,
+      lt50m: 0,
+      lt80m: 0,
+      lt120m: 0,
+      unknown: 0,
+    },
     backgroundAccepted: 0,
     backgroundCallbacks: 0,
     backgroundRejected: 0,
@@ -119,6 +131,54 @@ function createEmptyDiagnostics(
   };
 }
 
+function cloneAccuracyHistogram(
+  histogram: TripDiagnosticsAccuracyHistogram,
+): TripDiagnosticsAccuracyHistogram {
+  return { ...histogram };
+}
+
+function recordAccuracyHistogramBucket(
+  histogram: TripDiagnosticsAccuracyHistogram,
+  accuracy: number | null,
+) {
+  if (accuracy === null || !Number.isFinite(accuracy) || accuracy < 0) {
+    histogram.unknown += 1;
+    return;
+  }
+
+  if (accuracy < 10) {
+    histogram.lt10m += 1;
+    return;
+  }
+
+  if (accuracy < 20) {
+    histogram.lt20m += 1;
+    return;
+  }
+
+  if (accuracy < 30) {
+    histogram.lt30m += 1;
+    return;
+  }
+
+  if (accuracy < 50) {
+    histogram.lt50m += 1;
+    return;
+  }
+
+  if (accuracy < 80) {
+    histogram.lt80m += 1;
+    return;
+  }
+
+  if (accuracy < 120) {
+    histogram.lt120m += 1;
+    return;
+  }
+
+  histogram.gte120m += 1;
+}
+
 function cloneRecentEvent(event: TripDiagnosticsRecentEvent): TripDiagnosticsRecentEvent {
   return {
     accuracy: event.accuracy,
@@ -139,6 +199,14 @@ function mergeDiagnostics(
 ): MutableTripPointDiagnostics {
   target.accepted += source.accepted;
   target.acceptedAfterLongGap += source.acceptedAfterLongGap;
+  target.accuracyHistogram.gte120m += source.accuracyHistogram.gte120m;
+  target.accuracyHistogram.lt10m += source.accuracyHistogram.lt10m;
+  target.accuracyHistogram.lt20m += source.accuracyHistogram.lt20m;
+  target.accuracyHistogram.lt30m += source.accuracyHistogram.lt30m;
+  target.accuracyHistogram.lt50m += source.accuracyHistogram.lt50m;
+  target.accuracyHistogram.lt80m += source.accuracyHistogram.lt80m;
+  target.accuracyHistogram.lt120m += source.accuracyHistogram.lt120m;
+  target.accuracyHistogram.unknown += source.accuracyHistogram.unknown;
   target.backgroundAccepted += source.backgroundAccepted;
   target.backgroundCallbacks += source.backgroundCallbacks;
   target.backgroundRejected += source.backgroundRejected;
@@ -212,6 +280,7 @@ function toTripDiagnosticsSummary(diagnostics: MutableTripPointDiagnostics): Tri
   return {
     accepted: diagnostics.accepted,
     acceptedAfterLongGap: diagnostics.acceptedAfterLongGap,
+    accuracyHistogram: cloneAccuracyHistogram(diagnostics.accuracyHistogram),
     backgroundAccepted: diagnostics.backgroundAccepted,
     backgroundCallbacks: diagnostics.backgroundCallbacks,
     backgroundRejected: diagnostics.backgroundRejected,
@@ -345,6 +414,7 @@ export function recordLocationCallback(
 
   diagnostics.callbackCount += 1;
   diagnostics.updatedAt = receivedAt;
+  recordAccuracyHistogramBucket(diagnostics.accuracyHistogram, snapshot.accuracy);
 
   if (source === "foreground") {
     diagnostics.foregroundCallbacks += 1;

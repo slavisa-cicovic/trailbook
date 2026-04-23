@@ -136,6 +136,7 @@ export async function syncTripToServer(
   const diagnosticsPayload: {
     accepted: TripDiagnostics["accepted"];
     acceptedAfterLongGap: TripDiagnostics["acceptedAfterLongGap"];
+    accuracyHistogram: TripDiagnostics["accuracyHistogram"];
     backgroundAccepted: TripDiagnostics["backgroundAccepted"];
     backgroundCallbacks: TripDiagnostics["backgroundCallbacks"];
     backgroundRejected: TripDiagnostics["backgroundRejected"];
@@ -158,9 +159,10 @@ export async function syncTripToServer(
     sessionDuplicateRecordedAt: TripDiagnostics["sessionDuplicateRecordedAt"];
     updatedAt: TripDiagnostics["updatedAt"];
   } | null = diagnostics
-    ? {
+      ? {
         accepted: diagnostics.accepted,
         acceptedAfterLongGap: diagnostics.acceptedAfterLongGap,
+        accuracyHistogram: diagnostics.accuracyHistogram,
         backgroundAccepted: diagnostics.backgroundAccepted,
         backgroundCallbacks: diagnostics.backgroundCallbacks,
         backgroundRejected: diagnostics.backgroundRejected,

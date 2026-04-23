@@ -15,8 +15,18 @@ export interface TrackingProfileConfigResponse {
   timeIntervalMs: number;
 }
 
+export interface PointFilterProfileConfigResponse {
+  maxAccuracyMeters: number;
+  maxImpliedSpeedKmh: number;
+  maxJumpDistanceMeters: number;
+  minMovementMeters: number;
+}
+
 export type PlatformTrackingProfilesResponse = Partial<
   Record<RecordingModeConfigName, TrackingProfileConfigResponse>
+>;
+export type PlatformPointFilterProfilesResponse = Partial<
+  Record<RecordingModeConfigName, PointFilterProfileConfigResponse>
 >;
 
 export interface MobileRecordingConfigResponse {
@@ -27,11 +37,20 @@ export interface MobileRecordingConfigResponse {
     android: PlatformTrackingProfilesResponse;
     default?: PlatformTrackingProfilesResponse;
   };
+  pointFilters?: {
+    ios?: PlatformPointFilterProfilesResponse;
+    android?: PlatformPointFilterProfilesResponse;
+    default?: PlatformPointFilterProfilesResponse;
+  };
 }
 
 type PartialTrackingProfileConfig = Partial<TrackingProfileConfigResponse>;
+type PartialPointFilterProfileConfig = Partial<PointFilterProfileConfigResponse>;
 export type PartialPlatformTrackingProfiles = Partial<
   Record<RecordingModeConfigName, PartialTrackingProfileConfig>
+>;
+export type PartialPlatformPointFilterProfiles = Partial<
+  Record<RecordingModeConfigName, PartialPointFilterProfileConfig>
 >;
 
 export interface MobileRecordingConfigOverrides {
@@ -42,6 +61,11 @@ export interface MobileRecordingConfigOverrides {
     android?: PartialPlatformTrackingProfiles;
     default?: PartialPlatformTrackingProfiles;
   };
+  pointFilters?: {
+    ios?: PartialPlatformPointFilterProfiles;
+    android?: PartialPlatformPointFilterProfiles;
+    default?: PartialPlatformPointFilterProfiles;
+  };
   roleOverrides?: Partial<
     Record<
       UserRole,
@@ -49,6 +73,11 @@ export interface MobileRecordingConfigOverrides {
         ios?: PartialPlatformTrackingProfiles;
         android?: PartialPlatformTrackingProfiles;
         default?: PartialPlatformTrackingProfiles;
+        pointFilters?: {
+          ios?: PartialPlatformPointFilterProfiles;
+          android?: PartialPlatformPointFilterProfiles;
+          default?: PartialPlatformPointFilterProfiles;
+        };
       }
     >
   >;
@@ -58,6 +87,11 @@ export interface MobileRecordingConfigOverrides {
       ios?: PartialPlatformTrackingProfiles;
       android?: PartialPlatformTrackingProfiles;
       default?: PartialPlatformTrackingProfiles;
+      pointFilters?: {
+        ios?: PartialPlatformPointFilterProfiles;
+        android?: PartialPlatformPointFilterProfiles;
+        default?: PartialPlatformPointFilterProfiles;
+      };
     }
   >;
   emailOverrides?: Record<
@@ -66,6 +100,11 @@ export interface MobileRecordingConfigOverrides {
       ios?: PartialPlatformTrackingProfiles;
       android?: PartialPlatformTrackingProfiles;
       default?: PartialPlatformTrackingProfiles;
+      pointFilters?: {
+        ios?: PartialPlatformPointFilterProfiles;
+        android?: PartialPlatformPointFilterProfiles;
+        default?: PartialPlatformPointFilterProfiles;
+      };
     }
   >;
 }

@@ -30,9 +30,21 @@ export interface TripDiagnosticsRecentEvent {
   speed: number | null;
 }
 
+export interface TripDiagnosticsAccuracyHistogram {
+  gte120m: number;
+  lt10m: number;
+  lt20m: number;
+  lt30m: number;
+  lt50m: number;
+  lt80m: number;
+  lt120m: number;
+  unknown: number;
+}
+
 export interface TripDiagnostics {
   accepted: number;
   acceptedAfterLongGap: number;
+  accuracyHistogram: TripDiagnosticsAccuracyHistogram;
   backgroundAccepted: number;
   backgroundCallbacks: number;
   backgroundRejected: number;

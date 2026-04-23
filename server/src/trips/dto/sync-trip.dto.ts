@@ -83,6 +83,16 @@ export interface SyncTripDiagnosticsRecentEventDto {
 export interface SyncTripDiagnosticsDto {
   accepted: number;
   acceptedAfterLongGap?: number;
+  accuracyHistogram?: {
+    gte120m: number;
+    lt10m: number;
+    lt20m: number;
+    lt30m: number;
+    lt50m: number;
+    lt80m: number;
+    lt120m: number;
+    unknown: number;
+  };
   backgroundAccepted: number;
   backgroundCallbacks: number;
   backgroundRejected: number;

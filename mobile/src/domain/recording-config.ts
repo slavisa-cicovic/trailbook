@@ -14,7 +14,15 @@ export interface TrackingProfileConfig {
   timeIntervalMs: number;
 }
 
+export interface PointFilterProfileConfig {
+  maxAccuracyMeters: number;
+  maxImpliedSpeedKmh: number;
+  maxJumpDistanceMeters: number;
+  minMovementMeters: number;
+}
+
 export type PlatformTrackingProfiles = Partial<Record<RecordingMode, TrackingProfileConfig>>;
+export type PlatformPointFilterProfiles = Partial<Record<RecordingMode, PointFilterProfileConfig>>;
 export type RecordingConfigPlatform = "ios" | "android" | "default";
 
 export interface MobileRecordingConfig {
@@ -24,6 +32,11 @@ export interface MobileRecordingConfig {
     ios?: PlatformTrackingProfiles;
     android?: PlatformTrackingProfiles;
     default?: PlatformTrackingProfiles;
+  };
+  pointFilters?: {
+    ios?: PlatformPointFilterProfiles;
+    android?: PlatformPointFilterProfiles;
+    default?: PlatformPointFilterProfiles;
   };
 }
 

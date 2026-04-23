@@ -288,6 +288,7 @@ model TripDiagnostics {
   rejectedByImpliedSpeed   Int      @map("rejected_by_implied_speed")
   maxCallbackGapMs         Int      @map("max_callback_gap_ms")
   maxRecordedGapMs         Int      @map("max_recorded_gap_ms")
+  accuracyHistogramJson    Json?    @map("accuracy_histogram_json")
   recentEventsJson         Json?    @map("recent_events_json")
   createdAt                DateTime @default(now()) @map("created_at")
   updatedAt                DateTime @updatedAt @map("updated_at")

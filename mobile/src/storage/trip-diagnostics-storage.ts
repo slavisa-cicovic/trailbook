@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type {
+  TripDiagnosticsAccuracyHistogram,
   TripDiagnostics,
   TripDiagnosticsPlatform,
   TripDiagnosticsRecentEvent,
@@ -55,6 +56,7 @@ function normalizeTripDiagnostics(
   return {
     accepted: value.accepted ?? 0,
     acceptedAfterLongGap: value.acceptedAfterLongGap ?? 0,
+    accuracyHistogram: normalizeAccuracyHistogram(value.accuracyHistogram),
     backgroundAccepted: value.backgroundAccepted ?? 0,
     backgroundCallbacks: value.backgroundCallbacks ?? 0,
     backgroundRejected: value.backgroundRejected ?? 0,
@@ -77,6 +79,21 @@ function normalizeTripDiagnostics(
     sessionDuplicateRecordedAt: value.sessionDuplicateRecordedAt ?? 0,
     tripLocalId: value.tripLocalId,
     updatedAt: value.updatedAt ?? new Date(0).toISOString(),
+  };
+}
+
+function normalizeAccuracyHistogram(
+  value: Partial<TripDiagnosticsAccuracyHistogram> | undefined,
+): TripDiagnosticsAccuracyHistogram {
+  return {
+    gte120m: value?.gte120m ?? 0,
+    lt10m: value?.lt10m ?? 0,
+    lt20m: value?.lt20m ?? 0,
+    lt30m: value?.lt30m ?? 0,
+    lt50m: value?.lt50m ?? 0,
+    lt80m: value?.lt80m ?? 0,
+    lt120m: value?.lt120m ?? 0,
+    unknown: value?.unknown ?? 0,
   };
 }
 

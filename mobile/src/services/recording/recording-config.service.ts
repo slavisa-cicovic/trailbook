@@ -4,7 +4,9 @@ import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import type {
   CachedMobileRecordingConfig,
   MobileRecordingConfig,
+  PlatformPointFilterProfiles,
   PlatformTrackingProfiles,
+  PointFilterProfileConfig,
   RecordingConfigAccuracy,
   RecordingConfigPlatform,
   TrackingProfileConfig,
@@ -18,6 +20,8 @@ const MIN_DISTANCE_INTERVAL = 0;
 const MAX_DISTANCE_INTERVAL = 10_000;
 const MIN_TIME_INTERVAL_MS = 0;
 const MAX_TIME_INTERVAL_MS = 60 * 60 * 1000;
+const MIN_POINT_FILTER_VALUE = 0;
+const MAX_POINT_FILTER_VALUE = 1_000_000;
 
 let activeRecordingConfig: MobileRecordingConfig | null = null;
 let activeRecordingConfigUserId: string | null = null;
@@ -32,6 +36,20 @@ export function getRuntimeTrackingProfileConfig(
 
   const platformProfiles = activeRecordingConfig.profiles[platform];
   const defaultProfiles = activeRecordingConfig.profiles.default;
+
+  return platformProfiles?.[profile] ?? defaultProfiles?.[profile] ?? null;
+}
+
+export function getRuntimePointFilterProfileConfig(
+  profile: RecordingMode,
+  platform: RecordingConfigPlatform = Platform.OS === "ios" ? "ios" : "android",
+): PointFilterProfileConfig | null {
+  if (!activeRecordingConfig?.pointFilters) {
+    return null;
+  }
+
+  const platformProfiles = activeRecordingConfig.pointFilters[platform];
+  const defaultProfiles = activeRecordingConfig.pointFilters.default;
 
   return platformProfiles?.[profile] ?? defaultProfiles?.[profile] ?? null;
 }
@@ -115,7 +133,10 @@ function isValidMobileRecordingConfig(config: unknown): config is MobileRecordin
   return (
     isValidPlatformProfiles(candidate.profiles.ios) &&
     isValidPlatformProfiles(candidate.profiles.android) &&
-    isValidPlatformProfiles(candidate.profiles.default)
+    isValidPlatformProfiles(candidate.profiles.default) &&
+    isValidPlatformPointFilterProfiles(candidate.pointFilters?.ios) &&
+    isValidPlatformPointFilterProfiles(candidate.pointFilters?.android) &&
+    isValidPlatformPointFilterProfiles(candidate.pointFilters?.default)
   );
 }
 
@@ -140,6 +161,31 @@ function isValidTrackingProfileConfig(config: TrackingProfileConfig | undefined)
     isValidAccuracy(config.accuracy) &&
     isFiniteInRange(config.distanceInterval, MIN_DISTANCE_INTERVAL, MAX_DISTANCE_INTERVAL) &&
     isFiniteInRange(config.timeIntervalMs, MIN_TIME_INTERVAL_MS, MAX_TIME_INTERVAL_MS)
+  );
+}
+
+function isValidPlatformPointFilterProfiles(profiles: PlatformPointFilterProfiles | undefined): boolean {
+  if (profiles === undefined) {
+    return true;
+  }
+
+  if (!profiles || typeof profiles !== "object") {
+    return false;
+  }
+
+  return Object.values(profiles).every((profile) => isValidPointFilterProfileConfig(profile));
+}
+
+function isValidPointFilterProfileConfig(config: PointFilterProfileConfig | undefined): boolean {
+  if (!config || typeof config !== "object") {
+    return false;
+  }
+
+  return (
+    isFiniteInRange(config.maxAccuracyMeters, MIN_POINT_FILTER_VALUE, MAX_POINT_FILTER_VALUE) &&
+    isFiniteInRange(config.maxJumpDistanceMeters, MIN_POINT_FILTER_VALUE, MAX_POINT_FILTER_VALUE) &&
+    isFiniteInRange(config.maxImpliedSpeedKmh, MIN_POINT_FILTER_VALUE, MAX_POINT_FILTER_VALUE) &&
+    isFiniteInRange(config.minMovementMeters, MIN_POINT_FILTER_VALUE, MAX_POINT_FILTER_VALUE)
   );
 }
 
