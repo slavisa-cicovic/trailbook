@@ -18,6 +18,16 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 
+function getRecordingConfigErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Recording config update failed.";
+
+  if (message.includes("UIBackgroundModes")) {
+    return "This iOS build is missing background location support. Rebuild and reinstall Trailbook with UIBackgroundModes=location.";
+  }
+
+  return message;
+}
+
 export default function SettingsScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const trips = useTripsStore((state) => state.trips);
@@ -98,7 +108,7 @@ export default function SettingsScreen() {
       );
       setRecordingConfigMessage("Recording config updated.");
     } catch (error) {
-      setRecordingConfigMessage(error instanceof Error ? error.message : "Recording config update failed.");
+      setRecordingConfigMessage(getRecordingConfigErrorMessage(error));
     } finally {
       setRecordingConfigBusy(false);
     }

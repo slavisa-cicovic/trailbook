@@ -44,6 +44,7 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
         NSMotionUsageDescription:
           "Trailbook uses motion activity to distinguish walking, cycling, and driving more reliably in auto mode.",
+        UIBackgroundModes: ["location"],
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: true,
           NSAllowsLocalNetworking: true,
