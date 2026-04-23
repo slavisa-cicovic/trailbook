@@ -123,3 +123,7 @@ export interface SyncTripDto {
   waypoints: SyncWaypointDto[];
   points: SyncTripPointDto[];
 }
+
+export interface SyncTripPointsChunkDto {
+  points: SyncTripPointDto[];
+}

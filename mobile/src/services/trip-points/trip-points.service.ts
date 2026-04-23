@@ -460,7 +460,13 @@ export function appendTripPointIfUseful(
     .reverse()
     .find((tripPoint) => tripPoint.tripLocalId === nextTripPoint.tripLocalId);
 
-  if (previousPoint?.recordedAt === nextTripPoint.recordedAt) {
+  if (
+    tripPoints.some(
+      (tripPoint) =>
+        tripPoint.tripLocalId === nextTripPoint.tripLocalId &&
+        tripPoint.recordedAt === nextTripPoint.recordedAt,
+    )
+  ) {
     recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "duplicate-timestamp", {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,

@@ -21,7 +21,7 @@ import type { Request, Response } from "express";
 import { AuthService } from "../auth/auth.service";
 import type { ShareTripDto } from "./dto/share-trip.dto";
 import type { SaveTripEditDto } from "./dto/save-trip-edit.dto";
-import type { SyncTripDto } from "./dto/sync-trip.dto";
+import type { SyncTripDto, SyncTripPointsChunkDto } from "./dto/sync-trip.dto";
 import { UpdateTripDto } from "./dto/update-trip.dto";
 import { TripsService } from "./trips.service";
 
@@ -36,6 +36,16 @@ export class TripsController {
   async syncTrip(@Body() payload: SyncTripDto, @Req() request: Request) {
     const user = await this.requireAuthenticatedUser(request);
     return this.tripsService.syncTrip(user.id, payload);
+  }
+
+  @Post(":tripId/points/sync")
+  async syncTripPoints(
+    @Param("tripId") tripId: string,
+    @Body() payload: SyncTripPointsChunkDto,
+    @Req() request: Request,
+  ) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.tripsService.syncTripPoints(user.id, tripId, payload);
   }
 
   @Get("overview")

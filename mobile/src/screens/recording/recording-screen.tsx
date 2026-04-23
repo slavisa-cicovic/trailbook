@@ -420,7 +420,6 @@ export default function RecordingScreen() {
 
   useEffect(() => {
     if (
-      (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) ||
       !currentLocation ||
       recordingSession.status !== "recording"
     ) {

@@ -6,7 +6,7 @@ import { UsersService } from "../users/users.service";
 import { MediaStorageService } from "./media-storage.service";
 import type { SaveTripEditDto } from "./dto/save-trip-edit.dto";
 import type { ShareTripDto } from "./dto/share-trip.dto";
-import type { SyncTripDto } from "./dto/sync-trip.dto";
+import type { SyncTripDto, SyncTripPointsChunkDto } from "./dto/sync-trip.dto";
 import type { UpdateTripDto } from "./dto/update-trip.dto";
 
 @Injectable()
@@ -276,7 +276,7 @@ export class TripsService {
 
   async syncTrip(ownerUserId: string, payload: SyncTripDto) {
     const dedupedSegments = this.dedupeByLocalId(payload.segments);
-    const dedupedPoints = this.dedupeByLocalId(payload.points);
+    const dedupedPoints = this.dedupeByLocalId(payload.points ?? []);
     const dedupedWaypoints = this.dedupeByLocalId(payload.waypoints);
     const dedupedAttachments = this.dedupeByLocalId(payload.attachments);
 
@@ -503,6 +503,80 @@ export class TripsService {
       tripId: trip.id,
       tripLocalId: payload.localId,
       syncedAt: new Date().toISOString(),
+    };
+  }
+
+  async syncTripPoints(ownerUserId: string, tripId: string, payload: SyncTripPointsChunkDto) {
+    const dedupedPoints = this.dedupeByLocalId(payload.points ?? []);
+
+    const result = await this.databaseService.$transaction(async (tx) => {
+      const trip = await tx.trip.findFirst({
+        where: {
+          id: tripId,
+          ownerUserId,
+        },
+        select: {
+          id: true,
+          localSourceId: true,
+        },
+      });
+
+      if (!trip) {
+        throw new NotFoundException("Trip not found.");
+      }
+
+      const segments = await tx.tripSegment.findMany({
+        where: {
+          tripId,
+        },
+        select: {
+          id: true,
+          localSourceId: true,
+        },
+      });
+      const segmentIdByLocalId = new Map(segments.map((segment) => [segment.localSourceId, segment.id]));
+
+      for (const point of dedupedPoints) {
+        await tx.tripPoint.upsert({
+          where: {
+            tripId_localSourceId: {
+              tripId,
+              localSourceId: point.localId,
+            },
+          },
+          create: {
+            tripId,
+            segmentId: point.segmentLocalId ? (segmentIdByLocalId.get(point.segmentLocalId) ?? null) : null,
+            localSourceId: point.localId,
+            latitude: point.latitude,
+            longitude: point.longitude,
+            recordedAt: new Date(point.recordedAt),
+            accuracy: point.accuracy,
+            altitude: point.altitude,
+            speed: point.speed,
+          },
+          update: {
+            segmentId: point.segmentLocalId ? (segmentIdByLocalId.get(point.segmentLocalId) ?? null) : null,
+            latitude: point.latitude,
+            longitude: point.longitude,
+            recordedAt: new Date(point.recordedAt),
+            accuracy: point.accuracy,
+            altitude: point.altitude,
+            speed: point.speed,
+          },
+        });
+      }
+
+      return {
+        accepted: dedupedPoints.length,
+        tripLocalId: trip.localSourceId,
+      };
+    });
+
+    return {
+      ...result,
+      syncedAt: new Date().toISOString(),
+      tripId,
     };
   }
 

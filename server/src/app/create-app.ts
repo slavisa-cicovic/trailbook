@@ -2,6 +2,7 @@ import "dotenv/config";
 import "reflect-metadata";
 
 import cookieParser from "cookie-parser";
+import { json, urlencoded } from "express";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { INestApplication } from "@nestjs/common";
@@ -28,10 +29,13 @@ function getAllowedOrigins() {
 }
 
 export async function createApp(): Promise<INestApplication> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const databaseService = app.get(DatabaseService);
   const allowedOrigins = getAllowedOrigins();
+  const bodyLimit = process.env.SERVER_BODY_LIMIT || "1mb";
 
+  app.use(json({ limit: bodyLimit }));
+  app.use(urlencoded({ extended: true, limit: bodyLimit }));
   app.use(cookieParser());
   app.enableCors({
     origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {

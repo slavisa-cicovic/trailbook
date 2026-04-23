@@ -6,6 +6,8 @@ import { BackendRequestError } from "../api/mobile-api.service";
 import { getSessionStateSnapshot, refreshActiveIdentitySessionIfPossible } from "../../state/session-store";
 import { getTripDiagnosticsForSync, isTripDiagnosticsEnabled } from "../trip-points/trip-points.service";
 
+const TRIP_POINTS_SYNC_BATCH_SIZE = 500;
+
 export function getApiBaseUrl() {
   return process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3001/api";
 }
@@ -95,6 +97,29 @@ async function requestFormDataWithToken<T>(
   return (payload || {}) as T;
 }
 
+function toTripPointSyncPayload(point: TripPoint) {
+  return {
+    localId: point.localId,
+    segmentLocalId: point.segmentLocalId,
+    latitude: point.latitude,
+    longitude: point.longitude,
+    recordedAt: point.recordedAt,
+    accuracy: point.accuracy,
+    altitude: point.altitude,
+    speed: point.speed,
+  };
+}
+
+function chunkItems<T>(items: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+
+  return chunks;
+}
+
 export async function syncTripToServer(
   sessionToken: string,
   input: {
@@ -160,7 +185,7 @@ export async function syncTripToServer(
       }
     : null;
 
-  return request<{ syncedAt: string; tripId: string; tripLocalId: string }>("/trips/sync", sessionToken, {
+  const response = await request<{ syncedAt: string; tripId: string; tripLocalId: string }>("/trips/sync", sessionToken, {
     method: "POST",
     body: JSON.stringify({
       localId: input.trip.localId,
@@ -192,16 +217,7 @@ export async function syncTripToServer(
         createdAt: segment.createdAt,
         updatedAt: segment.updatedAt,
       })),
-      points: input.tripPoints.map((point) => ({
-        localId: point.localId,
-        segmentLocalId: point.segmentLocalId,
-        latitude: point.latitude,
-        longitude: point.longitude,
-        recordedAt: point.recordedAt,
-        accuracy: point.accuracy,
-        altitude: point.altitude,
-        speed: point.speed,
-      })),
+      points: [],
       waypoints: input.waypoints.map((waypoint) => ({
         localId: waypoint.localId,
         segmentLocalId: waypoint.segmentLocalId,
@@ -216,6 +232,23 @@ export async function syncTripToServer(
       })),
     }),
   });
+
+  const orderedTripPoints = [...input.tripPoints].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+
+  for (const tripPointChunk of chunkItems(orderedTripPoints, TRIP_POINTS_SYNC_BATCH_SIZE)) {
+    await request<{ accepted: number; syncedAt: string; tripId: string; tripLocalId: string }>(
+      `/trips/${response.tripId}/points/sync`,
+      sessionToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          points: tripPointChunk.map(toTripPointSyncPayload),
+        }),
+      },
+    );
+  }
+
+  return response;
 }
 
 export async function uploadTripAttachmentToServer(
