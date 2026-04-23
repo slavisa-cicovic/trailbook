@@ -29,6 +29,29 @@ async function request<T>(path: string, sessionToken: string, init?: RequestInit
   }
 }
 
+async function requestFormData<T>(
+  path: string,
+  sessionToken: string,
+  body: FormData,
+) {
+  try {
+    return await requestFormDataWithToken<T>(path, sessionToken, body);
+  } catch (error) {
+    if (!(error instanceof BackendRequestError) || (error.status !== 401 && error.status !== 403)) {
+      throw error;
+    }
+
+    const refreshedSession = await refreshActiveIdentitySessionIfPossible();
+    const latestToken = refreshedSession?.sessionToken ?? getSessionStateSnapshot().identitySession?.sessionToken;
+
+    if (!latestToken || latestToken === sessionToken) {
+      throw error;
+    }
+
+    return requestFormDataWithToken<T>(path, latestToken, body);
+  }
+}
+
 async function requestWithToken<T>(path: string, sessionToken: string, init?: RequestInit) {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
@@ -37,6 +60,29 @@ async function requestWithToken<T>(path: string, sessionToken: string, init?: Re
       Authorization: `Bearer ${sessionToken}`,
       ...(init?.headers || {}),
     },
+  });
+
+  const payload = (await response.json().catch(() => null)) as { message?: string | string[] } & T | null;
+
+  if (!response.ok) {
+    const message = Array.isArray(payload?.message) ? payload.message.join(", ") : payload?.message;
+    throw new BackendRequestError(message || `Request failed with status ${response.status}`, response.status);
+  }
+
+  return (payload || {}) as T;
+}
+
+async function requestFormDataWithToken<T>(
+  path: string,
+  sessionToken: string,
+  body: FormData,
+) {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+    body,
   });
 
   const payload = (await response.json().catch(() => null)) as { message?: string | string[] } & T | null;
@@ -64,6 +110,7 @@ export async function syncTripToServer(
 
   const diagnosticsPayload: {
     accepted: TripDiagnostics["accepted"];
+    acceptedAfterLongGap: TripDiagnostics["acceptedAfterLongGap"];
     backgroundAccepted: TripDiagnostics["backgroundAccepted"];
     backgroundCallbacks: TripDiagnostics["backgroundCallbacks"];
     backgroundRejected: TripDiagnostics["backgroundRejected"];
@@ -88,6 +135,7 @@ export async function syncTripToServer(
   } | null = diagnostics
     ? {
         accepted: diagnostics.accepted,
+        acceptedAfterLongGap: diagnostics.acceptedAfterLongGap,
         backgroundAccepted: diagnostics.backgroundAccepted,
         backgroundCallbacks: diagnostics.backgroundCallbacks,
         backgroundRejected: diagnostics.backgroundRejected,
@@ -190,24 +238,11 @@ export async function uploadTripAttachmentToServer(
     } as never,
   );
 
-  const response = await fetch(`${getApiBaseUrl()}/trips/${tripId}/attachments/upload`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${sessionToken}`,
-    },
-    body: formData,
-  });
-
-  const payload = (await response.json().catch(() => null)) as
-    | { attachmentId: string; attachmentLocalId: string; waypointId: string; message?: string | string[] }
-    | null;
-
-  if (!response.ok) {
-    const message = Array.isArray(payload?.message) ? payload.message.join(", ") : payload?.message;
-    throw new Error(message || `Request failed with status ${response.status}`);
-  }
-
-  return payload as { attachmentId: string; attachmentLocalId: string; waypointId: string };
+  return requestFormData<{ attachmentId: string; attachmentLocalId: string; waypointId: string }>(
+    `/trips/${tripId}/attachments/upload`,
+    sessionToken,
+    formData,
+  );
 }
 
 export async function listOwnedTripsFromServer(sessionToken: string) {

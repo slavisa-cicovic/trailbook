@@ -11,6 +11,7 @@ import type {
 } from "../../domain/recording-config";
 import type { RecordingMode } from "../../domain/trips";
 import { requestFromBackend } from "../api/mobile-api.service";
+import { refreshActiveIdentitySessionIfPossible } from "../../state/session-store";
 import { loadRecordingConfig, saveRecordingConfig } from "../../storage/recording-config-storage";
 
 const MIN_DISTANCE_INTERVAL = 0;
@@ -60,10 +61,16 @@ export async function syncResolvedRecordingConfig(
   }
 
   try {
+    const refreshedSession = await refreshActiveIdentitySessionIfPossible();
+    const sessionForRequest =
+      refreshedSession?.mode === "authenticated" && refreshedSession.sessionToken
+        ? refreshedSession
+        : authenticatedSession;
+
     const remoteConfig = await requestFromBackend<MobileRecordingConfig>(
       "/auth/mobile/recording-config",
       { method: "GET" },
-      authenticatedSession.sessionToken ?? undefined,
+      sessionForRequest.sessionToken ?? undefined,
     );
 
     if (!isValidMobileRecordingConfig(remoteConfig)) {
