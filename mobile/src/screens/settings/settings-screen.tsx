@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Redirect } from "expo-router";
-import { Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
 import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
 import ScreenLayout from "../../components/layout/screen-layout";
@@ -58,6 +58,19 @@ export default function SettingsScreen() {
 
     await setActiveIdentitySession(null);
     clearSessionCredentials();
+  }
+
+  function handleConfirmLogout() {
+    Alert.alert("Log out", "Do you want to log out of Trailbook on this device?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: () => {
+          void handleLogout();
+        },
+      },
+    ]);
   }
 
   async function handleRestoreFromServer() {
@@ -122,7 +135,7 @@ export default function SettingsScreen() {
     <ScreenLayout
       accountEmail={identitySession.userEmail}
       accountMode={identitySession.mode}
-      onLogout={() => void handleLogout()}
+      onLogout={handleConfirmLogout}
       showBottomNavigation
       title="Settings"
     >

@@ -9,7 +9,7 @@ import type { SharedTripDetail } from "../../domain/shared-trips";
 import type { Waypoint } from "../../domain/trips";
 import { getSharedTrip } from "../../services/trips/server-trip-sharing.service";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
-import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { useSessionStore } from "../../state/session-store";
 import TripRouteMap, { type TrailbookMapType } from "./components/trip-route-map";
 
 const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
@@ -106,10 +106,6 @@ export default function SharedTripScreen() {
     void refreshSharedTrip();
   }, [identitySession?.sessionToken, resolvedShareId]);
 
-  async function handleLogout() {
-    await setActiveIdentitySession(null);
-  }
-
   function handleSelectWaypoint(waypoint: Waypoint) {
     if (!resolvedShareId) {
       return;
@@ -191,7 +187,6 @@ export default function SharedTripScreen() {
       contentStyle={styles.screenContent}
       contentVariant="plain"
       onBack={() => router.back()}
-      onLogout={() => void handleLogout()}
       scrollEnabled={false}
       showBottomNavigation
       title="Shared trip"

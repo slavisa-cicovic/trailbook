@@ -748,14 +748,6 @@ export default function RecordingScreen() {
     }
   }
 
-  async function handleClearLocalSession() {
-    if (backgroundRecordingSupported !== false) {
-      await stopBackgroundLocationTracking();
-    }
-    await stopMotionActivityUpdates();
-    await setActiveIdentitySession(null);
-  }
-
   async function handleSelectRecordingProfile(mode: RecordingMode) {
     if (!recordingSession.activeTripId || !activeTrip) {
       setRecordingDraft((current) => ({
@@ -1133,7 +1125,6 @@ export default function RecordingScreen() {
       accountMode={activeIdentitySession.mode}
       contentStyle={styles.screenContent}
       contentVariant="plain"
-      onLogout={() => void handleClearLocalSession()}
       scrollEnabled={false}
       showBottomNavigation
       title="Trailbook"

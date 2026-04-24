@@ -29,7 +29,7 @@ import {
   stopRecordingSession,
 } from "../../services/recording/recording.service";
 import { setRecordingSession, useRecordingStore } from "../../state/recording-store";
-import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { useSessionStore } from "../../state/session-store";
 import { setTripPauses, useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { useTripPointsStore } from "../../state/trip-points-store";
@@ -156,10 +156,6 @@ export default function TripsScreen() {
 
     void refreshSharedTrips();
   }, [identitySession?.mode, identitySession?.sessionToken, listMode]);
-
-  async function handleLogout() {
-    await setActiveIdentitySession(null);
-  }
 
   async function refreshSharedTrips() {
     if (!identitySession?.sessionToken) {
@@ -379,7 +375,6 @@ export default function TripsScreen() {
       accountMode={identitySession.mode}
       contentStyle={styles.screenContent}
       contentVariant="plain"
-      onLogout={() => void handleLogout()}
       showBottomNavigation
       title="Trips"
     >

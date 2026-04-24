@@ -30,7 +30,7 @@ import {
   createAttachmentTimestamp,
   createPhotoAttachmentForWaypoint,
 } from "../../services/waypoints/waypoints.service";
-import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { useSessionStore } from "../../state/session-store";
 import {
   setWaypointAttachments,
   useWaypointAttachmentsStore,
@@ -86,10 +86,6 @@ export default function TripWaypointScreen() {
   const selectedWaypointCategory = selectedWaypoint
     ? getWaypointCategoryOption(selectedWaypoint.category)
     : null;
-
-  async function handleLogout() {
-    await setActiveIdentitySession(null);
-  }
 
   function handleOpenEdit() {
     if (!selectedWaypoint) {
@@ -257,7 +253,6 @@ export default function TripWaypointScreen() {
         accountEmail={identitySession.userEmail}
         accountMode={identitySession.mode}
         contentVariant="plain"
-        onLogout={() => void handleLogout()}
         showBottomNavigation
         title="Waypoint"
       >
@@ -276,7 +271,6 @@ export default function TripWaypointScreen() {
         contentStyle={styles.screenContent}
         contentVariant="plain"
         onBack={() => router.back()}
-        onLogout={() => void handleLogout()}
         showBottomNavigation
         title="Waypoint"
     >

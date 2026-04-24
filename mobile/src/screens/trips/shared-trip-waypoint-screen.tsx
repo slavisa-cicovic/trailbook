@@ -11,7 +11,7 @@ import {
   buildTripAttachmentContentUrl,
   getSharedTrip,
 } from "../../services/trips/server-trip-sharing.service";
-import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { useSessionStore } from "../../state/session-store";
 import WaypointPhotoViewerModal from "./components/waypoint-photo-viewer-modal";
 
 export default function SharedTripWaypointScreen() {
@@ -59,10 +59,6 @@ export default function SharedTripWaypointScreen() {
       active = false;
     };
   }, [identitySession?.sessionToken, resolvedShareId]);
-
-  async function handleLogout() {
-    await setActiveIdentitySession(null);
-  }
 
   const selectedWaypoint = useMemo(
     () => sharedTrip?.trip.waypoints.find((waypoint) => waypoint.id === resolvedWaypointId) ?? null,
@@ -121,7 +117,6 @@ export default function SharedTripWaypointScreen() {
       contentStyle={styles.screenContent}
       contentVariant="plain"
       onBack={() => router.back()}
-      onLogout={() => void handleLogout()}
       showBottomNavigation
       title="Waypoint"
     >

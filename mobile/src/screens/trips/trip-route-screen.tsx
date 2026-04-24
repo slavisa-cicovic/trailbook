@@ -26,7 +26,7 @@ import {
   getVisibleTripPointsForTrip,
   smoothTripRoutePoints,
 } from "../../services/trip-points/trip-points.service";
-import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import { useSessionStore } from "../../state/session-store";
 import { useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
@@ -194,10 +194,6 @@ export default function TripRouteScreen() {
       })),
     [selectedTripAttachments, selectedTripWaypoints],
   );
-
-  async function handleLogout() {
-    await setActiveIdentitySession(null);
-  }
 
   async function syncSelectedTripIfNeeded() {
     if (!identitySession?.sessionToken || !selectedTrip) {
@@ -497,7 +493,6 @@ export default function TripRouteScreen() {
         accountEmail={identitySession.userEmail}
         accountMode={identitySession.mode}
         contentVariant="plain"
-        onLogout={() => void handleLogout()}
         showBottomNavigation
         title="Route"
       >
@@ -523,7 +518,6 @@ export default function TripRouteScreen() {
       contentStyle={styles.screenContent}
       contentVariant="plain"
       onBack={() => router.back()}
-      onLogout={() => void handleLogout()}
       scrollEnabled={false}
       showBottomNavigation
       title="Route"
