@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Redirect } from "expo-router";
+import * as Sharing from "expo-sharing";
 import { Alert, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
 import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
@@ -17,6 +18,7 @@ import { setThemeMode, useThemeStore } from "../../state/theme-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
+import { exportDatabaseSnapshot } from "../../storage/sqlite/db";
 
 function getRecordingConfigErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "Recording config update failed.";
@@ -46,6 +48,8 @@ export default function SettingsScreen() {
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [recordingConfigBusy, setRecordingConfigBusy] = useState(false);
   const [recordingConfigMessage, setRecordingConfigMessage] = useState<string | null>(null);
+  const [exportDatabaseBusy, setExportDatabaseBusy] = useState(false);
+  const [exportDatabaseMessage, setExportDatabaseMessage] = useState<string | null>(null);
 
   async function handleLogout() {
     if (identitySession?.sessionToken) {
@@ -124,6 +128,30 @@ export default function SettingsScreen() {
       setRecordingConfigMessage(getRecordingConfigErrorMessage(error));
     } finally {
       setRecordingConfigBusy(false);
+    }
+  }
+
+  async function handleExportDatabase() {
+    setExportDatabaseBusy(true);
+    setExportDatabaseMessage(null);
+
+    try {
+      const exportUri = await exportDatabaseSnapshot();
+      const sharingAvailable = await Sharing.isAvailableAsync();
+
+      if (sharingAvailable) {
+        await Sharing.shareAsync(exportUri, {
+          dialogTitle: "Export Trailbook database",
+          mimeType: "application/vnd.sqlite3",
+          UTI: "public.database",
+        });
+      }
+
+      setExportDatabaseMessage(`Database exported: ${exportUri.split("/").pop() ?? exportUri}`);
+    } catch (error) {
+      setExportDatabaseMessage(error instanceof Error ? error.message : "Database export failed.");
+    } finally {
+      setExportDatabaseBusy(false);
     }
   }
 
@@ -272,6 +300,28 @@ export default function SettingsScreen() {
             </Text>
           ) : null}
         </>
+      ) : null}
+      <Text style={[styles.label, { color: theme.mutedText }]}>Debug</Text>
+      <Pressable
+        onPress={() => void handleExportDatabase()}
+        style={[styles.restoreButton, { backgroundColor: theme.accentMuted }]}
+      >
+        <Text style={[styles.restoreButtonText, { color: theme.accent }]}>
+          {exportDatabaseBusy ? "Exporting..." : "Export database"}
+        </Text>
+      </Pressable>
+      <Text style={[styles.themeHint, { color: theme.mutedText }]}>
+        Temporary helper that exports the local SQLite database snapshot.
+      </Text>
+      {exportDatabaseMessage ? (
+        <Text
+          style={[
+            styles.restoreMessage,
+            { color: exportDatabaseMessage.startsWith("Database exported:") ? theme.accent : "#9f2f2f" },
+          ]}
+        >
+          {exportDatabaseMessage}
+        </Text>
       ) : null}
     </ScreenLayout>
   );
