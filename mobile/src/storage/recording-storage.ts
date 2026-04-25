@@ -12,6 +12,7 @@ import {
   normalizeMotionActivityType,
 } from "../domain/motion-activity";
 import type { RecordingSessionSummary } from "../domain/trips";
+import { loadJsonRecord, saveJsonRecord } from "./sqlite/db";
 
 function normalizeRecordingSession(
   value: Partial<RecordingSessionSummary> & { isRecording?: boolean },
@@ -46,18 +47,30 @@ function normalizeRecordingSession(
   };
 }
 
-export async function loadRecordingSession(): Promise<RecordingSessionSummary | null> {
+async function ensureRecordingSessionMigrated(): Promise<void> {
+  const existingRecord = await loadJsonRecord<RecordingSessionSummary>(STORAGE_KEYS.recording);
+
+  if (existingRecord) {
+    return;
+  }
+
   const rawValue = await AsyncStorage.getItem(STORAGE_KEYS.recording);
 
   if (!rawValue) {
-    return null;
+    return;
   }
 
-  return normalizeRecordingSession(JSON.parse(rawValue) as RecordingSessionSummary);
+  await saveJsonRecord(STORAGE_KEYS.recording, normalizeRecordingSession(JSON.parse(rawValue) as RecordingSessionSummary));
 }
 
-export async function saveRecordingSession(
-  recordingSession: RecordingSessionSummary,
-): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEYS.recording, JSON.stringify(recordingSession));
+export async function loadRecordingSession(): Promise<RecordingSessionSummary | null> {
+  await ensureRecordingSessionMigrated();
+
+  const record = await loadJsonRecord<RecordingSessionSummary>(STORAGE_KEYS.recording);
+  return record ? normalizeRecordingSession(record) : null;
+}
+
+export async function saveRecordingSession(recordingSession: RecordingSessionSummary): Promise<void> {
+  await ensureRecordingSessionMigrated();
+  await saveJsonRecord(STORAGE_KEYS.recording, recordingSession);
 }

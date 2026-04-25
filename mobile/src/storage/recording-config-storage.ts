@@ -2,22 +2,30 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { CachedMobileRecordingConfig } from "../domain/recording-config";
+import { loadJsonRecord, saveJsonRecord } from "./sqlite/db";
 
-export async function loadRecordingConfig(): Promise<CachedMobileRecordingConfig | null> {
-  const rawValue = await AsyncStorage.getItem(STORAGE_KEYS.recordingConfig);
+async function ensureRecordingConfigMigrated(): Promise<void> {
+  const existingRecord = await loadJsonRecord<CachedMobileRecordingConfig>(STORAGE_KEYS.recordingConfig);
 
-  if (!rawValue) {
-    return null;
-  }
-
-  return JSON.parse(rawValue) as CachedMobileRecordingConfig;
-}
-
-export async function saveRecordingConfig(record: CachedMobileRecordingConfig | null): Promise<void> {
-  if (!record) {
-    await AsyncStorage.removeItem(STORAGE_KEYS.recordingConfig);
+  if (existingRecord) {
     return;
   }
 
-  await AsyncStorage.setItem(STORAGE_KEYS.recordingConfig, JSON.stringify(record));
+  const rawValue = await AsyncStorage.getItem(STORAGE_KEYS.recordingConfig);
+
+  if (!rawValue) {
+    return;
+  }
+
+  await saveJsonRecord(STORAGE_KEYS.recordingConfig, JSON.parse(rawValue) as CachedMobileRecordingConfig);
+}
+
+export async function loadRecordingConfig(): Promise<CachedMobileRecordingConfig | null> {
+  await ensureRecordingConfigMigrated();
+  return loadJsonRecord<CachedMobileRecordingConfig>(STORAGE_KEYS.recordingConfig);
+}
+
+export async function saveRecordingConfig(record: CachedMobileRecordingConfig | null): Promise<void> {
+  await ensureRecordingConfigMigrated();
+  await saveJsonRecord(STORAGE_KEYS.recordingConfig, record);
 }

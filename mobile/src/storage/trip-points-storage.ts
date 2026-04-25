@@ -158,7 +158,7 @@ export async function saveTripPoints(tripPoints: TripPoint[]): Promise<void> {
   const database = await getDatabase();
 
   await database.withTransactionAsync(async () => {
-    await database.execAsync("DELETE FROM trip_points");
+    await database.runAsync("DELETE FROM trip_points");
 
     for (const tripPoint of tripPoints) {
       const row = toTripPointRow(tripPoint);
