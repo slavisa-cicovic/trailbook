@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripPause } from "../domain/trips";
-import { getDatabase } from "./sqlite/db";
+import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 
 function normalizeTripPause(
   value: Partial<TripPause> & Pick<TripPause, "localId" | "tripLocalId" | "deviceId" | "userId">,
@@ -94,7 +94,7 @@ async function ensureTripPausesMigrated(): Promise<void> {
     return;
   }
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     for (const tripPause of legacyTripPauses) {
       const row = toTripPauseRow(tripPause);
       await database.runAsync(
@@ -141,7 +141,7 @@ export async function saveTripPauses(tripPauses: TripPause[]): Promise<void> {
 
   const database = await getDatabase();
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM trip_pauses");
 
     for (const tripPause of tripPauses) {

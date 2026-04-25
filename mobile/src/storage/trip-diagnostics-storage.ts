@@ -8,7 +8,7 @@ import type {
   TripDiagnosticsRecentEvent,
 } from "../domain/trip-diagnostics";
 import type { RecordingMode } from "../domain/trips";
-import { getDatabase } from "./sqlite/db";
+import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 
 function normalizeRecentEvent(
   value: Partial<TripDiagnosticsRecentEvent> & Pick<TripDiagnosticsRecentEvent, "receivedAt" | "recordedAt">,
@@ -214,7 +214,7 @@ async function ensureTripDiagnosticsMigrated(): Promise<void> {
     return;
   }
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     for (const tripDiagnostics of legacyTripDiagnostics) {
       const row = toTripDiagnosticsRow(tripDiagnostics);
       await database.runAsync(
@@ -291,7 +291,7 @@ export async function saveTripDiagnostics(tripDiagnostics: TripDiagnostics[]): P
 
   const database = await getDatabase();
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM trip_diagnostics");
 
     for (const entry of tripDiagnostics) {

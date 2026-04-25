@@ -5,6 +5,7 @@ const DATABASE_NAME = "trailbook.db";
 const DATABASE_VERSION = 2;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let databaseWriteQueue: Promise<void> = Promise.resolve();
 
 function joinPath(directory: string, fileName: string) {
   return `${directory.replace(/\/+$/, "")}/${fileName}`;
@@ -189,6 +190,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!databasePromise) {
     databasePromise = SQLite.openDatabaseAsync(DATABASE_NAME).then(async (database) => {
       await migrateDatabaseIfNeeded(database);
+      await database.execAsync("PRAGMA busy_timeout = 5000;");
       return database;
     });
   }
@@ -251,21 +253,46 @@ export async function loadJsonRecord<T>(storageKey: string): Promise<T | null> {
 }
 
 export async function saveJsonRecord<T>(storageKey: string, value: T | null): Promise<void> {
-  const database = await getDatabase();
+  await runExclusiveDatabaseWrite(async (database) => {
+    if (value === null) {
+      await database.runAsync("DELETE FROM app_kv WHERE storage_key = ?", storageKey);
+      return;
+    }
 
-  if (value === null) {
-    await database.runAsync("DELETE FROM app_kv WHERE storage_key = ?", storageKey);
-    return;
+    await database.runAsync(
+      `INSERT OR REPLACE INTO app_kv (
+        storage_key,
+        json_value,
+        updated_at
+      ) VALUES (?, ?, ?)`,
+      storageKey,
+      JSON.stringify(value),
+      new Date().toISOString(),
+    );
+  });
+}
+
+export async function runExclusiveDatabaseWrite<T>(
+  task: (transaction: SQLite.SQLiteDatabase) => Promise<T>,
+): Promise<T> {
+  let releaseQueue: () => void = () => undefined;
+  const waitForTurn = databaseWriteQueue;
+  databaseWriteQueue = new Promise<void>((resolve) => {
+    releaseQueue = resolve;
+  });
+
+  await waitForTurn;
+
+  try {
+    const database = await getDatabase();
+    let result: T | undefined;
+
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      result = await task(transaction);
+    });
+
+    return result as T;
+  } finally {
+    releaseQueue();
   }
-
-  await database.runAsync(
-    `INSERT OR REPLACE INTO app_kv (
-      storage_key,
-      json_value,
-      updated_at
-    ) VALUES (?, ?, ?)`,
-    storageKey,
-    JSON.stringify(value),
-    new Date().toISOString(),
-  );
 }

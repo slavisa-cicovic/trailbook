@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEFAULT_RECORDING_PROFILE, normalizeRecordingProfile } from "../constants/recording-profiles";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripSegment } from "../domain/trips";
-import { getDatabase } from "./sqlite/db";
+import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 
 function normalizeTripSegment(
   value: Partial<TripSegment> & Pick<TripSegment, "localId" | "tripLocalId" | "deviceId" | "userId">,
@@ -99,7 +99,7 @@ async function ensureTripSegmentsMigrated(): Promise<void> {
     return;
   }
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     for (const tripSegment of legacyTripSegments) {
       const row = toTripSegmentRow(tripSegment);
       await database.runAsync(
@@ -148,7 +148,7 @@ export async function saveTripSegments(tripSegments: TripSegment[]): Promise<voi
 
   const database = await getDatabase();
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM trip_segments");
 
     for (const tripSegment of tripSegments) {

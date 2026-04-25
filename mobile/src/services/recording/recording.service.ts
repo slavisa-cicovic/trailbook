@@ -286,15 +286,16 @@ export function createResumedRecordingState(
   tripPauses: TripPause[];
   tripSegments: TripSegment[];
 } {
-  const openPause = getOpenTripPauseForTrip(tripPauses, trip.localId);
-
-  if (!openPause) {
-    throw new Error("This trip is not currently paused.");
-  }
-
   const orderedSegments = getVisibleTripSegmentsForTrip(tripSegments, trip.localId);
   const lastSegment = orderedSegments[orderedSegments.length - 1] ?? null;
+  const openPause = getOpenTripPauseForTrip(tripPauses, trip.localId);
   const nextRecordingProfile = lastSegment?.recordingProfile ?? trip.recordingProfile;
+  const pauseToClose =
+    openPause ??
+    createTripPause(
+      trip,
+      trip.updatedAt ?? lastSegment?.endedAt ?? resumedAt,
+    );
   const { nextSegment, tripSegments: nextTripSegments } = startNextTripSegment(
     {
       ...trip,
@@ -308,7 +309,11 @@ export function createResumedRecordingState(
   return {
     recordingProfile: nextRecordingProfile,
     tripSegments: nextTripSegments,
-    tripPauses: closeTripPause(tripPauses, openPause.localId, resumedAt),
+    tripPauses: closeTripPause(
+      openPause ? tripPauses : [...tripPauses, pauseToClose],
+      pauseToClose.localId,
+      resumedAt,
+    ),
     session: createRecordingSession(
       identitySession,
       trip.localId,

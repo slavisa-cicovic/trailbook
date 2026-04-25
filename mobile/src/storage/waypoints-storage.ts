@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEFAULT_WAYPOINT_CATEGORY, normalizeWaypointCategory } from "../constants/waypoint-categories";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { Waypoint } from "../domain/trips";
-import { getDatabase } from "./sqlite/db";
+import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 
 function normalizeWaypoint(
   value: Partial<Waypoint> & Pick<Waypoint, "localId" | "tripLocalId" | "deviceId" | "userId">,
@@ -115,7 +115,7 @@ async function ensureWaypointsMigrated(): Promise<void> {
     return;
   }
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     for (const waypoint of legacyWaypoints) {
       const row = toWaypointRow(waypoint);
       await database.runAsync(
@@ -170,7 +170,7 @@ export async function saveWaypoints(waypoints: Waypoint[]): Promise<void> {
 
   const database = await getDatabase();
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM waypoints");
 
     for (const waypoint of waypoints) {

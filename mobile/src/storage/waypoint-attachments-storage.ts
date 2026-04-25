@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { WaypointAttachment } from "../domain/trips";
-import { getDatabase } from "./sqlite/db";
+import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 
 function normalizeWaypointAttachment(
   value: Partial<WaypointAttachment> &
@@ -110,7 +110,7 @@ async function ensureWaypointAttachmentsMigrated(): Promise<void> {
     return;
   }
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     for (const attachment of legacyAttachments) {
       const row = toWaypointAttachmentRow(attachment);
       await database.runAsync(
@@ -163,7 +163,7 @@ export async function saveWaypointAttachments(attachments: WaypointAttachment[])
 
   const database = await getDatabase();
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM waypoint_attachments");
 
     for (const attachment of attachments) {

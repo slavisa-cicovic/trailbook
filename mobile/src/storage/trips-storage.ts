@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEFAULT_RECORDING_PROFILE, normalizeRecordingProfile } from "../constants/recording-profiles";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { Trip, TripStatus } from "../domain/trips";
-import { getDatabase } from "./sqlite/db";
+import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 
 function inferTripStatus(value: Partial<Trip>): TripStatus {
   if (value.status === "active" || value.status === "paused" || value.status === "ended") {
@@ -113,7 +113,7 @@ async function ensureTripsMigrated(): Promise<void> {
     return;
   }
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     for (const trip of legacyTrips) {
       const row = toTripRow(trip);
       await database.runAsync(
@@ -166,7 +166,7 @@ export async function saveTrips(trips: Trip[]): Promise<void> {
 
   const database = await getDatabase();
 
-  await database.withTransactionAsync(async () => {
+  await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM trips");
 
     for (const trip of trips) {
