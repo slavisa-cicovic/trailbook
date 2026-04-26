@@ -13,7 +13,7 @@ import {
 } from "../../services/trip-segments/trip-segments.service";
 import {
   buildTripsAggregateSummary,
-  buildTripSummary,
+  buildTripSummaryWithPoints,
   filterTripsByDate,
   formatDurationSummary,
   getVisibleTrips,
@@ -32,12 +32,12 @@ import { setRecordingSession, useRecordingStore } from "../../state/recording-st
 import { useSessionStore } from "../../state/session-store";
 import { setTripPauses, useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
-import { useTripPointsStore } from "../../state/trip-points-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
 import { listSharedTrips, syncTripToServer } from "../../services/trips/server-trip-sharing.service";
+import { loadTripPointsForTrip, loadTripStatsByTripLocalIds, type TripStatsRow } from "../../storage/trip-points-storage";
 import TripEditModal from "./components/trip-edit-modal";
 
 interface PendingUndoState {
@@ -64,7 +64,6 @@ export default function TripsScreen() {
   const trips = useTripsStore((state) => state.trips);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const tripPauses = useTripPausesStore((state) => state.tripPauses);
-  const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
@@ -76,6 +75,8 @@ export default function TripsScreen() {
   const [sharedTrips, setSharedTrips] = useState<SharedTripSummary[]>([]);
   const [sharedTripsLoading, setSharedTripsLoading] = useState(false);
   const [sharedTripsError, setSharedTripsError] = useState<string | null>(null);
+  const [tripStatsByTripId, setTripStatsByTripId] = useState<Map<string, TripStatsRow>>(new Map());
+  const [tripStatsLoading, setTripStatsLoading] = useState(false);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -87,9 +88,6 @@ export default function TripsScreen() {
   const currentUserTripSegments = identitySession
     ? tripSegments.filter((segment) => segment.userId === identitySession.userId)
     : [];
-  const currentUserTripPoints = identitySession
-    ? tripPoints.filter((tripPoint) => tripPoint.userId === identitySession.userId)
-    : [];
   const currentUserWaypoints = identitySession
     ? waypoints.filter((waypoint) => waypoint.userId === identitySession.userId)
     : [];
@@ -99,10 +97,50 @@ export default function TripsScreen() {
 
   const visibleTrips = getVisibleTrips(currentUserTrips);
   const filteredTrips = filterTripsByDate(visibleTrips, dateFilter);
-  const tripSummaries = filteredTrips.map((trip) =>
-    buildTripSummary(trip, currentUserTripPoints, currentUserWaypoints, currentUserWaypointAttachments),
+  const filteredTripIds = filteredTrips.map((trip) => trip.localId);
+  const filteredTripIdsKey = filteredTripIds.join("|");
+  const tripSummaries = filteredTrips.map((trip) => ({
+    ...buildTripSummaryWithPoints(trip, [], currentUserWaypoints, currentUserWaypointAttachments),
+    distanceMeters: tripStatsByTripId.get(trip.localId)?.distance_meters ?? 0,
+  }));
+  const tripsAggregateSummary = filteredTrips.reduce(
+    (summary, trip) => {
+      const distanceMeters = tripStatsByTripId.get(trip.localId)?.distance_meters ?? 0;
+      const durationMs = Math.max(
+        0,
+        new Date(trip.endedAt ?? new Date().toISOString()).getTime() - new Date(trip.startedAt).getTime(),
+      );
+
+      summary.totalTripCount += 1;
+      summary.totalDurationMs += durationMs;
+      summary.totalDistanceMeters += distanceMeters;
+
+      if (trip.recordingProfile === "drive") {
+        summary.driveTripCount += 1;
+        summary.driveDurationMs += durationMs;
+        summary.driveDistanceMeters += distanceMeters;
+      } else if (trip.recordingProfile === "boat") {
+        summary.boatTripCount += 1;
+        summary.boatDurationMs += durationMs;
+        summary.boatDistanceMeters += distanceMeters;
+      } else if (trip.recordingProfile === "plane") {
+        summary.planeTripCount += 1;
+        summary.planeDurationMs += durationMs;
+        summary.planeDistanceMeters += distanceMeters;
+      } else if (trip.recordingProfile === "bike") {
+        summary.bikeTripCount += 1;
+        summary.bikeDurationMs += durationMs;
+        summary.bikeDistanceMeters += distanceMeters;
+      } else {
+        summary.walkTripCount += 1;
+        summary.walkDurationMs += durationMs;
+        summary.walkDistanceMeters += distanceMeters;
+      }
+
+      return summary;
+    },
+    buildTripsAggregateSummary([], []),
   );
-  const tripsAggregateSummary = buildTripsAggregateSummary(filteredTrips, currentUserTripPoints);
   const summaryRows = [
     {
       label: "Walk",
@@ -148,6 +186,38 @@ export default function TripsScreen() {
 
     return () => clearTimeout(timeoutId);
   }, [pendingUndo]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTripStats() {
+      if (filteredTripIds.length === 0) {
+        setTripStatsByTripId(new Map());
+        setTripStatsLoading(false);
+        return;
+      }
+
+      setTripStatsLoading(true);
+
+      try {
+        const nextTripStatsByTripId = await loadTripStatsByTripLocalIds(filteredTripIds);
+
+        if (!cancelled) {
+          setTripStatsByTripId(nextTripStatsByTripId);
+        }
+      } finally {
+        if (!cancelled) {
+          setTripStatsLoading(false);
+        }
+      }
+    }
+
+    void loadTripStats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredTripIdsKey]);
 
   useEffect(() => {
     if (listMode !== "shared" || identitySession?.mode !== "authenticated" || !identitySession.sessionToken) {
@@ -200,7 +270,7 @@ export default function TripsScreen() {
     await syncTripToServer(identitySession.sessionToken, {
       attachments: tripAttachments,
       trip,
-      tripPoints: currentUserTripPoints.filter((point) => point.tripLocalId === tripLocalId),
+      tripPoints: await loadTripPointsForTrip(tripLocalId),
       tripSegments: currentUserTripSegments.filter((segment) => segment.tripLocalId === tripLocalId),
       waypoints: tripWaypoints,
     });
@@ -451,9 +521,15 @@ export default function TripsScreen() {
             {summaryRows.map((row) => (
               <View key={row.label} style={styles.summaryRow}>
                 <Text style={[styles.summaryModeText, styles.summaryModeCell]}>{row.label}</Text>
-                <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                  {formatDistanceKm(row.distanceMeters)}
-                </Text>
+                {tripStatsLoading ? (
+                  <View style={[styles.summaryValueCell, styles.summarySkeletonCell]}>
+                    <View style={styles.summaryValueSkeleton} />
+                  </View>
+                ) : (
+                  <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                    {formatDistanceKm(row.distanceMeters)}
+                  </Text>
+                )}
                 <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
                   {formatDurationSummary(row.durationMs)}
                 </Text>
@@ -464,9 +540,15 @@ export default function TripsScreen() {
             ))}
             <View style={[styles.summaryRow, styles.summaryTotalRow]}>
               <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Total</Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDistanceKm(tripsAggregateSummary.totalDistanceMeters)}
-              </Text>
+              {tripStatsLoading ? (
+                <View style={[styles.summaryValueCell, styles.summarySkeletonCell]}>
+                  <View style={styles.summaryValueSkeleton} />
+                </View>
+              ) : (
+                <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                  {formatDistanceKm(tripsAggregateSummary.totalDistanceMeters)}
+                </Text>
+              )}
               <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
                 {formatDurationSummary(tripsAggregateSummary.totalDurationMs)}
               </Text>
@@ -492,6 +574,7 @@ export default function TripsScreen() {
                   new Date(trip.endedAt ?? new Date().toISOString()).getTime() -
                     new Date(trip.startedAt).getTime(),
                 );
+                const tripDistanceLoading = tripStatsLoading && !tripStatsByTripId.has(trip.localId);
 
                 return (
                   <Swipeable
@@ -559,7 +642,11 @@ export default function TripsScreen() {
                             </View>
                             <View style={styles.metaCell}>
                               <Text style={styles.metaKey}>Distance</Text>
-                              <Text style={styles.metaValue}>{formatDistanceKm(distanceMeters)}</Text>
+                              {tripDistanceLoading ? (
+                                <View style={styles.metaValueSkeleton} />
+                              ) : (
+                                <Text style={styles.metaValue}>{formatDistanceKm(distanceMeters)}</Text>
+                              )}
                             </View>
                             <View style={styles.metaCell}>
                               <Text style={styles.metaKey}>Waypoints</Text>
@@ -808,6 +895,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#355035",
   },
+  summarySkeletonCell: {
+    alignItems: "flex-start",
+  },
+  summaryValueSkeleton: {
+    width: 68,
+    height: 14,
+    borderRadius: 999,
+    backgroundColor: "#ddd4c3",
+  },
   empty: {
     fontSize: 15,
     color: "#52624f",
@@ -890,6 +986,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#243224",
+  },
+  metaValueSkeleton: {
+    width: 78,
+    height: 15,
+    borderRadius: 999,
+    backgroundColor: "#ddd4c3",
+    marginTop: 2,
   },
   sharedHeaderRow: {
     flexDirection: "row",

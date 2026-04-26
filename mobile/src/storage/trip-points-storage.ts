@@ -4,6 +4,13 @@ import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripPoint } from "../domain/trips";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 
+export interface TripStatsRow {
+  distance_meters: number;
+  point_count: number;
+  trip_local_id: string;
+  updated_at: string;
+}
+
 function normalizeTripPoint(
   value: Partial<TripPoint> & Pick<TripPoint, "localId" | "tripLocalId" | "deviceId" | "userId">,
 ): TripPoint {
@@ -74,6 +81,118 @@ function toTripPointFromRow(row: TripPointRow): TripPoint {
     tripLocalId: row.trip_local_id,
     userId: row.user_id,
   });
+}
+
+function calculateDistanceBetweenPoints(left: TripPoint, right: TripPoint): number {
+  const earthRadiusMeters = 6371000;
+  const deltaLatitude = ((right.latitude - left.latitude) * Math.PI) / 180;
+  const deltaLongitude = ((right.longitude - left.longitude) * Math.PI) / 180;
+  const latitudeLeft = (left.latitude * Math.PI) / 180;
+  const latitudeRight = (right.latitude * Math.PI) / 180;
+
+  const haversine =
+    Math.sin(deltaLatitude / 2) * Math.sin(deltaLatitude / 2) +
+    Math.cos(latitudeLeft) *
+      Math.cos(latitudeRight) *
+      Math.sin(deltaLongitude / 2) *
+      Math.sin(deltaLongitude / 2);
+
+  const arc = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+
+  return earthRadiusMeters * arc;
+}
+
+function calculateTripDistanceMeters(tripPoints: TripPoint[]): number {
+  if (tripPoints.length < 2) {
+    return 0;
+  }
+
+  let totalDistanceMeters = 0;
+
+  for (let index = 1; index < tripPoints.length; index += 1) {
+    const segmentDistance = calculateDistanceBetweenPoints(tripPoints[index - 1], tripPoints[index]);
+
+    if (segmentDistance >= 5) {
+      totalDistanceMeters += segmentDistance;
+    }
+  }
+
+  return totalDistanceMeters;
+}
+
+function groupTripPointsByTripLocalId(tripPoints: TripPoint[]): Map<string, TripPoint[]> {
+  const groupedTripPoints = new Map<string, TripPoint[]>();
+
+  for (const tripPoint of tripPoints) {
+    const existingTripPoints = groupedTripPoints.get(tripPoint.tripLocalId);
+
+    if (existingTripPoints) {
+      existingTripPoints.push(tripPoint);
+    } else {
+      groupedTripPoints.set(tripPoint.tripLocalId, [tripPoint]);
+    }
+  }
+
+  for (const groupedPoints of groupedTripPoints.values()) {
+    groupedPoints.sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  }
+
+  return groupedTripPoints;
+}
+
+async function replaceTripStats(
+  database: Awaited<ReturnType<typeof getDatabase>>,
+  groupedTripPoints: Map<string, TripPoint[]>,
+) {
+  await database.runAsync("DELETE FROM trip_stats");
+
+  const updatedAt = new Date().toISOString();
+
+  for (const [tripLocalId, groupedPoints] of groupedTripPoints.entries()) {
+    await database.runAsync(
+      `INSERT INTO trip_stats (
+        trip_local_id,
+        point_count,
+        distance_meters,
+        updated_at
+      ) VALUES (?, ?, ?, ?)`,
+      tripLocalId,
+      groupedPoints.length,
+      calculateTripDistanceMeters(groupedPoints),
+      updatedAt,
+    );
+  }
+}
+
+async function updateTripStatsForTripLocalIds(
+  database: Awaited<ReturnType<typeof getDatabase>>,
+  groupedTripPoints: Map<string, TripPoint[]>,
+  tripLocalIds: string[],
+) {
+  const updatedAt = new Date().toISOString();
+
+  for (const tripLocalId of tripLocalIds) {
+    await database.runAsync("DELETE FROM trip_stats WHERE trip_local_id = ?", tripLocalId);
+
+    const groupedPoints = groupedTripPoints.get(tripLocalId);
+
+    if (!groupedPoints || groupedPoints.length === 0) {
+      continue;
+    }
+
+    await database.runAsync(
+      `INSERT INTO trip_stats (
+        trip_local_id,
+        point_count,
+        distance_meters,
+        updated_at
+      ) VALUES (?, ?, ?, ?)`,
+      tripLocalId,
+      groupedPoints.length,
+      calculateTripDistanceMeters(groupedPoints),
+      updatedAt,
+    );
+  }
 }
 
 async function loadLegacyTripPointsFromAsyncStorage(): Promise<TripPoint[]> {
@@ -152,18 +271,165 @@ export async function loadTripPoints(): Promise<TripPoint[]> {
   return rows.map(toTripPointFromRow);
 }
 
-export async function saveTripPoints(tripPoints: TripPoint[]): Promise<void> {
+export async function loadTripPointsForTrip(tripLocalId: string): Promise<TripPoint[]> {
   await ensureTripPointsMigrated();
 
   const database = await getDatabase();
+  const rows = await database.getAllAsync<TripPointRow>(
+    "SELECT * FROM trip_points WHERE trip_local_id = ? ORDER BY recorded_at ASC, local_id ASC",
+    tripLocalId,
+  );
+
+  return rows.map(toTripPointFromRow);
+}
+
+export async function loadTripStatsByTripLocalIds(tripLocalIds: string[]): Promise<Map<string, TripStatsRow>> {
+  await ensureTripPointsMigrated();
+
+  if (tripLocalIds.length === 0) {
+    return new Map();
+  }
+
+  const database = await getDatabase();
+  const placeholders = tripLocalIds.map(() => "?").join(", ");
+  const rows = await database.getAllAsync<TripStatsRow>(
+    `SELECT * FROM trip_stats WHERE trip_local_id IN (${placeholders})`,
+    ...tripLocalIds,
+  );
+  const rowTripLocalIds = new Set(rows.map((row) => row.trip_local_id));
+  const missingTripLocalIds = tripLocalIds.filter((tripLocalId) => !rowTripLocalIds.has(tripLocalId));
+
+  if (missingTripLocalIds.length > 0) {
+    const missingPlaceholders = missingTripLocalIds.map(() => "?").join(", ");
+    const missingPointRows = await database.getAllAsync<TripPointRow>(
+      `SELECT * FROM trip_points WHERE trip_local_id IN (${missingPlaceholders}) ORDER BY recorded_at ASC, local_id ASC`,
+      ...missingTripLocalIds,
+    );
+    const missingTripPointsByTripLocalId = groupTripPointsByTripLocalId(
+      missingPointRows.map(toTripPointFromRow),
+    );
+
+    if (missingTripPointsByTripLocalId.size > 0) {
+      await runExclusiveDatabaseWrite(async (database) => {
+        await updateTripStatsForTripLocalIds(
+          database,
+          missingTripPointsByTripLocalId,
+          missingTripLocalIds,
+        );
+      });
+
+      const nextRows = await database.getAllAsync<TripStatsRow>(
+        `SELECT * FROM trip_stats WHERE trip_local_id IN (${placeholders})`,
+        ...tripLocalIds,
+      );
+
+      return new Map(nextRows.map((row) => [row.trip_local_id, row]));
+    }
+  }
+
+  return new Map(rows.map((row) => [row.trip_local_id, row]));
+}
+
+function areTripPointsEqual(left: TripPoint, right: TripPoint): boolean {
+  return (
+    left.localId === right.localId &&
+    left.serverId === right.serverId &&
+    left.tripLocalId === right.tripLocalId &&
+    left.segmentLocalId === right.segmentLocalId &&
+    left.deviceId === right.deviceId &&
+    left.userId === right.userId &&
+    left.latitude === right.latitude &&
+    left.longitude === right.longitude &&
+    left.recordedAt === right.recordedAt &&
+    left.accuracy === right.accuracy &&
+    left.altitude === right.altitude &&
+    left.speed === right.speed &&
+    left.syncStatus === right.syncStatus
+  );
+}
+
+export async function saveTripPoints(
+  tripPoints: TripPoint[],
+  previousTripPoints?: TripPoint[],
+): Promise<void> {
+  await ensureTripPointsMigrated();
+
+  if (!previousTripPoints) {
+    await runExclusiveDatabaseWrite(async (database) => {
+      await database.runAsync("DELETE FROM trip_points");
+
+      for (const tripPoint of tripPoints) {
+        const row = toTripPointRow(tripPoint);
+        await database.runAsync(
+          `INSERT INTO trip_points (
+            local_id,
+            server_id,
+            trip_local_id,
+            segment_local_id,
+            device_id,
+            user_id,
+            latitude,
+            longitude,
+            recorded_at,
+            accuracy,
+            altitude,
+            speed,
+            sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          row.local_id,
+          row.server_id,
+          row.trip_local_id,
+          row.segment_local_id,
+          row.device_id,
+          row.user_id,
+          row.latitude,
+          row.longitude,
+          row.recorded_at,
+          row.accuracy,
+          row.altitude,
+          row.speed,
+          row.sync_status,
+        );
+      }
+
+      await replaceTripStats(database, groupTripPointsByTripLocalId(tripPoints));
+    });
+
+    return;
+  }
+
+  const previousTripPointsById = new Map(previousTripPoints.map((tripPoint) => [tripPoint.localId, tripPoint]));
+  const nextTripPointsById = new Map(tripPoints.map((tripPoint) => [tripPoint.localId, tripPoint]));
+  const removedTripPointIds = previousTripPoints
+    .filter((tripPoint) => !nextTripPointsById.has(tripPoint.localId))
+    .map((tripPoint) => tripPoint.localId);
+  const upsertTripPoints = tripPoints.filter((tripPoint) => {
+    const previousTripPoint = previousTripPointsById.get(tripPoint.localId);
+    return !previousTripPoint || !areTripPointsEqual(previousTripPoint, tripPoint);
+  });
+
+  if (removedTripPointIds.length === 0 && upsertTripPoints.length === 0) {
+    return;
+  }
+
+  const affectedTripLocalIds = Array.from(
+    new Set([
+      ...upsertTripPoints.map((tripPoint) => tripPoint.tripLocalId),
+      ...previousTripPoints
+        .filter((tripPoint) => removedTripPointIds.includes(tripPoint.localId))
+        .map((tripPoint) => tripPoint.tripLocalId),
+    ]),
+  );
 
   await runExclusiveDatabaseWrite(async (database) => {
-    await database.runAsync("DELETE FROM trip_points");
+    for (const localId of removedTripPointIds) {
+      await database.runAsync("DELETE FROM trip_points WHERE local_id = ?", localId);
+    }
 
-    for (const tripPoint of tripPoints) {
+    for (const tripPoint of upsertTripPoints) {
       const row = toTripPointRow(tripPoint);
       await database.runAsync(
-        `INSERT INTO trip_points (
+        `INSERT OR REPLACE INTO trip_points (
           local_id,
           server_id,
           trip_local_id,
@@ -193,5 +459,11 @@ export async function saveTripPoints(tripPoints: TripPoint[]): Promise<void> {
         row.sync_status,
       );
     }
+
+    await updateTripStatsForTripLocalIds(
+      database,
+      groupTripPointsByTripLocalId(tripPoints),
+      affectedTripLocalIds,
+    );
   });
 }

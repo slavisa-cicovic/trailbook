@@ -69,6 +69,15 @@ export async function hydrateSessionStore(): Promise<void> {
       identitySession = mergeRefreshedIdentitySession(identitySession, refreshedSession);
       await saveSession(identitySession);
     } catch (error) {
+      if (__DEV__) {
+        console.warn(
+          "[Session] Startup refresh failed",
+          error instanceof BackendRequestError
+            ? { message: error.message, status: error.status }
+            : { message: error instanceof Error ? error.message : "Unknown error" },
+        );
+      }
+
       if (error instanceof BackendRequestError && (error.status === 401 || error.status === 403)) {
         identitySession = null;
         await saveSession(null);
@@ -123,6 +132,15 @@ export async function refreshActiveIdentitySessionIfPossible(): Promise<Authenti
       await saveSession(nextSession);
       return nextSession;
     } catch (error) {
+      if (__DEV__) {
+        console.warn(
+          "[Session] Active refresh failed",
+          error instanceof BackendRequestError
+            ? { message: error.message, status: error.status }
+            : { message: error instanceof Error ? error.message : "Unknown error" },
+        );
+      }
+
       if (error instanceof BackendRequestError && (error.status === 401 || error.status === 403)) {
         setState((currentState) => ({
           ...currentState,

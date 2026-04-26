@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 import * as FileSystem from "expo-file-system/legacy";
 
 const DATABASE_NAME = "trailbook.db";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let databaseWriteQueue: Promise<void> = Promise.resolve();
@@ -182,6 +182,18 @@ async function migrateDatabaseIfNeeded(database: SQLite.SQLiteDatabase) {
       );
 
       PRAGMA user_version = 2;
+    `);
+  }
+
+  if (currentVersion < 3) {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS trip_stats (
+        trip_local_id TEXT PRIMARY KEY NOT NULL,
+        point_count INTEGER NOT NULL,
+        distance_meters REAL NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      PRAGMA user_version = 3;
     `);
   }
 }

@@ -53,10 +53,12 @@ export async function hydrateTripPointsStore(): Promise<void> {
 }
 
 export async function setTripPoints(tripPoints: TripPoint[]): Promise<void> {
+  const previousTripPoints = state.tripPoints;
+
   setState((currentState) => ({
     ...currentState,
     tripPoints,
   }));
 
-  await saveTripPoints(tripPoints);
+  await saveTripPoints(tripPoints, previousTripPoints);
 }

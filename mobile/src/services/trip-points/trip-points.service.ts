@@ -435,6 +435,26 @@ export function getVisibleTripPointsForTrip(tripPoints: TripPoint[], tripLocalId
     .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
 }
 
+export function groupVisibleTripPointsByTripId(tripPoints: TripPoint[]): Map<string, TripPoint[]> {
+  const groupedTripPoints = new Map<string, TripPoint[]>();
+
+  for (const tripPoint of tripPoints) {
+    const existingTripPoints = groupedTripPoints.get(tripPoint.tripLocalId);
+
+    if (existingTripPoints) {
+      existingTripPoints.push(tripPoint);
+    } else {
+      groupedTripPoints.set(tripPoint.tripLocalId, [tripPoint]);
+    }
+  }
+
+  for (const groupedPoints of groupedTripPoints.values()) {
+    groupedPoints.sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  }
+
+  return groupedTripPoints;
+}
+
 export function appendTripPointIfUseful(
   tripPoints: TripPoint[],
   nextTripPoint: TripPoint,

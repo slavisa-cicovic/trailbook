@@ -42,7 +42,6 @@ export default function RootLayout() {
   const tripsHydrated = useTripsStore((state) => state.hydrated);
   const tripSegmentsHydrated = useTripSegmentsStore((state) => state.hydrated);
   const tripPausesHydrated = useTripPausesStore((state) => state.hydrated);
-  const tripPointsHydrated = useTripPointsStore((state) => state.hydrated);
   const waypointsHydrated = useWaypointsStore((state) => state.hydrated);
   const waypointAttachmentsHydrated = useWaypointAttachmentsStore((state) => state.hydrated);
 
@@ -58,10 +57,10 @@ export default function RootLayout() {
         hydrateTripsStore(),
         hydrateTripPausesStore(),
         hydrateTripSegmentsStore(),
-        hydrateTripPointsStore(),
         hydrateWaypointsStore(),
         hydrateWaypointAttachmentsStore(),
       ]);
+      void hydrateTripPointsStore();
       await reconcileHydratedRecordingState(
         getTripsStateSnapshot().trips,
         getTripSegmentsStateSnapshot().tripSegments,
@@ -121,7 +120,6 @@ export default function RootLayout() {
     !tripsHydrated ||
     !tripPausesHydrated ||
     !tripSegmentsHydrated ||
-    !tripPointsHydrated ||
     !waypointsHydrated ||
     !waypointAttachmentsHydrated
   ) {

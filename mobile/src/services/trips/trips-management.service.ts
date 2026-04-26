@@ -6,7 +6,11 @@ import type {
   WaypointAttachment,
   WaypointCategory,
 } from "../../domain/trips";
-import { calculateTripDistanceMeters, getVisibleTripPointsForTrip } from "../trip-points/trip-points.service";
+import {
+  calculateTripDistanceMeters,
+  getVisibleTripPointsForTrip,
+  groupVisibleTripPointsByTripId,
+} from "../trip-points/trip-points.service";
 
 export interface TripSummary {
   distanceMeters: number;
@@ -132,13 +136,15 @@ export function filterTripsByDate(
 }
 
 export function buildTripsAggregateSummary(trips: Trip[], tripPoints: TripPoint[]): TripsAggregateSummary {
+  const tripPointsByTripId = groupVisibleTripPointsByTripId(tripPoints);
+
   return trips.reduce<TripsAggregateSummary>(
     (summary, trip) => {
       const durationMs = getTripDurationMs(trip);
       const isDrive = isDriveProfile(trip.recordingProfile);
       const isBoat = isBoatProfile(trip.recordingProfile);
       const isPlane = isPlaneProfile(trip.recordingProfile);
-      const distanceMeters = calculateTripDistanceMeters(getVisibleTripPointsForTrip(tripPoints, trip.localId));
+      const distanceMeters = calculateTripDistanceMeters(tripPointsByTripId.get(trip.localId) ?? []);
 
       summary.totalTripCount += 1;
       summary.totalDurationMs += durationMs;
@@ -239,6 +245,26 @@ export function buildTripSummary(
 
   return {
     distanceMeters: calculateTripDistanceMeters(orderedTripPoints),
+    trip,
+    waypointCount: tripWaypoints.length,
+    photoCount: tripAttachments.length,
+  };
+}
+
+export function buildTripSummaryWithPoints(
+  trip: Trip,
+  tripPoints: TripPoint[],
+  waypoints: Waypoint[],
+  attachments: WaypointAttachment[],
+): TripSummary {
+  const tripWaypoints = getVisibleWaypointsForTrip(waypoints, trip.localId);
+  const tripAttachments = getVisibleAttachmentsForWaypoints(
+    attachments,
+    tripWaypoints.map((waypoint) => waypoint.localId),
+  );
+
+  return {
+    distanceMeters: calculateTripDistanceMeters(tripPoints),
     trip,
     waypointCount: tripWaypoints.length,
     photoCount: tripAttachments.length,
