@@ -14,6 +14,11 @@ export interface TripSegmentSummary {
   segment: TripSegment;
 }
 
+interface TripSegmentStatsSummary {
+  distance_meters: number;
+  duration_ms: number;
+}
+
 function getSegmentDurationMs(segment: TripSegment): number {
   const startedAt = new Date(segment.startedAt).getTime();
   const endedAt = new Date(segment.endedAt ?? new Date().toISOString()).getTime();
@@ -174,16 +179,21 @@ export function buildTripSegmentsSummary(
   tripSegments: TripSegment[],
   tripPoints: TripPoint[],
   tripLocalId: string,
+  segmentStatsBySegmentId?: Map<string, TripSegmentStatsSummary>,
 ): TripSegmentSummary[] {
   return getVisibleTripSegmentsForTrip(tripSegments, tripLocalId).map((segment) => {
-    const segmentTripPoints = getVisibleTripPointsForTrip(tripPoints, tripLocalId).filter(
-      (tripPoint) => tripPoint.segmentLocalId === segment.localId,
-    );
-    const durationMs = getSegmentDurationMs(segment);
+    const segmentStats = segmentStatsBySegmentId?.get(segment.localId) ?? null;
+    const segmentTripPoints = segmentStats
+      ? []
+      : getVisibleTripPointsForTrip(tripPoints, tripLocalId).filter(
+          (tripPoint) => tripPoint.segmentLocalId === segment.localId,
+        );
+    const durationMs =
+      segmentStats && segment.endedAt ? segmentStats.duration_ms : getSegmentDurationMs(segment);
 
     return {
       segment,
-      distanceMeters: calculateTripDistanceMeters(segmentTripPoints),
+      distanceMeters: segmentStats ? segmentStats.distance_meters : calculateTripDistanceMeters(segmentTripPoints),
       durationMs,
       durationLabel: formatDurationSummary(durationMs),
     };

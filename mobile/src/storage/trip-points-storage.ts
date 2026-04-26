@@ -11,6 +11,15 @@ export interface TripStatsRow {
   updated_at: string;
 }
 
+export interface TripSegmentStatsRow {
+  distance_meters: number;
+  duration_ms: number;
+  point_count: number;
+  segment_local_id: string;
+  trip_local_id: string;
+  updated_at: string;
+}
+
 function normalizeTripPoint(
   value: Partial<TripPoint> & Pick<TripPoint, "localId" | "tripLocalId" | "deviceId" | "userId">,
 ): TripPoint {
@@ -45,6 +54,13 @@ interface TripPointRow {
   sync_status: TripPoint["syncStatus"];
   trip_local_id: string;
   user_id: string;
+}
+
+interface TripSegmentStatsSourceRow {
+  ended_at: string | null;
+  local_id: string;
+  started_at: string;
+  trip_local_id: string;
 }
 
 function toTripPointRow(tripPoint: TripPoint): TripPointRow {
@@ -120,6 +136,17 @@ function calculateTripDistanceMeters(tripPoints: TripPoint[]): number {
   return totalDistanceMeters;
 }
 
+function calculateSegmentDurationMs(segment: TripSegmentStatsSourceRow): number {
+  const startedAt = new Date(segment.started_at).getTime();
+  const endedAt = new Date(segment.ended_at ?? new Date().toISOString()).getTime();
+
+  if (Number.isNaN(startedAt) || Number.isNaN(endedAt) || endedAt < startedAt) {
+    return 0;
+  }
+
+  return endedAt - startedAt;
+}
+
 function groupTripPointsByTripLocalId(tripPoints: TripPoint[]): Map<string, TripPoint[]> {
   const groupedTripPoints = new Map<string, TripPoint[]>();
 
@@ -130,6 +157,30 @@ function groupTripPointsByTripLocalId(tripPoints: TripPoint[]): Map<string, Trip
       existingTripPoints.push(tripPoint);
     } else {
       groupedTripPoints.set(tripPoint.tripLocalId, [tripPoint]);
+    }
+  }
+
+  for (const groupedPoints of groupedTripPoints.values()) {
+    groupedPoints.sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  }
+
+  return groupedTripPoints;
+}
+
+function groupTripPointsBySegmentLocalId(tripPoints: TripPoint[]): Map<string, TripPoint[]> {
+  const groupedTripPoints = new Map<string, TripPoint[]>();
+
+  for (const tripPoint of tripPoints) {
+    if (!tripPoint.segmentLocalId) {
+      continue;
+    }
+
+    const existingTripPoints = groupedTripPoints.get(tripPoint.segmentLocalId);
+
+    if (existingTripPoints) {
+      existingTripPoints.push(tripPoint);
+    } else {
+      groupedTripPoints.set(tripPoint.segmentLocalId, [tripPoint]);
     }
   }
 
@@ -164,6 +215,67 @@ async function replaceTripStats(
   }
 }
 
+async function updateTripSegmentStatsForTripLocalIds(
+  database: Awaited<ReturnType<typeof getDatabase>>,
+  tripLocalIds: string[],
+) {
+  if (tripLocalIds.length === 0) {
+    return;
+  }
+
+  const placeholders = tripLocalIds.map(() => "?").join(", ");
+  const segments = await database.getAllAsync<TripSegmentStatsSourceRow>(
+    `SELECT local_id, trip_local_id, started_at, ended_at
+     FROM trip_segments
+     WHERE trip_local_id IN (${placeholders})
+     ORDER BY started_at ASC, local_id ASC`,
+    ...tripLocalIds,
+  );
+
+  await database.runAsync(
+    `DELETE FROM trip_segment_stats WHERE trip_local_id IN (${placeholders})`,
+    ...tripLocalIds,
+  );
+
+  if (segments.length === 0) {
+    return;
+  }
+
+  const segmentIds = segments.map((segment) => segment.local_id);
+  const segmentPlaceholders = segmentIds.map(() => "?").join(", ");
+  const tripPointRows = await database.getAllAsync<TripPointRow>(
+    `SELECT * FROM trip_points
+     WHERE segment_local_id IN (${segmentPlaceholders})
+     ORDER BY recorded_at ASC, local_id ASC`,
+    ...segmentIds,
+  );
+  const tripPointsBySegmentLocalId = groupTripPointsBySegmentLocalId(
+    tripPointRows.map(toTripPointFromRow),
+  );
+  const updatedAt = new Date().toISOString();
+
+  for (const segment of segments) {
+    const segmentTripPoints = tripPointsBySegmentLocalId.get(segment.local_id) ?? [];
+
+    await database.runAsync(
+      `INSERT INTO trip_segment_stats (
+        segment_local_id,
+        trip_local_id,
+        point_count,
+        distance_meters,
+        duration_ms,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+      segment.local_id,
+      segment.trip_local_id,
+      segmentTripPoints.length,
+      calculateTripDistanceMeters(segmentTripPoints),
+      calculateSegmentDurationMs(segment),
+      updatedAt,
+    );
+  }
+}
+
 async function updateTripStatsForTripLocalIds(
   database: Awaited<ReturnType<typeof getDatabase>>,
   groupedTripPoints: Map<string, TripPoint[]>,
@@ -176,10 +288,6 @@ async function updateTripStatsForTripLocalIds(
 
     const groupedPoints = groupedTripPoints.get(tripLocalId);
 
-    if (!groupedPoints || groupedPoints.length === 0) {
-      continue;
-    }
-
     await database.runAsync(
       `INSERT INTO trip_stats (
         trip_local_id,
@@ -188,11 +296,19 @@ async function updateTripStatsForTripLocalIds(
         updated_at
       ) VALUES (?, ?, ?, ?)`,
       tripLocalId,
-      groupedPoints.length,
-      calculateTripDistanceMeters(groupedPoints),
+      groupedPoints?.length ?? 0,
+      groupedPoints ? calculateTripDistanceMeters(groupedPoints) : 0,
       updatedAt,
     );
   }
+}
+
+export async function refreshTripSegmentStatsForTripLocalIds(tripLocalIds: string[]): Promise<void> {
+  await ensureTripPointsMigrated();
+
+  await runExclusiveDatabaseWrite(async (database) => {
+    await updateTripSegmentStatsForTripLocalIds(database, Array.from(new Set(tripLocalIds)));
+  });
 }
 
 async function loadLegacyTripPointsFromAsyncStorage(): Promise<TripPoint[]> {
@@ -330,6 +446,47 @@ export async function loadTripStatsByTripLocalIds(tripLocalIds: string[]): Promi
   return new Map(rows.map((row) => [row.trip_local_id, row]));
 }
 
+export async function loadTripSegmentStatsByTripLocalIds(
+  tripLocalIds: string[],
+): Promise<Map<string, TripSegmentStatsRow>> {
+  await ensureTripPointsMigrated();
+
+  if (tripLocalIds.length === 0) {
+    return new Map();
+  }
+
+  const database = await getDatabase();
+  const placeholders = tripLocalIds.map(() => "?").join(", ");
+  const rows = await database.getAllAsync<TripSegmentStatsRow>(
+    `SELECT * FROM trip_segment_stats WHERE trip_local_id IN (${placeholders})`,
+    ...tripLocalIds,
+  );
+  const rowSegmentLocalIds = new Set(rows.map((row) => row.segment_local_id));
+  const segments = await database.getAllAsync<TripSegmentStatsSourceRow>(
+    `SELECT local_id, trip_local_id, started_at, ended_at
+     FROM trip_segments
+     WHERE trip_local_id IN (${placeholders})
+     ORDER BY started_at ASC, local_id ASC`,
+    ...tripLocalIds,
+  );
+  const missingStats = segments.some((segment) => !rowSegmentLocalIds.has(segment.local_id));
+
+  if (missingStats) {
+    await runExclusiveDatabaseWrite(async (database) => {
+      await updateTripSegmentStatsForTripLocalIds(database, Array.from(new Set(tripLocalIds)));
+    });
+
+    const nextRows = await database.getAllAsync<TripSegmentStatsRow>(
+      `SELECT * FROM trip_segment_stats WHERE trip_local_id IN (${placeholders})`,
+      ...tripLocalIds,
+    );
+
+    return new Map(nextRows.map((row) => [row.segment_local_id, row]));
+  }
+
+  return new Map(rows.map((row) => [row.segment_local_id, row]));
+}
+
 function areTripPointsEqual(left: TripPoint, right: TripPoint): boolean {
   return (
     left.localId === right.localId &&
@@ -393,6 +550,10 @@ export async function saveTripPoints(
       }
 
       await replaceTripStats(database, groupTripPointsByTripLocalId(tripPoints));
+      await updateTripSegmentStatsForTripLocalIds(
+        database,
+        Array.from(groupTripPointsByTripLocalId(tripPoints).keys()),
+      );
     });
 
     return;
@@ -465,5 +626,6 @@ export async function saveTripPoints(
       groupTripPointsByTripLocalId(tripPoints),
       affectedTripLocalIds,
     );
+    await updateTripSegmentStatsForTripLocalIds(database, affectedTripLocalIds);
   });
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
@@ -26,6 +26,10 @@ import {
   getVisibleTripPointsForTrip,
   smoothTripRoutePoints,
 } from "../../services/trip-points/trip-points.service";
+import {
+  loadTripSegmentStatsByTripLocalIds,
+  type TripSegmentStatsRow,
+} from "../../storage/trip-points-storage";
 import { useSessionStore } from "../../state/session-store";
 import { useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
@@ -118,6 +122,9 @@ export default function TripRouteScreen() {
   const [syncBusy, setSyncBusy] = useState(false);
   const [smoothBusy, setSmoothBusy] = useState(false);
   const [segmentEditSegmentId, setSegmentEditSegmentId] = useState<string | null>(null);
+  const [tripSegmentStatsBySegmentId, setTripSegmentStatsBySegmentId] = useState<
+    Map<string, TripSegmentStatsRow>
+  >(new Map());
   const [routeSmoothingUndo, setRouteSmoothingUndo] = useState<{
     previousTrip: Trip;
     previousTripPoints: TripPoint[];
@@ -154,7 +161,12 @@ export default function TripRouteScreen() {
     ? getVisibleTripPointsForTrip(currentUserTripPoints, selectedTrip.localId)
     : [];
   const selectedTripSegments = selectedTrip
-    ? buildTripSegmentsSummary(currentUserTripSegments, currentUserTripPoints, selectedTrip.localId)
+    ? buildTripSegmentsSummary(
+        currentUserTripSegments,
+        currentUserTripPoints,
+        selectedTrip.localId,
+        tripSegmentStatsBySegmentId,
+      )
     : [];
   const selectedTripPauses = selectedTrip
     ? currentUserTripPauses.filter((tripPause) => tripPause.tripLocalId === selectedTrip.localId)
@@ -194,6 +206,29 @@ export default function TripRouteScreen() {
       })),
     [selectedTripAttachments, selectedTripWaypoints],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSegmentStats() {
+      if (!selectedTrip) {
+        setTripSegmentStatsBySegmentId(new Map());
+        return;
+      }
+
+      const nextStats = await loadTripSegmentStatsByTripLocalIds([selectedTrip.localId]);
+
+      if (!cancelled) {
+        setTripSegmentStatsBySegmentId(nextStats);
+      }
+    }
+
+    void loadSegmentStats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTrip?.localId]);
 
   async function syncSelectedTripIfNeeded() {
     if (!identitySession?.sessionToken || !selectedTrip) {

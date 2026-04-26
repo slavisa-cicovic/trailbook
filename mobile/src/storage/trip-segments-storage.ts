@@ -4,6 +4,7 @@ import { DEFAULT_RECORDING_PROFILE, normalizeRecordingProfile } from "../constan
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripSegment } from "../domain/trips";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { refreshTripSegmentStatsForTripLocalIds } from "./trip-points-storage";
 
 function normalizeTripSegment(
   value: Partial<TripSegment> & Pick<TripSegment, "localId" | "tripLocalId" | "deviceId" | "userId">,
@@ -130,6 +131,10 @@ async function ensureTripSegmentsMigrated(): Promise<void> {
       );
     }
   });
+
+  await refreshTripSegmentStatsForTripLocalIds(
+    Array.from(new Set(legacyTripSegments.map((tripSegment) => tripSegment.tripLocalId))),
+  );
 }
 
 export async function loadTripSegments(): Promise<TripSegment[]> {
@@ -145,8 +150,6 @@ export async function loadTripSegments(): Promise<TripSegment[]> {
 
 export async function saveTripSegments(tripSegments: TripSegment[]): Promise<void> {
   await ensureTripSegmentsMigrated();
-
-  const database = await getDatabase();
 
   await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM trip_segments");
@@ -181,4 +184,8 @@ export async function saveTripSegments(tripSegments: TripSegment[]): Promise<voi
       );
     }
   });
+
+  await refreshTripSegmentStatsForTripLocalIds(
+    Array.from(new Set(tripSegments.map((tripSegment) => tripSegment.tripLocalId))),
+  );
 }

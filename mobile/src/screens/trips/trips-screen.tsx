@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Redirect, useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 
@@ -72,6 +73,7 @@ export default function TripsScreen() {
   const [tripEditVisible, setTripEditVisible] = useState(false);
   const [dateFilter, setDateFilter] = useState<TripDateFilter>("all");
   const [listMode, setListMode] = useState<TripListMode>("owned");
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [sharedTrips, setSharedTrips] = useState<SharedTripSummary[]>([]);
   const [sharedTripsLoading, setSharedTripsLoading] = useState(false);
   const [sharedTripsError, setSharedTripsError] = useState<string | null>(null);
@@ -99,9 +101,11 @@ export default function TripsScreen() {
   const filteredTrips = filterTripsByDate(visibleTrips, dateFilter);
   const filteredTripIds = filteredTrips.map((trip) => trip.localId);
   const filteredTripIdsKey = filteredTripIds.join("|");
+  const hasMissingTripStats = filteredTripIds.some((tripLocalId) => !tripStatsByTripId.has(tripLocalId));
+  const showTripStatsSkeleton = filteredTripIds.length > 0 && (tripStatsLoading || hasMissingTripStats);
   const tripSummaries = filteredTrips.map((trip) => ({
     ...buildTripSummaryWithPoints(trip, [], currentUserWaypoints, currentUserWaypointAttachments),
-    distanceMeters: tripStatsByTripId.get(trip.localId)?.distance_meters ?? 0,
+    distanceMeters: tripStatsByTripId.get(trip.localId)?.distance_meters ?? null,
   }));
   const tripsAggregateSummary = filteredTrips.reduce(
     (summary, trip) => {
@@ -445,6 +449,7 @@ export default function TripsScreen() {
       accountMode={identitySession.mode}
       contentStyle={styles.screenContent}
       contentVariant="plain"
+      scrollEnabled={false}
       showBottomNavigation
       title="Trips"
     >
@@ -457,322 +462,343 @@ export default function TripsScreen() {
         visible={tripEditVisible}
       />
 
-      <Text style={styles.subtitle}>Your local recorded routes and saved trip content.</Text>
+      <View style={styles.tripsRoot}>
+        <Text style={styles.subtitle}>Your local recorded routes and saved trip content.</Text>
 
-      <View style={styles.modeToggleRow}>
-        <Pressable
-          onPress={() => setListMode("owned")}
-          style={[styles.modeToggleChip, listMode === "owned" && styles.modeToggleChipSelected]}
-        >
-          <Text
-            style={[styles.modeToggleText, listMode === "owned" && styles.modeToggleTextSelected]}
+        <View style={styles.modeToggleRow}>
+          <Pressable
+            onPress={() => setListMode("owned")}
+            style={[styles.modeToggleChip, listMode === "owned" && styles.modeToggleChipSelected]}
           >
-            My trips
-          </Text>
-        </Pressable>
-        <Pressable
-          disabled={identitySession.mode !== "authenticated"}
-          onPress={() => setListMode("shared")}
-          style={[
-            styles.modeToggleChip,
-            listMode === "shared" && styles.modeToggleChipSelected,
-            identitySession.mode !== "authenticated" && styles.modeToggleChipDisabled,
-          ]}
-        >
-          <Text
-            style={[styles.modeToggleText, listMode === "shared" && styles.modeToggleTextSelected]}
+            <Text
+              style={[styles.modeToggleText, listMode === "owned" && styles.modeToggleTextSelected]}
+            >
+              My trips
+            </Text>
+          </Pressable>
+          <Pressable
+            disabled={identitySession.mode !== "authenticated"}
+            onPress={() => setListMode("shared")}
+            style={[
+              styles.modeToggleChip,
+              listMode === "shared" && styles.modeToggleChipSelected,
+              identitySession.mode !== "authenticated" && styles.modeToggleChipDisabled,
+            ]}
           >
-            Shared with me
-          </Text>
-        </Pressable>
-      </View>
+            <Text
+              style={[styles.modeToggleText, listMode === "shared" && styles.modeToggleTextSelected]}
+            >
+              Shared with me
+            </Text>
+          </Pressable>
+        </View>
 
-      {listMode === "owned" ? (
-        <>
-          <ScrollView
-            contentContainerStyle={styles.filterRow}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-          >
-            {TRIP_DATE_FILTER_OPTIONS.map((option) => {
-              const selected = option.value === dateFilter;
-
-              return (
-                <Pressable
-                  key={option.value}
-                  onPress={() => setDateFilter(option.value)}
-                  style={[styles.filterChip, selected && styles.filterChipSelected]}
-                >
-                  <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <View style={styles.summaryTable}>
-            <View style={[styles.summaryRow, styles.summaryHeaderRow]}>
-              <Text style={[styles.summaryHeaderCell, styles.summaryModeCell]}>Mode</Text>
-              <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>km</Text>
-              <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>time</Text>
-              <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>Trips</Text>
-            </View>
-            {summaryRows.map((row) => (
-              <View key={row.label} style={styles.summaryRow}>
-                <Text style={[styles.summaryModeText, styles.summaryModeCell]}>{row.label}</Text>
-                {tripStatsLoading ? (
-                  <View style={[styles.summaryValueCell, styles.summarySkeletonCell]}>
-                    <View style={styles.summaryValueSkeleton} />
-                  </View>
-                ) : (
-                  <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                    {formatDistanceKm(row.distanceMeters)}
-                  </Text>
-                )}
-                <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                  {formatDurationSummary(row.durationMs)}
-                </Text>
-                <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                  {String(row.tripCount)}
-                </Text>
-              </View>
-            ))}
-            <View style={[styles.summaryRow, styles.summaryTotalRow]}>
-              <Text style={[styles.summaryModeText, styles.summaryModeCell]}>Total</Text>
-              {tripStatsLoading ? (
-                <View style={[styles.summaryValueCell, styles.summarySkeletonCell]}>
-                  <View style={styles.summaryValueSkeleton} />
-                </View>
-              ) : (
-                <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                  {formatDistanceKm(tripsAggregateSummary.totalDistanceMeters)}
-                </Text>
-              )}
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {formatDurationSummary(tripsAggregateSummary.totalDurationMs)}
-              </Text>
-              <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
-                {String(tripsAggregateSummary.totalTripCount)}
-              </Text>
-            </View>
-          </View>
-
-          {tripSummaries.length === 0 ? (
-            <Text style={styles.empty}>No trips match the selected date filter.</Text>
-          ) : (
-            <View style={styles.list}>
-              {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => {
-                const statusLabel =
-                  trip.status === "active" ? "Active" : trip.status === "paused" ? "Paused" : trip.syncStatus;
-                const showStatusBadge =
-                  trip.status !== "ended" || identitySession.mode === "authenticated";
-                const tripModeSummary = buildTripModeSummary(currentUserTripSegments, trip.localId);
-                const tripSegmentsForCard = getVisibleTripSegmentsForTrip(currentUserTripSegments, trip.localId);
-                const tripDurationMs = Math.max(
-                  0,
-                  new Date(trip.endedAt ?? new Date().toISOString()).getTime() -
-                    new Date(trip.startedAt).getTime(),
-                );
-                const tripDistanceLoading = tripStatsLoading && !tripStatsByTripId.has(trip.localId);
+        {listMode === "owned" ? (
+          <>
+            <ScrollView
+              contentContainerStyle={styles.filterRow}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterScroll}
+            >
+              {TRIP_DATE_FILTER_OPTIONS.map((option) => {
+                const selected = option.value === dateFilter;
 
                 return (
-                  <Swipeable
-                    key={trip.localId}
-                    friction={2}
-                    onSwipeableCloseStartDrag={suppressTapAfterSwipe}
-                    onSwipeableOpenStartDrag={suppressTapAfterSwipe}
-                    onSwipeableWillClose={suppressTapAfterSwipe}
-                    onSwipeableWillOpen={suppressTapAfterSwipe}
-                    overshootRight={false}
-                    renderRightActions={() => (
-                      <View style={styles.swipeActions}>
-                        <Pressable
-                          onPress={() => router.push(`/trips/${trip.localId}`)}
-                          style={[styles.swipeAction, styles.openSwipeAction]}
-                        >
-                          <Text style={styles.swipeActionText}>Open</Text>
-                        </Pressable>
-                        {trip.status !== "ended" ? (
-                          <Pressable
-                            onPress={() => void handleResumeTrip(trip)}
-                            style={[styles.swipeAction, styles.resumeSwipeAction]}
-                          >
-                            <Text style={[styles.swipeActionText, styles.resumeSwipeActionText]}>
-                              Resume
-                            </Text>
-                          </Pressable>
-                        ) : (
-                          <Pressable
-                            onPress={() => void handleDeleteTrip(trip)}
-                            style={[styles.swipeAction, styles.deleteSwipeAction]}
-                          >
-                            <Text style={[styles.swipeActionText, styles.deleteSwipeActionText]}>
-                              Delete
-                            </Text>
-                          </Pressable>
-                        )}
-                      </View>
-                    )}
+                  <Pressable
+                    key={option.value}
+                    onPress={() => setDateFilter(option.value)}
+                    style={[styles.filterChip, selected && styles.filterChipSelected]}
                   >
-                    <View style={styles.tripCardRow}>
-                      <View style={styles.tripCard}>
+                    <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.summaryTable}>
+              <Pressable
+                onPress={() => setSummaryExpanded((current) => !current)}
+                style={styles.summaryCollapsedHeader}
+              >
+                <Text style={styles.summaryCollapsedTitle}>Total</Text>
+                <View style={styles.summaryCollapsedValues}>
+                  {showTripStatsSkeleton ? (
+                    <View style={styles.summaryValueSkeleton} />
+                  ) : (
+                    <Text style={styles.summaryCollapsedValue}>
+                      {formatDistanceKm(tripsAggregateSummary.totalDistanceMeters)}
+                    </Text>
+                  )}
+                  <Text style={styles.summaryCollapsedValue}>
+                    {formatDurationSummary(tripsAggregateSummary.totalDurationMs)}
+                  </Text>
+                </View>
+                <View style={styles.summaryToggleIcon}>
+                  <MaterialIcons
+                    color="#52624f"
+                    name={summaryExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+                    size={22}
+                  />
+                </View>
+              </Pressable>
+
+              {summaryExpanded ? (
+                <View>
+                  <View style={[styles.summaryRow, styles.summaryHeaderRow]}>
+                    <Text style={[styles.summaryHeaderCell, styles.summaryModeCell]}>Mode</Text>
+                    <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>km</Text>
+                    <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>time</Text>
+                    <Text style={[styles.summaryHeaderCell, styles.summaryValueCell]}>Trips</Text>
+                  </View>
+                  {summaryRows.map((row) => (
+                    <View key={row.label} style={styles.summaryRow}>
+                      <Text style={[styles.summaryModeText, styles.summaryModeCell]}>{row.label}</Text>
+                      {showTripStatsSkeleton ? (
+                        <View style={[styles.summaryValueCell, styles.summarySkeletonCell]}>
+                          <View style={styles.summaryValueSkeleton} />
+                        </View>
+                      ) : (
+                        <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                          {formatDistanceKm(row.distanceMeters)}
+                        </Text>
+                      )}
+                      <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                        {formatDurationSummary(row.durationMs)}
+                      </Text>
+                      <Text style={[styles.summaryValueText, styles.summaryValueCell]}>
+                        {String(row.tripCount)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+
+            <ScrollView contentContainerStyle={styles.listScrollContent} style={styles.listScroll}>
+              {tripSummaries.length === 0 ? (
+                <Text style={styles.empty}>No trips match the selected date filter.</Text>
+              ) : (
+                <View style={styles.list}>
+                  {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => {
+                    const statusLabel =
+                      trip.status === "active" ? "Active" : trip.status === "paused" ? "Paused" : trip.syncStatus;
+                    const showStatusBadge =
+                      trip.status !== "ended" || identitySession.mode === "authenticated";
+                    const tripModeSummary = buildTripModeSummary(currentUserTripSegments, trip.localId);
+                    const tripSegmentsForCard = getVisibleTripSegmentsForTrip(currentUserTripSegments, trip.localId);
+                    const tripDurationMs = Math.max(
+                      0,
+                      new Date(trip.endedAt ?? new Date().toISOString()).getTime() -
+                        new Date(trip.startedAt).getTime(),
+                    );
+                    const tripDistanceLoading = !tripStatsByTripId.has(trip.localId);
+
+                    return (
+                      <Swipeable
+                        key={trip.localId}
+                        friction={2}
+                        onSwipeableCloseStartDrag={suppressTapAfterSwipe}
+                        onSwipeableOpenStartDrag={suppressTapAfterSwipe}
+                        onSwipeableWillClose={suppressTapAfterSwipe}
+                        onSwipeableWillOpen={suppressTapAfterSwipe}
+                        overshootRight={false}
+                        renderRightActions={() => (
+                          <View style={styles.swipeActions}>
+                            <Pressable
+                              onPress={() => router.push(`/trips/${trip.localId}`)}
+                              style={[styles.swipeAction, styles.openSwipeAction]}
+                            >
+                              <Text style={styles.swipeActionText}>Open</Text>
+                            </Pressable>
+                            {trip.status !== "ended" ? (
+                              <Pressable
+                                onPress={() => void handleResumeTrip(trip)}
+                                style={[styles.swipeAction, styles.resumeSwipeAction]}
+                              >
+                                <Text style={[styles.swipeActionText, styles.resumeSwipeActionText]}>
+                                  Resume
+                                </Text>
+                              </Pressable>
+                            ) : (
+                              <Pressable
+                                onPress={() => void handleDeleteTrip(trip)}
+                                style={[styles.swipeAction, styles.deleteSwipeAction]}
+                              >
+                                <Text style={[styles.swipeActionText, styles.deleteSwipeActionText]}>
+                                  Delete
+                                </Text>
+                              </Pressable>
+                            )}
+                          </View>
+                        )}
+                      >
+                        <View style={styles.tripCardRow}>
+                          <View style={styles.tripCard}>
+                            <Pressable
+                              onPress={() => handleTripCardPress(trip.localId)}
+                              style={styles.tripBodyPressable}
+                            >
+                              <View style={styles.tripHeader}>
+                                <View style={styles.tripHeaderText}>
+                                  <Text style={styles.tripTitle}>{trip.title}</Text>
+                                  {trip.description ? (
+                                    <Text style={styles.tripDescription}>{trip.description}</Text>
+                                  ) : null}
+                                </View>
+                                {showStatusBadge ? (
+                                  <View style={styles.tripBadge}>
+                                    <Text style={styles.tripBadgeText}>{statusLabel}</Text>
+                                  </View>
+                                ) : null}
+                              </View>
+
+                              <View style={styles.metaGrid}>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Mode</Text>
+                                  <Text style={styles.metaValue}>{tripModeSummary}</Text>
+                                </View>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Distance</Text>
+                                  {tripDistanceLoading ? (
+                                    <View style={styles.metaValueSkeleton} />
+                                  ) : (
+                                    <Text style={styles.metaValue}>
+                                      {distanceMeters === null ? "" : formatDistanceKm(distanceMeters)}
+                                    </Text>
+                                  )}
+                                </View>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Waypoints</Text>
+                                  <Text style={styles.metaValue}>{String(waypointCount)}</Text>
+                                </View>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Photos</Text>
+                                  <Text style={styles.metaValue}>{String(photoCount)}</Text>
+                                </View>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Segments</Text>
+                                  <Text style={styles.metaValue}>{String(tripSegmentsForCard.length)}</Text>
+                                </View>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Duration</Text>
+                                  <Text style={styles.metaValue}>
+                                    {formatDurationSummary(tripDurationMs)}
+                                  </Text>
+                                </View>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Started</Text>
+                                  <Text style={styles.metaValue}>
+                                    {new Date(trip.startedAt).toLocaleDateString()}
+                                  </Text>
+                                </View>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Ended</Text>
+                                  <Text style={styles.metaValue}>
+                                    {trip.endedAt
+                                      ? new Date(trip.endedAt).toLocaleDateString()
+                                      : trip.status === "paused"
+                                        ? "Paused"
+                                        : "Active"}
+                                  </Text>
+                                </View>
+                              </View>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </Swipeable>
+                    );
+                  })}
+                </View>
+              )}
+            </ScrollView>
+          </>
+        ) : (
+          <>
+            <View style={styles.sharedHeaderRow}>
+              <Pressable onPress={() => void refreshSharedTrips()} style={styles.sharedRefreshButton}>
+                <Text style={styles.sharedRefreshButtonText}>
+                  {sharedTripsLoading ? "Refreshing..." : "Refresh"}
+                </Text>
+              </Pressable>
+            </View>
+
+            {sharedTripsError ? <Text style={styles.sharedError}>{sharedTripsError}</Text> : null}
+
+            <ScrollView contentContainerStyle={styles.listScrollContent} style={styles.listScroll}>
+              {sharedTrips.length === 0 && !sharedTripsLoading ? (
+                <Text style={styles.empty}>No trips have been shared with you yet.</Text>
+              ) : (
+                <View style={styles.list}>
+                  {sharedTrips.map((sharedTrip) => (
+                    <View key={sharedTrip.shareId} style={styles.tripCardRow}>
+                      <View style={[styles.tripCard, styles.sharedTripCard]}>
                         <Pressable
-                          onPress={() => handleTripCardPress(trip.localId)}
+                          onPress={() => router.push(`/trips/shared/${sharedTrip.shareId}`)}
                           style={styles.tripBodyPressable}
                         >
                           <View style={styles.tripHeader}>
                             <View style={styles.tripHeaderText}>
-                              <Text style={styles.tripTitle}>{trip.title}</Text>
-                              {trip.description ? (
-                                <Text style={styles.tripDescription}>{trip.description}</Text>
-                              ) : null}
+                              <Text style={styles.tripTitle}>{sharedTrip.trip.title}</Text>
+                              <Text style={styles.tripDescription}>
+                                Shared by {sharedTrip.owner.displayName}
+                              </Text>
                             </View>
-                            {showStatusBadge ? (
-                              <View style={styles.tripBadge}>
-                                <Text style={styles.tripBadgeText}>{statusLabel}</Text>
-                              </View>
-                            ) : null}
+                            <View style={[styles.tripBadge, styles.sharedTripBadge]}>
+                              <Text style={styles.tripBadgeText}>Read only</Text>
+                            </View>
                           </View>
 
                           <View style={styles.metaGrid}>
                             <View style={styles.metaCell}>
-                              <Text style={styles.metaKey}>Mode</Text>
-                              <Text style={styles.metaValue}>{tripModeSummary}</Text>
+                              <Text style={styles.metaKey}>Owner</Text>
+                              <Text style={styles.metaValue}>{sharedTrip.owner.email}</Text>
                             </View>
                             <View style={styles.metaCell}>
-                              <Text style={styles.metaKey}>Distance</Text>
-                              {tripDistanceLoading ? (
-                                <View style={styles.metaValueSkeleton} />
-                              ) : (
-                                <Text style={styles.metaValue}>{formatDistanceKm(distanceMeters)}</Text>
-                              )}
+                              <Text style={styles.metaKey}>Mode</Text>
+                              <Text style={styles.metaValue}>
+                                {sharedTrip.trip.segmentCount > 1 ? "Mixed" : sharedTrip.trip.recordingProfile}
+                              </Text>
                             </View>
                             <View style={styles.metaCell}>
                               <Text style={styles.metaKey}>Waypoints</Text>
-                              <Text style={styles.metaValue}>{String(waypointCount)}</Text>
-                            </View>
-                            <View style={styles.metaCell}>
-                              <Text style={styles.metaKey}>Photos</Text>
-                              <Text style={styles.metaValue}>{String(photoCount)}</Text>
+                              <Text style={styles.metaValue}>{String(sharedTrip.trip.waypointCount)}</Text>
                             </View>
                             <View style={styles.metaCell}>
                               <Text style={styles.metaKey}>Segments</Text>
-                              <Text style={styles.metaValue}>{String(tripSegmentsForCard.length)}</Text>
-                            </View>
-                            <View style={styles.metaCell}>
-                              <Text style={styles.metaKey}>Duration</Text>
-                              <Text style={styles.metaValue}>
-                                {formatDurationSummary(tripDurationMs)}
-                              </Text>
+                              <Text style={styles.metaValue}>{String(sharedTrip.trip.segmentCount)}</Text>
                             </View>
                             <View style={styles.metaCell}>
                               <Text style={styles.metaKey}>Started</Text>
                               <Text style={styles.metaValue}>
-                                {new Date(trip.startedAt).toLocaleDateString()}
+                                {new Date(sharedTrip.trip.startedAt).toLocaleDateString()}
                               </Text>
                             </View>
                             <View style={styles.metaCell}>
-                              <Text style={styles.metaKey}>Ended</Text>
+                              <Text style={styles.metaKey}>Shared</Text>
                               <Text style={styles.metaValue}>
-                                {trip.endedAt
-                                  ? new Date(trip.endedAt).toLocaleDateString()
-                                  : trip.status === "paused"
-                                    ? "Paused"
-                                    : "Active"}
+                                {new Date(sharedTrip.sharedAt).toLocaleDateString()}
+                              </Text>
+                            </View>
+                            <View style={styles.metaCell}>
+                              <Text style={styles.metaKey}>Updated</Text>
+                              <Text style={styles.metaValue}>
+                                {new Date(sharedTrip.trip.updatedAt).toLocaleDateString()}
                               </Text>
                             </View>
                           </View>
                         </Pressable>
                       </View>
                     </View>
-                  </Swipeable>
-                );
-              })}
-            </View>
-          )}
-        </>
-      ) : (
-        <>
-          <View style={styles.sharedHeaderRow}>
-            <Pressable onPress={() => void refreshSharedTrips()} style={styles.sharedRefreshButton}>
-              <Text style={styles.sharedRefreshButtonText}>
-                {sharedTripsLoading ? "Refreshing..." : "Refresh"}
-              </Text>
-            </Pressable>
-          </View>
-
-          {sharedTripsError ? <Text style={styles.sharedError}>{sharedTripsError}</Text> : null}
-
-          {sharedTrips.length === 0 && !sharedTripsLoading ? (
-            <Text style={styles.empty}>No trips have been shared with you yet.</Text>
-          ) : (
-            <View style={styles.list}>
-              {sharedTrips.map((sharedTrip) => (
-                <View key={sharedTrip.shareId} style={styles.tripCardRow}>
-                  <View style={[styles.tripCard, styles.sharedTripCard]}>
-                    <Pressable
-                      onPress={() => router.push(`/trips/shared/${sharedTrip.shareId}`)}
-                      style={styles.tripBodyPressable}
-                    >
-                      <View style={styles.tripHeader}>
-                        <View style={styles.tripHeaderText}>
-                          <Text style={styles.tripTitle}>{sharedTrip.trip.title}</Text>
-                          <Text style={styles.tripDescription}>
-                            Shared by {sharedTrip.owner.displayName}
-                          </Text>
-                        </View>
-                        <View style={[styles.tripBadge, styles.sharedTripBadge]}>
-                          <Text style={styles.tripBadgeText}>Read only</Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.metaGrid}>
-                        <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Owner</Text>
-                          <Text style={styles.metaValue}>{sharedTrip.owner.email}</Text>
-                        </View>
-                        <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Mode</Text>
-                          <Text style={styles.metaValue}>
-                            {sharedTrip.trip.segmentCount > 1 ? "Mixed" : sharedTrip.trip.recordingProfile}
-                          </Text>
-                        </View>
-                        <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Waypoints</Text>
-                          <Text style={styles.metaValue}>{String(sharedTrip.trip.waypointCount)}</Text>
-                        </View>
-                        <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Segments</Text>
-                          <Text style={styles.metaValue}>{String(sharedTrip.trip.segmentCount)}</Text>
-                        </View>
-                        <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Started</Text>
-                          <Text style={styles.metaValue}>
-                            {new Date(sharedTrip.trip.startedAt).toLocaleDateString()}
-                          </Text>
-                        </View>
-                        <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Shared</Text>
-                          <Text style={styles.metaValue}>
-                            {new Date(sharedTrip.sharedAt).toLocaleDateString()}
-                          </Text>
-                        </View>
-                        <View style={styles.metaCell}>
-                          <Text style={styles.metaKey}>Updated</Text>
-                          <Text style={styles.metaValue}>
-                            {new Date(sharedTrip.trip.updatedAt).toLocaleDateString()}
-                          </Text>
-                        </View>
-                      </View>
-                    </Pressable>
-                  </View>
+                  ))}
                 </View>
-              ))}
-            </View>
-          )}
-        </>
-      )}
+              )}
+            </ScrollView>
+          </>
+        )}
+      </View>
 
       {pendingUndo ? (
         <View style={styles.undoBanner}>
@@ -793,7 +819,11 @@ export default function TripsScreen() {
 
 const styles = StyleSheet.create({
   screenContent: {
+    flex: 1,
     justifyContent: "flex-start",
+  },
+  tripsRoot: {
+    flex: 1,
   },
   subtitle: {
     fontSize: 15,
@@ -828,14 +858,22 @@ const styles = StyleSheet.create({
     color: "#fffdf8",
   },
   filterRow: {
+    alignItems: "center",
     gap: 10,
-    paddingBottom: 14,
+    minHeight: 38,
+  },
+  filterScroll: {
+    flexGrow: 0,
+    height: 38,
+    marginBottom: 8,
   },
   filterChip: {
+    height: 38,
+    alignItems: "center",
     borderRadius: 999,
     backgroundColor: "#e8ede2",
+    justifyContent: "center",
     paddingHorizontal: 14,
-    paddingVertical: 10,
   },
   filterChipSelected: {
     backgroundColor: "#243224",
@@ -853,8 +891,38 @@ const styles = StyleSheet.create({
     backgroundColor: "#f6f1e5",
     borderWidth: 1,
     borderColor: "#ebe1cf",
-    marginBottom: 18,
+    marginBottom: 12,
     overflow: "hidden",
+  },
+  summaryCollapsedHeader: {
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  summaryCollapsedTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#243224",
+  },
+  summaryCollapsedValues: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  summaryCollapsedValue: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#243224",
+  },
+  summaryToggleIcon: {
+    width: 30,
+    alignItems: "flex-end",
+    justifyContent: "center",
   },
   summaryRow: {
     flexDirection: "row",
@@ -908,8 +976,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#52624f",
   },
-  list: {
+  listScroll: {
+    flex: 1,
+  },
+  listScrollContent: {
+    flexGrow: 1,
     paddingBottom: 20,
+  },
+  list: {
+    paddingBottom: 0,
   },
   tripCardRow: {
     marginBottom: 14,
