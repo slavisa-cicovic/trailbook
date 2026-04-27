@@ -13,22 +13,22 @@ import type {
 } from "./mobile-recording-config.types";
 
 const BUILT_IN_RECORDING_CONFIG: MobileRecordingConfigResponse = {
-  version: 1,
-  updatedAt: "2026-04-22T00:00:00.000Z",
+  version: 2,
+  updatedAt: "2026-04-26T00:00:00.000Z",
   profiles: {
     ios: {
       auto: { accuracy: "high", distanceInterval: 12, timeIntervalMs: 12_000 },
       walk: { accuracy: "high", distanceInterval: 12, timeIntervalMs: 15_000 },
-      bike: { accuracy: "high", distanceInterval: 15, timeIntervalMs: 20_000 },
-      drive: { accuracy: "high", distanceInterval: 25, timeIntervalMs: 15_000 },
+      bike: { accuracy: "high", distanceInterval: 15, timeIntervalMs: 15_000 },
+      drive: { accuracy: "high", distanceInterval: 10, timeIntervalMs: 5_000 },
       boat: { accuracy: "balanced", distanceInterval: 180, timeIntervalMs: 240_000 },
       plane: { accuracy: "low", distanceInterval: 1000, timeIntervalMs: 600_000 },
     },
     android: {
       auto: { accuracy: "balanced", distanceInterval: 25, timeIntervalMs: 20_000 },
       walk: { accuracy: "high", distanceInterval: 5, timeIntervalMs: 5_000 },
-      bike: { accuracy: "high", distanceInterval: 15, timeIntervalMs: 20_000 },
-      drive: { accuracy: "high", distanceInterval: 20, timeIntervalMs: 10_000 },
+      bike: { accuracy: "bestForNavigation", distanceInterval: 10, timeIntervalMs: 5_000 },
+      drive: { accuracy: "bestForNavigation", distanceInterval: 10, timeIntervalMs: 5_000 },
       boat: { accuracy: "balanced", distanceInterval: 180, timeIntervalMs: 240_000 },
       plane: { accuracy: "low", distanceInterval: 1000, timeIntervalMs: 600_000 },
     },
