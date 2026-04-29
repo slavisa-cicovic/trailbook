@@ -190,6 +190,13 @@ CREATE TABLE IF NOT EXISTS mail_outbox (
 CREATE INDEX IF NOT EXISTS mail_outbox_user_id_idx ON mail_outbox(user_id);
 CREATE INDEX IF NOT EXISTS mail_outbox_status_idx ON mail_outbox(status);
 
+CREATE TABLE IF NOT EXISTS mobile_recording_configs (
+  id TEXT PRIMARY KEY,
+  config_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS trips (
   id TEXT PRIMARY KEY,
   owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -198,6 +205,7 @@ CREATE TABLE IF NOT EXISTS trips (
   title TEXT NOT NULL,
   description TEXT,
   recording_profile recording_profile NOT NULL,
+  recording_config_json JSONB,
   started_at TIMESTAMPTZ NOT NULL,
   ended_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL,
@@ -205,6 +213,8 @@ CREATE TABLE IF NOT EXISTS trips (
   deleted_at TIMESTAMPTZ,
   UNIQUE(owner_user_id, local_source_id)
 );
+
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS recording_config_json JSONB;
 
 CREATE INDEX IF NOT EXISTS trips_owner_user_id_idx ON trips(owner_user_id);
 

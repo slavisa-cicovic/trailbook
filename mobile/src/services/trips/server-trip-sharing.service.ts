@@ -195,6 +195,7 @@ export async function syncTripToServer(
       title: input.trip.title,
       description: input.trip.description,
       recordingProfile: input.trip.recordingProfile,
+      recordingConfig: input.trip.recordingConfig,
       startedAt: input.trip.startedAt,
       endedAt: input.trip.endedAt,
       createdAt: input.trip.createdAt,

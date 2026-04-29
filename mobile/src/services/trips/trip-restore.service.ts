@@ -34,6 +34,7 @@ function importTripDetail(
     title: detail.title,
     description: detail.description,
     recordingProfile: detail.recordingProfile,
+    recordingConfig: detail.recordingConfig,
     status: detail.endedAt ? "ended" : "paused",
     startedAt: detail.startedAt,
     endedAt: detail.endedAt,

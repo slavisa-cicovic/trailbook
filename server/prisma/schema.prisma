@@ -237,6 +237,15 @@ model MailOutbox {
   @@map("mail_outbox")
 }
 
+model MobileRecordingConfig {
+  id        String   @id
+  configJson Json    @map("config_json")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("mobile_recording_configs")
+}
+
 model Trip {
   id               String           @id @default(cuid())
   ownerUserId      String           @map("owner_user_id")
@@ -245,6 +254,7 @@ model Trip {
   title            String
   description      String?
   recordingProfile RecordingProfile @map("recording_profile")
+  recordingConfigJson Json?         @map("recording_config_json")
   startedAt        DateTime         @map("started_at")
   endedAt          DateTime?        @map("ended_at")
   createdAt        DateTime         @map("created_at")

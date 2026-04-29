@@ -1,3 +1,5 @@
+import type { MobileRecordingConfigResponse } from "../../auth/mobile-recording-config.types";
+
 export interface SyncTripSegmentDto {
   createdAt: string;
   endedAt: string | null;
@@ -125,6 +127,7 @@ export interface SyncTripDto {
   deviceId: string;
   endedAt: string | null;
   localId: string;
+  recordingConfig?: MobileRecordingConfigResponse | null;
   recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
   segments: SyncTripSegmentDto[];
   startedAt: string;

@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react";
-import { Redirect } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { MaterialIcons } from "@expo/vector-icons";
 import { Alert, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
@@ -135,6 +135,7 @@ function getRecordingConfigErrorMessage(error: unknown): string {
 
 export default function SettingsScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
+  const router = useRouter();
   const trips = useTripsStore((state) => state.trips);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const tripPoints = useTripPointsStore((state) => state.tripPoints);
@@ -356,6 +357,15 @@ export default function SettingsScreen() {
               theme={theme}
               title="Recording config"
               value={recordingConfigBusy ? "Updating..." : "Update"}
+            />
+            <SettingsDivider theme={theme} />
+            <SettingsRow
+              description="Edit the local recording config used by this device."
+              iconName="settings"
+              onPress={() => router.push("/settings/recording-config")}
+              theme={theme}
+              title="Recording config editor"
+              value="Open"
             />
           </SettingsSection>
         ) : null}

@@ -22,6 +22,7 @@ function normalizeTrip(value: Partial<Trip> & Pick<Trip, "localId" | "deviceId" 
     title: value.title ?? value.localId,
     description: value.description ?? null,
     recordingProfile: normalizeRecordingProfile(value.recordingProfile ?? DEFAULT_RECORDING_PROFILE),
+    recordingConfig: value.recordingConfig ?? null,
     status: inferTripStatus(value),
     startedAt: value.startedAt ?? new Date(0).toISOString(),
     endedAt: value.endedAt ?? null,
@@ -40,6 +41,7 @@ interface TripRow {
   ended_at: string | null;
   local_id: string;
   recording_profile: Trip["recordingProfile"];
+  recording_config_json: string | null;
   server_id: string | null;
   started_at: string;
   status: Trip["status"];
@@ -58,6 +60,7 @@ function toTripRow(trip: Trip): TripRow {
     ended_at: trip.endedAt,
     local_id: trip.localId,
     recording_profile: trip.recordingProfile,
+    recording_config_json: trip.recordingConfig ? JSON.stringify(trip.recordingConfig) : null,
     server_id: trip.serverId,
     started_at: trip.startedAt,
     status: trip.status,
@@ -77,6 +80,7 @@ function toTripFromRow(row: TripRow): Trip {
     endedAt: row.ended_at,
     localId: row.local_id,
     recordingProfile: row.recording_profile,
+    recordingConfig: row.recording_config_json ? JSON.parse(row.recording_config_json) : null,
     serverId: row.server_id,
     startedAt: row.started_at,
     status: row.status,
@@ -125,6 +129,7 @@ async function ensureTripsMigrated(): Promise<void> {
           title,
           description,
           recording_profile,
+          recording_config_json,
           status,
           started_at,
           ended_at,
@@ -132,7 +137,7 @@ async function ensureTripsMigrated(): Promise<void> {
           updated_at,
           deleted_at,
           sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.local_id,
         row.server_id,
         row.device_id,
@@ -140,6 +145,7 @@ async function ensureTripsMigrated(): Promise<void> {
         row.title,
         row.description,
         row.recording_profile,
+        row.recording_config_json,
         row.status,
         row.started_at,
         row.ended_at,
@@ -180,6 +186,7 @@ export async function saveTrips(trips: Trip[]): Promise<void> {
           title,
           description,
           recording_profile,
+          recording_config_json,
           status,
           started_at,
           ended_at,
@@ -187,7 +194,7 @@ export async function saveTrips(trips: Trip[]): Promise<void> {
           updated_at,
           deleted_at,
           sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.local_id,
         row.server_id,
         row.device_id,
@@ -195,6 +202,7 @@ export async function saveTrips(trips: Trip[]): Promise<void> {
         row.title,
         row.description,
         row.recording_profile,
+        row.recording_config_json,
         row.status,
         row.started_at,
         row.ended_at,

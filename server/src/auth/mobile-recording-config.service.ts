@@ -1,5 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 
+import { DatabaseService } from "../database/database.service";
 import type { AuthUserResponse } from "./auth.types";
 import type {
   MobileRecordingConfigOverrides,
@@ -65,31 +67,36 @@ const BUILT_IN_RECORDING_CONFIG: MobileRecordingConfigResponse = {
 
 @Injectable()
 export class MobileRecordingConfigService {
+  private static readonly DEFAULT_CONFIG_ID = "default";
+
   private readonly envOverrides = this.parseEnvOverrides();
 
-  getResolvedConfigForUser(user: AuthUserResponse | null): MobileRecordingConfigResponse {
+  constructor(@Inject(DatabaseService) private readonly databaseService: DatabaseService) {}
+
+  async getResolvedConfigForUser(user: AuthUserResponse | null): Promise<MobileRecordingConfigResponse> {
+    const baseConfig = await this.getBaseConfig();
     const defaultProfiles = this.mergeProfiles(
-      this.cloneProfiles(BUILT_IN_RECORDING_CONFIG.profiles.default),
+      this.cloneProfiles(baseConfig.profiles.default),
       this.envOverrides.defaults?.default,
     );
     const iosProfiles = this.mergeProfiles(
-      this.cloneProfiles(BUILT_IN_RECORDING_CONFIG.profiles.ios),
+      this.cloneProfiles(baseConfig.profiles.ios),
       this.envOverrides.defaults?.ios,
     );
     const androidProfiles = this.mergeProfiles(
-      this.cloneProfiles(BUILT_IN_RECORDING_CONFIG.profiles.android),
+      this.cloneProfiles(baseConfig.profiles.android),
       this.envOverrides.defaults?.android,
     );
     const defaultPointFilters = this.mergePointFilters(
-      this.clonePointFilters(BUILT_IN_RECORDING_CONFIG.pointFilters?.default),
+      this.clonePointFilters(baseConfig.pointFilters?.default),
       this.envOverrides.pointFilters?.default,
     );
     const iosPointFilters = this.mergePointFilters(
-      this.clonePointFilters(BUILT_IN_RECORDING_CONFIG.pointFilters?.ios),
+      this.clonePointFilters(baseConfig.pointFilters?.ios),
       this.envOverrides.pointFilters?.ios,
     );
     const androidPointFilters = this.mergePointFilters(
-      this.clonePointFilters(BUILT_IN_RECORDING_CONFIG.pointFilters?.android),
+      this.clonePointFilters(baseConfig.pointFilters?.android),
       this.envOverrides.pointFilters?.android,
     );
 
@@ -120,10 +127,10 @@ export class MobileRecordingConfigService {
     }
 
     return {
-      version: this.envOverrides.version ?? BUILT_IN_RECORDING_CONFIG.version,
+      version: this.envOverrides.version ?? baseConfig.version,
       updatedAt: this.normalizeUpdatedAt(
-        this.envOverrides.updatedAt ?? BUILT_IN_RECORDING_CONFIG.updatedAt,
-        BUILT_IN_RECORDING_CONFIG.updatedAt,
+        this.envOverrides.updatedAt ?? baseConfig.updatedAt,
+        baseConfig.updatedAt,
       ),
       profiles: {
         ios: this.mergeProfiles(iosProfiles, defaultProfiles),
@@ -132,6 +139,67 @@ export class MobileRecordingConfigService {
       pointFilters: {
         ios: this.mergePointFilters(iosPointFilters, defaultPointFilters),
         android: this.mergePointFilters(androidPointFilters, defaultPointFilters),
+      },
+    };
+  }
+
+  private async getBaseConfig(): Promise<MobileRecordingConfigResponse> {
+    const record = await this.databaseService.mobileRecordingConfig.upsert({
+      where: { id: MobileRecordingConfigService.DEFAULT_CONFIG_ID },
+      create: {
+        id: MobileRecordingConfigService.DEFAULT_CONFIG_ID,
+        configJson: BUILT_IN_RECORDING_CONFIG as unknown as Prisma.InputJsonValue,
+      },
+      update: {},
+    });
+
+    const normalized = this.normalizeBaseConfig(record.configJson);
+
+    if (normalized) {
+      return normalized;
+    }
+
+    await this.databaseService.mobileRecordingConfig.update({
+      where: { id: MobileRecordingConfigService.DEFAULT_CONFIG_ID },
+      data: {
+        configJson: BUILT_IN_RECORDING_CONFIG as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return BUILT_IN_RECORDING_CONFIG;
+  }
+
+  private normalizeBaseConfig(value: unknown): MobileRecordingConfigResponse | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    const candidate = value as MobileRecordingConfigResponse;
+
+    if (
+      typeof candidate.version !== "number" ||
+      !Number.isFinite(candidate.version) ||
+      candidate.version < 1 ||
+      typeof candidate.updatedAt !== "string" ||
+      Number.isNaN(Date.parse(candidate.updatedAt)) ||
+      !candidate.profiles ||
+      typeof candidate.profiles !== "object"
+    ) {
+      return null;
+    }
+
+    return {
+      version: candidate.version,
+      updatedAt: this.normalizeUpdatedAt(candidate.updatedAt, BUILT_IN_RECORDING_CONFIG.updatedAt),
+      profiles: {
+        default: this.mergeProfiles({}, candidate.profiles.default),
+        ios: this.mergeProfiles({}, candidate.profiles.ios),
+        android: this.mergeProfiles({}, candidate.profiles.android),
+      },
+      pointFilters: {
+        default: this.mergePointFilters({}, candidate.pointFilters?.default),
+        ios: this.mergePointFilters({}, candidate.pointFilters?.ios),
+        android: this.mergePointFilters({}, candidate.pointFilters?.android),
       },
     };
   }

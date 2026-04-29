@@ -153,6 +153,7 @@ export class TripsService {
       title: string;
       updatedAt: Date;
       deletedAt: Date | null;
+      recordingConfigJson?: Prisma.JsonValue | null;
       attachments: Array<{
         id: string;
         localSourceId: string;
@@ -220,6 +221,7 @@ export class TripsService {
         endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
         id: trip.id,
         localId: trip.localSourceId,
+        recordingConfig: trip.recordingConfigJson ?? null,
         recordingProfile: trip.recordingProfile,
         startedAt: trip.startedAt.toISOString(),
         title: trip.title,
@@ -295,6 +297,9 @@ export class TripsService {
           title: payload.title.trim(),
           description: payload.description?.trim() || null,
           recordingProfile: payload.recordingProfile,
+          recordingConfigJson: payload.recordingConfig
+            ? (payload.recordingConfig as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
           startedAt: new Date(payload.startedAt),
           endedAt: payload.endedAt ? new Date(payload.endedAt) : null,
           createdAt: new Date(payload.createdAt),
@@ -306,6 +311,9 @@ export class TripsService {
           title: payload.title.trim(),
           description: payload.description?.trim() || null,
           recordingProfile: payload.recordingProfile,
+          recordingConfigJson: payload.recordingConfig
+            ? (payload.recordingConfig as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
           startedAt: new Date(payload.startedAt),
           endedAt: payload.endedAt ? new Date(payload.endedAt) : null,
           createdAt: new Date(payload.createdAt),

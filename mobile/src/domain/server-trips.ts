@@ -1,3 +1,4 @@
+import type { MobileRecordingConfig } from "./recording-config";
 import type { RecordingProfile, WaypointCategory } from "./trips";
 
 export interface OwnedServerTripSummary {
@@ -41,6 +42,7 @@ export interface OwnedServerTripDetail {
     segmentId: string | null;
     speed: number | null;
   }>;
+  recordingConfig: MobileRecordingConfig | null;
   recordingProfile: RecordingProfile;
   segments: Array<{
     createdAt: string;

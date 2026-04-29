@@ -3,6 +3,7 @@ import type {
   MotionActivitySourcePlatform,
   MotionActivityType,
 } from "./motion-activity";
+import type { MobileRecordingConfig } from "./recording-config";
 
 export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error";
 export type RecordingStatus = "idle" | "recording" | "interrupted";
@@ -31,6 +32,7 @@ export interface Trip {
   title: string;
   description: string | null;
   recordingProfile: RecordingProfile;
+  recordingConfig: MobileRecordingConfig | null;
   status: TripStatus;
   startedAt: string;
   endedAt: string | null;

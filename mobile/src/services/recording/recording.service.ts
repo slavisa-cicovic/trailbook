@@ -19,6 +19,7 @@ import {
   createTripPause,
   getOpenTripPauseForTrip,
 } from "../trip-pauses/trip-pauses.service";
+import { getActiveRecordingConfigSnapshot } from "./recording-config.service";
 
 export interface RecordingDraftInput {
   description: string;
@@ -74,6 +75,7 @@ export function createTripForRecording(
     title: draft.title.trim(),
     description: draft.description.trim() || null,
     recordingProfile: concreteRecordingProfile,
+    recordingConfig: getActiveRecordingConfigSnapshot(),
     status: "active",
     startedAt,
     endedAt: null,

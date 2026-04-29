@@ -41,6 +41,8 @@ export interface MobileRecordingConfig {
 }
 
 export interface CachedMobileRecordingConfig {
-  resolvedForUserId: string;
   config: MobileRecordingConfig;
+  localOverrideConfig?: MobileRecordingConfig | null;
+  remoteConfig?: MobileRecordingConfig;
+  resolvedForUserId: string;
 }
