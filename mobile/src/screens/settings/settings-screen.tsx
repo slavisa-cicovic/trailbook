@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Redirect } from "expo-router";
 import * as Sharing from "expo-sharing";
+import { MaterialIcons } from "@expo/vector-icons";
 import { Alert, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
-import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
+import { type AppThemePalette, getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
 import ScreenLayout from "../../components/layout/screen-layout";
 import { showDemoModeInfoDialog } from "../../services/demo/demo-mode.service";
 import { logoutFromBackend } from "../../services/auth/mobile-auth.service";
@@ -19,6 +20,108 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { exportDatabaseSnapshot } from "../../storage/sqlite/db";
+
+type SettingsIconName = keyof typeof MaterialIcons.glyphMap;
+
+interface SettingsSectionProps {
+  children: ReactNode;
+  theme: AppThemePalette;
+  title: string;
+}
+
+interface SettingsRowProps {
+  description?: string;
+  disabled?: boolean;
+  iconName: SettingsIconName;
+  message?: string | null;
+  messageTone?: "danger" | "success";
+  onPress?: () => void;
+  theme: AppThemePalette;
+  title: string;
+  value?: string;
+}
+
+function SettingsSection({ children, theme, title }: SettingsSectionProps) {
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: theme.mutedText }]}>{title}</Text>
+      <View
+        style={[
+          styles.preferenceGroup,
+          { backgroundColor: theme.card, borderColor: theme.border },
+        ]}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
+function SettingsDivider({ theme }: { theme: AppThemePalette }) {
+  return <View style={[styles.preferenceDivider, { backgroundColor: theme.border }]} />;
+}
+
+function SettingsRow({
+  description,
+  disabled,
+  iconName,
+  message,
+  messageTone = "success",
+  onPress,
+  theme,
+  title,
+  value,
+}: SettingsRowProps) {
+  const isInteractive = Boolean(onPress) && !disabled;
+
+  return (
+    <>
+      <Pressable
+        disabled={!isInteractive}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.preferenceRow,
+          pressed && styles.preferenceRowPressed,
+          disabled && styles.preferenceRowDisabled,
+        ]}
+      >
+        <View style={[styles.preferenceIcon, { backgroundColor: theme.accentMuted }]}>
+          <MaterialIcons color={theme.accent} name={iconName} size={20} />
+        </View>
+        <View style={styles.preferenceBody}>
+          <Text style={[styles.preferenceTitle, { color: theme.primaryText }]}>{title}</Text>
+          {description ? (
+            <Text style={[styles.preferenceDescription, { color: theme.mutedText }]}>
+              {description}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.preferenceTrailing}>
+          {value ? (
+            <Text style={[styles.preferenceValue, { color: theme.mutedText }]}>{value}</Text>
+          ) : null}
+          {isInteractive ? (
+            <MaterialIcons color={theme.mutedText} name="chevron-right" size={22} />
+          ) : null}
+        </View>
+      </Pressable>
+      {message ? (
+        <Text
+          style={[
+            styles.preferenceMessage,
+            { color: messageTone === "success" ? theme.accent : theme.danger },
+          ]}
+        >
+          {message}
+        </Text>
+      ) : null}
+    </>
+  );
+}
+
+function formatProvider(provider: string): string {
+  return provider[0].toUpperCase() + provider.slice(1);
+}
 
 function getRecordingConfigErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "Recording config update failed.";
@@ -167,222 +270,225 @@ export default function SettingsScreen() {
       showBottomNavigation
       title="Settings"
     >
-      
-      <Text style={[styles.label, { color: theme.mutedText }]}>Theme</Text>
-      <View style={styles.themeRow}>
-        <Pressable
-          onPress={() => void setThemeMode("auto")}
-          style={[
-            styles.themeButton,
-            { backgroundColor: theme.accentMuted },
-            themeMode === "auto" && { backgroundColor: theme.accent },
-          ]}
-        >
-          <Text
-            style={[
-              styles.themeButtonText,
-              { color: theme.accent },
-              themeMode === "auto" && { color: theme.surface },
-            ]}
-          >
-            Auto
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => void setThemeMode("day")}
-          style={[
-            styles.themeButton,
-            { backgroundColor: theme.accentMuted },
-            themeMode === "day" && { backgroundColor: theme.accent },
-          ]}
-        >
-          <Text
-            style={[
-              styles.themeButtonText,
-              { color: theme.accent },
-              themeMode === "day" && { color: theme.surface },
-            ]}
-          >
-            Day
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => void setThemeMode("night")}
-          style={[
-            styles.themeButton,
-            { backgroundColor: theme.accentMuted },
-            themeMode === "night" && { backgroundColor: theme.accent },
-          ]}
-        >
-          <Text
-            style={[
-              styles.themeButtonText,
-              { color: theme.accent },
-              themeMode === "night" && { color: theme.surface },
-            ]}
-          >
-            Night
-          </Text>
-        </Pressable>
-      </View>
-      <Text style={[styles.themeHint, { color: theme.mutedText }]}>
-        Active theme: {resolvedThemeMode === "night" ? "Night" : "Day"}
-        {themeMode === "auto" ? " via system" : ""}
-      </Text>
+      <View style={styles.settingsRoot}>
+        <SettingsSection theme={theme} title="Appearance">
+          <View style={styles.themePreference}>
+            <View style={[styles.preferenceIcon, { backgroundColor: theme.accentMuted }]}>
+              <MaterialIcons color={theme.accent} name="palette" size={20} />
+            </View>
+            <View style={styles.preferenceBody}>
+              <Text style={[styles.preferenceTitle, { color: theme.primaryText }]}>Theme</Text>
+              <Text style={[styles.preferenceDescription, { color: theme.mutedText }]}>
+                Active theme: {resolvedThemeMode === "night" ? "Night" : "Day"}
+                {themeMode === "auto" ? " via system" : ""}
+              </Text>
+              <View style={styles.themeRow}>
+                {(["auto", "day", "night"] as const).map((mode) => {
+                  const isActive = themeMode === mode;
 
-      <Text style={[styles.label, { color: theme.mutedText }]}>Active user</Text>
-      <Text style={[styles.value, { color: theme.primaryText }]}>
-        {identitySession.displayName || identitySession.userEmail}
-      </Text>
-      <Text style={[styles.themeHint, { color: theme.mutedText }]}>{identitySession.userEmail}</Text>
-      <Text style={[styles.label, { color: theme.mutedText }]}>Session mode</Text>
-      {identitySession.mode === "demo" ? (
-        <Pressable onPress={showDemoModeInfoDialog} style={styles.modeButton}>
-          <Text style={[styles.value, styles.modeButtonText, { color: theme.primaryText }]}>
-            Demo Session Mode
-          </Text>
-        </Pressable>
-      ) : (
-        <Text style={[styles.value, { color: theme.primaryText }]}>Authenticated</Text>
-      )}
-      <Text style={[styles.label, { color: theme.mutedText }]}>Providers</Text>
-      <Text style={[styles.value, { color: theme.primaryText }]}>
-        {identitySession.providers.map((provider) => provider[0].toUpperCase() + provider.slice(1)).join(", ")}
-      </Text>
-      {identitySession.mode === "authenticated" ? (
-        <>
-          <Text style={[styles.label, { color: theme.mutedText }]}>Recording config</Text>
-          <Pressable
-            onPress={() => void handleUpdateRecordingConfig()}
-            style={[styles.restoreButton, { backgroundColor: theme.accentMuted }]}
-          >
-            <Text style={[styles.restoreButtonText, { color: theme.accent }]}>
-              {recordingConfigBusy ? "Updating..." : "Update recording config"}
-            </Text>
-          </Pressable>
-          <Text style={[styles.themeHint, { color: theme.mutedText }]}>
-            Pulls the latest resolved recording profile config from the server and applies it immediately.
-          </Text>
-          {recordingConfigMessage ? (
-            <Text
-              style={[
-                styles.restoreMessage,
-                { color: recordingConfigMessage === "Recording config updated." ? theme.accent : "#9f2f2f" },
-              ]}
-            >
-              {recordingConfigMessage}
-            </Text>
-          ) : null}
-        </>
-      ) : null}
-      {identitySession.mode === "authenticated" ? (
-        <>
-          <Text style={[styles.label, { color: theme.mutedText }]}>Device transfer</Text>
-          <Pressable
-            onPress={() => void handleRestoreFromServer()}
-            style={[styles.restoreButton, { backgroundColor: theme.accentMuted }]}
-          >
-            <Text style={[styles.restoreButtonText, { color: theme.accent }]}>
-              {restoreBusy ? "Restoring..." : "Restore from server"}
-            </Text>
-          </Pressable>
-          <Text style={[styles.themeHint, { color: theme.mutedText }]}>
-            Imports server-backed trips that are not already present on this device.
-          </Text>
-          {restoreMessage ? (
-            <Text
-              style={[
-                styles.restoreMessage,
-                { color: restoreMessage.startsWith("Imported") ? theme.accent : "#9f2f2f" },
-              ]}
-            >
-              {restoreMessage}
-            </Text>
-          ) : null}
-        </>
-      ) : null}
-      <Text style={[styles.label, { color: theme.mutedText }]}>Debug</Text>
-      <Pressable
-        onPress={() => void handleExportDatabase()}
-        style={[styles.restoreButton, { backgroundColor: theme.accentMuted }]}
-      >
-        <Text style={[styles.restoreButtonText, { color: theme.accent }]}>
-          {exportDatabaseBusy ? "Exporting..." : "Export database"}
-        </Text>
-      </Pressable>
-      <Text style={[styles.themeHint, { color: theme.mutedText }]}>
-        Temporary helper that exports the local SQLite database snapshot.
-      </Text>
-      {exportDatabaseMessage ? (
-        <Text
-          style={[
-            styles.restoreMessage,
-            { color: exportDatabaseMessage.startsWith("Database exported:") ? theme.accent : "#9f2f2f" },
-          ]}
-        >
-          {exportDatabaseMessage}
-        </Text>
-      ) : null}
+                  return (
+                    <Pressable
+                      key={mode}
+                      onPress={() => void setThemeMode(mode)}
+                      style={[
+                        styles.themeButton,
+                        { backgroundColor: theme.accentMuted },
+                        isActive && { backgroundColor: theme.accent },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.themeButtonText,
+                          { color: theme.accent },
+                          isActive && { color: theme.surface },
+                        ]}
+                      >
+                        {mode === "auto" ? "Auto" : mode === "day" ? "Day" : "Night"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        </SettingsSection>
+
+        <SettingsSection theme={theme} title="Account">
+          <SettingsRow
+            description={identitySession.userEmail}
+            iconName="person"
+            theme={theme}
+            title="Active user"
+            value={identitySession.displayName || identitySession.userEmail}
+          />
+          <SettingsDivider theme={theme} />
+          <SettingsRow
+            description={
+              identitySession.mode === "demo"
+                ? "Local demo data. Tap for details."
+                : "Backend session is active."
+            }
+            iconName={identitySession.mode === "demo" ? "info-outline" : "verified-user"}
+            onPress={identitySession.mode === "demo" ? showDemoModeInfoDialog : undefined}
+            theme={theme}
+            title="Session mode"
+            value={identitySession.mode === "demo" ? "Demo" : "Authenticated"}
+          />
+          <SettingsDivider theme={theme} />
+          <SettingsRow
+            description="Login providers linked to this session."
+            iconName="link"
+            theme={theme}
+            title="Providers"
+            value={identitySession.providers.map(formatProvider).join(", ")}
+          />
+        </SettingsSection>
+
+        {identitySession.mode === "authenticated" ? (
+          <SettingsSection theme={theme} title="Recording">
+            <SettingsRow
+              description="Pulls the latest resolved recording profile config from the server and applies it immediately."
+              disabled={recordingConfigBusy}
+              iconName="tune"
+              message={recordingConfigMessage}
+              messageTone={recordingConfigMessage === "Recording config updated." ? "success" : "danger"}
+              onPress={() => void handleUpdateRecordingConfig()}
+              theme={theme}
+              title="Recording config"
+              value={recordingConfigBusy ? "Updating..." : "Update"}
+            />
+          </SettingsSection>
+        ) : null}
+
+        {identitySession.mode === "authenticated" ? (
+          <SettingsSection theme={theme} title="Data transfer">
+            <SettingsRow
+              description="Imports server-backed trips that are not already present on this device."
+              disabled={restoreBusy}
+              iconName="cloud-download"
+              message={restoreMessage}
+              messageTone={restoreMessage?.startsWith("Imported") ? "success" : "danger"}
+              onPress={() => void handleRestoreFromServer()}
+              theme={theme}
+              title="Restore from server"
+              value={restoreBusy ? "Restoring..." : "Restore"}
+            />
+          </SettingsSection>
+        ) : null}
+
+        <SettingsSection theme={theme} title="Debug">
+          <SettingsRow
+            description="Temporary helper that exports the local SQLite database snapshot."
+            disabled={exportDatabaseBusy}
+            iconName="storage"
+            message={exportDatabaseMessage}
+            messageTone={exportDatabaseMessage?.startsWith("Database exported:") ? "success" : "danger"}
+            onPress={() => void handleExportDatabase()}
+            theme={theme}
+            title="Export database"
+            value={exportDatabaseBusy ? "Exporting..." : "Export"}
+          />
+        </SettingsSection>
+      </View>
     </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  subtitle: {
-    fontSize: 16,
-    color: "#52624f",
-    marginBottom: 12,
+  settingsRoot: {
+    gap: 18,
   },
-  label: {
+  section: {
+    gap: 8,
+  },
+  sectionTitle: {
     fontSize: 12,
-    textTransform: "uppercase",
+    fontWeight: "800",
     letterSpacing: 1,
-    marginTop: 4,
+    marginLeft: 4,
+    textTransform: "uppercase",
   },
-  value: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 8,
+  preferenceGroup: {
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: "hidden",
   },
-  modeButton: {
-    alignSelf: "flex-start",
+  preferenceRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 68,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  modeButtonText: {
-    textDecorationLine: "underline",
+  preferenceRowPressed: {
+    opacity: 0.72,
+  },
+  preferenceRowDisabled: {
+    opacity: 0.62,
+  },
+  preferenceIcon: {
+    alignItems: "center",
+    borderRadius: 13,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  preferenceBody: {
+    flex: 1,
+    gap: 3,
+  },
+  preferenceTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  preferenceDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  preferenceTrailing: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    gap: 2,
+  },
+  preferenceValue: {
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    maxWidth: 130,
+    textAlign: "right",
+  },
+  preferenceDivider: {
+    height: 1,
+    marginLeft: 62,
+  },
+  preferenceMessage: {
+    fontSize: 13,
+    lineHeight: 18,
+    paddingBottom: 12,
+    paddingHorizontal: 14,
+    paddingLeft: 62,
+  },
+  themePreference: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   themeRow: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 12,
+    gap: 8,
+    marginTop: 9,
   },
   themeButton: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 14,
-    paddingVertical: 12,
+    borderRadius: 12,
+    paddingVertical: 10,
   },
   themeButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  themeHint: {
     fontSize: 13,
-    marginBottom: 12,
-  },
-  restoreButton: {
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    marginBottom: 8,
-  },
-  restoreButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  restoreMessage: {
-    fontSize: 13,
-    marginTop: 4,
+    fontWeight: "800",
   },
 });
