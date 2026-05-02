@@ -1,6 +1,7 @@
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
 import type { MotionActivity } from "../../domain/motion-activity";
+import type { BatterySnapshot } from "../device/battery.service";
 import type {
   RecordingMode,
   RecordingProfile,
@@ -64,6 +65,7 @@ export function createTripForRecording(
   identitySession: AuthenticatedDeviceSession,
   startedAt: string,
   draft: RecordingDraftInput,
+  batterySnapshot: BatterySnapshot | null = null,
 ): Trip {
   const concreteRecordingProfile = getConcreteRecordingProfileForMode(draft.recordingMode);
 
@@ -76,6 +78,10 @@ export function createTripForRecording(
     description: draft.description.trim() || null,
     recordingProfile: concreteRecordingProfile,
     recordingConfig: getActiveRecordingConfigSnapshot(),
+    batteryStartLevelPercent: batterySnapshot?.levelPercent ?? null,
+    batteryStartState: batterySnapshot?.state ?? null,
+    batteryEndLevelPercent: null,
+    batteryEndState: null,
     status: "active",
     startedAt,
     endedAt: null,
@@ -218,13 +224,20 @@ export function reconcileRecordingSessionWithTrips(
   };
 }
 
-export function closeActiveTrip(trips: Trip[], activeTripId: string, endedAt: string): Trip[] {
+export function closeActiveTrip(
+  trips: Trip[],
+  activeTripId: string,
+  endedAt: string,
+  batterySnapshot: BatterySnapshot | null = null,
+): Trip[] {
   return trips.map((trip) =>
     trip.localId === activeTripId
       ? {
           ...trip,
           status: "ended",
           endedAt,
+          batteryEndLevelPercent: batterySnapshot?.levelPercent ?? trip.batteryEndLevelPercent,
+          batteryEndState: batterySnapshot?.state ?? trip.batteryEndState,
           updatedAt: endedAt,
           syncStatus: "pending-sync",
         }

@@ -44,6 +44,10 @@ export interface OwnedServerTripDetail {
   }>;
   recordingConfig: MobileRecordingConfig | null;
   recordingProfile: RecordingProfile;
+  batteryStartLevelPercent: number | null;
+  batteryStartState: string | null;
+  batteryEndLevelPercent: number | null;
+  batteryEndState: string | null;
   segments: Array<{
     createdAt: string;
     endedAt: string | null;

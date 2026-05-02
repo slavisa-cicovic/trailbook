@@ -154,6 +154,10 @@ export class TripsService {
       updatedAt: Date;
       deletedAt: Date | null;
       recordingConfigJson?: Prisma.JsonValue | null;
+      batteryStartLevelPercent?: number | null;
+      batteryStartState?: string | null;
+      batteryEndLevelPercent?: number | null;
+      batteryEndState?: string | null;
       attachments: Array<{
         id: string;
         localSourceId: string;
@@ -223,6 +227,10 @@ export class TripsService {
         localId: trip.localSourceId,
         recordingConfig: trip.recordingConfigJson ?? null,
         recordingProfile: trip.recordingProfile,
+        batteryStartLevelPercent: trip.batteryStartLevelPercent ?? null,
+        batteryStartState: trip.batteryStartState ?? null,
+        batteryEndLevelPercent: trip.batteryEndLevelPercent ?? null,
+        batteryEndState: trip.batteryEndState ?? null,
         startedAt: trip.startedAt.toISOString(),
         title: trip.title,
         updatedAt: trip.updatedAt.toISOString(),
@@ -300,6 +308,10 @@ export class TripsService {
           recordingConfigJson: payload.recordingConfig
             ? (payload.recordingConfig as unknown as Prisma.InputJsonValue)
             : Prisma.JsonNull,
+          batteryStartLevelPercent: payload.batteryStartLevelPercent ?? null,
+          batteryStartState: payload.batteryStartState ?? null,
+          batteryEndLevelPercent: payload.batteryEndLevelPercent ?? null,
+          batteryEndState: payload.batteryEndState ?? null,
           startedAt: new Date(payload.startedAt),
           endedAt: payload.endedAt ? new Date(payload.endedAt) : null,
           createdAt: new Date(payload.createdAt),
@@ -314,6 +326,10 @@ export class TripsService {
           recordingConfigJson: payload.recordingConfig
             ? (payload.recordingConfig as unknown as Prisma.InputJsonValue)
             : Prisma.JsonNull,
+          batteryStartLevelPercent: payload.batteryStartLevelPercent ?? null,
+          batteryStartState: payload.batteryStartState ?? null,
+          batteryEndLevelPercent: payload.batteryEndLevelPercent ?? null,
+          batteryEndState: payload.batteryEndState ?? null,
           startedAt: new Date(payload.startedAt),
           endedAt: payload.endedAt ? new Date(payload.endedAt) : null,
           createdAt: new Date(payload.createdAt),

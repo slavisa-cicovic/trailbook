@@ -255,6 +255,10 @@ model Trip {
   description      String?
   recordingProfile RecordingProfile @map("recording_profile")
   recordingConfigJson Json?         @map("recording_config_json")
+  batteryStartLevelPercent Float?   @map("battery_start_level_percent")
+  batteryStartState String?         @map("battery_start_state")
+  batteryEndLevelPercent Float?     @map("battery_end_level_percent")
+  batteryEndState String?           @map("battery_end_state")
   startedAt        DateTime         @map("started_at")
   endedAt          DateTime?        @map("ended_at")
   createdAt        DateTime         @map("created_at")

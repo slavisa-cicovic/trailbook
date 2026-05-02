@@ -129,6 +129,10 @@ export interface SyncTripDto {
   localId: string;
   recordingConfig?: MobileRecordingConfigResponse | null;
   recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+  batteryStartLevelPercent?: number | null;
+  batteryStartState?: string | null;
+  batteryEndLevelPercent?: number | null;
+  batteryEndState?: string | null;
   segments: SyncTripSegmentDto[];
   startedAt: string;
   title: string;

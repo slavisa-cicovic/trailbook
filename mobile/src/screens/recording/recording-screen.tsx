@@ -46,6 +46,7 @@ import {
   watchImmediateForegroundLocation,
   watchForegroundLocation,
 } from "../../services/location/location.service";
+import { getBatterySnapshot } from "../../services/device/battery.service";
 import {
   ensureMotionActivityUpdatesForAutoMode,
   getLatestMotionActivityAsync,
@@ -550,7 +551,8 @@ export default function RecordingScreen() {
 
     const startedAt = new Date().toISOString();
     const concreteRecordingProfile = getConcreteRecordingProfileForMode(recordingDraft.recordingMode);
-    const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft);
+    const batterySnapshot = await getBatterySnapshot();
+    const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft, batterySnapshot);
     resetPendingTripPointContinuity(nextTrip.localId);
     resetTripPointDiagnostics(nextTrip.localId);
     const nextSegment = createInitialTripSegment(nextTrip, startedAt);
@@ -658,6 +660,7 @@ export default function RecordingScreen() {
     }
 
     const endedAt = new Date().toISOString();
+    const batterySnapshot = await getBatterySnapshot();
 
     if (backgroundRecordingSupported !== false) {
       await stopBackgroundLocationTracking();
@@ -681,7 +684,7 @@ export default function RecordingScreen() {
           };
     await setTripSegments(normalizedState.tripSegments);
     await setWaypoints(normalizedState.waypoints);
-    await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt));
+    await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt, batterySnapshot));
     await setRecordingSession(stopRecordingSession(recordingSession));
     flushTripPointDiagnostics(recordingSession.activeTripId);
   }

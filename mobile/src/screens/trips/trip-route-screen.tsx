@@ -87,6 +87,41 @@ function buildTripMapRegion(
   };
 }
 
+function formatBatteryState(state: string | null): string {
+  switch (state) {
+    case "charging":
+      return "charging";
+    case "full":
+      return "full";
+    case "unplugged":
+      return "unplugged";
+    case "unknown":
+    case null:
+    default:
+      return "unknown";
+  }
+}
+
+function formatBatterySnapshot(levelPercent: number | null, state: string | null): string {
+  const stateLabel = formatBatteryState(state);
+
+  if (levelPercent === null) {
+    return stateLabel;
+  }
+
+  return `${Math.round(levelPercent)}% ${stateLabel}`;
+}
+
+function formatBatteryConsumption(startLevelPercent: number | null, endLevelPercent: number | null): string {
+  if (startLevelPercent === null || endLevelPercent === null) {
+    return "unknown";
+  }
+
+  const consumed = Math.max(0, Math.round(startLevelPercent - endLevelPercent));
+
+  return `${consumed}%`;
+}
+
 export default function TripRouteScreen() {
   const router = useRouter();
   const { tripId } = useLocalSearchParams<{ tripId?: string | string[] }>();
@@ -711,6 +746,20 @@ export default function TripRouteScreen() {
                 <Text style={styles.summaryValue}>{distanceText}</Text>
               </View>
             </View>
+            <View style={styles.batteryConsumptionItem}>
+              <Text style={styles.summaryKey}>Battery consumption</Text>
+              <Text style={styles.summaryValue}>
+                {formatBatteryConsumption(
+                  selectedTrip.batteryStartLevelPercent,
+                  selectedTrip.batteryEndLevelPercent,
+                )}
+              </Text>
+              <Text style={styles.batteryConsumptionMeta}>
+                {formatBatterySnapshot(selectedTrip.batteryStartLevelPercent, selectedTrip.batteryStartState)}
+                {" -> "}
+                {formatBatterySnapshot(selectedTrip.batteryEndLevelPercent, selectedTrip.batteryEndState)}
+              </Text>
+            </View>
             {selectedTripTimeline.length > 0 ? (
               <View style={styles.segmentsList}>
                 <Text style={styles.segmentsTitle}>Timeline</Text>
@@ -948,6 +997,19 @@ const styles = StyleSheet.create({
   summaryItem: {
     flex: 1,
     gap: 2,
+  },
+  batteryConsumptionItem: {
+    gap: 2,
+    borderRadius: 14,
+    backgroundColor: "#eef4ea",
+    borderWidth: 1,
+    borderColor: "#dbe7d5",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  batteryConsumptionMeta: {
+    fontSize: 12,
+    color: "#52624f",
   },
   summaryKey: {
     fontSize: 11,

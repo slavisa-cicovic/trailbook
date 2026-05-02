@@ -23,6 +23,10 @@ function normalizeTrip(value: Partial<Trip> & Pick<Trip, "localId" | "deviceId" 
     description: value.description ?? null,
     recordingProfile: normalizeRecordingProfile(value.recordingProfile ?? DEFAULT_RECORDING_PROFILE),
     recordingConfig: value.recordingConfig ?? null,
+    batteryStartLevelPercent: value.batteryStartLevelPercent ?? null,
+    batteryStartState: value.batteryStartState ?? null,
+    batteryEndLevelPercent: value.batteryEndLevelPercent ?? null,
+    batteryEndState: value.batteryEndState ?? null,
     status: inferTripStatus(value),
     startedAt: value.startedAt ?? new Date(0).toISOString(),
     endedAt: value.endedAt ?? null,
@@ -42,6 +46,10 @@ interface TripRow {
   local_id: string;
   recording_profile: Trip["recordingProfile"];
   recording_config_json: string | null;
+  battery_start_level_percent: number | null;
+  battery_start_state: string | null;
+  battery_end_level_percent: number | null;
+  battery_end_state: string | null;
   server_id: string | null;
   started_at: string;
   status: Trip["status"];
@@ -61,6 +69,10 @@ function toTripRow(trip: Trip): TripRow {
     local_id: trip.localId,
     recording_profile: trip.recordingProfile,
     recording_config_json: trip.recordingConfig ? JSON.stringify(trip.recordingConfig) : null,
+    battery_start_level_percent: trip.batteryStartLevelPercent,
+    battery_start_state: trip.batteryStartState,
+    battery_end_level_percent: trip.batteryEndLevelPercent,
+    battery_end_state: trip.batteryEndState,
     server_id: trip.serverId,
     started_at: trip.startedAt,
     status: trip.status,
@@ -81,6 +93,10 @@ function toTripFromRow(row: TripRow): Trip {
     localId: row.local_id,
     recordingProfile: row.recording_profile,
     recordingConfig: row.recording_config_json ? JSON.parse(row.recording_config_json) : null,
+    batteryStartLevelPercent: row.battery_start_level_percent,
+    batteryStartState: row.battery_start_state,
+    batteryEndLevelPercent: row.battery_end_level_percent,
+    batteryEndState: row.battery_end_state,
     serverId: row.server_id,
     startedAt: row.started_at,
     status: row.status,
@@ -130,6 +146,10 @@ async function ensureTripsMigrated(): Promise<void> {
           description,
           recording_profile,
           recording_config_json,
+          battery_start_level_percent,
+          battery_start_state,
+          battery_end_level_percent,
+          battery_end_state,
           status,
           started_at,
           ended_at,
@@ -137,7 +157,7 @@ async function ensureTripsMigrated(): Promise<void> {
           updated_at,
           deleted_at,
           sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.local_id,
         row.server_id,
         row.device_id,
@@ -146,6 +166,10 @@ async function ensureTripsMigrated(): Promise<void> {
         row.description,
         row.recording_profile,
         row.recording_config_json,
+        row.battery_start_level_percent,
+        row.battery_start_state,
+        row.battery_end_level_percent,
+        row.battery_end_state,
         row.status,
         row.started_at,
         row.ended_at,
@@ -187,6 +211,10 @@ export async function saveTrips(trips: Trip[]): Promise<void> {
           description,
           recording_profile,
           recording_config_json,
+          battery_start_level_percent,
+          battery_start_state,
+          battery_end_level_percent,
+          battery_end_state,
           status,
           started_at,
           ended_at,
@@ -194,7 +222,7 @@ export async function saveTrips(trips: Trip[]): Promise<void> {
           updated_at,
           deleted_at,
           sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.local_id,
         row.server_id,
         row.device_id,
@@ -203,6 +231,10 @@ export async function saveTrips(trips: Trip[]): Promise<void> {
         row.description,
         row.recording_profile,
         row.recording_config_json,
+        row.battery_start_level_percent,
+        row.battery_start_state,
+        row.battery_end_level_percent,
+        row.battery_end_state,
         row.status,
         row.started_at,
         row.ended_at,

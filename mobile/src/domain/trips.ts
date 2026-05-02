@@ -33,6 +33,10 @@ export interface Trip {
   description: string | null;
   recordingProfile: RecordingProfile;
   recordingConfig: MobileRecordingConfig | null;
+  batteryStartLevelPercent: number | null;
+  batteryStartState: string | null;
+  batteryEndLevelPercent: number | null;
+  batteryEndState: string | null;
   status: TripStatus;
   startedAt: string;
   endedAt: string | null;

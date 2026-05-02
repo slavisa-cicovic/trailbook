@@ -206,6 +206,10 @@ CREATE TABLE IF NOT EXISTS trips (
   description TEXT,
   recording_profile recording_profile NOT NULL,
   recording_config_json JSONB,
+  battery_start_level_percent DOUBLE PRECISION,
+  battery_start_state TEXT,
+  battery_end_level_percent DOUBLE PRECISION,
+  battery_end_state TEXT,
   started_at TIMESTAMPTZ NOT NULL,
   ended_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL,
@@ -215,6 +219,10 @@ CREATE TABLE IF NOT EXISTS trips (
 );
 
 ALTER TABLE trips ADD COLUMN IF NOT EXISTS recording_config_json JSONB;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS battery_start_level_percent DOUBLE PRECISION;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS battery_start_state TEXT;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS battery_end_level_percent DOUBLE PRECISION;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS battery_end_state TEXT;
 
 CREATE INDEX IF NOT EXISTS trips_owner_user_id_idx ON trips(owner_user_id);
 
