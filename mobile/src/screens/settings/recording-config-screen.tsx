@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import { Redirect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Alert, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Alert, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
@@ -17,7 +17,7 @@ import { useRecordingStore } from "../../state/recording-store";
 import { useSessionStore } from "../../state/session-store";
 import { useThemeStore } from "../../state/theme-store";
 
-const EDITABLE_PLATFORMS: Array<Exclude<RecordingConfigPlatform, "default">> = ["ios", "android"];
+const EDITABLE_PLATFORM: Exclude<RecordingConfigPlatform, "default"> = Platform.OS === "ios" ? "ios" : "android";
 const EDITABLE_MODES: RecordingMode[] = RECORDING_PROFILE_OPTIONS.map((option) => option.value);
 
 function formatMode(mode: RecordingMode) {
@@ -63,9 +63,9 @@ export default function RecordingConfigScreen() {
     setLoading(false);
   }, [identitySession]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     void reloadConfig();
-  }, [reloadConfig]);
+  }, [reloadConfig]));
 
   async function handleReset() {
     if (!identitySession || identitySession.mode !== "authenticated") {
@@ -121,37 +121,37 @@ export default function RecordingConfigScreen() {
           <Text style={[styles.loadingText, { color: theme.mutedText }]}>Loading recording config...</Text>
         ) : null}
 
-        {config
-          ? EDITABLE_PLATFORMS.map((platform) => (
-              <View key={platform} style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: theme.mutedText }]}>{formatPlatform(platform)}</Text>
-                <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  {EDITABLE_MODES.map((mode, index) => (
-                    <View key={`${platform}-${mode}`}>
-                      <Pressable
-                        onPress={() => router.push(`/settings/recording-config/${platform}-${mode}`)}
-                        style={styles.row}
-                      >
-                        <View style={[styles.icon, { backgroundColor: theme.accentMuted }]}>
-                          <MaterialIcons color={theme.accent} name="tune" size={18} />
-                        </View>
-                        <View style={styles.rowBody}>
-                          <Text style={[styles.rowTitle, { color: theme.primaryText }]}>{formatMode(mode)}</Text>
-                          <Text style={[styles.rowDescription, { color: theme.mutedText }]}>
-                            {describeProfile(config, platform, mode)}
-                          </Text>
-                        </View>
-                        <MaterialIcons color={theme.mutedText} name="chevron-right" size={22} />
-                      </Pressable>
-                      {index < EDITABLE_MODES.length - 1 ? (
-                        <View style={[styles.divider, { backgroundColor: theme.border }]} />
-                      ) : null}
+        {config ? (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.mutedText }]}>
+              {formatPlatform(EDITABLE_PLATFORM)}
+            </Text>
+            <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              {EDITABLE_MODES.map((mode, index) => (
+                <View key={`${EDITABLE_PLATFORM}-${mode}`}>
+                  <Pressable
+                    onPress={() => router.push(`/settings/recording-config/${EDITABLE_PLATFORM}-${mode}`)}
+                    style={styles.row}
+                  >
+                    <View style={[styles.icon, { backgroundColor: theme.accentMuted }]}>
+                      <MaterialIcons color={theme.accent} name="tune" size={18} />
                     </View>
-                  ))}
+                    <View style={styles.rowBody}>
+                      <Text style={[styles.rowTitle, { color: theme.primaryText }]}>{formatMode(mode)}</Text>
+                      <Text style={[styles.rowDescription, { color: theme.mutedText }]}>
+                        {describeProfile(config, EDITABLE_PLATFORM, mode)}
+                      </Text>
+                    </View>
+                    <MaterialIcons color={theme.mutedText} name="chevron-right" size={22} />
+                  </Pressable>
+                  {index < EDITABLE_MODES.length - 1 ? (
+                    <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                  ) : null}
                 </View>
-              </View>
-            ))
-          : null}
+              ))}
+            </View>
+          </View>
+        ) : null}
       </View>
     </ScreenLayout>
   );

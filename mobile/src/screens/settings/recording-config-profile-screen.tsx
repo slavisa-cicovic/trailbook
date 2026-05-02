@@ -105,13 +105,14 @@ export default function RecordingConfigProfileScreen() {
   const [config, setConfig] = useState<MobileRecordingConfig | null>(null);
   const [accuracy, setAccuracy] = useState<RecordingConfigAccuracy>("high");
   const [distanceInterval, setDistanceInterval] = useState("0");
-  const [timeIntervalMs, setTimeIntervalMs] = useState("0");
+  const [timeIntervalSeconds, setTimeIntervalSeconds] = useState("0");
   const [maxAccuracyMeters, setMaxAccuracyMeters] = useState("0");
   const [maxJumpDistanceMeters, setMaxJumpDistanceMeters] = useState("0");
   const [maxImpliedSpeedKmh, setMaxImpliedSpeedKmh] = useState("0");
   const [minMovementMeters, setMinMovementMeters] = useState("0");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const loadConfig = useCallback(async () => {
     if (!identitySession || identitySession.mode !== "authenticated" || !parsedTarget) {
@@ -134,7 +135,7 @@ export default function RecordingConfigProfileScreen() {
     setConfig(nextConfig);
     setAccuracy(trackingProfile.accuracy);
     setDistanceInterval(String(trackingProfile.distanceInterval));
-    setTimeIntervalMs(String(trackingProfile.timeIntervalMs));
+    setTimeIntervalSeconds(String(Math.round(trackingProfile.timeIntervalMs / 1000)));
     setMaxAccuracyMeters(String(pointFilterProfile.maxAccuracyMeters));
     setMaxJumpDistanceMeters(String(pointFilterProfile.maxJumpDistanceMeters));
     setMaxImpliedSpeedKmh(String(pointFilterProfile.maxImpliedSpeedKmh));
@@ -158,7 +159,7 @@ export default function RecordingConfigProfileScreen() {
       const trackingProfile: TrackingProfileConfig = {
         accuracy,
         distanceInterval: toNumber(distanceInterval, "Distance interval"),
-        timeIntervalMs: toNumber(timeIntervalMs, "Time interval"),
+        timeIntervalMs: toNumber(timeIntervalSeconds, "Time interval") * 1000,
       };
       const pointFilterProfile: PointFilterProfileConfig = {
         maxAccuracyMeters: toNumber(maxAccuracyMeters, "Max accuracy"),
@@ -186,6 +187,57 @@ export default function RecordingConfigProfileScreen() {
       Alert.alert("Recording config", error instanceof Error ? error.message : "Save failed.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleResetProfileToDefault() {
+    if (!identitySession || identitySession.mode !== "authenticated" || !parsedTarget || !config) {
+      return;
+    }
+
+    setResetting(true);
+
+    try {
+      const record = await loadEditableRecordingConfig(identitySession);
+      const remoteConfig = record?.remoteConfig;
+      const remoteTrackingProfile =
+        remoteConfig?.profiles[parsedTarget.platform]?.[parsedTarget.mode] ??
+        remoteConfig?.profiles.default?.[parsedTarget.mode];
+      const remotePointFilterProfile =
+        remoteConfig?.pointFilters?.[parsedTarget.platform]?.[parsedTarget.mode] ??
+        remoteConfig?.pointFilters?.default?.[parsedTarget.mode];
+
+      if (!remoteConfig || !remoteTrackingProfile || !remotePointFilterProfile) {
+        throw new Error("Server default is not available for this profile.");
+      }
+
+      const nextConfig = cloneConfig(config);
+      nextConfig.profiles[parsedTarget.platform] = {
+        ...(nextConfig.profiles[parsedTarget.platform] ?? {}),
+        [parsedTarget.mode]: remoteTrackingProfile,
+      };
+      nextConfig.pointFilters = {
+        ...(nextConfig.pointFilters ?? {}),
+        [parsedTarget.platform]: {
+          ...(nextConfig.pointFilters?.[parsedTarget.platform] ?? {}),
+          [parsedTarget.mode]: remotePointFilterProfile,
+        },
+      };
+
+      await saveLocalRecordingConfigOverride(identitySession, nextConfig);
+      await syncBackgroundLocationTracking(recordingStatus, activeRecordingTripId, activeRecordingProfile);
+      setConfig(nextConfig);
+      setAccuracy(remoteTrackingProfile.accuracy);
+      setDistanceInterval(String(remoteTrackingProfile.distanceInterval));
+      setTimeIntervalSeconds(String(Math.round(remoteTrackingProfile.timeIntervalMs / 1000)));
+      setMaxAccuracyMeters(String(remotePointFilterProfile.maxAccuracyMeters));
+      setMaxJumpDistanceMeters(String(remotePointFilterProfile.maxJumpDistanceMeters));
+      setMaxImpliedSpeedKmh(String(remotePointFilterProfile.maxImpliedSpeedKmh));
+      setMinMovementMeters(String(remotePointFilterProfile.minMovementMeters));
+    } catch (error) {
+      Alert.alert("Recording config", error instanceof Error ? error.message : "Reset failed.");
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -229,7 +281,12 @@ export default function RecordingConfigProfileScreen() {
             })}
           </View>
           <NumberField label="Distance interval (m)" value={distanceInterval} onChange={setDistanceInterval} theme={theme} />
-          <NumberField label="Time interval (ms)" value={timeIntervalMs} onChange={setTimeIntervalMs} theme={theme} />
+          <NumberField
+            label="Time interval (sec)"
+            value={timeIntervalSeconds}
+            onChange={setTimeIntervalSeconds}
+            theme={theme}
+          />
         </View>
 
         <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -240,15 +297,34 @@ export default function RecordingConfigProfileScreen() {
           <NumberField label="Min movement (m)" value={minMovementMeters} onChange={setMinMovementMeters} theme={theme} />
         </View>
 
-        <Pressable
-          disabled={loading || saving || !config}
-          onPress={() => void handleSave()}
-          style={[styles.saveButton, { backgroundColor: theme.accent }, (loading || saving || !config) && styles.disabled]}
-        >
-          <Text style={[styles.saveButtonText, { color: theme.surface }]}>
-            {saving ? "Saving..." : "Save local override"}
-          </Text>
-        </Pressable>
+        <View style={styles.actionRow}>
+          <Pressable
+            disabled={loading || saving || resetting || !config}
+            onPress={() => void handleResetProfileToDefault()}
+            style={[
+              styles.secondaryButton,
+              { backgroundColor: theme.accentMuted },
+              (loading || saving || resetting || !config) && styles.disabled,
+            ]}
+          >
+            <Text style={[styles.secondaryButtonText, { color: theme.accent }]}>
+              {resetting ? "Resetting..." : "Reset to default"}
+            </Text>
+          </Pressable>
+          <Pressable
+            disabled={loading || saving || resetting || !config}
+            onPress={() => void handleSave()}
+            style={[
+              styles.saveButton,
+              { backgroundColor: theme.accent },
+              (loading || saving || resetting || !config) && styles.disabled,
+            ]}
+          >
+            <Text style={[styles.saveButtonText, { color: theme.surface }]}>
+              {saving ? "Saving..." : "Save local override"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </ScreenLayout>
   );
@@ -326,9 +402,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  secondaryButton: {
+    alignItems: "center",
+    borderRadius: 16,
+    flex: 1,
+    paddingVertical: 14,
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
   saveButton: {
     alignItems: "center",
     borderRadius: 16,
+    flex: 1,
     paddingVertical: 14,
   },
   saveButtonText: {
