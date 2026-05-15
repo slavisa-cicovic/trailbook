@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getWaypointCategoryOption } from "../../constants/waypoint-categories";
@@ -16,6 +16,7 @@ import WaypointPhotoViewerModal from "./components/waypoint-photo-viewer-modal";
 
 export default function SharedTripWaypointScreen() {
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
   const identitySession = useSessionStore((state) => state.identitySession);
   const { shareId, waypointId } = useLocalSearchParams<{ shareId?: string | string[]; waypointId?: string | string[] }>();
   const resolvedShareId = Array.isArray(shareId) ? shareId[0] : shareId;
@@ -97,6 +98,7 @@ export default function SharedTripWaypointScreen() {
       );
   }, [identitySession?.sessionToken, selectedWaypoint, sharedTrip]);
   const photoViewerVisible = selectedPhotoAttachmentId !== null && attachments.length > 0;
+  const photoCarouselCardWidth = Math.min(Math.max(screenWidth * 0.74, 240), 340);
 
   if (!identitySession) {
     return <Redirect href="/login" />;
@@ -193,17 +195,24 @@ export default function SharedTripWaypointScreen() {
               <Text style={styles.emptyText}>No photos were shared for this waypoint.</Text>
             </View>
           ) : (
-            <View style={styles.photoGrid}>
+            <ScrollView
+              contentContainerStyle={styles.photoCarouselContent}
+              decelerationRate="fast"
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToAlignment="start"
+              snapToInterval={photoCarouselCardWidth + 12}
+            >
               {attachments.map((attachment) => (
                 <Pressable
                   key={attachment.localId}
                   onPress={() => setSelectedPhotoAttachmentId(attachment.localId)}
-                  style={styles.photoCard}
+                  style={[styles.photoCarouselCard, { width: photoCarouselCardWidth }]}
                 >
-                  <Image source={{ uri: attachment.localUri }} style={styles.photoImage} />
+                  <Image source={{ uri: attachment.localUri }} style={styles.photoCarouselImage} />
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
           )}
         </>
       ) : null}
@@ -330,20 +339,26 @@ const styles = StyleSheet.create({
     borderColor: "#ebe1cf",
     padding: 20,
   },
-  photoGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -6,
-    rowGap: 12,
+  photoCarouselCard: {
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: "#f6f1e5",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
+    shadowColor: "#243224",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 3,
   },
-  photoCard: {
-    width: "50%",
-    paddingHorizontal: 6,
+  photoCarouselContent: {
+    gap: 12,
+    paddingRight: 18,
+    paddingBottom: 4,
   },
-  photoImage: {
+  photoCarouselImage: {
     width: "100%",
-    aspectRatio: 1,
-    borderRadius: 16,
+    aspectRatio: 1.08,
     backgroundColor: "#d9e3d3",
   },
 });

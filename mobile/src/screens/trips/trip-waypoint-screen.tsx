@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import {
@@ -42,6 +42,7 @@ import WaypointPhotoViewerModal from "./components/waypoint-photo-viewer-modal";
 
 export default function TripWaypointScreen() {
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
   const params = useLocalSearchParams<{ tripId?: string | string[]; waypointId?: string | string[] }>();
   const identitySession = useSessionStore((state) => state.identitySession);
   const trips = useTripsStore((state) => state.trips);
@@ -82,6 +83,7 @@ export default function TripWaypointScreen() {
     : [];
 
   const selectedPhotoSet = useMemo(() => new Set(selectedPhotoIds), [selectedPhotoIds]);
+  const photoCarouselCardWidth = Math.min(Math.max(screenWidth * 0.74, 240), 340);
   const photoViewerVisible = selectedPhotoAttachmentId !== null && attachments.length > 0;
   const selectedWaypointCategory = selectedWaypoint
     ? getWaypointCategoryOption(selectedWaypoint.category)
@@ -358,7 +360,14 @@ export default function TripWaypointScreen() {
           <Text style={styles.emptyText}>No photos saved for this waypoint.</Text>
         </View>
       ) : (
-        <View style={styles.photoGrid}>
+        <ScrollView
+          contentContainerStyle={styles.photoCarouselContent}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToAlignment="start"
+          snapToInterval={photoCarouselCardWidth + 12}
+          decelerationRate="fast"
+        >
           {attachments.map((attachment) => {
             const selected = selectedPhotoSet.has(attachment.localId);
 
@@ -367,9 +376,13 @@ export default function TripWaypointScreen() {
                 key={attachment.localId}
                 onLongPress={() => enterSelectionMode(attachment.localId)}
                 onPress={() => handlePhotoPress(attachment.localId)}
-                style={[styles.photoCard, selected && styles.photoCardSelected]}
+                style={[
+                  styles.photoCarouselCard,
+                  { width: photoCarouselCardWidth },
+                  selected && styles.photoCardSelected,
+                ]}
               >
-                <Image source={{ uri: attachment.localUri }} style={styles.photoImage} />
+                <Image source={{ uri: attachment.localUri }} style={styles.photoCarouselImage} />
                 {selectionMode ? (
                   <View style={styles.photoSelectionBadge}>
                     <Text style={styles.photoSelectionBadgeText}>{selected ? "Selected" : "Tap"}</Text>
@@ -378,7 +391,7 @@ export default function TripWaypointScreen() {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
       )}
     </ScreenLayout>
   );
@@ -554,23 +567,29 @@ const styles = StyleSheet.create({
     borderColor: "#ebe1cf",
     padding: 20,
   },
-  photoGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -6,
-    rowGap: 12,
+  photoCarouselCard: {
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: "#f6f1e5",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
+    shadowColor: "#243224",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 3,
   },
-  photoCard: {
-    width: "50%",
-    paddingHorizontal: 6,
+  photoCarouselContent: {
+    gap: 12,
+    paddingRight: 18,
+    paddingBottom: 4,
   },
   photoCardSelected: {
     opacity: 0.72,
   },
-  photoImage: {
+  photoCarouselImage: {
     width: "100%",
-    aspectRatio: 1,
-    borderRadius: 16,
+    aspectRatio: 1.08,
     backgroundColor: "#d7ddcf",
   },
   photoSelectionBadge: {
