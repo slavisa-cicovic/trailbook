@@ -155,6 +155,7 @@ function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps)
 
   return (
     <TapGestureHandler
+      enabled={zoomed}
       numberOfTaps={2}
       onHandlerStateChange={handleDoubleTapStateChange}
       ref={doubleTapRef}
@@ -291,7 +292,18 @@ export default function WaypointPhotoViewerScreen({
           <View key={attachment.localId} style={[styles.slide, { width: screenWidth, height: screenHeight }]}>
             <ZoomablePhoto
               height={screenHeight}
-              onZoomChange={(isZoomed) => setZoomedAttachmentId(isZoomed ? attachment.localId : null)}
+              onZoomChange={(isZoomed) => {
+                setZoomedAttachmentId(isZoomed ? attachment.localId : null);
+
+                if (!isZoomed) {
+                  requestAnimationFrame(() => {
+                    scrollRef.current?.scrollTo({
+                      x: (currentIndex + leadingPageCount) * screenWidth,
+                      animated: false,
+                    });
+                  });
+                }
+              }}
               uri={attachment.localUri}
               width={screenWidth}
             />
