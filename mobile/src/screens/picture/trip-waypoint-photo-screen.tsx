@@ -63,11 +63,11 @@ export default function TripWaypointPhotoScreen() {
   const selectedWaypointIndex = selectedWaypoint
     ? tripWaypoints.findIndex((waypoint) => waypoint.localId === selectedWaypoint.localId)
     : -1;
-  const previousPhotoWaypoint = findWaypointWithPhotos(
+  const nextPhotoWaypoint = findWaypointWithPhotos(
     tripWaypoints.slice(0, selectedWaypointIndex).reverse(),
     currentUserWaypointAttachments,
   );
-  const nextPhotoWaypoint = findWaypointWithPhotos(
+  const previousPhotoWaypoint = findWaypointWithPhotos(
     tripWaypoints.slice(selectedWaypointIndex + 1),
     currentUserWaypointAttachments,
   );
