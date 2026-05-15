@@ -13,14 +13,8 @@ async function ensurePhotoStorageDirectory() {
   await FileSystem.makeDirectoryAsync(PHOTO_STORAGE_DIR, { intermediates: true });
 }
 
-function resolvePhotoExtension(asset: ImagePicker.ImagePickerAsset) {
-  const uriMatch = asset.uri.match(/\.[a-zA-Z0-9]+(?=($|\?))/);
-
-  if (uriMatch?.[0]) {
-    return uriMatch[0].toLowerCase();
-  }
-
-  switch (asset.mimeType) {
+function resolvePhotoExtensionFromMimeType(mimeType: string | null) {
+  switch (mimeType) {
     case "image/jpeg":
       return ".jpg";
     case "image/png":
@@ -33,6 +27,16 @@ function resolvePhotoExtension(asset: ImagePicker.ImagePickerAsset) {
     default:
       return ".jpg";
   }
+}
+
+function resolvePhotoExtension(asset: ImagePicker.ImagePickerAsset) {
+  const uriMatch = asset.uri.match(/\.[a-zA-Z0-9]+(?=($|\?))/);
+
+  if (uriMatch?.[0]) {
+    return uriMatch[0].toLowerCase();
+  }
+
+  return resolvePhotoExtensionFromMimeType(asset.mimeType ?? null);
 }
 
 async function normalizePhotoAsset(asset: ImagePicker.ImagePickerAsset): Promise<PickedPhoto> {
@@ -114,4 +118,23 @@ export async function capturePhotoWithCamera(): Promise<PickedPhoto | null> {
   }
 
   return normalizePhotoAsset(result.assets[0]);
+}
+
+export async function downloadPhotoToLocalStorage(input: {
+  fileNameSeed: string;
+  mimeType: string | null;
+  sourceUrl: string;
+}): Promise<PickedPhoto> {
+  await ensurePhotoStorageDirectory();
+
+  const safeFileNameSeed = input.fileNameSeed.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const destination = `${PHOTO_STORAGE_DIR}/${safeFileNameSeed}${resolvePhotoExtensionFromMimeType(input.mimeType)}`;
+  const result = await FileSystem.downloadAsync(input.sourceUrl, destination);
+  const fileInfo = await FileSystem.getInfoAsync(result.uri);
+
+  return {
+    localUri: result.uri,
+    mimeType: input.mimeType,
+    fileSize: fileInfo.exists && !fileInfo.isDirectory ? fileInfo.size : null,
+  };
 }

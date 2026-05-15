@@ -1,6 +1,7 @@
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import type { OwnedServerTripDetail } from "../../domain/server-trips";
 import type { Trip, TripPoint, TripSegment, Waypoint, WaypointAttachment } from "../../domain/trips";
+import { downloadPhotoToLocalStorage } from "../media/photo-picker.service";
 import { buildTripAttachmentContentUrl, getOwnedTripFromServer, listOwnedTripsFromServer } from "./server-trip-sharing.service";
 
 export interface RestoreTripsResult {
@@ -13,16 +14,16 @@ export interface RestoreTripsResult {
   skippedCount: number;
 }
 
-function importTripDetail(
+async function importTripDetail(
   detail: OwnedServerTripDetail,
   identitySession: AuthenticatedDeviceSession,
-): {
+): Promise<{
   attachments: WaypointAttachment[];
   trip: Trip;
   tripPoints: TripPoint[];
   tripSegments: TripSegment[];
   waypoints: Waypoint[];
-} {
+}> {
   const segmentLocalIdByServerId = new Map(detail.segments.map((segment) => [segment.id, segment.localId]));
   const waypointLocalIdByServerId = new Map(detail.waypoints.map((waypoint) => [waypoint.id, waypoint.localId]));
 
@@ -96,31 +97,37 @@ function importTripDetail(
     syncStatus: "synced",
   }));
 
-  const attachments = detail.attachments.reduce<WaypointAttachment[]>((result, attachment) => {
-      const waypointLocalId = waypointLocalIdByServerId.get(attachment.waypointId) ?? attachment.waypointLocalId;
+  const attachments: WaypointAttachment[] = [];
 
-      if (!waypointLocalId) {
-        return result;
-      }
+  for (const attachment of detail.attachments) {
+    const waypointLocalId = waypointLocalIdByServerId.get(attachment.waypointId) ?? attachment.waypointLocalId;
 
-      result.push({
-        localId: attachment.localId,
-        serverId: attachment.id,
-        waypointLocalId,
-        deviceId: identitySession.deviceId,
-        userId: identitySession.userId,
-        type: "photo" as const,
-        localUri: buildTripAttachmentContentUrl(identitySession.sessionToken ?? "", attachment.id),
-        mimeType: attachment.mimeType,
-        fileSize: attachment.fileSizeBytes,
-        createdAt: attachment.createdAt,
-        updatedAt: attachment.updatedAt,
-        deletedAt: null,
-        syncStatus: "synced" as const,
-      });
+    if (!waypointLocalId) {
+      continue;
+    }
 
-      return result;
-    }, []);
+    const downloadedPhoto = await downloadPhotoToLocalStorage({
+      fileNameSeed: `server-${attachment.id}`,
+      mimeType: attachment.mimeType,
+      sourceUrl: buildTripAttachmentContentUrl(identitySession.sessionToken ?? "", attachment.id),
+    });
+
+    attachments.push({
+      localId: attachment.localId,
+      serverId: attachment.id,
+      waypointLocalId,
+      deviceId: identitySession.deviceId,
+      userId: identitySession.userId,
+      type: "photo" as const,
+      localUri: downloadedPhoto.localUri,
+      mimeType: attachment.mimeType,
+      fileSize: downloadedPhoto.fileSize ?? attachment.fileSizeBytes,
+      createdAt: attachment.createdAt,
+      updatedAt: attachment.updatedAt,
+      deletedAt: null,
+      syncStatus: "synced" as const,
+    });
+  }
 
   return {
     trip,
@@ -167,7 +174,7 @@ export async function restoreOwnedTripsFromServer(
     }
 
     const detailResponse = await getOwnedTripFromServer(identitySession.sessionToken, ownedTrip.id);
-    const imported = importTripDetail(detailResponse.trip, identitySession);
+    const imported = await importTripDetail(detailResponse.trip, identitySession);
 
     nextTrips = [...nextTrips, imported.trip];
     nextTripSegments = [...nextTripSegments, ...imported.tripSegments];
