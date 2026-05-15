@@ -2,6 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Image,
   Pressable,
   ScrollView,
@@ -30,10 +31,12 @@ interface WaypointPhotoViewerScreenProps {
   attachments: WaypointAttachment[];
   hasNextGroup?: boolean;
   hasPreviousGroup?: boolean;
+  nextGroupTitle?: string | null;
   onBack: () => void;
   onScrollPastEnd?: () => void;
   onScrollPastStart?: () => void;
   onRemoveCurrent?: (attachmentLocalId: string) => void;
+  previousGroupTitle?: string | null;
   readOnly?: boolean;
   selectedAttachmentId: string | null;
   waypointTitle: string;
@@ -199,15 +202,18 @@ export default function WaypointPhotoViewerScreen({
   attachments,
   hasNextGroup = false,
   hasPreviousGroup = false,
+  nextGroupTitle = null,
   onBack,
   onScrollPastEnd,
   onScrollPastStart,
   onRemoveCurrent,
+  previousGroupTitle = null,
   readOnly = false,
   selectedAttachmentId,
   waypointTitle,
 }: WaypointPhotoViewerScreenProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const transitionOpacity = useRef(new Animated.Value(0)).current;
   const scrollRef = useRef<ScrollView | null>(null);
   const initialIndex = useMemo(
     () => attachments.findIndex((attachment) => attachment.localId === selectedAttachmentId),
@@ -215,6 +221,8 @@ export default function WaypointPhotoViewerScreen({
   );
   const [currentIndex, setCurrentIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
   const [zoomedAttachmentId, setZoomedAttachmentId] = useState<string | null>(null);
+  const [transitionTitle, setTransitionTitle] = useState<string | null>(null);
+  const [transitionDirection, setTransitionDirection] = useState<"Next" | "Previous" | null>(null);
   const currentAttachment = attachments[currentIndex] ?? null;
   const leadingPageCount = hasPreviousGroup ? 1 : 0;
   const trailingPageIndex = leadingPageCount + attachments.length;
@@ -236,16 +244,34 @@ export default function WaypointPhotoViewerScreen({
     const nextPageIndex = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
 
     if (hasPreviousGroup && nextPageIndex === 0) {
-      onScrollPastStart?.();
+      startWaypointTransition(previousGroupTitle ?? "Previous waypoint", "Previous", onScrollPastStart);
       return;
     }
 
     if (hasNextGroup && nextPageIndex === trailingPageIndex) {
-      onScrollPastEnd?.();
+      startWaypointTransition(nextGroupTitle ?? "Next waypoint", "Next", onScrollPastEnd);
       return;
     }
 
     setCurrentIndex(clamp(nextPageIndex - leadingPageCount, 0, attachments.length - 1));
+  }
+
+  function startWaypointTransition(
+    title: string,
+    direction: "Next" | "Previous",
+    onTransitionEnd: (() => void) | undefined,
+  ) {
+    setTransitionTitle(title);
+    setTransitionDirection(direction);
+    transitionOpacity.setValue(0);
+
+    Animated.timing(transitionOpacity, {
+      toValue: 1,
+      duration: 160,
+      useNativeDriver: true,
+    }).start(() => {
+      onTransitionEnd?.();
+    });
   }
 
   return (
@@ -291,6 +317,15 @@ export default function WaypointPhotoViewerScreen({
           </Pressable>
         ) : null}
       </View>
+
+      {transitionTitle && transitionDirection ? (
+        <Animated.View pointerEvents="none" style={[styles.transitionOverlay, { opacity: transitionOpacity }]}>
+          <Text style={styles.transitionEyebrow}>{transitionDirection} waypoint</Text>
+          <Text numberOfLines={2} style={styles.transitionTitle}>
+            {transitionTitle}
+          </Text>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -351,5 +386,31 @@ const styles = StyleSheet.create({
   },
   removeIconButton: {
     backgroundColor: "rgba(143, 52, 40, 0.58)",
+  },
+  transitionOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    backgroundColor: "rgba(12, 16, 12, 0.64)",
+  },
+  transitionEyebrow: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    color: "rgba(255, 253, 248, 0.66)",
+    textTransform: "uppercase",
+  },
+  transitionTitle: {
+    marginTop: 8,
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 30,
+    color: "#fffdf8",
+    textAlign: "center",
   },
 });

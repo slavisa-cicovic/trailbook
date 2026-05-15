@@ -1,4 +1,4 @@
-import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import type { Waypoint, WaypointAttachment } from "../../domain/trips";
 import {
@@ -20,6 +20,7 @@ export default function TripWaypointPhotoScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     attachmentId?: string | string[];
+    photoTransition?: string | string[];
     tripId?: string | string[];
     waypointId?: string | string[];
   }>();
@@ -29,8 +30,17 @@ export default function TripWaypointPhotoScreen() {
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
   const resolvedAttachmentId = Array.isArray(params.attachmentId) ? params.attachmentId[0] : params.attachmentId;
+  const resolvedPhotoTransition = Array.isArray(params.photoTransition)
+    ? params.photoTransition[0]
+    : params.photoTransition;
   const resolvedTripId = Array.isArray(params.tripId) ? params.tripId[0] : params.tripId;
   const resolvedWaypointId = Array.isArray(params.waypointId) ? params.waypointId[0] : params.waypointId;
+  const screenAnimation =
+    resolvedPhotoTransition === "previous"
+      ? "slide_from_left"
+      : resolvedPhotoTransition === "next"
+        ? "slide_from_right"
+        : "default";
 
   if (!identitySession) {
     return <Redirect href="/login" />;
@@ -84,7 +94,11 @@ export default function TripWaypointPhotoScreen() {
     router.back();
   }
 
-  function navigateToWaypointPhoto(waypoint: Waypoint | null, boundary: "first" | "last") {
+  function navigateToWaypointPhoto(
+    waypoint: Waypoint | null,
+    boundary: "first" | "last",
+    transition: "next" | "previous",
+  ) {
     if (!waypoint) {
       return;
     }
@@ -96,21 +110,28 @@ export default function TripWaypointPhotoScreen() {
       return;
     }
 
-    router.replace(`/trips/${resolvedTripId}/waypoints/${waypoint.localId}/photos/${waypointPhoto.localId}`);
+    router.replace(
+      `/trips/${resolvedTripId}/waypoints/${waypoint.localId}/photos/${waypointPhoto.localId}?photoTransition=${transition}`,
+    );
   }
 
   return (
-    <WaypointPhotoViewerScreen
-      attachments={attachments}
-      hasNextGroup={nextPhotoWaypoint !== null}
-      hasPreviousGroup={previousPhotoWaypoint !== null}
-      onBack={() => router.back()}
-      onRemoveCurrent={(attachmentLocalId) => void handleRemoveCurrentPhoto(attachmentLocalId)}
-      onScrollPastEnd={() => navigateToWaypointPhoto(nextPhotoWaypoint, "first")}
-      onScrollPastStart={() => navigateToWaypointPhoto(previousPhotoWaypoint, "last")}
-      selectedAttachmentId={resolvedAttachmentId ?? null}
-      waypointTitle={selectedWaypoint.title}
-    />
+    <>
+      <Stack.Screen options={{ animation: screenAnimation }} />
+      <WaypointPhotoViewerScreen
+        attachments={attachments}
+        hasNextGroup={nextPhotoWaypoint !== null}
+        hasPreviousGroup={previousPhotoWaypoint !== null}
+        nextGroupTitle={nextPhotoWaypoint?.title ?? null}
+        onBack={() => router.back()}
+        onRemoveCurrent={(attachmentLocalId) => void handleRemoveCurrentPhoto(attachmentLocalId)}
+        onScrollPastEnd={() => navigateToWaypointPhoto(nextPhotoWaypoint, "first", "next")}
+        onScrollPastStart={() => navigateToWaypointPhoto(previousPhotoWaypoint, "last", "previous")}
+        previousGroupTitle={previousPhotoWaypoint?.title ?? null}
+        selectedAttachmentId={resolvedAttachmentId ?? null}
+        waypointTitle={selectedWaypoint.title}
+      />
+    </>
   );
 }
 
