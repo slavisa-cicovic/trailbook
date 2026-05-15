@@ -28,7 +28,11 @@ import type { WaypointAttachment } from "../../../domain/trips";
 
 interface WaypointPhotoViewerScreenProps {
   attachments: WaypointAttachment[];
+  hasNextGroup?: boolean;
+  hasPreviousGroup?: boolean;
   onBack: () => void;
+  onScrollPastEnd?: () => void;
+  onScrollPastStart?: () => void;
   onRemoveCurrent?: (attachmentLocalId: string) => void;
   readOnly?: boolean;
   selectedAttachmentId: string | null;
@@ -193,7 +197,11 @@ function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps)
 
 export default function WaypointPhotoViewerScreen({
   attachments,
+  hasNextGroup = false,
+  hasPreviousGroup = false,
   onBack,
+  onScrollPastEnd,
+  onScrollPastStart,
   onRemoveCurrent,
   readOnly = false,
   selectedAttachmentId,
@@ -208,22 +216,36 @@ export default function WaypointPhotoViewerScreen({
   const [currentIndex, setCurrentIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
   const [zoomedAttachmentId, setZoomedAttachmentId] = useState<string | null>(null);
   const currentAttachment = attachments[currentIndex] ?? null;
+  const leadingPageCount = hasPreviousGroup ? 1 : 0;
+  const trailingPageIndex = leadingPageCount + attachments.length;
 
   useEffect(() => {
     const nextIndex = initialIndex >= 0 ? initialIndex : 0;
     setCurrentIndex(nextIndex);
+    setZoomedAttachmentId(null);
 
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({
-        x: nextIndex * screenWidth,
+        x: (nextIndex + leadingPageCount) * screenWidth,
         animated: false,
       });
     });
-  }, [initialIndex, screenWidth]);
+  }, [initialIndex, leadingPageCount, screenWidth]);
 
   function handleMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
-    setCurrentIndex(nextIndex);
+    const nextPageIndex = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
+
+    if (hasPreviousGroup && nextPageIndex === 0) {
+      onScrollPastStart?.();
+      return;
+    }
+
+    if (hasNextGroup && nextPageIndex === trailingPageIndex) {
+      onScrollPastEnd?.();
+      return;
+    }
+
+    setCurrentIndex(clamp(nextPageIndex - leadingPageCount, 0, attachments.length - 1));
   }
 
   return (
@@ -238,6 +260,7 @@ export default function WaypointPhotoViewerScreen({
         showsHorizontalScrollIndicator={false}
         style={styles.pager}
       >
+        {hasPreviousGroup ? <View style={[styles.slide, { width: screenWidth, height: screenHeight }]} /> : null}
         {attachments.map((attachment) => (
           <View key={attachment.localId} style={[styles.slide, { width: screenWidth, height: screenHeight }]}>
             <ZoomablePhoto
@@ -248,6 +271,7 @@ export default function WaypointPhotoViewerScreen({
             />
           </View>
         ))}
+        {hasNextGroup ? <View style={[styles.slide, { width: screenWidth, height: screenHeight }]} /> : null}
       </ScrollView>
 
       <View pointerEvents="box-none" style={styles.bottomOverlay}>
