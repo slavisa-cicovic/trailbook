@@ -80,6 +80,7 @@ export default function TripWaypointPhotoScreen() {
       onBack={() => router.back()}
       onRemoveCurrent={(attachmentLocalId) => void handleRemoveCurrentPhoto(attachmentLocalId)}
       selectedAttachmentId={resolvedAttachmentId ?? null}
+      waypointTitle={selectedWaypoint.title}
     />
   );
 }

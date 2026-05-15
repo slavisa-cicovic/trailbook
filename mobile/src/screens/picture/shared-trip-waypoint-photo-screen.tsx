@@ -74,6 +74,8 @@ export default function SharedTripWaypointPhotoScreen() {
           }) satisfies WaypointAttachment,
       );
   }, [identitySession?.sessionToken, resolvedWaypointId, sharedTrip]);
+  const selectedWaypointTitle =
+    sharedTrip?.trip.waypoints.find((waypoint) => waypoint.id === resolvedWaypointId)?.title ?? "Waypoint";
 
   if (!identitySession) {
     return <Redirect href="/login" />;
@@ -97,6 +99,7 @@ export default function SharedTripWaypointPhotoScreen() {
       onBack={() => router.back()}
       readOnly
       selectedAttachmentId={resolvedAttachmentId ?? null}
+      waypointTitle={selectedWaypointTitle}
     />
   );
 }

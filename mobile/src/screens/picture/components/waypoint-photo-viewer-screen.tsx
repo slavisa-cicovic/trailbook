@@ -32,6 +32,7 @@ interface WaypointPhotoViewerScreenProps {
   onRemoveCurrent?: (attachmentLocalId: string) => void;
   readOnly?: boolean;
   selectedAttachmentId: string | null;
+  waypointTitle: string;
 }
 
 interface ZoomablePhotoProps {
@@ -196,6 +197,7 @@ export default function WaypointPhotoViewerScreen({
   onRemoveCurrent,
   readOnly = false,
   selectedAttachmentId,
+  waypointTitle,
 }: WaypointPhotoViewerScreenProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const scrollRef = useRef<ScrollView | null>(null);
@@ -248,16 +250,13 @@ export default function WaypointPhotoViewerScreen({
         ))}
       </ScrollView>
 
-      <View pointerEvents="box-none" style={styles.topOverlay}>
-        <Text style={styles.counter}>
-          {attachments.length === 0 ? "0 / 0" : `${currentIndex + 1} / ${attachments.length}`}
-        </Text>
-      </View>
-
       <View pointerEvents="box-none" style={styles.bottomOverlay}>
         <Pressable accessibilityLabel="Back to waypoint" onPress={onBack} style={styles.iconButton}>
           <MaterialIcons color="#fffdf8" name="arrow-back" size={24} />
         </Pressable>
+        <Text numberOfLines={1} style={styles.bottomInfo}>
+          {attachments.length === 0 ? "0 / 0" : `${currentIndex + 1} / ${attachments.length}`} · {waypointTitle}
+        </Text>
         {currentAttachment && !readOnly && onRemoveCurrent ? (
           <Pressable
             accessibilityLabel="Remove current photo"
@@ -295,23 +294,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  topOverlay: {
-    position: "absolute",
-    top: 18,
-    left: 18,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  counter: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#fffdf8",
-    textAlign: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(12, 16, 12, 0.44)",
-  },
   bottomOverlay: {
     position: "absolute",
     left: 18,
@@ -320,6 +302,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 10,
+  },
+  bottomInfo: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#fffdf8",
+    textAlign: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(12, 16, 12, 0.44)",
   },
   iconButton: {
     alignItems: "center",
