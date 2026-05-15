@@ -236,6 +236,9 @@ export default function TripRouteScreen() {
   const waypointMarkers = useMemo(
     () =>
       selectedTripWaypoints.map((waypoint) => ({
+        firstPhotoUri:
+          selectedTripAttachments.find((attachment) => attachment.waypointLocalId === waypoint.localId)?.localUri ??
+          null,
         waypoint,
         hasPhotos: selectedTripAttachments.some((attachment) => attachment.waypointLocalId === waypoint.localId),
       })),
