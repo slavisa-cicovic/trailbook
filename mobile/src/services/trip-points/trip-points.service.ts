@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 
 import type { CurrentLocationSnapshot } from "../location/location.service";
-import type { RecordingMode, Trip, TripPoint } from "../../domain/trips";
+import type { RecordingProfile, Trip, TripPoint } from "../../domain/trips";
 import { getRuntimePointFilterProfileConfig } from "../recording/recording-config.service";
 import {
   recordTripPointDiagnostic,
@@ -90,7 +90,7 @@ function calculatePerpendicularDeviationMeters(
   return Math.sqrt(deviationX * deviationX + deviationY * deviationY);
 }
 
-function getRouteSmoothingThresholds(recordingMode: RecordingMode): {
+function getRouteSmoothingThresholds(recordingMode: RecordingProfile): {
   maxDeviationMeters: number;
   maxDirectDistanceMeters: number;
   maxExcessMeters: number;
@@ -123,23 +123,12 @@ function getRouteSmoothingThresholds(recordingMode: RecordingMode): {
         spikeMinExcessMeters: 40,
         spikeMinDeviationMeters: 18,
       };
-    case "auto":
-      return {
-        maxDeviationMeters: 9,
-        maxDirectDistanceMeters: 70,
-        maxExcessMeters: 20,
-        maxNeighborDistanceMeters: 45,
-        spikeMaxAccuracyMeters: 30,
-        spikeMaxDirectDistanceMeters: 50,
-        spikeMinExcessMeters: 32,
-        spikeMinDeviationMeters: 16,
-      };
     default:
       return null;
   }
 }
 
-function getMaxAccuracyMeters(recordingMode: RecordingMode) {
+function getMaxAccuracyMeters(recordingMode: RecordingProfile) {
   const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
 
   if (runtimeConfig) {
@@ -157,13 +146,12 @@ function getMaxAccuracyMeters(recordingMode: RecordingMode) {
       return 120;
     case "plane":
       return Number.POSITIVE_INFINITY;
-    case "auto":
     default:
       return 45;
   }
 }
 
-function getMaxJumpDistanceMeters(recordingMode: RecordingMode) {
+function getMaxJumpDistanceMeters(recordingMode: RecordingProfile) {
   const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
 
   if (runtimeConfig) {
@@ -181,13 +169,12 @@ function getMaxJumpDistanceMeters(recordingMode: RecordingMode) {
       return 5000;
     case "plane":
       return Number.POSITIVE_INFINITY;
-    case "auto":
     default:
       return 180;
   }
 }
 
-function getMaxImpliedSpeedKmh(recordingMode: RecordingMode) {
+function getMaxImpliedSpeedKmh(recordingMode: RecordingProfile) {
   const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
 
   if (runtimeConfig) {
@@ -205,13 +192,12 @@ function getMaxImpliedSpeedKmh(recordingMode: RecordingMode) {
       return 90;
     case "plane":
       return Number.POSITIVE_INFINITY;
-    case "auto":
     default:
       return 70;
   }
 }
 
-function getMinMovementMeters(recordingMode: RecordingMode) {
+function getMinMovementMeters(recordingMode: RecordingProfile) {
   const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
 
   if (runtimeConfig) {
@@ -229,7 +215,6 @@ function getMinMovementMeters(recordingMode: RecordingMode) {
       return 40;
     case "plane":
       return 150;
-    case "auto":
     default:
       return 10;
   }
@@ -293,7 +278,7 @@ function getRecoveryAcceptanceReason(
 function shouldHoldAsPendingContinuity(
   previousPoint: TripPoint,
   nextTripPoint: TripPoint,
-  recordingMode: RecordingMode,
+  recordingMode: RecordingProfile,
   distanceMeters: number,
   impliedSpeedKmh: number,
   context?: AppendTripPointContext,
@@ -327,7 +312,7 @@ function shouldHoldAsPendingContinuity(
 function shouldConfirmPendingContinuity(
   pendingCandidate: PendingContinuityCandidate,
   nextTripPoint: TripPoint,
-  recordingMode: RecordingMode,
+  recordingMode: RecordingProfile,
 ): boolean {
   const pendingToNextDistance = calculateDistanceBetweenPoints(
     pendingCandidate.candidatePoint,
@@ -364,7 +349,7 @@ function shouldConfirmPendingContinuity(
 
 function maybeRollbackRecentSpike(
   tripPoints: TripPoint[],
-  recordingMode: RecordingMode,
+  recordingMode: RecordingProfile,
   callbackSource: LocationCallbackSource,
 ): TripPoint[] {
   const relevantTripPoints = tripPoints.filter(
@@ -458,7 +443,7 @@ export function groupVisibleTripPointsByTripId(tripPoints: TripPoint[]): Map<str
 export function appendTripPointIfUseful(
   tripPoints: TripPoint[],
   nextTripPoint: TripPoint,
-  recordingMode: RecordingMode,
+  recordingMode: RecordingProfile,
   callbackSource: LocationCallbackSource,
   context?: AppendTripPointContext,
 ): TripPoint[] {
@@ -631,7 +616,7 @@ export function clearAllPendingTripPointContinuity() {
 export function smoothTripRoutePoints(
   tripPoints: TripPoint[],
   tripLocalId: string,
-  recordingMode: RecordingMode,
+  recordingMode: RecordingProfile,
   nextSyncStatus: TripPoint["syncStatus"],
 ): { removedPointCount: number; tripPoints: TripPoint[] } {
   const thresholds = getRouteSmoothingThresholds(recordingMode);

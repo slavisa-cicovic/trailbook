@@ -3,7 +3,7 @@ import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 
 import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
-import type { RecordingMode, RecordingProfile } from "../../domain/trips";
+import type { RecordingProfile } from "../../domain/trips";
 import type { RecordingConfigAccuracy, TrackingProfileConfig } from "../../domain/recording-config";
 import { getRuntimeTrackingProfileConfig } from "../recording/recording-config.service";
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "./background-location.constants";
@@ -72,7 +72,7 @@ export async function getCurrentForegroundLocation(): Promise<CurrentLocationSna
   }
 }
 
-export function getTrackingOptionsForProfile(profile: RecordingMode): TrackingOptions {
+export function getTrackingOptionsForProfile(profile: RecordingProfile): TrackingOptions {
   const runtimeConfig = getRuntimeTrackingProfileConfig(profile);
 
   if (runtimeConfig) {
@@ -82,14 +82,8 @@ export function getTrackingOptionsForProfile(profile: RecordingMode): TrackingOp
   return getFallbackTrackingOptionsForProfile(profile);
 }
 
-function getFallbackTrackingOptionsForProfile(profile: RecordingMode): TrackingOptions {
+function getFallbackTrackingOptionsForProfile(profile: RecordingProfile): TrackingOptions {
   switch (profile) {
-    case "auto":
-      return {
-        accuracy: Platform.OS === "ios" ? Location.Accuracy.High : Location.Accuracy.Balanced,
-        distanceInterval: Platform.OS === "ios" ? 12 : 25,
-        timeInterval: Platform.OS === "ios" ? 12 * 1000 : 20 * 1000,
-      };
     case "walk":
       return {
         accuracy: Location.Accuracy.High,
@@ -156,10 +150,8 @@ function toExpoAccuracy(accuracy: RecordingConfigAccuracy): Location.Accuracy {
   }
 }
 
-function getBackgroundActivityTypeForProfile(profile: RecordingMode): Location.LocationActivityType {
+function getBackgroundActivityTypeForProfile(profile: RecordingProfile): Location.LocationActivityType {
   switch (profile) {
-    case "auto":
-      return Location.LocationActivityType.OtherNavigation;
     case "drive":
       return Location.LocationActivityType.AutomotiveNavigation;
     case "plane":
@@ -173,7 +165,7 @@ function getBackgroundActivityTypeForProfile(profile: RecordingMode): Location.L
   }
 }
 
-function buildBackgroundTrackingOptions(profile: RecordingMode): Location.LocationTaskOptions {
+function buildBackgroundTrackingOptions(profile: RecordingProfile): Location.LocationTaskOptions {
   const trackingOptions = getTrackingOptionsForProfile(profile);
 
   return {
@@ -209,7 +201,7 @@ function backgroundTrackingOptionsMatch(
 }
 
 export async function startBackgroundLocationTracking(
-  profile: RecordingMode = DEFAULT_RECORDING_PROFILE,
+  profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
 ): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
@@ -236,7 +228,7 @@ export async function stopBackgroundLocationTracking(): Promise<void> {
 }
 
 export async function restartBackgroundLocationTracking(
-  profile: RecordingMode = DEFAULT_RECORDING_PROFILE,
+  profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
 ): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
@@ -257,7 +249,7 @@ export async function restartBackgroundLocationTracking(
 export async function syncBackgroundLocationTracking(
   status: "idle" | "recording" | "interrupted",
   activeTripId: string | null,
-  profile: RecordingMode = DEFAULT_RECORDING_PROFILE,
+  profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
 ): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
@@ -291,7 +283,7 @@ export async function syncBackgroundLocationTracking(
 }
 
 export async function watchForegroundLocation(
-  profile: RecordingMode = DEFAULT_RECORDING_PROFILE,
+  profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
   onLocation: (snapshot: CurrentLocationSnapshot) => void,
 ): Promise<() => void> {
   const trackingOptions = getTrackingOptionsForProfile(profile);

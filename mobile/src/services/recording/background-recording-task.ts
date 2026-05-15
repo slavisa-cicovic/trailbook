@@ -2,7 +2,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "../location/background-location.constants";
-import { toSnapshot } from "../location/location.service";
+import { restartBackgroundLocationTracking, toSnapshot } from "../location/location.service";
 import { getLatestMotionActivityAsync } from "../motion/motion-activity.service";
 import {
   appendTripPointIfUseful,
@@ -70,12 +70,12 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
 
   for (const location of locations) {
     const snapshot = toSnapshot(location);
-    recordLocationCallback(activeTrip.localId, nextRecordingSession.recordingMode, "background", snapshot);
+    recordLocationCallback(activeTrip.localId, nextRecordingSession.recordingProfile, "background", snapshot);
 
     if (lastRecordedAt === snapshot.recordedAt) {
       recordTripPointDiagnostic(
         activeTrip.localId,
-        nextRecordingSession.recordingMode,
+        nextRecordingSession.recordingProfile,
         "session-duplicate-recorded-at",
         {
           recordedAt: snapshot.recordedAt,
@@ -88,7 +88,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
     const appendedTripPoints = appendTripPointIfUseful(
       nextTripPoints,
       createTripPointForLocation(activeTrip, nextRecordingSession.activeSegmentId ?? activeSegment?.localId ?? null, snapshot),
-      nextRecordingSession.recordingMode,
+      nextRecordingSession.recordingProfile,
       "background",
       {
         sessionStartedAt: nextRecordingSession.startedAt,
@@ -119,6 +119,10 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
       nextRecordingSession = autoTransition.session;
       nextTripSegments = autoTransition.tripSegments;
       nextWaypoints = autoTransition.waypoints;
+
+      if (autoTransition.changed) {
+        await restartBackgroundLocationTracking(nextRecordingSession.recordingProfile);
+      }
     }
 
     lastRecordedAt = snapshot.recordedAt;

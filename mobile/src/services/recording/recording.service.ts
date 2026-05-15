@@ -295,6 +295,7 @@ export function createResumedRecordingState(
   tripSegments: TripSegment[],
   tripPauses: TripPause[],
   resumedAt: string,
+  recordingMode?: RecordingMode,
 ): {
   recordingProfile: RecordingProfile;
   session: RecordingSessionSummary;
@@ -334,7 +335,7 @@ export function createResumedRecordingState(
       trip.localId,
       nextSegment.localId,
       resumedAt,
-      nextRecordingProfile,
+      recordingMode ?? nextRecordingProfile,
       nextRecordingProfile,
     ),
   };

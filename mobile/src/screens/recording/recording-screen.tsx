@@ -352,11 +352,11 @@ export default function RecordingScreen() {
           ? await watchImmediateForegroundLocation((nextLocation) => {
               setCurrentLocation(nextLocation);
             })
-          : await watchForegroundLocation(recordingSession.recordingMode, (nextLocation) => {
+          : await watchForegroundLocation(activeRecordingProfile, (nextLocation) => {
               if (activeTrip) {
                 recordLocationCallback(
                   activeTrip.localId,
-                  recordingSession.recordingMode,
+                  activeRecordingProfile,
                   "foreground",
                   nextLocation,
                 );
@@ -371,7 +371,7 @@ export default function RecordingScreen() {
       active = false;
       stopWatchingLocation?.();
     };
-  }, [activeTrip, recordingSession.recordingMode, recordingSession.status]);
+  }, [activeRecordingProfile, activeTrip, recordingSession.status]);
 
   useEffect(() => {
     let active = true;
@@ -434,7 +434,7 @@ export default function RecordingScreen() {
     if (recordingSession.lastPointRecordedAt === currentLocation.recordedAt) {
       recordTripPointDiagnostic(
         activeTrip.localId,
-        recordingSession.recordingMode,
+        recordingSession.recordingProfile,
         "session-duplicate-recorded-at",
         {
           recordedAt: currentLocation.recordedAt,
@@ -452,7 +452,7 @@ export default function RecordingScreen() {
     const nextTripPoints = appendTripPointIfUseful(
       tripPoints,
       nextTripPoint,
-      recordingSession.recordingMode,
+      recordingSession.recordingProfile,
       "foreground",
       {
         sessionStartedAt: recordingSession.startedAt,
@@ -494,7 +494,7 @@ export default function RecordingScreen() {
         backgroundRecordingSupported !== false &&
         backgroundLocationPermissionGranted !== false
       ) {
-        await restartBackgroundLocationTracking(autoTransition.session.recordingMode);
+        await restartBackgroundLocationTracking(autoTransition.session.recordingProfile);
       }
     })();
   }, [
@@ -582,7 +582,7 @@ export default function RecordingScreen() {
           setBackgroundLocationPermissionGranted(backgroundPermissionGranted);
 
           if (backgroundPermissionGranted) {
-            await startBackgroundLocationTracking(recordingDraft.recordingMode);
+            await startBackgroundLocationTracking(concreteRecordingProfile);
           } else {
             promptOpenBackgroundLocationSettings(
               "Recording has started, but it will continue only while Trailbook stays active until background location is enabled. In Trailbook permissions, allow location all the time.",
@@ -713,6 +713,7 @@ export default function RecordingScreen() {
       tripSegments,
       tripPauses,
       resumedAt,
+      recordingSession.recordingMode === "auto" ? "auto" : undefined,
     );
 
     await setTripSegments(nextState.tripSegments);
@@ -721,7 +722,7 @@ export default function RecordingScreen() {
     await setRecordingSession(nextState.session);
 
     if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
-      await startBackgroundLocationTracking(nextState.session.recordingMode);
+      await startBackgroundLocationTracking(nextState.session.recordingProfile);
     }
 
     if (nextState.session.recordingMode === "auto") {
@@ -737,7 +738,7 @@ export default function RecordingScreen() {
     try {
       await setRecordingSession(nextSession);
       if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
-        await startBackgroundLocationTracking(nextSession.recordingMode);
+        await startBackgroundLocationTracking(nextSession.recordingProfile);
       }
       if (nextSession.recordingMode === "auto") {
         await ensureMotionActivityUpdatesForAutoMode();
@@ -774,7 +775,7 @@ export default function RecordingScreen() {
       });
       await ensureMotionActivityUpdatesForAutoMode();
       if (backgroundRecordingSupported !== false && backgroundLocationPermissionGranted !== false) {
-        await restartBackgroundLocationTracking("auto");
+        await restartBackgroundLocationTracking(recordingSession.recordingProfile);
       }
       setProfileModalVisible(false);
       return;
