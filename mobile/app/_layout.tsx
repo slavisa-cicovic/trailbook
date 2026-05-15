@@ -142,7 +142,10 @@ export default function RootLayout() {
         <Stack.Screen name="trips/index" options={{ animation: "none" }} />
         <Stack.Screen name="trips/shared/[shareId]" />
         <Stack.Screen name="trips/shared/[shareId]/waypoints/[waypointId]" />
+        <Stack.Screen name="trips/shared/[shareId]/waypoints/[waypointId]/photos/[attachmentId]" />
         <Stack.Screen name="trips/[tripId]" />
+        <Stack.Screen name="trips/[tripId]/waypoints/[waypointId]" />
+        <Stack.Screen name="trips/[tripId]/waypoints/[waypointId]/photos/[attachmentId]" />
         <Stack.Screen name="settings" options={{ animation: "none" }} />
         <Stack.Screen name="settings/recording-config" options={{ animation: "none" }} />
         <Stack.Screen name="settings/recording-config/[target]" options={{ animation: "none" }} />

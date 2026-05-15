@@ -38,7 +38,6 @@ import {
 import { useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import WaypointEditModal from "./components/waypoint-edit-modal";
-import WaypointPhotoViewerModal from "./components/waypoint-photo-viewer-modal";
 
 export default function TripWaypointScreen() {
   const router = useRouter();
@@ -57,7 +56,6 @@ export default function TripWaypointScreen() {
   });
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
-  const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
 
   const resolvedTripId = Array.isArray(params.tripId) ? params.tripId[0] : params.tripId;
   const resolvedWaypointId = Array.isArray(params.waypointId) ? params.waypointId[0] : params.waypointId;
@@ -84,7 +82,6 @@ export default function TripWaypointScreen() {
 
   const selectedPhotoSet = useMemo(() => new Set(selectedPhotoIds), [selectedPhotoIds]);
   const photoCarouselCardWidth = Math.min(Math.max(screenWidth * 0.74, 240), 340);
-  const photoViewerVisible = selectedPhotoAttachmentId !== null && attachments.length > 0;
   const selectedWaypointCategory = selectedWaypoint
     ? getWaypointCategoryOption(selectedWaypoint.category)
     : null;
@@ -132,7 +129,7 @@ export default function TripWaypointScreen() {
       return;
     }
 
-    setSelectedPhotoAttachmentId(attachmentLocalId);
+    router.push(`/trips/${resolvedTripId}/waypoints/${resolvedWaypointId}/photos/${attachmentLocalId}`);
   }
 
   async function handleRemoveSelectedPhotos() {
@@ -235,16 +232,6 @@ export default function TripWaypointScreen() {
     ]);
   }
 
-  async function handleRemoveCurrentPhoto(attachmentLocalId: string) {
-    const currentIndex = attachments.findIndex((attachment) => attachment.localId === attachmentLocalId);
-    const fallbackAttachment = attachments[currentIndex + 1] ?? attachments[currentIndex - 1] ?? null;
-
-    await setWaypointAttachments(
-      markWaypointAttachmentDeleted(waypointAttachments, attachmentLocalId, new Date().toISOString()),
-    );
-    setSelectedPhotoAttachmentId(fallbackAttachment?.localId ?? null);
-  }
-
   if (!identitySession) {
     return <Redirect href="/login" />;
   }
@@ -298,14 +285,6 @@ export default function TripWaypointScreen() {
           </View>
         </View>
       ) : null}
-
-      <WaypointPhotoViewerModal
-        attachments={attachments}
-        onClose={() => setSelectedPhotoAttachmentId(null)}
-        onRemoveCurrent={(attachmentLocalId) => void handleRemoveCurrentPhoto(attachmentLocalId)}
-        selectedAttachmentId={selectedPhotoAttachmentId}
-        visible={photoViewerVisible}
-      />
 
       <View style={styles.headerCard}>
         <View style={styles.headerCardRow}>

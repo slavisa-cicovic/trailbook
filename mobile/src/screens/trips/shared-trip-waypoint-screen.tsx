@@ -12,7 +12,6 @@ import {
   getSharedTrip,
 } from "../../services/trips/server-trip-sharing.service";
 import { useSessionStore } from "../../state/session-store";
-import WaypointPhotoViewerModal from "./components/waypoint-photo-viewer-modal";
 
 export default function SharedTripWaypointScreen() {
   const router = useRouter();
@@ -24,7 +23,6 @@ export default function SharedTripWaypointScreen() {
   const [sharedTrip, setSharedTrip] = useState<SharedTripDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -97,7 +95,6 @@ export default function SharedTripWaypointScreen() {
           }) satisfies WaypointAttachment,
       );
   }, [identitySession?.sessionToken, selectedWaypoint, sharedTrip]);
-  const photoViewerVisible = selectedPhotoAttachmentId !== null && attachments.length > 0;
   const photoCarouselCardWidth = Math.min(Math.max(screenWidth * 0.74, 240), 340);
 
   if (!identitySession) {
@@ -177,15 +174,6 @@ export default function SharedTripWaypointScreen() {
             </View>
           </View>
 
-          <WaypointPhotoViewerModal
-            attachments={attachments}
-            onClose={() => setSelectedPhotoAttachmentId(null)}
-            onRemoveCurrent={() => undefined}
-            readOnly
-            selectedAttachmentId={selectedPhotoAttachmentId}
-            visible={photoViewerVisible}
-          />
-
           <View style={styles.photoHeader}>
             <Text style={styles.sectionTitle}>Photos</Text>
           </View>
@@ -206,7 +194,11 @@ export default function SharedTripWaypointScreen() {
               {attachments.map((attachment) => (
                 <Pressable
                   key={attachment.localId}
-                  onPress={() => setSelectedPhotoAttachmentId(attachment.localId)}
+                  onPress={() =>
+                    router.push(
+                      `/trips/shared/${resolvedShareId}/waypoints/${resolvedWaypointId}/photos/${attachment.localId}`,
+                    )
+                  }
                   style={[styles.photoCarouselCard, { width: photoCarouselCardWidth }]}
                 >
                   <Image source={{ uri: attachment.localUri }} style={styles.photoCarouselImage} />
