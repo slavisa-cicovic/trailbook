@@ -303,6 +303,20 @@ export async function exportDatabaseSnapshot(): Promise<string> {
   return exportUri;
 }
 
+export async function clearLocalTripData(): Promise<void> {
+  await runExclusiveDatabaseWrite(async (database) => {
+    await database.runAsync("DELETE FROM waypoint_attachments");
+    await database.runAsync("DELETE FROM waypoints");
+    await database.runAsync("DELETE FROM trip_diagnostics");
+    await database.runAsync("DELETE FROM trip_segment_stats");
+    await database.runAsync("DELETE FROM trip_stats");
+    await database.runAsync("DELETE FROM trip_pauses");
+    await database.runAsync("DELETE FROM trip_segments");
+    await database.runAsync("DELETE FROM trip_points");
+    await database.runAsync("DELETE FROM trips");
+  });
+}
+
 export async function loadJsonRecord<T>(storageKey: string): Promise<T | null> {
   const database = await getDatabase();
   const row = await database.getFirstAsync<{ json_value: string }>(

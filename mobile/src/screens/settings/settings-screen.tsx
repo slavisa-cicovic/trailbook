@@ -12,6 +12,7 @@ import { syncBackgroundLocationTracking } from "../../services/location/location
 import { syncResolvedRecordingConfig } from "../../services/recording/recording-config.service";
 import { restoreOwnedTripsFromServer } from "../../services/trips/trip-restore.service";
 import { useRecordingStore } from "../../state/recording-store";
+import { setTripPauses } from "../../state/trip-pauses-store";
 import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { clearSessionCredentials, setActiveIdentitySession, useSessionStore } from "../../state/session-store";
@@ -19,7 +20,7 @@ import { setThemeMode, useThemeStore } from "../../state/theme-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
-import { exportDatabaseSnapshot } from "../../storage/sqlite/db";
+import { clearLocalTripData, exportDatabaseSnapshot } from "../../storage/sqlite/db";
 
 type SettingsIconName = keyof typeof MaterialIcons.glyphMap;
 
@@ -152,6 +153,8 @@ export default function SettingsScreen() {
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [recordingConfigBusy, setRecordingConfigBusy] = useState(false);
   const [recordingConfigMessage, setRecordingConfigMessage] = useState<string | null>(null);
+  const [clearTripDataBusy, setClearTripDataBusy] = useState(false);
+  const [clearTripDataMessage, setClearTripDataMessage] = useState<string | null>(null);
   const [exportDatabaseBusy, setExportDatabaseBusy] = useState(false);
   const [exportDatabaseMessage, setExportDatabaseMessage] = useState<string | null>(null);
 
@@ -257,6 +260,43 @@ export default function SettingsScreen() {
     } finally {
       setExportDatabaseBusy(false);
     }
+  }
+
+  async function handleClearLocalTripData() {
+    setClearTripDataBusy(true);
+    setClearTripDataMessage(null);
+
+    try {
+      await clearLocalTripData();
+      await setTrips([]);
+      await setTripSegments([]);
+      await setTripPauses([]);
+      await setTripPoints([]);
+      await setWaypoints([]);
+      await setWaypointAttachments([]);
+      setClearTripDataMessage("Local trip data deleted. Photo files were not removed.");
+    } catch (error) {
+      setClearTripDataMessage(error instanceof Error ? error.message : "Local trip data delete failed.");
+    } finally {
+      setClearTripDataBusy(false);
+    }
+  }
+
+  function handleConfirmClearLocalTripData() {
+    Alert.alert(
+      "Delete local trips",
+      "This deletes local trips, points, waypoints, diagnostics and attachment records from SQLite. Auth and photo files are not deleted.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete local trips",
+          style: "destructive",
+          onPress: () => {
+            void handleClearLocalTripData();
+          },
+        },
+      ],
+    );
   }
 
   if (!identitySession) {
@@ -387,6 +427,18 @@ export default function SettingsScreen() {
         ) : null}
 
         <SettingsSection theme={theme} title="Debug">
+          <SettingsRow
+            description="Temporary helper that clears local SQLite trip data before restoring from server. Does not delete auth or photo files."
+            disabled={clearTripDataBusy}
+            iconName="delete-sweep"
+            message={clearTripDataMessage}
+            messageTone={clearTripDataMessage?.startsWith("Local trip data deleted") ? "success" : "danger"}
+            onPress={handleConfirmClearLocalTripData}
+            theme={theme}
+            title="Delete local trips"
+            value={clearTripDataBusy ? "Deleting..." : "Delete"}
+          />
+          <SettingsDivider theme={theme} />
           <SettingsRow
             description="Temporary helper that exports the local SQLite database snapshot."
             disabled={exportDatabaseBusy}
