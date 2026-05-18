@@ -10,7 +10,7 @@ import {
   recordLocationCallback,
   recordTripPointDiagnostic,
 } from "../trip-points/trip-points.service";
-import { applyAutoRecordingTransition } from "./auto-recording.service";
+import { applyAutoRecordingTransition, recordAutoRecordingSample } from "./auto-recording.service";
 import { updateRecordingLastPoint, updateRecordingMotionActivity } from "./recording.service";
 import { setRecordingSession } from "../../state/recording-store";
 import { setTripSegments } from "../../state/trip-segments-store";
@@ -71,6 +71,10 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
   for (const location of locations) {
     const snapshot = toSnapshot(location);
     recordLocationCallback(activeTrip.localId, nextRecordingSession.recordingProfile, "background", snapshot);
+    const rawAutoSamples =
+      nextRecordingSession.recordingMode === "auto"
+        ? recordAutoRecordingSample(activeTrip.localId, snapshot)
+        : null;
 
     if (lastRecordedAt === snapshot.recordedAt) {
       recordTripPointDiagnostic(
@@ -82,7 +86,9 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
           source: "background",
         },
       );
-      continue;
+      if (nextRecordingSession.recordingMode !== "auto") {
+        continue;
+      }
     }
 
     const appendedTripPoints = appendTripPointIfUseful(
@@ -95,17 +101,18 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
         tripStartedAt: activeTrip.startedAt,
       },
     );
+    const pointsWereAppended = appendedTripPoints !== nextTripPoints;
 
-    if (appendedTripPoints !== nextTripPoints) {
+    if (pointsWereAppended) {
       nextTripPoints = appendedTripPoints;
       pointsChanged = true;
-      const motionActivity =
-        nextRecordingSession.recordingMode === "auto"
-          ? await getLatestMotionActivityAsync(snapshot.recordedAt)
-          : null;
+      nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, snapshot.recordedAt);
+    }
+
+    if (nextRecordingSession.recordingMode === "auto") {
+      const motionActivity = await getLatestMotionActivityAsync(snapshot.recordedAt);
 
       nextRecordingSession = updateRecordingMotionActivity(nextRecordingSession, motionActivity);
-      nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, snapshot.recordedAt);
       const autoTransition = applyAutoRecordingTransition(
         nextRecordingSession,
         activeTrip,
@@ -114,6 +121,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
         nextWaypoints,
         snapshot.recordedAt,
         motionActivity,
+        rawAutoSamples,
       );
 
       nextRecordingSession = autoTransition.session;
@@ -132,12 +140,14 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
 
   if (pointsChanged) {
     writes.push(setTripPoints(nextTripPoints));
-    if (nextTripSegments !== tripSegments) {
-      writes.push(setTripSegments(nextTripSegments));
-    }
-    if (nextWaypoints !== waypoints) {
-      writes.push(setWaypoints(nextWaypoints));
-    }
+  }
+
+  if (nextTripSegments !== tripSegments) {
+    writes.push(setTripSegments(nextTripSegments));
+  }
+
+  if (nextWaypoints !== waypoints) {
+    writes.push(setWaypoints(nextWaypoints));
   }
 
   if (

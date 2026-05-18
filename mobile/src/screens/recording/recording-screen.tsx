@@ -54,6 +54,7 @@ import {
   isMotionActivityAvailableAsync,
   stopMotionActivityUpdates,
 } from "../../services/motion/motion-activity.service";
+import { clearAutoRecordingSamples, recordAutoRecordingSample } from "../../services/recording/auto-recording.service";
 import {
   closeActiveTrip,
   continueInterruptedRecording,
@@ -452,6 +453,10 @@ export default function RecordingScreen() {
       recordingSession.activeSegmentId,
       currentLocation,
     );
+    const rawAutoSamples =
+      recordingSession.recordingMode === "auto"
+        ? recordAutoRecordingSample(activeTrip.localId, currentLocation)
+        : null;
     const nextTripPoints = appendTripPointIfUseful(
       tripPoints,
       nextTripPoint,
@@ -463,7 +468,7 @@ export default function RecordingScreen() {
       },
     );
 
-    if (nextTripPoints === tripPoints) {
+    if (nextTripPoints === tripPoints && recordingSession.recordingMode !== "auto") {
       return;
     }
 
@@ -473,7 +478,9 @@ export default function RecordingScreen() {
           ? await getLatestMotionActivityAsync(currentLocation.recordedAt)
           : null;
       let nextRecordingSession = updateRecordingMotionActivity(recordingSession, motionActivity);
-      nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, currentLocation.recordedAt);
+      if (nextTripPoints !== tripPoints) {
+        nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, currentLocation.recordedAt);
+      }
       const autoTransition = applyAutoRecordingTransition(
         nextRecordingSession,
         activeTrip,
@@ -482,6 +489,7 @@ export default function RecordingScreen() {
         waypoints,
         currentLocation.recordedAt,
         motionActivity,
+        rawAutoSamples,
       );
 
       if (autoTransition.changed) {
@@ -489,8 +497,24 @@ export default function RecordingScreen() {
         await setWaypoints(autoTransition.waypoints);
       }
 
-      await setTripPoints(nextTripPoints);
-      await setRecordingSession(autoTransition.session);
+      if (nextTripPoints !== tripPoints) {
+        await setTripPoints(nextTripPoints);
+      }
+
+      if (
+        nextTripPoints !== tripPoints ||
+        autoTransition.changed ||
+        autoTransition.session.autoCandidateProfile !== recordingSession.autoCandidateProfile ||
+        autoTransition.session.autoCandidateSince !== recordingSession.autoCandidateSince ||
+        autoTransition.session.recordingProfile !== recordingSession.recordingProfile ||
+        autoTransition.session.activeSegmentId !== recordingSession.activeSegmentId ||
+        autoTransition.session.motionActivityType !== recordingSession.motionActivityType ||
+        autoTransition.session.motionActivityConfidence !== recordingSession.motionActivityConfidence ||
+        autoTransition.session.motionActivityRecordedAt !== recordingSession.motionActivityRecordedAt ||
+        autoTransition.session.motionActivitySourcePlatform !== recordingSession.motionActivitySourcePlatform
+      ) {
+        await setRecordingSession(autoTransition.session);
+      }
 
       if (
         autoTransition.changed &&
@@ -689,6 +713,7 @@ export default function RecordingScreen() {
     await setWaypoints(normalizedState.waypoints);
     await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt, batterySnapshot));
     await setRecordingSession(stopRecordingSession(recordingSession));
+    clearAutoRecordingSamples(recordingSession.activeTripId);
     flushTripPointDiagnostics(recordingSession.activeTripId);
   }
 

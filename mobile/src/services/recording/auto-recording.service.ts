@@ -22,29 +22,41 @@ interface TimedSpeedSample {
   speedKmh: number;
 }
 
+interface AutoLocationPoint {
+  accuracy: number | null;
+  latitude: number;
+  longitude: number;
+  recordedAt: string;
+  speed: number | null;
+}
+
 const WALK_MAX_KMH = 6;
 const BIKE_MIN_KMH = 8.5;
 const BIKE_MAX_KMH = 35;
-const DRIVE_MIN_KMH = 40;
+const DRIVE_MIN_KMH = 28;
 const PLANE_MIN_KMH = 180;
 const PLANE_PEAK_KMH = 250;
 const BOAT_MIN_KMH = 12;
 const BOAT_MAX_KMH = 35;
 const STATIONARY_MAX_KMH = 2;
+const AUTO_RAW_SAMPLE_MAX_AGE_MS = 15 * 60 * 1000;
+const AUTO_RAW_SAMPLE_MAX_COUNT = 240;
 
 const WALK_STABILITY_MS = 5 * 60 * 1000;
 const BIKE_STABILITY_MS = 2 * 60 * 1000;
 const MOTION_ASSISTED_BIKE_STABILITY_MS = 90 * 1000;
-const DRIVE_STABILITY_MS = 5 * 60 * 1000;
+const DRIVE_STABILITY_MS = 75 * 1000;
+const MOTION_ASSISTED_DRIVE_STABILITY_MS = 45 * 1000;
 const PLANE_STABILITY_MS = 3 * 60 * 1000;
 const BOAT_STABILITY_MS = 20 * 60 * 1000;
 const MOTION_ACTIVITY_MAX_AGE_MS = 10 * 60 * 1000;
+const rawAutoSamplesByTripLocalId = new Map<string, AutoLocationPoint[]>();
 
 function toRadians(value: number): number {
   return (value * Math.PI) / 180;
 }
 
-function distanceMetersBetweenPoints(left: TripPoint, right: TripPoint): number {
+function distanceMetersBetweenPoints(left: AutoLocationPoint, right: AutoLocationPoint): number {
   const earthRadiusMeters = 6371000;
   const deltaLatitude = toRadians(right.latitude - left.latitude);
   const deltaLongitude = toRadians(right.longitude - left.longitude);
@@ -75,7 +87,7 @@ function normalizeHeadingDegrees(value: number): number {
   return value;
 }
 
-function headingDegreesBetweenPoints(left: TripPoint, right: TripPoint): number {
+function headingDegreesBetweenPoints(left: AutoLocationPoint, right: AutoLocationPoint): number {
   const latitudeLeft = toRadians(left.latitude);
   const latitudeRight = toRadians(right.latitude);
   const deltaLongitude = toRadians(right.longitude - left.longitude);
@@ -109,11 +121,11 @@ function median(values: number[]): number {
   return (ordered[middleIndex - 1] + ordered[middleIndex]) / 2;
 }
 
-function getPointTimeMs(point: TripPoint): number {
+function getPointTimeMs(point: AutoLocationPoint): number {
   return new Date(point.recordedAt).getTime();
 }
 
-function getSpeedKmh(previousPoint: TripPoint | null, point: TripPoint): number | null {
+function getSpeedKmh(previousPoint: AutoLocationPoint | null, point: AutoLocationPoint): number | null {
   if (point.speed !== null && Number.isFinite(point.speed) && point.speed >= 0) {
     return point.speed * 3.6;
   }
@@ -133,7 +145,7 @@ function getSpeedKmh(previousPoint: TripPoint | null, point: TripPoint): number 
   return (distanceMetersBetweenPoints(previousPoint, point) / deltaSeconds) * 3.6;
 }
 
-function buildTimedSpeedSamples(tripPoints: TripPoint[]): TimedSpeedSample[] {
+function buildTimedSpeedSamples(tripPoints: AutoLocationPoint[]): TimedSpeedSample[] {
   return tripPoints.reduce<TimedSpeedSample[]>((samples, point, index) => {
     const speedKmh = getSpeedKmh(index > 0 ? tripPoints[index - 1] ?? null : null, point);
 
@@ -174,7 +186,7 @@ function getWindowDurationMs(samples: TimedSpeedSample[]): number {
   return (samples[samples.length - 1]?.recordedAtMs ?? 0) - (samples[0]?.recordedAtMs ?? 0);
 }
 
-function getHeadingChangeAverage(tripPoints: TripPoint[]): number {
+function getHeadingChangeAverage(tripPoints: AutoLocationPoint[]): number {
   if (tripPoints.length < 3) {
     return Number.POSITIVE_INFINITY;
   }
@@ -198,7 +210,7 @@ function getHeadingChangeAverage(tripPoints: TripPoint[]): number {
   return totalDelta / (headings.length - 1);
 }
 
-function inferBoatFromTripPoints(tripPoints: TripPoint[]): boolean {
+function inferBoatFromTripPoints(tripPoints: AutoLocationPoint[]): boolean {
   if (tripPoints.length < 6) {
     return false;
   }
@@ -235,7 +247,7 @@ function inferBoatFromTripPoints(tripPoints: TripPoint[]): boolean {
   );
 }
 
-function inferLocationOnlyAutoRecordingProfile(tripPoints: TripPoint[]): RecordingProfile | null {
+function inferLocationOnlyAutoRecordingProfile(tripPoints: AutoLocationPoint[]): RecordingProfile | null {
   const visibleTripPoints = [...tripPoints].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
   const speedSamples = buildTimedSpeedSamples(visibleTripPoints);
 
@@ -294,7 +306,7 @@ function inferLocationOnlyAutoRecordingProfile(tripPoints: TripPoint[]): Recordi
 
 function isFreshMotionActivity(
   motionActivity: MotionActivity | null,
-  tripPoints: TripPoint[],
+  tripPoints: AutoLocationPoint[],
 ): motionActivity is MotionActivity {
   if (!motionActivity) {
     return false;
@@ -317,7 +329,7 @@ function isFreshMotionActivity(
 }
 
 function inferMotionGuidedProfile(
-  tripPoints: TripPoint[],
+  tripPoints: AutoLocationPoint[],
   motionActivity: MotionActivity | null,
 ): RecordingProfile | null {
   const visibleTripPoints = [...tripPoints].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
@@ -359,8 +371,41 @@ function isMotionAssistedBikeCandidate(motionActivity: MotionActivity | null): b
   );
 }
 
+function isMotionAssistedDriveCandidate(motionActivity: MotionActivity | null): boolean {
+  return (
+    motionActivity?.type === "drive" &&
+    (motionActivity.confidence === "medium" || motionActivity.confidence === "high")
+  );
+}
+
+export function recordAutoRecordingSample(
+  tripLocalId: string,
+  snapshot: AutoLocationPoint,
+): AutoLocationPoint[] {
+  const recordedAtMs = new Date(snapshot.recordedAt).getTime();
+
+  if (Number.isNaN(recordedAtMs)) {
+    return rawAutoSamplesByTripLocalId.get(tripLocalId) ?? [];
+  }
+
+  const existingSamples = rawAutoSamplesByTripLocalId.get(tripLocalId) ?? [];
+  const deduplicatedSamples = existingSamples.filter((sample) => sample.recordedAt !== snapshot.recordedAt);
+  const minRecordedAtMs = recordedAtMs - AUTO_RAW_SAMPLE_MAX_AGE_MS;
+  const nextSamples = [...deduplicatedSamples, snapshot]
+    .filter((sample) => new Date(sample.recordedAt).getTime() >= minRecordedAtMs)
+    .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt))
+    .slice(-AUTO_RAW_SAMPLE_MAX_COUNT);
+
+  rawAutoSamplesByTripLocalId.set(tripLocalId, nextSamples);
+  return nextSamples;
+}
+
+export function clearAutoRecordingSamples(tripLocalId: string) {
+  rawAutoSamplesByTripLocalId.delete(tripLocalId);
+}
+
 export function inferAutoRecordingProfile(
-  tripPoints: TripPoint[],
+  tripPoints: AutoLocationPoint[],
   motionActivity: MotionActivity | null = null,
 ): RecordingProfile | null {
   const locationProfile = inferLocationOnlyAutoRecordingProfile(tripPoints);
@@ -415,6 +460,10 @@ function getAutoTransitionStabilityThresholdMs(
     return MOTION_ASSISTED_BIKE_STABILITY_MS;
   }
 
+  if (recordingProfile === "drive" && isMotionAssistedDriveCandidate(motionActivity)) {
+    return MOTION_ASSISTED_DRIVE_STABILITY_MS;
+  }
+
   return getAutoStabilityThresholdMs(recordingProfile);
 }
 
@@ -426,6 +475,7 @@ export function applyAutoRecordingTransition(
   waypoints: Waypoint[],
   recordedAt: string,
   motionActivity: MotionActivity | null = null,
+  rawTripPoints: AutoLocationPoint[] | null = null,
 ): AutoRecordingTransitionResult {
   if (recordingSession.recordingMode !== "auto" || !recordingSession.activeSegmentId) {
     return {
@@ -436,8 +486,9 @@ export function applyAutoRecordingTransition(
     };
   }
 
+  const acceptedTripPoints = getVisibleTripPointsForTrip(tripPoints, trip.localId);
   const inferredProfile = inferAutoRecordingProfile(
-    getVisibleTripPointsForTrip(tripPoints, trip.localId),
+    rawTripPoints && rawTripPoints.length > 0 ? rawTripPoints : acceptedTripPoints,
     motionActivity,
   );
   const activeSegment =
