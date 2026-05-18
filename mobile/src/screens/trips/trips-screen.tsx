@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Redirect, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 
 import ScreenLayout from "../../components/layout/screen-layout";
@@ -37,7 +37,11 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
-import { listSharedTrips, syncTripToServer } from "../../services/trips/server-trip-sharing.service";
+import {
+  listSharedTrips,
+  syncTripToServer,
+  uploadTripAttachmentToServer,
+} from "../../services/trips/server-trip-sharing.service";
 import { loadTripPointsForTrip, loadTripStatsByTripLocalIds, type TripStatsRow } from "../../storage/trip-points-storage";
 import TripEditModal from "./components/trip-edit-modal";
 
@@ -77,6 +81,7 @@ export default function TripsScreen() {
   const [sharedTrips, setSharedTrips] = useState<SharedTripSummary[]>([]);
   const [sharedTripsLoading, setSharedTripsLoading] = useState(false);
   const [sharedTripsError, setSharedTripsError] = useState<string | null>(null);
+  const [syncingTripId, setSyncingTripId] = useState<string | null>(null);
   const [tripStatsByTripId, setTripStatsByTripId] = useState<Map<string, TripStatsRow>>(new Map());
   const [tripStatsLoading, setTripStatsLoading] = useState(false);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
@@ -278,6 +283,98 @@ export default function TripsScreen() {
       tripSegments: currentUserTripSegments.filter((segment) => segment.tripLocalId === tripLocalId),
       waypoints: tripWaypoints,
     });
+  }
+
+  async function handleSyncTrip(trip: Trip) {
+    if (identitySession?.mode !== "authenticated" || !identitySession.sessionToken || syncingTripId) {
+      return;
+    }
+
+    if (trip.status !== "ended") {
+      return;
+    }
+
+    setSyncingTripId(trip.localId);
+
+    try {
+      const tripWaypoints = currentUserWaypoints.filter((waypoint) => waypoint.tripLocalId === trip.localId);
+      const tripWaypointIds = new Set(tripWaypoints.map((waypoint) => waypoint.localId));
+      const tripAttachments = currentUserWaypointAttachments.filter((attachment) =>
+        tripWaypointIds.has(attachment.waypointLocalId),
+      );
+      const response = await syncTripToServer(identitySession.sessionToken, {
+        attachments: tripAttachments,
+        trip,
+        tripPoints: await loadTripPointsForTrip(trip.localId),
+        tripSegments: currentUserTripSegments.filter((segment) => segment.tripLocalId === trip.localId),
+        waypoints: tripWaypoints,
+      });
+      const uploadedAttachments = [];
+      const attachmentsToUpload = tripAttachments.filter(
+        (attachment) =>
+          attachment.deletedAt === null &&
+          (!attachment.serverId ||
+            attachment.syncStatus !== "synced" ||
+            !attachment.localUri.startsWith("http")),
+      );
+
+      for (const attachment of attachmentsToUpload) {
+        const uploadedAttachment = await uploadTripAttachmentToServer(identitySession.sessionToken, response.tripId, {
+          attachmentLocalId: attachment.localId,
+          localUri: attachment.localUri,
+          mimeType: attachment.mimeType,
+        });
+
+        uploadedAttachments.push(uploadedAttachment);
+      }
+
+      await setTrips(
+        trips.map((candidate) =>
+          candidate.localId === trip.localId
+            ? {
+                ...candidate,
+                serverId: response.tripId,
+                syncStatus: "synced",
+                updatedAt: response.syncedAt,
+              }
+            : candidate,
+        ),
+      );
+
+      if (uploadedAttachments.length > 0) {
+        const uploadedAttachmentIds = new Map(
+          uploadedAttachments.map((attachment) => [attachment.attachmentLocalId, attachment.attachmentId]),
+        );
+
+        await setWaypointAttachments(
+          waypointAttachments.map((attachment) =>
+            uploadedAttachmentIds.has(attachment.localId)
+              ? {
+                  ...attachment,
+                  serverId: uploadedAttachmentIds.get(attachment.localId) ?? attachment.serverId,
+                  syncStatus: "synced",
+                  updatedAt: response.syncedAt,
+                }
+              : attachment,
+          ),
+        );
+      }
+    } catch (error) {
+      await setTrips(
+        trips.map((candidate) =>
+          candidate.localId === trip.localId
+            ? {
+                ...candidate,
+                syncStatus: "sync-error",
+                updatedAt: new Date().toISOString(),
+              }
+            : candidate,
+        ),
+      );
+      Alert.alert("Sync failed", error instanceof Error ? error.message : "Trip could not be synced.");
+    } finally {
+      setSyncingTripId(null);
+    }
   }
 
   async function handleDeleteTrip(trip: Trip) {
@@ -587,6 +684,8 @@ export default function TripsScreen() {
                       trip.status === "active" ? "Active" : trip.status === "paused" ? "Paused" : trip.syncStatus;
                     const showStatusBadge =
                       trip.status !== "ended" || identitySession.mode === "authenticated";
+                    const isSyncBadge = trip.status === "ended" && identitySession.mode === "authenticated";
+                    const isTripSyncing = syncingTripId === trip.localId;
                     const tripModeSummary = buildTripModeSummary(currentUserTripSegments, trip.localId);
                     const tripSegmentsForCard = getVisibleTripSegmentsForTrip(currentUserTripSegments, trip.localId);
                     const tripDurationMs = Math.max(
@@ -649,9 +748,28 @@ export default function TripsScreen() {
                                   ) : null}
                                 </View>
                                 {showStatusBadge ? (
-                                  <View style={styles.tripBadge}>
-                                    <Text style={styles.tripBadgeText}>{statusLabel}</Text>
-                                  </View>
+                                  isSyncBadge ? (
+                                    <Pressable
+                                      accessibilityLabel={isTripSyncing ? "Syncing trip" : "Sync trip"}
+                                      disabled={isTripSyncing || syncingTripId !== null}
+                                      onPress={(event) => {
+                                        event.stopPropagation();
+                                        void handleSyncTrip(trip);
+                                      }}
+                                      style={[
+                                        styles.tripBadge,
+                                        styles.tripBadgePressable,
+                                        isTripSyncing && styles.tripBadgeDisabled,
+                                      ]}
+                                    >
+                                      {isTripSyncing ? <ActivityIndicator color="#355035" size="small" /> : null}
+                                      <Text style={styles.tripBadgeText}>{isTripSyncing ? "syncing" : statusLabel}</Text>
+                                    </Pressable>
+                                  ) : (
+                                    <View style={styles.tripBadge}>
+                                      <Text style={styles.tripBadgeText}>{statusLabel}</Text>
+                                    </View>
+                                  )
                                 ) : null}
                               </View>
 
@@ -1029,6 +1147,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#e2ecda",
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  tripBadgePressable: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  tripBadgeDisabled: {
+    opacity: 0.72,
   },
   tripBadgeText: {
     fontSize: 11,
