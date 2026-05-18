@@ -39,6 +39,7 @@ interface WaypointPhotoViewerScreenProps {
   previousGroupTitle?: string | null;
   readOnly?: boolean;
   selectedAttachmentId: string | null;
+  tripTitle?: string;
   waypointTitle: string;
 }
 
@@ -211,6 +212,7 @@ export default function WaypointPhotoViewerScreen({
   previousGroupTitle = null,
   readOnly = false,
   selectedAttachmentId,
+  tripTitle,
   waypointTitle,
 }: WaypointPhotoViewerScreenProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -312,6 +314,14 @@ export default function WaypointPhotoViewerScreen({
         {hasNextGroup ? <View style={[styles.slide, { width: screenWidth, height: screenHeight }]} /> : null}
       </ScrollView>
 
+      {tripTitle ? (
+        <View pointerEvents="box-none" style={styles.topOverlay}>
+          <Text numberOfLines={1} style={styles.topInfo}>
+            {tripTitle}
+          </Text>
+        </View>
+      ) : null}
+
       <View pointerEvents="box-none" style={styles.bottomOverlay}>
         <Pressable accessibilityLabel="Back to waypoint" onPress={onBack} style={styles.iconButton}>
           <MaterialIcons color="#fffdf8" name="arrow-back" size={24} />
@@ -364,6 +374,24 @@ const styles = StyleSheet.create({
   zoomImageWrap: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  topOverlay: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    top: 36,
+    alignItems: "center",
+  },
+  topInfo: {
+    maxWidth: "86%",
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#fffdf8",
+    textAlign: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(12, 16, 12, 0.44)",
   },
   bottomOverlay: {
     position: "absolute",

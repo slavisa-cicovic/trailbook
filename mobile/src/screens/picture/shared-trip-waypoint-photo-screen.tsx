@@ -99,6 +99,7 @@ export default function SharedTripWaypointPhotoScreen() {
       onBack={() => router.back()}
       readOnly
       selectedAttachmentId={resolvedAttachmentId ?? null}
+      tripTitle={sharedTrip?.trip.title}
       waypointTitle={selectedWaypointTitle}
     />
   );

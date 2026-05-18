@@ -129,6 +129,7 @@ export default function TripWaypointPhotoScreen() {
         onScrollPastStart={() => navigateToWaypointPhoto(previousPhotoWaypoint, "last", "previous")}
         previousGroupTitle={previousPhotoWaypoint?.title ?? null}
         selectedAttachmentId={resolvedAttachmentId ?? null}
+        tripTitle={selectedTrip.title}
         waypointTitle={selectedWaypoint.title}
       />
     </>
