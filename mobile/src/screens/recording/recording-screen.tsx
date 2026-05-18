@@ -14,6 +14,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { Redirect } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -126,6 +127,7 @@ import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 
 export default function RecordingScreen() {
+  const { width: screenWidth } = useWindowDimensions();
   const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
     { label: "Map", value: "standard" },
     { label: "Satellite", value: "satellite" },
@@ -224,6 +226,7 @@ export default function RecordingScreen() {
   const canChangeMode = recordingSession.activeTripId !== null;
   const canStartRecording = recordingDraft.title.trim().length > 0;
   const canSaveWaypoint = waypointDraft.title.trim().length > 0;
+  const draftPhotoCardWidth = Math.min(Math.max(screenWidth * 0.5, 170), 230);
   const selectedPhotoAttachment =
     selectedPhotoAttachmentId === null
       ? null
@@ -1227,9 +1230,19 @@ export default function RecordingScreen() {
               </View>
 
               {waypointDraft.photos.length > 0 ? (
-                <View style={styles.photoDraftList}>
+                <ScrollView
+                  contentContainerStyle={styles.photoDraftCarouselContent}
+                  decelerationRate="fast"
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  snapToAlignment="start"
+                  snapToInterval={draftPhotoCardWidth + 12}
+                >
                   {waypointDraft.photos.map((photo, index) => (
-                    <View key={`${photo.localUri}-${index}`} style={styles.photoDraftCard}>
+                    <View
+                      key={`${photo.localUri}-${index}`}
+                      style={[styles.photoDraftCard, { width: draftPhotoCardWidth }]}
+                    >
                       <Image source={{ uri: photo.localUri }} style={styles.photoPreview} />
                       <Pressable
                         onPress={() => handleRemoveDraftPhoto(index)}
@@ -1239,7 +1252,7 @@ export default function RecordingScreen() {
                       </Pressable>
                     </View>
                   ))}
-                </View>
+                </ScrollView>
               ) : (
                 <View style={styles.photoPlaceholder}>
                   <Text style={styles.photoPlaceholderText}>No photos selected yet.</Text>
@@ -1896,10 +1909,10 @@ const styles = StyleSheet.create({
   fieldTextarea: {
     minHeight: 90,
   },
-  photoDraftList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+  photoDraftCarouselContent: {
+    gap: 12,
+    paddingBottom: 4,
+    paddingRight: 18,
   },
   photoHelpText: {
     fontSize: 13,
@@ -1937,19 +1950,23 @@ const styles = StyleSheet.create({
     color: "#fffdf8",
   },
   photoDraftCard: {
-    width: 132,
-    gap: 8,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#f6f1e5",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
   },
   photoPreview: {
-    width: 132,
-    height: 132,
-    borderRadius: 18,
+    width: "100%",
+    aspectRatio: 1.08,
     backgroundColor: "#d7ddcf",
   },
   removeDraftPhotoButton: {
-    alignSelf: "flex-start",
+    position: "absolute",
+    right: 8,
+    top: 8,
     borderRadius: 999,
-    backgroundColor: "#f7e0db",
+    backgroundColor: "rgba(247, 224, 219, 0.92)",
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
