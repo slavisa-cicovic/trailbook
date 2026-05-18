@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
@@ -155,6 +155,7 @@ export default function TripRouteScreen() {
   >([]);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const syncIconRotation = useRef(new Animated.Value(0)).current;
   const [smoothBusy, setSmoothBusy] = useState(false);
   const [segmentEditSegmentId, setSegmentEditSegmentId] = useState<string | null>(null);
   const [tripSegmentStatsBySegmentId, setTripSegmentStatsBySegmentId] = useState<
@@ -243,6 +244,43 @@ export default function TripRouteScreen() {
         hasPhotos: selectedTripAttachments.some((attachment) => attachment.waypointLocalId === waypoint.localId),
       })),
     [selectedTripAttachments, selectedTripWaypoints],
+  );
+
+  useEffect(() => {
+    if (!syncBusy) {
+      syncIconRotation.stopAnimation();
+      syncIconRotation.setValue(0);
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.timing(syncIconRotation, {
+        toValue: 1,
+        duration: 850,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [syncBusy, syncIconRotation]);
+
+  const syncIconAnimatedStyle = useMemo(
+    () => ({
+      transform: [
+        {
+          rotate: syncIconRotation.interpolate({
+            inputRange: [0, 1],
+            outputRange: ["0deg", "360deg"],
+          }),
+        },
+      ],
+    }),
+    [syncIconRotation],
   );
 
   useEffect(() => {
@@ -701,10 +739,13 @@ export default function TripRouteScreen() {
                 <>
                   <Pressable
                     accessibilityLabel={syncBusy ? "Syncing trip" : "Sync trip"}
+                    disabled={syncBusy}
                     onPress={() => void syncSelectedTripIfNeeded()}
-                    style={[styles.headerIconButton, styles.syncButton]}
+                    style={[styles.headerIconButton, styles.syncButton, syncBusy && styles.headerIconButtonDisabled]}
                   >
-                    <MaterialIcons color={syncIconColor} name="sync" size={18} />
+                    <Animated.View style={syncIconAnimatedStyle}>
+                      <MaterialIcons color={syncIconColor} name="sync" size={18} />
+                    </Animated.View>
                   </Pressable>
                   <Pressable
                     accessibilityLabel="Share trip"
@@ -922,6 +963,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#e6ece1",
     padding: 10,
+  },
+  headerIconButtonDisabled: {
+    opacity: 0.72,
   },
   mapTypeRow: {
     flexDirection: "row",
