@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Alert, Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
@@ -23,17 +23,17 @@ import {
 import {
   calculateTripDistanceMeters,
   formatDistanceKm,
-  getVisibleTripPointsForTrip,
   smoothTripRoutePoints,
 } from "../../services/trip-points/trip-points.service";
 import {
+  loadTripPointsForTrip,
   loadTripSegmentStatsByTripLocalIds,
   type TripSegmentStatsRow,
 } from "../../storage/trip-points-storage";
 import { useSessionStore } from "../../state/session-store";
 import { useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
-import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
+import { getTripPointsStateSnapshot, setTripPoints } from "../../state/trip-points-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
@@ -72,12 +72,17 @@ function buildTripMapRegion(
     };
   }
 
-  const latitudes = coordinates.map((coordinate) => coordinate.latitude);
-  const longitudes = coordinates.map((coordinate) => coordinate.longitude);
-  const minLatitude = Math.min(...latitudes);
-  const maxLatitude = Math.max(...latitudes);
-  const minLongitude = Math.min(...longitudes);
-  const maxLongitude = Math.max(...longitudes);
+  let minLatitude = coordinates[0].latitude;
+  let maxLatitude = coordinates[0].latitude;
+  let minLongitude = coordinates[0].longitude;
+  let maxLongitude = coordinates[0].longitude;
+
+  for (const coordinate of coordinates) {
+    minLatitude = Math.min(minLatitude, coordinate.latitude);
+    maxLatitude = Math.max(maxLatitude, coordinate.latitude);
+    minLongitude = Math.min(minLongitude, coordinate.longitude);
+    maxLongitude = Math.max(maxLongitude, coordinate.longitude);
+  }
 
   return {
     latitude: (minLatitude + maxLatitude) / 2,
@@ -129,7 +134,6 @@ export default function TripRouteScreen() {
   const trips = useTripsStore((state) => state.trips);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const tripPauses = useTripPausesStore((state) => state.tripPauses);
-  const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
   const currentUserId = identitySession?.userId ?? null;
@@ -161,6 +165,9 @@ export default function TripRouteScreen() {
   const [tripSegmentStatsBySegmentId, setTripSegmentStatsBySegmentId] = useState<
     Map<string, TripSegmentStatsRow>
   >(new Map());
+  const [selectedTripPoints, setSelectedTripPoints] = useState<TripPoint[]>([]);
+  const [selectedTripPointsTripId, setSelectedTripPointsTripId] = useState<string | null>(null);
+  const [routePointsLoading, setRoutePointsLoading] = useState(false);
   const [routeSmoothingUndo, setRouteSmoothingUndo] = useState<{
     previousTrip: Trip;
     previousTripPoints: TripPoint[];
@@ -181,9 +188,6 @@ export default function TripRouteScreen() {
   const currentUserTripPauses = identitySession
     ? tripPauses.filter((tripPause) => tripPause.userId === identitySession.userId)
     : [];
-  const currentUserTripPoints = identitySession
-    ? tripPoints.filter((tripPoint) => tripPoint.userId === identitySession.userId)
-    : [];
   const currentUserWaypoints = identitySession
     ? waypoints.filter((waypoint) => waypoint.userId === identitySession.userId)
     : [];
@@ -193,13 +197,13 @@ export default function TripRouteScreen() {
 
   const visibleTrips = getVisibleTrips(currentUserTrips);
   const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
-  const selectedTripPoints = selectedTrip
-    ? getVisibleTripPointsForTrip(currentUserTripPoints, selectedTrip.localId)
-    : [];
+  const loadedSelectedTripPoints =
+    selectedTrip && selectedTripPointsTripId === selectedTrip.localId ? selectedTripPoints : [];
+  const routeLoading = Boolean(selectedTrip && (routePointsLoading || selectedTripPointsTripId !== selectedTrip.localId));
   const selectedTripSegments = selectedTrip
     ? buildTripSegmentsSummary(
         currentUserTripSegments,
-        currentUserTripPoints,
+        loadedSelectedTripPoints,
         selectedTrip.localId,
         tripSegmentStatsBySegmentId,
       )
@@ -219,12 +223,12 @@ export default function TripRouteScreen() {
         selectedTripWaypoints.map((waypoint) => waypoint.localId),
       )
     : [];
-  const routeCoordinates = selectedTripPoints.map((tripPoint) => ({
+  const routeCoordinates = loadedSelectedTripPoints.map((tripPoint) => ({
     latitude: tripPoint.latitude,
     longitude: tripPoint.longitude,
   }));
   const segmentPolylines = selectedTrip
-    ? buildSegmentPolylines(currentUserTripSegments, currentUserTripPoints, selectedTrip.localId)
+    ? buildSegmentPolylines(currentUserTripSegments, loadedSelectedTripPoints, selectedTrip.localId)
     : [];
   const fallbackCoordinates = selectedTripWaypoints.map((waypoint) => ({
     latitude: waypoint.latitude,
@@ -235,14 +239,21 @@ export default function TripRouteScreen() {
   );
 
   const waypointMarkers = useMemo(
-    () =>
-      selectedTripWaypoints.map((waypoint) => ({
-        firstPhotoUri:
-          selectedTripAttachments.find((attachment) => attachment.waypointLocalId === waypoint.localId)?.localUri ??
-          null,
+    () => {
+      const firstPhotoUriByWaypointId = new Map<string, string>();
+
+      for (const attachment of selectedTripAttachments) {
+        if (!firstPhotoUriByWaypointId.has(attachment.waypointLocalId)) {
+          firstPhotoUriByWaypointId.set(attachment.waypointLocalId, attachment.localUri);
+        }
+      }
+
+      return selectedTripWaypoints.map((waypoint) => ({
+        firstPhotoUri: firstPhotoUriByWaypointId.get(waypoint.localId) ?? null,
         waypoint,
-        hasPhotos: selectedTripAttachments.some((attachment) => attachment.waypointLocalId === waypoint.localId),
-      })),
+        hasPhotos: firstPhotoUriByWaypointId.has(waypoint.localId),
+      }));
+    },
     [selectedTripAttachments, selectedTripWaypoints],
   );
 
@@ -286,6 +297,42 @@ export default function TripRouteScreen() {
   useEffect(() => {
     let cancelled = false;
 
+    async function loadSelectedTripPoints() {
+      if (!selectedTrip) {
+        setSelectedTripPoints([]);
+        setSelectedTripPointsTripId(null);
+        setRoutePointsLoading(false);
+        return;
+      }
+
+      setSelectedTripPoints([]);
+      setSelectedTripPointsTripId(null);
+      setRoutePointsLoading(true);
+
+      try {
+        const tripPoints = await loadTripPointsForTrip(selectedTrip.localId);
+
+        if (!cancelled) {
+          setSelectedTripPoints(tripPoints);
+          setSelectedTripPointsTripId(selectedTrip.localId);
+        }
+      } finally {
+        if (!cancelled) {
+          setRoutePointsLoading(false);
+        }
+      }
+    }
+
+    void loadSelectedTripPoints();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTrip?.localId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function loadSegmentStats() {
       if (!selectedTrip) {
         setTripSegmentStatsBySegmentId(new Map());
@@ -314,11 +361,21 @@ export default function TripRouteScreen() {
     setSyncBusy(true);
 
     try {
+      const tripPointsForSync =
+        selectedTripPointsTripId === selectedTrip.localId
+          ? loadedSelectedTripPoints
+          : await loadTripPointsForTrip(selectedTrip.localId);
+
+      if (selectedTripPointsTripId !== selectedTrip.localId) {
+        setSelectedTripPoints(tripPointsForSync);
+        setSelectedTripPointsTripId(selectedTrip.localId);
+      }
+
       const response = await syncTripToServer(identitySession.sessionToken, {
         attachments: selectedTripAttachments,
         trip: selectedTrip,
         tripSegments: currentUserTripSegments.filter((segment) => segment.tripLocalId === selectedTrip.localId),
-        tripPoints: currentUserTripPoints.filter((point) => point.tripLocalId === selectedTrip.localId),
+        tripPoints: tripPointsForSync,
         waypoints: currentUserWaypoints.filter((waypoint) => waypoint.tripLocalId === selectedTrip.localId),
       });
 
@@ -464,6 +521,8 @@ export default function TripRouteScreen() {
     const updatedAt = new Date().toISOString();
 
     try {
+      const allTripPoints = getTripPointsStateSnapshot().tripPoints;
+      const currentUserTripPoints = allTripPoints.filter((tripPoint) => tripPoint.userId === selectedTrip.userId);
       const nextState = updateTripSegmentMode(
         currentUserTripSegments,
         currentUserTripPoints,
@@ -481,7 +540,7 @@ export default function TripRouteScreen() {
             segment.tripLocalId !== selectedTrip.localId ||
             nextState.tripSegments.some((candidate) => candidate.localId === segment.localId),
         );
-      const nextTripPoints = tripPoints.map(
+      const nextTripPoints = allTripPoints.map(
         (tripPoint) => nextState.tripPoints.find((candidate) => candidate.localId === tripPoint.localId) ?? tripPoint,
       );
       const nextWaypoints = waypoints.map(
@@ -490,6 +549,8 @@ export default function TripRouteScreen() {
 
       await setTripSegments(nextTripSegments);
       await setTripPoints(nextTripPoints);
+      setSelectedTripPoints(nextState.tripPoints.filter((tripPoint) => tripPoint.tripLocalId === selectedTrip.localId));
+      setSelectedTripPointsTripId(selectedTrip.localId);
       await setWaypoints(nextWaypoints);
       await setTrips(
         trips.map((trip) =>
@@ -519,6 +580,8 @@ export default function TripRouteScreen() {
 
     const nextSyncStatus: Trip["syncStatus"] =
       selectedTrip.syncStatus === "local-only" ? "local-only" : "pending-sync";
+    const allTripPoints = getTripPointsStateSnapshot().tripPoints;
+    const currentUserTripPoints = allTripPoints.filter((tripPoint) => tripPoint.userId === currentUserId);
     const nextTripPointsState = smoothTripRoutePoints(
       currentUserTripPoints,
       selectedTrip.localId,
@@ -552,9 +615,13 @@ export default function TripRouteScreen() {
       });
 
       await setTripPoints([
-        ...tripPoints.filter((tripPoint) => tripPoint.userId !== currentUserId),
+        ...allTripPoints.filter((tripPoint) => tripPoint.userId !== currentUserId),
         ...nextTripPointsState.tripPoints,
       ]);
+      setSelectedTripPoints(
+        nextTripPointsState.tripPoints.filter((tripPoint) => tripPoint.tripLocalId === selectedTrip.localId),
+      );
+      setSelectedTripPointsTripId(selectedTrip.localId);
       await setTrips(nextTrips);
     } finally {
       setSmoothBusy(false);
@@ -571,8 +638,10 @@ export default function TripRouteScreen() {
       return;
     }
 
+    const allTripPoints = getTripPointsStateSnapshot().tripPoints;
+    const currentUserTripPoints = allTripPoints.filter((tripPoint) => tripPoint.userId === currentUserId);
     const restoredTripPoints = [
-      ...tripPoints.filter((tripPoint) => tripPoint.userId !== currentUserId),
+      ...allTripPoints.filter((tripPoint) => tripPoint.userId !== currentUserId),
       ...currentUserTripPoints.filter((tripPoint) => tripPoint.tripLocalId !== selectedTrip.localId),
       ...routeSmoothingUndo.previousTripPoints,
     ];
@@ -582,6 +651,8 @@ export default function TripRouteScreen() {
     );
 
     await setTripPoints(restoredTripPoints);
+    setSelectedTripPoints(routeSmoothingUndo.previousTripPoints);
+    setSelectedTripPointsTripId(selectedTrip.localId);
     await setTrips(restoredTrips);
     setRouteSmoothingUndo(null);
   }
@@ -615,7 +686,9 @@ export default function TripRouteScreen() {
     );
   }
 
-  const distanceText = formatDistanceKm(calculateTripDistanceMeters(selectedTripPoints));
+  const distanceText = routeLoading
+    ? "Loading"
+    : formatDistanceKm(calculateTripDistanceMeters(loadedSelectedTripPoints));
   const syncIconColor = selectedTrip.syncStatus === "synced" ? "#243224" : "#b45309";
   const segmentEditTarget =
     segmentEditSegmentId === null
@@ -888,14 +961,22 @@ export default function TripRouteScreen() {
         })}
       </View>
 
-      <TripRouteMap
-        coordinates={routeCoordinates}
-        mapType={mapType}
-        onSelectWaypoint={handleSelectWaypoint}
-        region={selectedTripMapRegion}
-        segmentPolylines={segmentPolylines}
-        waypointMarkers={waypointMarkers}
-      />
+      {routeLoading ? (
+        <View style={styles.routeLoadingCard}>
+          <ActivityIndicator color="#355035" />
+          <Text style={styles.routeLoadingTitle}>Loading route</Text>
+          <Text style={styles.routeLoadingText}>Preparing map data for this trip.</Text>
+        </View>
+      ) : (
+        <TripRouteMap
+          coordinates={routeCoordinates}
+          mapType={mapType}
+          onSelectWaypoint={handleSelectWaypoint}
+          region={selectedTripMapRegion}
+          segmentPolylines={segmentPolylines}
+          waypointMarkers={waypointMarkers}
+        />
+      )}
     </ScreenLayout>
   );
 }
@@ -1035,6 +1116,26 @@ const styles = StyleSheet.create({
   },
   mapTypeChipTextSelected: {
     color: "#fffdf8",
+  },
+  routeLoadingCard: {
+    flex: 1,
+    minHeight: 320,
+    borderRadius: 20,
+    backgroundColor: "#dfe8db",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  routeLoadingTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#355035",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  routeLoadingText: {
+    fontSize: 13,
+    color: "#52624f",
   },
   summaryGrid: {
     flexDirection: "row",
