@@ -119,7 +119,7 @@ import {
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { setTripPauses, useTripPausesStore } from "../../state/trip-pauses-store";
-import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
+import { mergeTripPoints, useTripPointsStore } from "../../state/trip-points-store";
 import {
   setWaypointAttachments,
   useWaypointAttachmentsStore,
@@ -498,7 +498,7 @@ export default function RecordingScreen() {
       }
 
       if (nextTripPoints !== tripPoints) {
-        await setTripPoints(nextTripPoints);
+        await mergeTripPoints(nextTripPoints);
       }
 
       if (

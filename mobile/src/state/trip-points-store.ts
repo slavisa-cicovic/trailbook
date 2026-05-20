@@ -62,3 +62,27 @@ export async function setTripPoints(tripPoints: TripPoint[]): Promise<void> {
 
   await saveTripPoints(tripPoints, previousTripPoints);
 }
+
+export async function mergeTripPoints(tripPoints: TripPoint[]): Promise<void> {
+  if (tripPoints.length === 0) {
+    return;
+  }
+
+  const previousTripPoints = state.tripPoints;
+  const nextTripPointsById = new Map(previousTripPoints.map((tripPoint) => [tripPoint.localId, tripPoint]));
+
+  for (const tripPoint of tripPoints) {
+    nextTripPointsById.set(tripPoint.localId, tripPoint);
+  }
+
+  const nextTripPoints = Array.from(nextTripPointsById.values()).sort((left, right) =>
+    left.recordedAt.localeCompare(right.recordedAt),
+  );
+
+  setState((currentState) => ({
+    ...currentState,
+    tripPoints: nextTripPoints,
+  }));
+
+  await saveTripPoints(nextTripPoints, previousTripPoints);
+}

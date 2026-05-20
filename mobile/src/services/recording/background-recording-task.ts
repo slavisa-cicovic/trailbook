@@ -14,7 +14,7 @@ import { applyAutoRecordingTransition, recordAutoRecordingSample } from "./auto-
 import { updateRecordingLastPoint, updateRecordingMotionActivity } from "./recording.service";
 import { setRecordingSession } from "../../state/recording-store";
 import { setTripSegments } from "../../state/trip-segments-store";
-import { setTripPoints } from "../../state/trip-points-store";
+import { mergeTripPoints } from "../../state/trip-points-store";
 import { setWaypoints } from "../../state/waypoints-store";
 import { loadRecordingSession } from "../../storage/recording-storage";
 import { loadTripPoints } from "../../storage/trip-points-storage";
@@ -139,7 +139,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
   const writes: Promise<void>[] = [];
 
   if (pointsChanged) {
-    writes.push(setTripPoints(nextTripPoints));
+    writes.push(mergeTripPoints(nextTripPoints));
   }
 
   if (nextTripSegments !== tripSegments) {
