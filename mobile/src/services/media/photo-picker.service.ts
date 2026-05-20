@@ -1,16 +1,15 @@
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 
+import {
+  buildPhotoStorageUri,
+  ensurePhotoStorageDirectory,
+} from "./photo-storage.service";
+
 export interface PickedPhoto {
   fileSize: number | null;
   localUri: string;
   mimeType: string | null;
-}
-
-const PHOTO_STORAGE_DIR = `${FileSystem.documentDirectory}waypoint-photos`;
-
-async function ensurePhotoStorageDirectory() {
-  await FileSystem.makeDirectoryAsync(PHOTO_STORAGE_DIR, { intermediates: true });
 }
 
 function resolvePhotoExtensionFromMimeType(mimeType: string | null) {
@@ -43,7 +42,7 @@ async function normalizePhotoAsset(asset: ImagePicker.ImagePickerAsset): Promise
   await ensurePhotoStorageDirectory();
 
   const fileName = `photo-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${resolvePhotoExtension(asset)}`;
-  const destination = `${PHOTO_STORAGE_DIR}/${fileName}`;
+  const destination = buildPhotoStorageUri(fileName);
 
   await FileSystem.copyAsync({
     from: asset.uri,
@@ -128,7 +127,7 @@ export async function downloadPhotoToLocalStorage(input: {
   await ensurePhotoStorageDirectory();
 
   const safeFileNameSeed = input.fileNameSeed.replace(/[^a-zA-Z0-9_-]/g, "-");
-  const destination = `${PHOTO_STORAGE_DIR}/${safeFileNameSeed}${resolvePhotoExtensionFromMimeType(input.mimeType)}`;
+  const destination = buildPhotoStorageUri(`${safeFileNameSeed}${resolvePhotoExtensionFromMimeType(input.mimeType)}`);
   const result = await FileSystem.downloadAsync(input.sourceUrl, destination);
   const fileInfo = await FileSystem.getInfoAsync(result.uri);
 

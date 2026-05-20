@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { WaypointAttachment } from "../domain/trips";
+import { resolveStoredPhotoUri } from "../services/media/photo-storage.service";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 
 function normalizeWaypointAttachment(
@@ -17,7 +18,7 @@ function normalizeWaypointAttachment(
     deviceId: value.deviceId,
     userId: value.userId,
     type: value.type ?? "photo",
-    localUri: value.localUri,
+    localUri: resolveStoredPhotoUri(value.localUri),
     mimeType: value.mimeType ?? null,
     fileSize: value.fileSize ?? null,
     createdAt: value.createdAt ?? fallbackDate,
