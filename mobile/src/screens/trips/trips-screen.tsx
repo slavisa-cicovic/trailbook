@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Redirect, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
@@ -196,37 +196,39 @@ export default function TripsScreen() {
     return () => clearTimeout(timeoutId);
   }, [pendingUndo]);
 
-  useEffect(() => {
-    let cancelled = false;
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-    async function loadTripStats() {
-      if (filteredTripIds.length === 0) {
-        setTripStatsByTripId(new Map());
-        setTripStatsLoading(false);
-        return;
-      }
-
-      setTripStatsLoading(true);
-
-      try {
-        const nextTripStatsByTripId = await loadTripStatsByTripLocalIds(filteredTripIds);
-
-        if (!cancelled) {
-          setTripStatsByTripId(nextTripStatsByTripId);
-        }
-      } finally {
-        if (!cancelled) {
+      async function loadTripStats() {
+        if (filteredTripIds.length === 0) {
+          setTripStatsByTripId(new Map());
           setTripStatsLoading(false);
+          return;
+        }
+
+        setTripStatsLoading(true);
+
+        try {
+          const nextTripStatsByTripId = await loadTripStatsByTripLocalIds(filteredTripIds);
+
+          if (!cancelled) {
+            setTripStatsByTripId(nextTripStatsByTripId);
+          }
+        } finally {
+          if (!cancelled) {
+            setTripStatsLoading(false);
+          }
         }
       }
-    }
 
-    void loadTripStats();
+      void loadTripStats();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [filteredTripIdsKey]);
+      return () => {
+        cancelled = true;
+      };
+    }, [filteredTripIdsKey]),
+  );
 
   useEffect(() => {
     if (listMode !== "shared" || identitySession?.mode !== "authenticated" || !identitySession.sessionToken) {

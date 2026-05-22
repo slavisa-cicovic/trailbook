@@ -49,10 +49,12 @@ export async function hydrateWaypointsStore(): Promise<void> {
 }
 
 export async function setWaypoints(waypoints: Waypoint[]): Promise<void> {
+  const previousWaypoints = state.waypoints;
+
   setState((currentState) => ({
     ...currentState,
     waypoints,
   }));
 
-  await saveWaypoints(waypoints);
+  await saveWaypoints(waypoints, previousWaypoints);
 }

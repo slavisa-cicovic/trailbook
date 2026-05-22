@@ -165,18 +165,96 @@ export async function loadWaypoints(): Promise<Waypoint[]> {
   return rows.map(toWaypointFromRow);
 }
 
-export async function saveWaypoints(waypoints: Waypoint[]): Promise<void> {
+function areWaypointsEqual(left: Waypoint, right: Waypoint): boolean {
+  return (
+    left.localId === right.localId &&
+    left.serverId === right.serverId &&
+    left.tripLocalId === right.tripLocalId &&
+    left.segmentLocalId === right.segmentLocalId &&
+    left.deviceId === right.deviceId &&
+    left.userId === right.userId &&
+    left.latitude === right.latitude &&
+    left.longitude === right.longitude &&
+    left.category === right.category &&
+    left.title === right.title &&
+    left.note === right.note &&
+    left.createdAt === right.createdAt &&
+    left.updatedAt === right.updatedAt &&
+    left.deletedAt === right.deletedAt &&
+    left.syncStatus === right.syncStatus
+  );
+}
+
+export async function saveWaypoints(waypoints: Waypoint[], previousWaypoints?: Waypoint[]): Promise<void> {
   await ensureWaypointsMigrated();
 
-  const database = await getDatabase();
+  if (!previousWaypoints) {
+    await runExclusiveDatabaseWrite(async (database) => {
+      await database.runAsync("DELETE FROM waypoints");
+
+      for (const waypoint of waypoints) {
+        const row = toWaypointRow(waypoint);
+        await database.runAsync(
+          `INSERT INTO waypoints (
+            local_id,
+            server_id,
+            trip_local_id,
+            segment_local_id,
+            device_id,
+            user_id,
+            latitude,
+            longitude,
+            category,
+            title,
+            note,
+            created_at,
+            updated_at,
+            deleted_at,
+            sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          row.local_id,
+          row.server_id,
+          row.trip_local_id,
+          row.segment_local_id,
+          row.device_id,
+          row.user_id,
+          row.latitude,
+          row.longitude,
+          row.category,
+          row.title,
+          row.note,
+          row.created_at,
+          row.updated_at,
+          row.deleted_at,
+          row.sync_status,
+        );
+      }
+    });
+
+    return;
+  }
+
+  const previousWaypointsById = new Map(previousWaypoints.map((waypoint) => [waypoint.localId, waypoint]));
+  const nextWaypointsById = new Map(waypoints.map((waypoint) => [waypoint.localId, waypoint]));
+  const removedWaypoints = previousWaypoints.filter((waypoint) => !nextWaypointsById.has(waypoint.localId));
+  const upsertWaypoints = waypoints.filter((waypoint) => {
+    const previousWaypoint = previousWaypointsById.get(waypoint.localId);
+    return !previousWaypoint || !areWaypointsEqual(previousWaypoint, waypoint);
+  });
+
+  if (removedWaypoints.length === 0 && upsertWaypoints.length === 0) {
+    return;
+  }
 
   await runExclusiveDatabaseWrite(async (database) => {
-    await database.runAsync("DELETE FROM waypoints");
+    for (const waypoint of removedWaypoints) {
+      await database.runAsync("DELETE FROM waypoints WHERE local_id = ?", waypoint.localId);
+    }
 
-    for (const waypoint of waypoints) {
+    for (const waypoint of upsertWaypoints) {
       const row = toWaypointRow(waypoint);
       await database.runAsync(
-        `INSERT INTO waypoints (
+        `INSERT OR REPLACE INTO waypoints (
           local_id,
           server_id,
           trip_local_id,

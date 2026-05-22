@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import type { TripPoint } from "../domain/trips";
-import { loadTripPoints, saveTripPoints } from "../storage/trip-points-storage";
+import { replaceTripPointsForTrip } from "../storage/trip-points-storage";
 
 interface TripPointsState {
   hydrated: boolean;
@@ -16,6 +16,8 @@ let state: TripPointsState = {
   hydrated: false,
   tripPoints: [],
 };
+
+// Keep this store scoped to the active/selected trip. Full point loads stay in storage helpers.
 
 function emitChange() {
   listeners.forEach((listener) => listener());
@@ -39,28 +41,38 @@ export function useTripPointsStore<T>(selector: (snapshot: TripPointsState) => T
   return useSyncExternalStore(subscribe, () => selector(getSnapshot()), () => selector(getSnapshot()));
 }
 
-export function getTripPointsStateSnapshot() {
-  return state;
-}
-
-export async function hydrateTripPointsStore(): Promise<void> {
-  const tripPoints = await loadTripPoints();
-
-  setState({
-    hydrated: true,
-    tripPoints,
-  });
-}
-
-export async function setTripPoints(tripPoints: TripPoint[]): Promise<void> {
-  const previousTripPoints = state.tripPoints;
-
+export function setTripPointsInMemory(tripPoints: TripPoint[]): void {
   setState((currentState) => ({
     ...currentState,
+    hydrated: true,
     tripPoints,
   }));
+}
 
-  await saveTripPoints(tripPoints, previousTripPoints);
+export function mergeTripPointsInMemory(tripPoints: TripPoint[]): void {
+  if (tripPoints.length === 0) {
+    setState((currentState) => ({
+      ...currentState,
+      hydrated: true,
+    }));
+    return;
+  }
+
+  setState((currentState) => {
+    const nextTripPointsById = new Map(currentState.tripPoints.map((tripPoint) => [tripPoint.localId, tripPoint]));
+
+    for (const tripPoint of tripPoints) {
+      nextTripPointsById.set(tripPoint.localId, tripPoint);
+    }
+
+    return {
+      ...currentState,
+      hydrated: true,
+      tripPoints: Array.from(nextTripPointsById.values()).sort((left, right) =>
+        left.recordedAt.localeCompare(right.recordedAt),
+      ),
+    };
+  });
 }
 
 export async function mergeTripPoints(tripPoints: TripPoint[]): Promise<void> {
@@ -68,10 +80,12 @@ export async function mergeTripPoints(tripPoints: TripPoint[]): Promise<void> {
     return;
   }
 
-  const previousTripPoints = state.tripPoints;
+  const tripLocalIds = Array.from(new Set(tripPoints.map((tripPoint) => tripPoint.tripLocalId)));
+  const tripLocalId = tripLocalIds[0];
+  const previousTripPoints = state.tripPoints.filter((tripPoint) => tripPoint.tripLocalId === tripLocalId);
   const nextTripPointsById = new Map(previousTripPoints.map((tripPoint) => [tripPoint.localId, tripPoint]));
 
-  for (const tripPoint of tripPoints) {
+  for (const tripPoint of tripPoints.filter((candidate) => candidate.tripLocalId === tripLocalId)) {
     nextTripPointsById.set(tripPoint.localId, tripPoint);
   }
 
@@ -81,8 +95,9 @@ export async function mergeTripPoints(tripPoints: TripPoint[]): Promise<void> {
 
   setState((currentState) => ({
     ...currentState,
+    hydrated: true,
     tripPoints: nextTripPoints,
   }));
 
-  await saveTripPoints(nextTripPoints, previousTripPoints);
+  await replaceTripPointsForTrip(tripLocalId, nextTripPoints);
 }

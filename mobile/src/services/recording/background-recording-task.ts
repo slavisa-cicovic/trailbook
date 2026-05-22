@@ -17,7 +17,7 @@ import { setTripSegments } from "../../state/trip-segments-store";
 import { mergeTripPoints } from "../../state/trip-points-store";
 import { setWaypoints } from "../../state/waypoints-store";
 import { loadRecordingSession } from "../../storage/recording-storage";
-import { loadTripPoints } from "../../storage/trip-points-storage";
+import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
 import { loadTripSegments } from "../../storage/trip-segments-storage";
 import { loadTrips } from "../../storage/trips-storage";
 import { loadWaypoints } from "../../storage/waypoints-storage";
@@ -60,7 +60,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
   );
   const activeSegment = activeSegmentById ?? activeOpenSegment ?? null;
 
-  let nextTripPoints = await loadTripPoints();
+  let nextTripPoints = await loadTripPointsForTrip(activeTrip.localId);
   const waypoints = await loadWaypoints();
   let nextWaypoints = waypoints;
   let nextTripSegments = tripSegments;

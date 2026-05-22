@@ -13,7 +13,7 @@ import { syncResolvedRecordingConfig } from "../../services/recording/recording-
 import { restoreOwnedTripsFromServer } from "../../services/trips/trip-restore.service";
 import { useRecordingStore } from "../../state/recording-store";
 import { setTripPauses } from "../../state/trip-pauses-store";
-import { setTripPoints, useTripPointsStore } from "../../state/trip-points-store";
+import { setTripPointsInMemory } from "../../state/trip-points-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { clearSessionCredentials, setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { setThemeMode, useThemeStore } from "../../state/theme-store";
@@ -21,6 +21,7 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { clearLocalTripData, exportDatabaseSnapshot } from "../../storage/sqlite/db";
+import { loadTripPoints, saveTripPoints } from "../../storage/trip-points-storage";
 
 type SettingsIconName = keyof typeof MaterialIcons.glyphMap;
 
@@ -139,7 +140,6 @@ export default function SettingsScreen() {
   const router = useRouter();
   const trips = useTripsStore((state) => state.trips);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
-  const tripPoints = useTripPointsStore((state) => state.tripPoints);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
   const recordingStatus = useRecordingStore((state) => state.session.status);
@@ -193,6 +193,7 @@ export default function SettingsScreen() {
     setRestoreMessage(null);
 
     try {
+      const tripPoints = await loadTripPoints();
       const result = await restoreOwnedTripsFromServer(identitySession, {
         trips,
         tripSegments,
@@ -203,7 +204,8 @@ export default function SettingsScreen() {
 
       await setTrips(result.nextTrips);
       await setTripSegments(result.nextTripSegments);
-      await setTripPoints(result.nextTripPoints);
+      await saveTripPoints(result.nextTripPoints);
+      setTripPointsInMemory([]);
       await setWaypoints(result.nextWaypoints);
       await setWaypointAttachments(result.nextAttachments);
 
@@ -271,7 +273,7 @@ export default function SettingsScreen() {
       await setTrips([]);
       await setTripSegments([]);
       await setTripPauses([]);
-      await setTripPoints([]);
+      setTripPointsInMemory([]);
       await setWaypoints([]);
       await setWaypointAttachments([]);
       setClearTripDataMessage("Local trip data deleted. Photo files were not removed.");

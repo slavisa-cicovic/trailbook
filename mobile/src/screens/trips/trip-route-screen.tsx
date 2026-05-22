@@ -28,12 +28,12 @@ import {
 import {
   loadTripPointsForTrip,
   loadTripSegmentStatsByTripLocalIds,
+  replaceTripPointsForTrip,
   type TripSegmentStatsRow,
 } from "../../storage/trip-points-storage";
 import { useSessionStore } from "../../state/session-store";
 import { useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
-import { getTripPointsStateSnapshot, setTripPoints } from "../../state/trip-points-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
@@ -437,6 +437,26 @@ export default function TripRouteScreen() {
     }
   }
 
+  async function loadSelectedTripPointsForEdit(): Promise<TripPoint[]> {
+    if (!selectedTrip) {
+      return [];
+    }
+
+    if (selectedTripPointsTripId === selectedTrip.localId) {
+      return loadedSelectedTripPoints;
+    }
+
+    const tripPoints = await loadTripPointsForTrip(selectedTrip.localId);
+    setSelectedTripPoints(tripPoints);
+    setSelectedTripPointsTripId(selectedTrip.localId);
+
+    return tripPoints;
+  }
+
+  async function refreshSelectedTripSegmentStats(tripLocalId: string): Promise<void> {
+    setTripSegmentStatsBySegmentId(await loadTripSegmentStatsByTripLocalIds([tripLocalId]));
+  }
+
   async function handleShareTrip() {
     if (!selectedTrip || !identitySession?.sessionToken) {
       return;
@@ -521,11 +541,10 @@ export default function TripRouteScreen() {
     const updatedAt = new Date().toISOString();
 
     try {
-      const allTripPoints = getTripPointsStateSnapshot().tripPoints;
-      const currentUserTripPoints = allTripPoints.filter((tripPoint) => tripPoint.userId === selectedTrip.userId);
+      const selectedTripPointsForEdit = await loadSelectedTripPointsForEdit();
       const nextState = updateTripSegmentMode(
         currentUserTripSegments,
-        currentUserTripPoints,
+        selectedTripPointsForEdit,
         currentUserWaypoints,
         selectedTrip.localId,
         segmentEditSegmentId,
@@ -540,17 +559,18 @@ export default function TripRouteScreen() {
             segment.tripLocalId !== selectedTrip.localId ||
             nextState.tripSegments.some((candidate) => candidate.localId === segment.localId),
         );
-      const nextTripPoints = allTripPoints.map(
-        (tripPoint) => nextState.tripPoints.find((candidate) => candidate.localId === tripPoint.localId) ?? tripPoint,
+      const nextSelectedTripPoints = nextState.tripPoints.filter(
+        (tripPoint) => tripPoint.tripLocalId === selectedTrip.localId,
       );
       const nextWaypoints = waypoints.map(
         (waypoint) => nextState.waypoints.find((candidate) => candidate.localId === waypoint.localId) ?? waypoint,
       );
 
       await setTripSegments(nextTripSegments);
-      await setTripPoints(nextTripPoints);
-      setSelectedTripPoints(nextState.tripPoints.filter((tripPoint) => tripPoint.tripLocalId === selectedTrip.localId));
+      await replaceTripPointsForTrip(selectedTrip.localId, nextSelectedTripPoints);
+      setSelectedTripPoints(nextSelectedTripPoints);
       setSelectedTripPointsTripId(selectedTrip.localId);
+      await refreshSelectedTripSegmentStats(selectedTrip.localId);
       await setWaypoints(nextWaypoints);
       await setTrips(
         trips.map((trip) =>
@@ -580,10 +600,9 @@ export default function TripRouteScreen() {
 
     const nextSyncStatus: Trip["syncStatus"] =
       selectedTrip.syncStatus === "local-only" ? "local-only" : "pending-sync";
-    const allTripPoints = getTripPointsStateSnapshot().tripPoints;
-    const currentUserTripPoints = allTripPoints.filter((tripPoint) => tripPoint.userId === currentUserId);
+    const selectedTripPointsForEdit = await loadSelectedTripPointsForEdit();
     const nextTripPointsState = smoothTripRoutePoints(
-      currentUserTripPoints,
+      selectedTripPointsForEdit,
       selectedTrip.localId,
       selectedTrip.recordingProfile,
       nextSyncStatus,
@@ -610,18 +629,14 @@ export default function TripRouteScreen() {
 
       setRouteSmoothingUndo({
         previousTrip: selectedTrip,
-        previousTripPoints: currentUserTripPoints.filter((tripPoint) => tripPoint.tripLocalId === selectedTrip.localId),
+        previousTripPoints: selectedTripPointsForEdit,
         removedPointCount: nextTripPointsState.removedPointCount,
       });
 
-      await setTripPoints([
-        ...allTripPoints.filter((tripPoint) => tripPoint.userId !== currentUserId),
-        ...nextTripPointsState.tripPoints,
-      ]);
-      setSelectedTripPoints(
-        nextTripPointsState.tripPoints.filter((tripPoint) => tripPoint.tripLocalId === selectedTrip.localId),
-      );
+      await replaceTripPointsForTrip(selectedTrip.localId, nextTripPointsState.tripPoints);
+      setSelectedTripPoints(nextTripPointsState.tripPoints);
       setSelectedTripPointsTripId(selectedTrip.localId);
+      await refreshSelectedTripSegmentStats(selectedTrip.localId);
       await setTrips(nextTrips);
     } finally {
       setSmoothBusy(false);
@@ -638,21 +653,14 @@ export default function TripRouteScreen() {
       return;
     }
 
-    const allTripPoints = getTripPointsStateSnapshot().tripPoints;
-    const currentUserTripPoints = allTripPoints.filter((tripPoint) => tripPoint.userId === currentUserId);
-    const restoredTripPoints = [
-      ...allTripPoints.filter((tripPoint) => tripPoint.userId !== currentUserId),
-      ...currentUserTripPoints.filter((tripPoint) => tripPoint.tripLocalId !== selectedTrip.localId),
-      ...routeSmoothingUndo.previousTripPoints,
-    ];
-
     const restoredTrips = trips.map((trip) =>
       trip.localId === selectedTrip.localId ? routeSmoothingUndo.previousTrip : trip,
     );
 
-    await setTripPoints(restoredTripPoints);
+    await replaceTripPointsForTrip(selectedTrip.localId, routeSmoothingUndo.previousTripPoints);
     setSelectedTripPoints(routeSmoothingUndo.previousTripPoints);
     setSelectedTripPointsTripId(selectedTrip.localId);
+    await refreshSelectedTripSegmentStats(selectedTrip.localId);
     await setTrips(restoredTrips);
     setRouteSmoothingUndo(null);
   }

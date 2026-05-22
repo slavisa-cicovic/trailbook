@@ -55,10 +55,12 @@ export async function hydrateTripSegmentsStore(): Promise<void> {
 }
 
 export async function setTripSegments(tripSegments: TripSegment[]): Promise<void> {
+  const previousTripSegments = state.tripSegments;
+
   setState((currentState) => ({
     ...currentState,
     tripSegments,
   }));
 
-  await saveTripSegments(tripSegments);
+  await saveTripSegments(tripSegments, previousTripSegments);
 }

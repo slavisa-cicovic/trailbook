@@ -148,16 +148,106 @@ export async function loadTripSegments(): Promise<TripSegment[]> {
   return rows.map(toTripSegmentFromRow);
 }
 
-export async function saveTripSegments(tripSegments: TripSegment[]): Promise<void> {
+function areTripSegmentsEqual(left: TripSegment, right: TripSegment): boolean {
+  return (
+    left.localId === right.localId &&
+    left.serverId === right.serverId &&
+    left.tripLocalId === right.tripLocalId &&
+    left.deviceId === right.deviceId &&
+    left.userId === right.userId &&
+    left.recordingProfile === right.recordingProfile &&
+    left.startedAt === right.startedAt &&
+    left.endedAt === right.endedAt &&
+    left.createdAt === right.createdAt &&
+    left.updatedAt === right.updatedAt &&
+    left.syncStatus === right.syncStatus
+  );
+}
+
+export async function saveTripSegments(
+  tripSegments: TripSegment[],
+  previousTripSegments?: TripSegment[],
+): Promise<void> {
   await ensureTripSegmentsMigrated();
 
-  await runExclusiveDatabaseWrite(async (database) => {
-    await database.runAsync("DELETE FROM trip_segments");
+  if (!previousTripSegments) {
+    await runExclusiveDatabaseWrite(async (database) => {
+      await database.runAsync("DELETE FROM trip_segments");
 
-    for (const tripSegment of tripSegments) {
+      for (const tripSegment of tripSegments) {
+        const row = toTripSegmentRow(tripSegment);
+        await database.runAsync(
+          `INSERT INTO trip_segments (
+            local_id,
+            server_id,
+            trip_local_id,
+            device_id,
+            user_id,
+            recording_profile,
+            started_at,
+            ended_at,
+            created_at,
+            updated_at,
+            sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          row.local_id,
+          row.server_id,
+          row.trip_local_id,
+          row.device_id,
+          row.user_id,
+          row.recording_profile,
+          row.started_at,
+          row.ended_at,
+          row.created_at,
+          row.updated_at,
+          row.sync_status,
+        );
+      }
+    });
+
+    await refreshTripSegmentStatsForTripLocalIds(
+      Array.from(new Set(tripSegments.map((tripSegment) => tripSegment.tripLocalId))),
+    );
+    return;
+  }
+
+  const previousTripSegmentsById = new Map(
+    previousTripSegments.map((tripSegment) => [tripSegment.localId, tripSegment]),
+  );
+  const nextTripSegmentsById = new Map(tripSegments.map((tripSegment) => [tripSegment.localId, tripSegment]));
+  const removedTripSegments = previousTripSegments.filter(
+    (tripSegment) => !nextTripSegmentsById.has(tripSegment.localId),
+  );
+  const upsertTripSegments = tripSegments.filter((tripSegment) => {
+    const previousTripSegment = previousTripSegmentsById.get(tripSegment.localId);
+    return !previousTripSegment || !areTripSegmentsEqual(previousTripSegment, tripSegment);
+  });
+
+  if (removedTripSegments.length === 0 && upsertTripSegments.length === 0) {
+    return;
+  }
+
+  const affectedTripLocalIds = Array.from(
+    new Set([
+      ...removedTripSegments.map((tripSegment) => tripSegment.tripLocalId),
+      ...upsertTripSegments.flatMap((tripSegment) => {
+        const previousTripSegment = previousTripSegmentsById.get(tripSegment.localId);
+        return previousTripSegment
+          ? [previousTripSegment.tripLocalId, tripSegment.tripLocalId]
+          : [tripSegment.tripLocalId];
+      }),
+    ]),
+  );
+
+  await runExclusiveDatabaseWrite(async (database) => {
+    for (const tripSegment of removedTripSegments) {
+      await database.runAsync("DELETE FROM trip_segments WHERE local_id = ?", tripSegment.localId);
+    }
+
+    for (const tripSegment of upsertTripSegments) {
       const row = toTripSegmentRow(tripSegment);
       await database.runAsync(
-        `INSERT INTO trip_segments (
+        `INSERT OR REPLACE INTO trip_segments (
           local_id,
           server_id,
           trip_local_id,
@@ -185,7 +275,5 @@ export async function saveTripSegments(tripSegments: TripSegment[]): Promise<voi
     }
   });
 
-  await refreshTripSegmentStatsForTripLocalIds(
-    Array.from(new Set(tripSegments.map((tripSegment) => tripSegment.tripLocalId))),
-  );
+  await refreshTripSegmentStatsForTripLocalIds(affectedTripLocalIds);
 }

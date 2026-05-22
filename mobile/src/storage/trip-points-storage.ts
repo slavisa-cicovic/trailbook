@@ -399,6 +399,62 @@ export async function loadTripPointsForTrip(tripLocalId: string): Promise<TripPo
   return rows.map(toTripPointFromRow);
 }
 
+export async function replaceTripPointsForTrip(
+  tripLocalId: string,
+  tripPoints: TripPoint[],
+): Promise<void> {
+  await ensureTripPointsMigrated();
+
+  const nextTripPoints = tripPoints
+    .filter((tripPoint) => tripPoint.tripLocalId === tripLocalId)
+    .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+
+  await runExclusiveDatabaseWrite(async (database) => {
+    await database.runAsync("DELETE FROM trip_points WHERE trip_local_id = ?", tripLocalId);
+
+    for (const tripPoint of nextTripPoints) {
+      const row = toTripPointRow(tripPoint);
+      await database.runAsync(
+        `INSERT INTO trip_points (
+          local_id,
+          server_id,
+          trip_local_id,
+          segment_local_id,
+          device_id,
+          user_id,
+          latitude,
+          longitude,
+          recorded_at,
+          accuracy,
+          altitude,
+          speed,
+          sync_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        row.local_id,
+        row.server_id,
+        row.trip_local_id,
+        row.segment_local_id,
+        row.device_id,
+        row.user_id,
+        row.latitude,
+        row.longitude,
+        row.recorded_at,
+        row.accuracy,
+        row.altitude,
+        row.speed,
+        row.sync_status,
+      );
+    }
+
+    await updateTripStatsForTripLocalIds(
+      database,
+      groupTripPointsByTripLocalId(nextTripPoints),
+      [tripLocalId],
+    );
+    await updateTripSegmentStatsForTripLocalIds(database, [tripLocalId]);
+  });
+}
+
 export async function loadTripStatsByTripLocalIds(tripLocalIds: string[]): Promise<Map<string, TripStatsRow>> {
   await ensureTripPointsMigrated();
 

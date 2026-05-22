@@ -105,6 +105,7 @@ import {
   markWaypointAttachmentDeleted,
   markWaypointDeleted,
 } from "../../services/trips/trips-management.service";
+import { loadTripPointsForTrip, replaceTripPointsForTrip } from "../../storage/trip-points-storage";
 import {
   createAttachmentTimestamp,
   createPhotoAttachmentForWaypoint,
@@ -119,7 +120,12 @@ import {
 import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { setTripPauses, useTripPausesStore } from "../../state/trip-pauses-store";
-import { mergeTripPoints, useTripPointsStore } from "../../state/trip-points-store";
+import {
+  mergeTripPointsInMemory,
+  mergeTripPoints,
+  setTripPointsInMemory,
+  useTripPointsStore,
+} from "../../state/trip-points-store";
 import {
   setWaypointAttachments,
   useWaypointAttachmentsStore,
@@ -179,9 +185,6 @@ export default function RecordingScreen() {
   const currentUserTripPauses = activeIdentitySession
     ? tripPauses.filter((tripPause) => tripPause.userId === activeIdentitySession.userId)
     : [];
-  const currentUserTripPoints = activeIdentitySession
-    ? tripPoints.filter((tripPoint) => tripPoint.userId === activeIdentitySession.userId)
-    : [];
   const currentUserWaypoints = activeIdentitySession
     ? waypoints.filter((waypoint) => waypoint.userId === activeIdentitySession.userId)
     : [];
@@ -201,7 +204,7 @@ export default function RecordingScreen() {
       : null;
   const activeRecordingMode = recordingSession.recordingMode;
   const activeRecordingProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
-  const activeTripPoints = activeTrip ? getVisibleTripPointsForTrip(currentUserTripPoints, activeTrip.localId) : [];
+  const activeTripPoints = activeTrip ? getVisibleTripPointsForTrip(tripPoints, activeTrip.localId) : [];
   const activeRecordingProfileLabel =
     activeRecordingMode === "auto"
       ? `Auto • ${getRecordingProfileLabel(activeRecordingProfile)}`
@@ -376,6 +379,30 @@ export default function RecordingScreen() {
       stopWatchingLocation?.();
     };
   }, [activeRecordingProfile, activeTrip, recordingSession.status]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActiveTripPoints() {
+      if (!activeTrip) {
+        setTripPointsInMemory([]);
+        return;
+      }
+
+      setTripPointsInMemory([]);
+      const nextTripPoints = await loadTripPointsForTrip(activeTrip.localId);
+
+      if (!cancelled) {
+        mergeTripPointsInMemory(nextTripPoints);
+      }
+    }
+
+    void loadActiveTripPoints();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTrip?.localId]);
 
   useEffect(() => {
     let active = true;
@@ -582,6 +609,7 @@ export default function RecordingScreen() {
     const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft, batterySnapshot);
     resetPendingTripPointContinuity(nextTrip.localId);
     resetTripPointDiagnostics(nextTrip.localId);
+    setTripPointsInMemory([]);
     const nextSegment = createInitialTripSegment(nextTrip, startedAt);
     const nextSession = createRecordingSession(
       activeIdentitySession,
@@ -674,6 +702,10 @@ export default function RecordingScreen() {
 
     await setTripSegments(normalizedState.tripSegments);
     await setWaypoints(normalizedState.waypoints);
+    if (normalizedState.tripPoints !== tripPoints) {
+      setTripPointsInMemory(normalizedState.tripPoints);
+      await replaceTripPointsForTrip(activeTrip.localId, normalizedState.tripPoints);
+    }
     await setTripPauses(nextState.tripPauses);
     await setTrips(pauseActiveTrip(trips, activeTrip.localId, pausedAt));
     await setRecordingSession(nextState.session);
@@ -711,6 +743,10 @@ export default function RecordingScreen() {
           };
     await setTripSegments(normalizedState.tripSegments);
     await setWaypoints(normalizedState.waypoints);
+    if (activeTrip && normalizedState.tripPoints !== tripPoints) {
+      setTripPointsInMemory(normalizedState.tripPoints);
+      await replaceTripPointsForTrip(activeTrip.localId, normalizedState.tripPoints);
+    }
     await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt, batterySnapshot));
     await setRecordingSession(stopRecordingSession(recordingSession));
     clearAutoRecordingSamples(recordingSession.activeTripId);
@@ -746,6 +782,7 @@ export default function RecordingScreen() {
 
     await setTripSegments(nextState.tripSegments);
     await setTripPauses(nextState.tripPauses);
+    setTripPointsInMemory(await loadTripPointsForTrip(tripToResume.localId));
     await setTrips(resumePausedTrip(trips, tripToResume.localId, resumedAt));
     await setRecordingSession(nextState.session);
 

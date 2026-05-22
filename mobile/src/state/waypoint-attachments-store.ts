@@ -60,10 +60,12 @@ export async function hydrateWaypointAttachmentsStore(): Promise<void> {
 export async function setWaypointAttachments(
   attachments: WaypointAttachment[],
 ): Promise<void> {
+  const previousAttachments = state.attachments;
+
   setState((currentState) => ({
     ...currentState,
     attachments,
   }));
 
-  await saveWaypointAttachments(attachments);
+  await saveWaypointAttachments(attachments, previousAttachments);
 }

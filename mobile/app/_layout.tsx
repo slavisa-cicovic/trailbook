@@ -21,7 +21,6 @@ import {
   useTripSegmentsStore,
 } from "../src/state/trip-segments-store";
 import { hydrateTripPausesStore, useTripPausesStore } from "../src/state/trip-pauses-store";
-import { hydrateTripPointsStore, useTripPointsStore } from "../src/state/trip-points-store";
 import { getTripsStateSnapshot, hydrateTripsStore, useTripsStore } from "../src/state/trips-store";
 import {
   hydrateWaypointAttachmentsStore,
@@ -60,7 +59,6 @@ export default function RootLayout() {
         hydrateWaypointsStore(),
         hydrateWaypointAttachmentsStore(),
       ]);
-      void hydrateTripPointsStore();
       await reconcileHydratedRecordingState(
         getTripsStateSnapshot().trips,
         getTripSegmentsStateSnapshot().tripSegments,
