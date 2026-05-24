@@ -13,10 +13,10 @@ import {
   loginWithBackend,
   signInWithSocialProvider,
 } from "../../services/auth/mobile-auth.service";
+import { getExpoGoDevLoginCredentials } from "../../services/auth/dev-login-credentials.service";
 import { showEnterDemoModeDialog } from "../../services/demo/demo-mode.service";
 import { canCreateTemporarySession, createTemporarySession } from "../../services/auth/temporary-login.service";
 import {
-  clearSessionCredentials,
   setActiveIdentitySession,
   updateSessionCredentials,
   useSessionStore,
@@ -49,6 +49,16 @@ export default function LoginScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [passwordVisible, setPasswordVisible] = useState(false);
+
+  useEffect(() => {
+    const devCredentials = getExpoGoDevLoginCredentials();
+
+    if (!devCredentials || credentials.email || credentials.password) {
+      return;
+    }
+
+    updateSessionCredentials(devCredentials);
+  }, [credentials.email, credentials.password]);
 
   useEffect(() => {
     let active = true;
