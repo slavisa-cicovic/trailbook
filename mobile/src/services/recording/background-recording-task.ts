@@ -2,7 +2,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "../location/background-location.constants";
-import { restartBackgroundLocationTracking, toSnapshot } from "../location/location.service";
+import { restartBackgroundLocationTracking, toSnapshot, type CurrentLocationSnapshot } from "../location/location.service";
 import { getLatestMotionActivityAsync } from "../motion/motion-activity.service";
 import {
   appendTripPointIfUseful,
@@ -25,6 +25,55 @@ import { getOpenTripSegmentForTrip } from "../trip-segments/trip-segments.servic
 
 interface BackgroundLocationTaskData {
   locations: Location.LocationObject[];
+}
+
+const AUTO_REJECTED_RECOVERY_MAX_AGE_MS = 10 * 60 * 1000;
+const AUTO_REJECTED_RECOVERY_MAX_COUNT = 120;
+const rejectedAutoSnapshotsByTripLocalId = new Map<string, CurrentLocationSnapshot[]>();
+
+function getRejectedAutoRecoverySnapshots(tripLocalId: string, recordedAt: string): CurrentLocationSnapshot[] {
+  const recordedAtMs = new Date(recordedAt).getTime();
+  const minRecordedAtMs = Number.isNaN(recordedAtMs)
+    ? Number.NEGATIVE_INFINITY
+    : recordedAtMs - AUTO_REJECTED_RECOVERY_MAX_AGE_MS;
+
+  return (rejectedAutoSnapshotsByTripLocalId.get(tripLocalId) ?? []).filter(
+    (snapshot) => new Date(snapshot.recordedAt).getTime() >= minRecordedAtMs,
+  );
+}
+
+function rememberRejectedAutoSnapshot(tripLocalId: string, snapshot: CurrentLocationSnapshot) {
+  const recordedAtMs = new Date(snapshot.recordedAt).getTime();
+
+  if (Number.isNaN(recordedAtMs)) {
+    return;
+  }
+
+  const minRecordedAtMs = recordedAtMs - AUTO_REJECTED_RECOVERY_MAX_AGE_MS;
+  const existingSnapshots = rejectedAutoSnapshotsByTripLocalId.get(tripLocalId) ?? [];
+  const nextSnapshots = [...existingSnapshots.filter((candidate) => candidate.recordedAt !== snapshot.recordedAt), snapshot]
+    .filter((candidate) => new Date(candidate.recordedAt).getTime() >= minRecordedAtMs)
+    .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt))
+    .slice(-AUTO_REJECTED_RECOVERY_MAX_COUNT);
+
+  rejectedAutoSnapshotsByTripLocalId.set(tripLocalId, nextSnapshots);
+}
+
+function forgetRejectedAutoSnapshots(tripLocalId: string, snapshots: CurrentLocationSnapshot[]) {
+  if (snapshots.length === 0) {
+    return;
+  }
+
+  const removedRecordedAt = new Set(snapshots.map((snapshot) => snapshot.recordedAt));
+  const nextSnapshots = (rejectedAutoSnapshotsByTripLocalId.get(tripLocalId) ?? []).filter(
+    (snapshot) => !removedRecordedAt.has(snapshot.recordedAt),
+  );
+
+  if (nextSnapshots.length === 0) {
+    rejectedAutoSnapshotsByTripLocalId.delete(tripLocalId);
+  } else {
+    rejectedAutoSnapshotsByTripLocalId.set(tripLocalId, nextSnapshots);
+  }
 }
 
 async function persistRecordedLocations(locations: Location.LocationObject[]): Promise<void> {
@@ -52,8 +101,9 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
     return;
   }
 
+  const recordingTrip = activeTrip;
   const tripSegments = await loadTripSegments();
-  let nextTripPoints = await loadTripPointsForTrip(activeTrip.localId);
+  let nextTripPoints = await loadTripPointsForTrip(recordingTrip.localId);
   const waypoints = await loadWaypoints();
   let nextWaypoints = waypoints;
   let nextTripSegments = tripSegments;
@@ -61,17 +111,41 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
   let lastRecordedAt = recordingSession.lastPointRecordedAt;
   let nextRecordingSession = recordingSession;
 
+  function appendSnapshotIfUseful(snapshot: CurrentLocationSnapshot): boolean {
+    const fallbackOpenSegment = getOpenTripSegmentForTrip(nextTripSegments, recordingTrip.localId);
+    const activeSegmentLocalId = nextRecordingSession.activeSegmentId ?? fallbackOpenSegment?.localId ?? null;
+    const appendedTripPoints = appendTripPointIfUseful(
+      nextTripPoints,
+      createTripPointForLocation(recordingTrip, activeSegmentLocalId, snapshot),
+      nextRecordingSession.recordingProfile,
+      "background",
+      {
+        sessionStartedAt: nextRecordingSession.startedAt,
+        tripStartedAt: recordingTrip.startedAt,
+      },
+    );
+    const pointsWereAppended = appendedTripPoints !== nextTripPoints;
+
+    if (pointsWereAppended) {
+      nextTripPoints = appendedTripPoints;
+      pointsChanged = true;
+      nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, snapshot.recordedAt);
+    }
+
+    return pointsWereAppended;
+  }
+
   for (const location of locations) {
     const snapshot = toSnapshot(location);
-    recordLocationCallback(activeTrip.localId, nextRecordingSession.recordingProfile, "background", snapshot);
+    recordLocationCallback(recordingTrip.localId, nextRecordingSession.recordingProfile, "background", snapshot);
     const rawAutoSamples =
       nextRecordingSession.recordingMode === "auto"
-        ? recordAutoRecordingSample(activeTrip.localId, snapshot)
+        ? recordAutoRecordingSample(recordingTrip.localId, snapshot)
         : null;
 
     if (lastRecordedAt === snapshot.recordedAt) {
       recordTripPointDiagnostic(
-        activeTrip.localId,
+        recordingTrip.localId,
         nextRecordingSession.recordingProfile,
         "session-duplicate-recorded-at",
         {
@@ -84,33 +158,13 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
       }
     }
 
-    const fallbackOpenSegment = getOpenTripSegmentForTrip(nextTripSegments, activeTrip.localId);
-    const activeSegmentLocalId = nextRecordingSession.activeSegmentId ?? fallbackOpenSegment?.localId ?? null;
-    const appendedTripPoints = appendTripPointIfUseful(
-      nextTripPoints,
-      createTripPointForLocation(activeTrip, activeSegmentLocalId, snapshot),
-      nextRecordingSession.recordingProfile,
-      "background",
-      {
-        sessionStartedAt: nextRecordingSession.startedAt,
-        tripStartedAt: activeTrip.startedAt,
-      },
-    );
-    const pointsWereAppended = appendedTripPoints !== nextTripPoints;
-
-    if (pointsWereAppended) {
-      nextTripPoints = appendedTripPoints;
-      pointsChanged = true;
-      nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, snapshot.recordedAt);
-    }
-
     if (nextRecordingSession.recordingMode === "auto") {
       const motionActivity = await getLatestMotionActivityAsync(snapshot.recordedAt);
 
       nextRecordingSession = updateRecordingMotionActivity(nextRecordingSession, motionActivity);
       const autoTransition = applyAutoRecordingTransition(
         nextRecordingSession,
-        activeTrip,
+        recordingTrip,
         nextTripSegments,
         nextTripPoints,
         nextWaypoints,
@@ -125,6 +179,29 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
 
       if (autoTransition.changed) {
         await restartBackgroundLocationTracking(nextRecordingSession.recordingProfile);
+        const recoverySnapshots = getRejectedAutoRecoverySnapshots(recordingTrip.localId, snapshot.recordedAt);
+        const snapshotsToReevaluate = lastRecordedAt === snapshot.recordedAt
+          ? recoverySnapshots
+          : [...recoverySnapshots, snapshot];
+        const acceptedRecoverySnapshots: CurrentLocationSnapshot[] = [];
+
+        for (const recoverySnapshot of snapshotsToReevaluate) {
+          if (appendSnapshotIfUseful(recoverySnapshot)) {
+            acceptedRecoverySnapshots.push(recoverySnapshot);
+          }
+        }
+
+        forgetRejectedAutoSnapshots(recordingTrip.localId, acceptedRecoverySnapshots);
+        lastRecordedAt = snapshot.recordedAt;
+        continue;
+      }
+    }
+
+    if (lastRecordedAt !== snapshot.recordedAt) {
+      const pointsWereAppended = appendSnapshotIfUseful(snapshot);
+
+      if (!pointsWereAppended && nextRecordingSession.recordingMode === "auto") {
+        rememberRejectedAutoSnapshot(recordingTrip.localId, snapshot);
       }
     }
 
