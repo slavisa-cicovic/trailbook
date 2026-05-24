@@ -17,6 +17,16 @@ let state: TripSegmentsState = {
   tripSegments: [],
 };
 
+function dedupeTripSegmentsByLocalId(tripSegments: TripSegment[]): TripSegment[] {
+  const tripSegmentsByLocalId = new Map<string, TripSegment>();
+
+  for (const tripSegment of tripSegments) {
+    tripSegmentsByLocalId.set(tripSegment.localId, tripSegment);
+  }
+
+  return Array.from(tripSegmentsByLocalId.values());
+}
+
 function emitChange() {
   listeners.forEach((listener) => listener());
 }
@@ -50,17 +60,18 @@ export async function hydrateTripSegmentsStore(): Promise<void> {
 
   setState({
     hydrated: true,
-    tripSegments,
+    tripSegments: dedupeTripSegmentsByLocalId(tripSegments),
   });
 }
 
 export async function setTripSegments(tripSegments: TripSegment[]): Promise<void> {
   const previousTripSegments = state.tripSegments;
+  const nextTripSegments = dedupeTripSegmentsByLocalId(tripSegments);
 
   setState((currentState) => ({
     ...currentState,
-    tripSegments,
+    tripSegments: nextTripSegments,
   }));
 
-  await saveTripSegments(tripSegments, previousTripSegments);
+  await saveTripSegments(nextTripSegments, previousTripSegments);
 }

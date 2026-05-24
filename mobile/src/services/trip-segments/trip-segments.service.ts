@@ -159,8 +159,15 @@ export function getVisibleTripSegmentsForTrip(
   tripSegments: TripSegment[],
   tripLocalId: string,
 ): TripSegment[] {
-  return tripSegments
-    .filter((segment) => segment.tripLocalId === tripLocalId)
+  const segmentsByLocalId = new Map<string, TripSegment>();
+
+  for (const segment of tripSegments) {
+    if (segment.tripLocalId === tripLocalId) {
+      segmentsByLocalId.set(segment.localId, segment);
+    }
+  }
+
+  return Array.from(segmentsByLocalId.values())
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
 }
 

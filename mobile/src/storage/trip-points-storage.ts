@@ -136,6 +136,22 @@ function calculateTripDistanceMeters(tripPoints: TripPoint[]): number {
   return totalDistanceMeters;
 }
 
+function calculateSegmentedTripDistanceMeters(tripPoints: TripPoint[]): number {
+  const tripPointsBySegmentLocalId = groupTripPointsBySegmentLocalId(tripPoints);
+
+  if (tripPointsBySegmentLocalId.size === 0) {
+    return calculateTripDistanceMeters(tripPoints);
+  }
+
+  let totalDistanceMeters = 0;
+
+  for (const segmentTripPoints of tripPointsBySegmentLocalId.values()) {
+    totalDistanceMeters += calculateTripDistanceMeters(segmentTripPoints);
+  }
+
+  return totalDistanceMeters;
+}
+
 function calculateSegmentDurationMs(segment: TripSegmentStatsSourceRow): number {
   const startedAt = new Date(segment.started_at).getTime();
   const endedAt = new Date(segment.ended_at ?? new Date().toISOString()).getTime();
@@ -209,7 +225,7 @@ async function replaceTripStats(
       ) VALUES (?, ?, ?, ?)`,
       tripLocalId,
       groupedPoints.length,
-      calculateTripDistanceMeters(groupedPoints),
+      calculateSegmentedTripDistanceMeters(groupedPoints),
       updatedAt,
     );
   }
@@ -297,7 +313,7 @@ async function updateTripStatsForTripLocalIds(
       ) VALUES (?, ?, ?, ?)`,
       tripLocalId,
       groupedPoints?.length ?? 0,
-      groupedPoints ? calculateTripDistanceMeters(groupedPoints) : 0,
+      groupedPoints ? calculateSegmentedTripDistanceMeters(groupedPoints) : 0,
       updatedAt,
     );
   }

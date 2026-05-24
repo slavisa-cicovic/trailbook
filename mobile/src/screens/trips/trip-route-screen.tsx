@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { ActivityIndicator, Alert, Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Easing,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
@@ -21,7 +32,6 @@ import {
   updateTripMetadata,
 } from "../../services/trips/trips-management.service";
 import {
-  calculateTripDistanceMeters,
   formatDistanceKm,
   smoothTripRoutePoints,
 } from "../../services/trip-points/trip-points.service";
@@ -696,7 +706,9 @@ export default function TripRouteScreen() {
 
   const distanceText = routeLoading
     ? "Loading"
-    : formatDistanceKm(calculateTripDistanceMeters(loadedSelectedTripPoints));
+    : formatDistanceKm(
+        selectedTripSegments.reduce((totalDistance, entry) => totalDistance + entry.distanceMeters, 0),
+      );
   const syncIconColor = selectedTrip.syncStatus === "synced" ? "#243224" : "#b45309";
   const segmentEditTarget =
     segmentEditSegmentId === null
@@ -888,63 +900,69 @@ export default function TripRouteScreen() {
             {selectedTripTimeline.length > 0 ? (
               <View style={styles.segmentsList}>
                 <Text style={styles.segmentsTitle}>Timeline</Text>
-                {selectedTripTimeline.map((entry) =>
-                  entry.type === "segment" ? (
-                    <View key={entry.segment.localId} style={styles.segmentRow}>
-                      <View style={styles.segmentHeader}>
-                        <View style={styles.segmentHeaderLead}>
-                          <Text style={styles.segmentMode}>{getRecordingProfileLabel(entry.segment.recordingProfile)}</Text>
-                          {selectedTrip.status === "ended" ? (
-                            <Pressable
-                              onPress={() => setSegmentEditSegmentId(entry.segment.localId)}
-                              style={styles.segmentEditIconButton}
-                            >
-                              <MaterialIcons color="#52624f" name="edit" size={16} />
-                            </Pressable>
-                          ) : null}
+                <ScrollView
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={selectedTripTimeline.length > 3}
+                  style={styles.segmentsScroll}
+                >
+                  {selectedTripTimeline.map((entry) =>
+                    entry.type === "segment" ? (
+                      <View key={entry.segment.localId} style={styles.segmentRow}>
+                        <View style={styles.segmentHeader}>
+                          <View style={styles.segmentHeaderLead}>
+                            <Text style={styles.segmentMode}>{getRecordingProfileLabel(entry.segment.recordingProfile)}</Text>
+                            {selectedTrip.status === "ended" ? (
+                              <Pressable
+                                onPress={() => setSegmentEditSegmentId(entry.segment.localId)}
+                                style={styles.segmentEditIconButton}
+                              >
+                                <MaterialIcons color="#52624f" name="edit" size={16} />
+                              </Pressable>
+                            ) : null}
+                          </View>
+                          <Text style={styles.segmentDistance}>{formatDistanceKm(entry.distanceMeters)}</Text>
                         </View>
-                        <Text style={styles.segmentDistance}>{formatDistanceKm(entry.distanceMeters)}</Text>
+                        <Text style={styles.segmentMeta}>
+                          {new Date(entry.segment.startedAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {" - "}
+                          {entry.segment.endedAt
+                            ? new Date(entry.segment.endedAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "Active"}
+                          {" • "}
+                          {entry.durationLabel}
+                        </Text>
                       </View>
-                      <Text style={styles.segmentMeta}>
-                        {new Date(entry.segment.startedAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                        {" - "}
-                        {entry.segment.endedAt
-                          ? new Date(entry.segment.endedAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "Active"}
-                        {" • "}
-                        {entry.durationLabel}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View key={entry.pause.localId} style={[styles.segmentRow, styles.pauseRow]}>
-                      <View style={styles.segmentHeader}>
-                        <View style={styles.segmentHeaderLead}>
-                          <Text style={styles.pauseMode}>Pause</Text>
+                    ) : (
+                      <View key={entry.pause.localId} style={[styles.segmentRow, styles.pauseRow]}>
+                        <View style={styles.segmentHeader}>
+                          <View style={styles.segmentHeaderLead}>
+                            <Text style={styles.pauseMode}>Pause</Text>
+                          </View>
+                          <Text style={styles.pauseDuration}>{entry.durationLabel}</Text>
                         </View>
-                        <Text style={styles.pauseDuration}>{entry.durationLabel}</Text>
+                        <Text style={styles.segmentMeta}>
+                          {new Date(entry.pause.startedAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {" - "}
+                          {entry.pause.endedAt
+                            ? new Date(entry.pause.endedAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "Paused"}
+                        </Text>
                       </View>
-                      <Text style={styles.segmentMeta}>
-                        {new Date(entry.pause.startedAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                        {" - "}
-                        {entry.pause.endedAt
-                          ? new Date(entry.pause.endedAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "Paused"}
-                      </Text>
-                    </View>
-                  ),
-                )}
+                    ),
+                  )}
+                </ScrollView>
               </View>
             ) : null}
           </View>
@@ -1190,6 +1208,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#243224",
+  },
+  segmentsScroll: {
+    maxHeight: 205,
   },
   segmentRow: {
     gap: 4,
