@@ -11,6 +11,7 @@ import { logoutFromBackend } from "../../services/auth/mobile-auth.service";
 import { syncBackgroundLocationTracking } from "../../services/location/location.service";
 import { syncResolvedRecordingConfig } from "../../services/recording/recording-config.service";
 import { restoreOwnedTripsFromServer } from "../../services/trips/trip-restore.service";
+import { syncTripStatsToServer } from "../../services/trips/server-trip-sharing.service";
 import { useRecordingStore } from "../../state/recording-store";
 import { setTripPauses } from "../../state/trip-pauses-store";
 import { setTripPointsInMemory } from "../../state/trip-points-store";
@@ -151,6 +152,8 @@ export default function SettingsScreen() {
   const theme = getAppTheme(resolvedThemeMode);
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [sendStatsBusy, setSendStatsBusy] = useState(false);
+  const [sendStatsMessage, setSendStatsMessage] = useState<string | null>(null);
   const [recordingConfigBusy, setRecordingConfigBusy] = useState(false);
   const [recordingConfigMessage, setRecordingConfigMessage] = useState<string | null>(null);
   const [clearTripDataBusy, setClearTripDataBusy] = useState(false);
@@ -237,6 +240,36 @@ export default function SettingsScreen() {
       setRecordingConfigMessage(getRecordingConfigErrorMessage(error));
     } finally {
       setRecordingConfigBusy(false);
+    }
+  }
+
+  async function handleSendStatsData() {
+    if (!identitySession || identitySession.mode !== "authenticated" || !identitySession.sessionToken) {
+      return;
+    }
+
+    setSendStatsBusy(true);
+    setSendStatsMessage(null);
+
+    try {
+      const syncedTrips = trips.filter(
+        (trip) => trip.userId === identitySession.userId && trip.serverId && trip.deletedAt === null,
+      );
+      let sentCount = 0;
+
+      for (const trip of syncedTrips) {
+        await syncTripStatsToServer(identitySession.sessionToken, {
+          trip,
+          tripSegments: tripSegments.filter((segment) => segment.tripLocalId === trip.localId),
+        });
+        sentCount += 1;
+      }
+
+      setSendStatsMessage(`Sent stats for ${sentCount} trip(s).`);
+    } catch (error) {
+      setSendStatsMessage(error instanceof Error ? error.message : "Stats sync failed.");
+    } finally {
+      setSendStatsBusy(false);
     }
   }
 
@@ -408,6 +441,18 @@ export default function SettingsScreen() {
               theme={theme}
               title="Recording config editor"
               value="Open"
+            />
+            <SettingsDivider theme={theme} />
+            <SettingsRow
+              description="Temporary helper that sends locally stored trip and segment stats for already synced trips."
+              disabled={sendStatsBusy}
+              iconName="query-stats"
+              message={sendStatsMessage}
+              messageTone={sendStatsMessage?.startsWith("Sent stats") ? "success" : "danger"}
+              onPress={() => void handleSendStatsData()}
+              theme={theme}
+              title="Send stats data"
+              value={sendStatsBusy ? "Sending..." : "Send"}
             />
           </SettingsSection>
         ) : null}

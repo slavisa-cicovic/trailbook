@@ -5,6 +5,9 @@ export interface OwnedServerTripSummary {
   description: string | null;
   endedAt: string | null;
   id: string;
+  pointCount: number | null;
+  distanceMeters: number | null;
+  statsUpdatedAt: string | null;
   recordingProfile: RecordingProfile;
   segmentCount: number;
   startedAt: string;
@@ -31,6 +34,9 @@ export interface OwnedServerTripDetail {
   endedAt: string | null;
   id: string;
   localId: string;
+  pointCount: number | null;
+  distanceMeters: number | null;
+  statsUpdatedAt: string | null;
   points: Array<{
     accuracy: number | null;
     altitude: number | null;
@@ -53,6 +59,10 @@ export interface OwnedServerTripDetail {
     endedAt: string | null;
     id: string;
     localId: string;
+    pointCount: number | null;
+    distanceMeters: number | null;
+    durationMs: number | null;
+    statsUpdatedAt: string | null;
     recordingProfile: RecordingProfile;
     startedAt: string;
     updatedAt: string;

@@ -5,6 +5,10 @@ import type { Trip, TripPoint, TripSegment, Waypoint, WaypointAttachment } from 
 import { BackendRequestError } from "../api/mobile-api.service";
 import { getSessionStateSnapshot, refreshActiveIdentitySessionIfPossible } from "../../state/session-store";
 import { getTripDiagnosticsForSync, isTripDiagnosticsEnabled } from "../trip-points/trip-points.service";
+import {
+  loadTripSegmentStatsByTripLocalIds,
+  loadTripStatsByTripLocalIds,
+} from "../../storage/trip-points-storage";
 
 const TRIP_POINTS_SYNC_BATCH_SIZE = 500;
 
@@ -118,6 +122,67 @@ function chunkItems<T>(items: T[], chunkSize: number): T[][] {
   }
 
   return chunks;
+}
+
+async function buildTripStatsSyncPayload(input: {
+  trip: Trip;
+  tripSegments: TripSegment[];
+}) {
+  const [tripStatsById, segmentStatsById] = await Promise.all([
+    loadTripStatsByTripLocalIds([input.trip.localId]),
+    loadTripSegmentStatsByTripLocalIds([input.trip.localId]),
+  ]);
+  const tripStats = tripStatsById.get(input.trip.localId);
+
+  return {
+    tripStats: tripStats
+      ? {
+          distanceMeters: tripStats.distance_meters,
+          pointCount: tripStats.point_count,
+          updatedAt: tripStats.updated_at,
+        }
+      : null,
+    segmentStats: input.tripSegments
+      .map((segment) => {
+        const segmentStats = segmentStatsById.get(segment.localId);
+
+        if (!segmentStats) {
+          return null;
+        }
+
+        return {
+          segmentLocalId: segment.localId,
+          distanceMeters: segmentStats.distance_meters,
+          durationMs: segmentStats.duration_ms,
+          pointCount: segmentStats.point_count,
+          updatedAt: segmentStats.updated_at,
+        };
+      })
+      .filter((stats): stats is NonNullable<typeof stats> => stats !== null),
+  };
+}
+
+export async function syncTripStatsToServer(
+  sessionToken: string,
+  input: {
+    trip: Trip;
+    tripSegments: TripSegment[];
+  },
+) {
+  if (!input.trip.serverId) {
+    throw new Error("Trip must be synced before stats can be sent.");
+  }
+
+  const statsPayload = await buildTripStatsSyncPayload(input);
+
+  return request<{ segmentStatsUpdated: number; syncedAt: string; tripId: string; tripLocalId: string }>(
+    `/trips/${input.trip.serverId}/stats/sync`,
+    sessionToken,
+    {
+      method: "POST",
+      body: JSON.stringify(statsPayload),
+    },
+  );
 }
 
 export async function syncTripToServer(
@@ -254,6 +319,15 @@ export async function syncTripToServer(
       },
     );
   }
+
+  await request<{ segmentStatsUpdated: number; syncedAt: string; tripId: string; tripLocalId: string }>(
+    `/trips/${response.tripId}/stats/sync`,
+    sessionToken,
+    {
+      method: "POST",
+      body: JSON.stringify(await buildTripStatsSyncPayload(input)),
+    },
+  );
 
   return response;
 }

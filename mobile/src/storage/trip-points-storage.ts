@@ -212,10 +212,18 @@ async function replaceTripStats(
   groupedTripPoints: Map<string, TripPoint[]>,
 ) {
   await database.runAsync("DELETE FROM trip_stats");
+  await database.runAsync(`
+    UPDATE trips
+    SET point_count = NULL,
+        distance_meters = NULL,
+        stats_updated_at = NULL
+  `);
 
   const updatedAt = new Date().toISOString();
 
   for (const [tripLocalId, groupedPoints] of groupedTripPoints.entries()) {
+    const distanceMeters = calculateSegmentedTripDistanceMeters(groupedPoints);
+
     await database.runAsync(
       `INSERT INTO trip_stats (
         trip_local_id,
@@ -225,8 +233,19 @@ async function replaceTripStats(
       ) VALUES (?, ?, ?, ?)`,
       tripLocalId,
       groupedPoints.length,
-      calculateSegmentedTripDistanceMeters(groupedPoints),
+      distanceMeters,
       updatedAt,
+    );
+    await database.runAsync(
+      `UPDATE trips
+       SET point_count = ?,
+           distance_meters = ?,
+           stats_updated_at = ?
+       WHERE local_id = ?`,
+      groupedPoints.length,
+      distanceMeters,
+      updatedAt,
+      tripLocalId,
     );
   }
 }
@@ -252,6 +271,15 @@ async function updateTripSegmentStatsForTripLocalIds(
     `DELETE FROM trip_segment_stats WHERE trip_local_id IN (${placeholders})`,
     ...tripLocalIds,
   );
+  await database.runAsync(
+    `UPDATE trip_segments
+     SET point_count = NULL,
+         distance_meters = NULL,
+         duration_ms = NULL,
+         stats_updated_at = NULL
+     WHERE trip_local_id IN (${placeholders})`,
+    ...tripLocalIds,
+  );
 
   if (segments.length === 0) {
     return;
@@ -272,6 +300,8 @@ async function updateTripSegmentStatsForTripLocalIds(
 
   for (const segment of segments) {
     const segmentTripPoints = tripPointsBySegmentLocalId.get(segment.local_id) ?? [];
+    const distanceMeters = calculateTripDistanceMeters(segmentTripPoints);
+    const durationMs = calculateSegmentDurationMs(segment);
 
     await database.runAsync(
       `INSERT INTO trip_segment_stats (
@@ -285,9 +315,22 @@ async function updateTripSegmentStatsForTripLocalIds(
       segment.local_id,
       segment.trip_local_id,
       segmentTripPoints.length,
-      calculateTripDistanceMeters(segmentTripPoints),
-      calculateSegmentDurationMs(segment),
+      distanceMeters,
+      durationMs,
       updatedAt,
+    );
+    await database.runAsync(
+      `UPDATE trip_segments
+       SET point_count = ?,
+           distance_meters = ?,
+           duration_ms = ?,
+           stats_updated_at = ?
+       WHERE local_id = ?`,
+      segmentTripPoints.length,
+      distanceMeters,
+      durationMs,
+      updatedAt,
+      segment.local_id,
     );
   }
 }
@@ -303,6 +346,8 @@ async function updateTripStatsForTripLocalIds(
     await database.runAsync("DELETE FROM trip_stats WHERE trip_local_id = ?", tripLocalId);
 
     const groupedPoints = groupedTripPoints.get(tripLocalId);
+    const pointCount = groupedPoints?.length ?? 0;
+    const distanceMeters = groupedPoints ? calculateSegmentedTripDistanceMeters(groupedPoints) : 0;
 
     await database.runAsync(
       `INSERT INTO trip_stats (
@@ -312,11 +357,48 @@ async function updateTripStatsForTripLocalIds(
         updated_at
       ) VALUES (?, ?, ?, ?)`,
       tripLocalId,
-      groupedPoints?.length ?? 0,
-      groupedPoints ? calculateSegmentedTripDistanceMeters(groupedPoints) : 0,
+      pointCount,
+      distanceMeters,
       updatedAt,
     );
+    await database.runAsync(
+      `UPDATE trips
+       SET point_count = ?,
+           distance_meters = ?,
+           stats_updated_at = ?
+       WHERE local_id = ?`,
+      pointCount,
+      distanceMeters,
+      updatedAt,
+      tripLocalId,
+    );
   }
+}
+
+export async function refreshTripStatsForTripLocalIds(tripLocalIds: string[]): Promise<void> {
+  await ensureTripPointsMigrated();
+
+  const uniqueTripLocalIds = Array.from(new Set(tripLocalIds));
+
+  if (uniqueTripLocalIds.length === 0) {
+    return;
+  }
+
+  const database = await getDatabase();
+  const placeholders = uniqueTripLocalIds.map(() => "?").join(", ");
+  const rows = await database.getAllAsync<TripPointRow>(
+    `SELECT * FROM trip_points WHERE trip_local_id IN (${placeholders}) ORDER BY recorded_at ASC, local_id ASC`,
+    ...uniqueTripLocalIds,
+  );
+  const groupedTripPoints = groupTripPointsByTripLocalId(rows.map(toTripPointFromRow));
+
+  await runExclusiveDatabaseWrite(async (database) => {
+    await updateTripStatsForTripLocalIds(database, groupedTripPoints, uniqueTripLocalIds);
+  });
+}
+
+export async function refreshTripStatsForTripLocalId(tripLocalId: string): Promise<void> {
+  await refreshTripStatsForTripLocalIds([tripLocalId]);
 }
 
 export async function refreshTripSegmentStatsForTripLocalIds(tripLocalIds: string[]): Promise<void> {
@@ -325,6 +407,10 @@ export async function refreshTripSegmentStatsForTripLocalIds(tripLocalIds: strin
   await runExclusiveDatabaseWrite(async (database) => {
     await updateTripSegmentStatsForTripLocalIds(database, Array.from(new Set(tripLocalIds)));
   });
+}
+
+export async function refreshTripSegmentStatsForTripLocalId(tripLocalId: string): Promise<void> {
+  await refreshTripSegmentStatsForTripLocalIds([tripLocalId]);
 }
 
 async function loadLegacyTripPointsFromAsyncStorage(): Promise<TripPoint[]> {
@@ -481,7 +567,16 @@ export async function loadTripStatsByTripLocalIds(tripLocalIds: string[]): Promi
   const database = await getDatabase();
   const placeholders = tripLocalIds.map(() => "?").join(", ");
   const rows = await database.getAllAsync<TripStatsRow>(
-    `SELECT * FROM trip_stats WHERE trip_local_id IN (${placeholders})`,
+    `SELECT
+       local_id AS trip_local_id,
+       point_count,
+       distance_meters,
+       stats_updated_at AS updated_at
+     FROM trips
+     WHERE local_id IN (${placeholders})
+       AND point_count IS NOT NULL
+       AND distance_meters IS NOT NULL
+       AND stats_updated_at IS NOT NULL`,
     ...tripLocalIds,
   );
   const rowTripLocalIds = new Set(rows.map((row) => row.trip_local_id));
@@ -507,7 +602,16 @@ export async function loadTripStatsByTripLocalIds(tripLocalIds: string[]): Promi
       });
 
       const nextRows = await database.getAllAsync<TripStatsRow>(
-        `SELECT * FROM trip_stats WHERE trip_local_id IN (${placeholders})`,
+        `SELECT
+           local_id AS trip_local_id,
+           point_count,
+           distance_meters,
+           stats_updated_at AS updated_at
+         FROM trips
+         WHERE local_id IN (${placeholders})
+           AND point_count IS NOT NULL
+           AND distance_meters IS NOT NULL
+           AND stats_updated_at IS NOT NULL`,
         ...tripLocalIds,
       );
 
@@ -530,7 +634,19 @@ export async function loadTripSegmentStatsByTripLocalIds(
   const database = await getDatabase();
   const placeholders = tripLocalIds.map(() => "?").join(", ");
   const rows = await database.getAllAsync<TripSegmentStatsRow>(
-    `SELECT * FROM trip_segment_stats WHERE trip_local_id IN (${placeholders})`,
+    `SELECT
+       local_id AS segment_local_id,
+       trip_local_id,
+       point_count,
+       distance_meters,
+       duration_ms,
+       stats_updated_at AS updated_at
+     FROM trip_segments
+     WHERE trip_local_id IN (${placeholders})
+       AND point_count IS NOT NULL
+       AND distance_meters IS NOT NULL
+       AND duration_ms IS NOT NULL
+       AND stats_updated_at IS NOT NULL`,
     ...tripLocalIds,
   );
   const rowSegmentLocalIds = new Set(rows.map((row) => row.segment_local_id));
@@ -549,7 +665,19 @@ export async function loadTripSegmentStatsByTripLocalIds(
     });
 
     const nextRows = await database.getAllAsync<TripSegmentStatsRow>(
-      `SELECT * FROM trip_segment_stats WHERE trip_local_id IN (${placeholders})`,
+      `SELECT
+         local_id AS segment_local_id,
+         trip_local_id,
+         point_count,
+         distance_meters,
+         duration_ms,
+         stats_updated_at AS updated_at
+       FROM trip_segments
+       WHERE trip_local_id IN (${placeholders})
+         AND point_count IS NOT NULL
+         AND distance_meters IS NOT NULL
+         AND duration_ms IS NOT NULL
+         AND stats_updated_at IS NOT NULL`,
       ...tripLocalIds,
     );
 

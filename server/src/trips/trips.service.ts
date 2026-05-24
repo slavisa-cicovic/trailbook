@@ -6,7 +6,7 @@ import { UsersService } from "../users/users.service";
 import { MediaStorageService } from "./media-storage.service";
 import type { SaveTripEditDto } from "./dto/save-trip-edit.dto";
 import type { ShareTripDto } from "./dto/share-trip.dto";
-import type { SyncTripDto, SyncTripPointsChunkDto } from "./dto/sync-trip.dto";
+import type { SyncTripDto, SyncTripPointsChunkDto, SyncTripStatsSnapshotDto } from "./dto/sync-trip.dto";
 import type { UpdateTripDto } from "./dto/update-trip.dto";
 
 @Injectable()
@@ -120,6 +120,9 @@ export class TripsService {
       startedAt: Date;
       endedAt: Date | null;
       updatedAt: Date;
+      pointCount: number | null;
+      distanceMeters: number | null;
+      statsUpdatedAt: Date | null;
       segments: Array<{ id: string }>;
       waypoints: Array<{ deletedAt: Date | null }>;
     },
@@ -129,6 +132,9 @@ export class TripsService {
         description: trip.description,
         endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
         id: trip.id,
+        pointCount: trip.pointCount,
+        distanceMeters: trip.distanceMeters,
+        statsUpdatedAt: trip.statsUpdatedAt ? trip.statsUpdatedAt.toISOString() : null,
         recordingProfile: trip.recordingProfile,
         segmentCount: trip.segments.length,
         startedAt: trip.startedAt.toISOString(),
@@ -158,6 +164,9 @@ export class TripsService {
       batteryStartState?: string | null;
       batteryEndLevelPercent?: number | null;
       batteryEndState?: string | null;
+      pointCount?: number | null;
+      distanceMeters?: number | null;
+      statsUpdatedAt?: Date | null;
       attachments: Array<{
         id: string;
         localSourceId: string;
@@ -187,6 +196,10 @@ export class TripsService {
         recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
         startedAt: Date;
         endedAt: Date | null;
+        pointCount: number | null;
+        distanceMeters: number | null;
+        durationMs: number | null;
+        statsUpdatedAt: Date | null;
         createdAt: Date;
         updatedAt: Date;
       }>;
@@ -231,6 +244,9 @@ export class TripsService {
         batteryStartState: trip.batteryStartState ?? null,
         batteryEndLevelPercent: trip.batteryEndLevelPercent ?? null,
         batteryEndState: trip.batteryEndState ?? null,
+        pointCount: trip.pointCount ?? null,
+        distanceMeters: trip.distanceMeters ?? null,
+        statsUpdatedAt: trip.statsUpdatedAt ? trip.statsUpdatedAt.toISOString() : null,
         startedAt: trip.startedAt.toISOString(),
         title: trip.title,
         updatedAt: trip.updatedAt.toISOString(),
@@ -262,6 +278,10 @@ export class TripsService {
           endedAt: segment.endedAt ? segment.endedAt.toISOString() : null,
           id: segment.id,
           localId: segment.localSourceId,
+          pointCount: segment.pointCount,
+          distanceMeters: segment.distanceMeters,
+          durationMs: segment.durationMs,
+          statsUpdatedAt: segment.statsUpdatedAt ? segment.statsUpdatedAt.toISOString() : null,
           recordingProfile: segment.recordingProfile,
           startedAt: segment.startedAt.toISOString(),
           updatedAt: segment.updatedAt.toISOString(),
@@ -606,6 +626,78 @@ export class TripsService {
     };
   }
 
+  async syncTripStats(ownerUserId: string, tripId: string, payload: SyncTripStatsSnapshotDto) {
+    const result = await this.databaseService.$transaction(async (tx) => {
+      const trip = await tx.trip.findFirst({
+        where: {
+          id: tripId,
+          ownerUserId,
+        },
+        select: {
+          id: true,
+          localSourceId: true,
+        },
+      });
+
+      if (!trip) {
+        throw new NotFoundException("Trip not found.");
+      }
+
+      if (payload.tripStats) {
+        await tx.trip.update({
+          where: { id: tripId },
+          data: {
+            pointCount: payload.tripStats.pointCount,
+            distanceMeters: payload.tripStats.distanceMeters,
+            statsUpdatedAt: this.parseDateOrFallback(payload.tripStats.updatedAt, new Date()),
+          },
+        });
+      }
+
+      const segments = await tx.tripSegment.findMany({
+        where: {
+          tripId,
+        },
+        select: {
+          id: true,
+          localSourceId: true,
+        },
+      });
+      const segmentIdByLocalId = new Map(segments.map((segment) => [segment.localSourceId, segment.id]));
+      let segmentStatsUpdated = 0;
+
+      for (const segmentStats of payload.segmentStats ?? []) {
+        const segmentId = segmentIdByLocalId.get(segmentStats.segmentLocalId);
+
+        if (!segmentId) {
+          continue;
+        }
+
+        await tx.tripSegment.update({
+          where: { id: segmentId },
+          data: {
+            pointCount: segmentStats.pointCount,
+            distanceMeters: segmentStats.distanceMeters,
+            durationMs: segmentStats.durationMs,
+            statsUpdatedAt: this.parseDateOrFallback(segmentStats.updatedAt, new Date()),
+          },
+        });
+        segmentStatsUpdated += 1;
+      }
+
+      return {
+        segmentStatsUpdated,
+        tripLocalId: trip.localSourceId,
+      };
+    });
+
+    return {
+      ...result,
+      syncedAt: new Date().toISOString(),
+      tripId,
+    };
+  }
+
   async getTripOverview(ownerUserId: string, fromInput?: string, toInput?: string) {
     let from: Date | null = null;
     let to: Date | null = null;
@@ -782,7 +874,7 @@ export class TripsService {
       );
     }
 
-    const distanceMeters = this.calculateDistanceMeters(trip.points);
+    const distanceMeters = trip.distanceMeters ?? this.calculateDistanceMeters(trip.points);
 
     return {
       trip: {
@@ -813,14 +905,14 @@ export class TripsService {
         speed: point.speed,
       })),
       segments: trip.segments.map((segment) => {
-        const segmentPoints = trip.points.filter((point) => point.segmentId === segment.id);
-
         return {
           localId: segment.localSourceId,
           recordingProfile: segment.recordingProfile,
           startedAt: segment.startedAt.toISOString(),
           endedAt: segment.endedAt ? segment.endedAt.toISOString() : null,
-          distanceMeters: this.calculateDistanceMeters(segmentPoints),
+          distanceMeters:
+            segment.distanceMeters ??
+            this.calculateDistanceMeters(trip.points.filter((point) => point.segmentId === segment.id)),
         };
       }),
       waypoints: trip.waypoints.map((waypoint) => ({
@@ -1184,6 +1276,9 @@ export class TripsService {
           id: share.trip.id,
           title: share.trip.title,
           description: share.trip.description,
+          pointCount: share.trip.pointCount,
+          distanceMeters: share.trip.distanceMeters,
+          statsUpdatedAt: share.trip.statsUpdatedAt ? share.trip.statsUpdatedAt.toISOString() : null,
           recordingProfile: share.trip.recordingProfile,
           startedAt: share.trip.startedAt.toISOString(),
           endedAt: share.trip.endedAt ? share.trip.endedAt.toISOString() : null,
@@ -1236,6 +1331,9 @@ export class TripsService {
         description: share.trip.description,
         endedAt: share.trip.endedAt ? share.trip.endedAt.toISOString() : null,
         id: share.trip.id,
+        pointCount: share.trip.pointCount,
+        distanceMeters: share.trip.distanceMeters,
+        statsUpdatedAt: share.trip.statsUpdatedAt ? share.trip.statsUpdatedAt.toISOString() : null,
         recordingProfile: share.trip.recordingProfile,
         startedAt: share.trip.startedAt.toISOString(),
         title: share.trip.title,
@@ -1264,6 +1362,10 @@ export class TripsService {
           createdAt: segment.createdAt.toISOString(),
           endedAt: segment.endedAt ? segment.endedAt.toISOString() : null,
           id: segment.id,
+          pointCount: segment.pointCount,
+          distanceMeters: segment.distanceMeters,
+          durationMs: segment.durationMs,
+          statsUpdatedAt: segment.statsUpdatedAt ? segment.statsUpdatedAt.toISOString() : null,
           recordingProfile: segment.recordingProfile,
           startedAt: segment.startedAt.toISOString(),
           updatedAt: segment.updatedAt.toISOString(),

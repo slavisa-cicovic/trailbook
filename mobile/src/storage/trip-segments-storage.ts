@@ -4,7 +4,7 @@ import { DEFAULT_RECORDING_PROFILE, normalizeRecordingProfile } from "../constan
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripSegment } from "../domain/trips";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
-import { refreshTripSegmentStatsForTripLocalIds } from "./trip-points-storage";
+import { refreshTripSegmentStatsForTripLocalIds, refreshTripStatsForTripLocalIds } from "./trip-points-storage";
 
 function normalizeTripSegment(
   value: Partial<TripSegment> & Pick<TripSegment, "localId" | "tripLocalId" | "deviceId" | "userId">,
@@ -18,6 +18,10 @@ function normalizeTripSegment(
     deviceId: value.deviceId,
     userId: value.userId,
     recordingProfile: normalizeRecordingProfile(value.recordingProfile ?? DEFAULT_RECORDING_PROFILE),
+    pointCount: value.pointCount ?? null,
+    distanceMeters: value.distanceMeters ?? null,
+    durationMs: value.durationMs ?? null,
+    statsUpdatedAt: value.statsUpdatedAt ?? null,
     startedAt: value.startedAt ?? fallbackDate,
     endedAt: value.endedAt ?? null,
     createdAt: value.createdAt ?? value.startedAt ?? fallbackDate,
@@ -32,6 +36,10 @@ interface TripSegmentRow {
   ended_at: string | null;
   local_id: string;
   recording_profile: TripSegment["recordingProfile"];
+  point_count: number | null;
+  distance_meters: number | null;
+  duration_ms: number | null;
+  stats_updated_at: string | null;
   server_id: string | null;
   started_at: string;
   sync_status: TripSegment["syncStatus"];
@@ -47,6 +55,10 @@ function toTripSegmentRow(tripSegment: TripSegment): TripSegmentRow {
     ended_at: tripSegment.endedAt,
     local_id: tripSegment.localId,
     recording_profile: tripSegment.recordingProfile,
+    point_count: tripSegment.pointCount,
+    distance_meters: tripSegment.distanceMeters,
+    duration_ms: tripSegment.durationMs,
+    stats_updated_at: tripSegment.statsUpdatedAt,
     server_id: tripSegment.serverId,
     started_at: tripSegment.startedAt,
     sync_status: tripSegment.syncStatus,
@@ -63,6 +75,10 @@ function toTripSegmentFromRow(row: TripSegmentRow): TripSegment {
     endedAt: row.ended_at,
     localId: row.local_id,
     recordingProfile: row.recording_profile,
+    pointCount: row.point_count,
+    distanceMeters: row.distance_meters,
+    durationMs: row.duration_ms,
+    statsUpdatedAt: row.stats_updated_at,
     serverId: row.server_id,
     startedAt: row.started_at,
     syncStatus: row.sync_status,
@@ -111,18 +127,26 @@ async function ensureTripSegmentsMigrated(): Promise<void> {
           device_id,
           user_id,
           recording_profile,
+          point_count,
+          distance_meters,
+          duration_ms,
+          stats_updated_at,
           started_at,
           ended_at,
           created_at,
           updated_at,
           sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.local_id,
         row.server_id,
         row.trip_local_id,
         row.device_id,
         row.user_id,
         row.recording_profile,
+        row.point_count,
+        row.distance_meters,
+        row.duration_ms,
+        row.stats_updated_at,
         row.started_at,
         row.ended_at,
         row.created_at,
@@ -133,6 +157,9 @@ async function ensureTripSegmentsMigrated(): Promise<void> {
   });
 
   await refreshTripSegmentStatsForTripLocalIds(
+    Array.from(new Set(legacyTripSegments.map((tripSegment) => tripSegment.tripLocalId))),
+  );
+  await refreshTripStatsForTripLocalIds(
     Array.from(new Set(legacyTripSegments.map((tripSegment) => tripSegment.tripLocalId))),
   );
 }
@@ -156,6 +183,10 @@ function areTripSegmentsEqual(left: TripSegment, right: TripSegment): boolean {
     left.deviceId === right.deviceId &&
     left.userId === right.userId &&
     left.recordingProfile === right.recordingProfile &&
+    left.pointCount === right.pointCount &&
+    left.distanceMeters === right.distanceMeters &&
+    left.durationMs === right.durationMs &&
+    left.statsUpdatedAt === right.statsUpdatedAt &&
     left.startedAt === right.startedAt &&
     left.endedAt === right.endedAt &&
     left.createdAt === right.createdAt &&
@@ -184,18 +215,26 @@ export async function saveTripSegments(
             device_id,
             user_id,
             recording_profile,
+            point_count,
+            distance_meters,
+            duration_ms,
+            stats_updated_at,
             started_at,
             ended_at,
             created_at,
             updated_at,
             sync_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           row.local_id,
           row.server_id,
           row.trip_local_id,
           row.device_id,
           row.user_id,
           row.recording_profile,
+          row.point_count,
+          row.distance_meters,
+          row.duration_ms,
+          row.stats_updated_at,
           row.started_at,
           row.ended_at,
           row.created_at,
@@ -206,6 +245,9 @@ export async function saveTripSegments(
     });
 
     await refreshTripSegmentStatsForTripLocalIds(
+      Array.from(new Set(tripSegments.map((tripSegment) => tripSegment.tripLocalId))),
+    );
+    await refreshTripStatsForTripLocalIds(
       Array.from(new Set(tripSegments.map((tripSegment) => tripSegment.tripLocalId))),
     );
     return;
@@ -254,18 +296,26 @@ export async function saveTripSegments(
           device_id,
           user_id,
           recording_profile,
+          point_count,
+          distance_meters,
+          duration_ms,
+          stats_updated_at,
           started_at,
           ended_at,
           created_at,
           updated_at,
           sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.local_id,
         row.server_id,
         row.trip_local_id,
         row.device_id,
         row.user_id,
         row.recording_profile,
+        row.point_count,
+        row.distance_meters,
+        row.duration_ms,
+        row.stats_updated_at,
         row.started_at,
         row.ended_at,
         row.created_at,
@@ -276,4 +326,5 @@ export async function saveTripSegments(
   });
 
   await refreshTripSegmentStatsForTripLocalIds(affectedTripLocalIds);
+  await refreshTripStatsForTripLocalIds(affectedTripLocalIds);
 }

@@ -9,6 +9,20 @@ export interface SyncTripSegmentDto {
   updatedAt: string;
 }
 
+export interface SyncTripStatsDto {
+  distanceMeters: number;
+  pointCount: number;
+  updatedAt: string;
+}
+
+export interface SyncTripSegmentStatsDto {
+  distanceMeters: number;
+  durationMs: number;
+  pointCount: number;
+  segmentLocalId: string;
+  updatedAt: string;
+}
+
 export interface SyncTripPointDto {
   accuracy: number | null;
   altitude: number | null;
@@ -143,4 +157,9 @@ export interface SyncTripDto {
 
 export interface SyncTripPointsChunkDto {
   points: SyncTripPointDto[];
+}
+
+export interface SyncTripStatsSnapshotDto {
+  segmentStats: SyncTripSegmentStatsDto[];
+  tripStats: SyncTripStatsDto | null;
 }

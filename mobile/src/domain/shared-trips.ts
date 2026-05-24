@@ -32,6 +32,9 @@ export interface SharedTripDetail {
     description: string | null;
     endedAt: string | null;
     id: string;
+    pointCount: number | null;
+    distanceMeters: number | null;
+    statsUpdatedAt: string | null;
     points: Array<{
       accuracy: number | null;
       altitude: number | null;
@@ -47,6 +50,10 @@ export interface SharedTripDetail {
       createdAt: string;
       endedAt: string | null;
       id: string;
+      pointCount: number | null;
+      distanceMeters: number | null;
+      durationMs: number | null;
+      statsUpdatedAt: string | null;
       recordingProfile: RecordingProfile;
       startedAt: string;
       updatedAt: string;

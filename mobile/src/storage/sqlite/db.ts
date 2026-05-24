@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 import * as FileSystem from "expo-file-system/legacy";
 
 const DATABASE_NAME = "trailbook.db";
-const DATABASE_VERSION = 6;
+const DATABASE_VERSION = 7;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let databaseWriteQueue: Promise<void> = Promise.resolve();
@@ -248,6 +248,104 @@ async function migrateDatabaseIfNeeded(database: SQLite.SQLiteDatabase) {
     }
 
     await database.execAsync("PRAGMA user_version = 6;");
+  }
+
+  if (currentVersion < 7) {
+    const tripColumns = [
+      "point_count INTEGER",
+      "distance_meters REAL",
+      "stats_updated_at TEXT",
+    ];
+    const segmentColumns = [
+      "point_count INTEGER",
+      "distance_meters REAL",
+      "duration_ms INTEGER",
+      "stats_updated_at TEXT",
+    ];
+
+    for (const columnDefinition of tripColumns) {
+      await database.execAsync(`ALTER TABLE trips ADD COLUMN ${columnDefinition};`).catch(async (error) => {
+        if (!(error instanceof Error) || !error.message.includes("duplicate column name")) {
+          throw error;
+        }
+      });
+    }
+
+    for (const columnDefinition of segmentColumns) {
+      await database.execAsync(`ALTER TABLE trip_segments ADD COLUMN ${columnDefinition};`).catch(async (error) => {
+        if (!(error instanceof Error) || !error.message.includes("duplicate column name")) {
+          throw error;
+        }
+      });
+    }
+
+    const tripStatsTable = await database.getFirstAsync<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'trip_stats'",
+    );
+    const tripSegmentStatsTable = await database.getFirstAsync<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'trip_segment_stats'",
+    );
+
+    if (tripStatsTable) {
+      await database.execAsync(`
+        UPDATE trips
+        SET
+          point_count = (
+            SELECT trip_stats.point_count
+            FROM trip_stats
+            WHERE trip_stats.trip_local_id = trips.local_id
+          ),
+          distance_meters = (
+            SELECT trip_stats.distance_meters
+            FROM trip_stats
+            WHERE trip_stats.trip_local_id = trips.local_id
+          ),
+          stats_updated_at = (
+            SELECT trip_stats.updated_at
+            FROM trip_stats
+            WHERE trip_stats.trip_local_id = trips.local_id
+          )
+        WHERE EXISTS (
+          SELECT 1
+          FROM trip_stats
+          WHERE trip_stats.trip_local_id = trips.local_id
+        );
+      `);
+    }
+
+    if (tripSegmentStatsTable) {
+      await database.execAsync(`
+        UPDATE trip_segments
+        SET
+          point_count = (
+            SELECT trip_segment_stats.point_count
+            FROM trip_segment_stats
+            WHERE trip_segment_stats.segment_local_id = trip_segments.local_id
+          ),
+          distance_meters = (
+            SELECT trip_segment_stats.distance_meters
+            FROM trip_segment_stats
+            WHERE trip_segment_stats.segment_local_id = trip_segments.local_id
+          ),
+          duration_ms = (
+            SELECT trip_segment_stats.duration_ms
+            FROM trip_segment_stats
+            WHERE trip_segment_stats.segment_local_id = trip_segments.local_id
+          ),
+          stats_updated_at = (
+            SELECT trip_segment_stats.updated_at
+            FROM trip_segment_stats
+            WHERE trip_segment_stats.segment_local_id = trip_segments.local_id
+          )
+        WHERE EXISTS (
+          SELECT 1
+          FROM trip_segment_stats
+          WHERE trip_segment_stats.segment_local_id = trip_segments.local_id
+        );
+      `);
+    }
+
+    await database.execAsync("PRAGMA user_version = 7;");
   }
 }
 

@@ -104,6 +104,10 @@ export function createInitialTripSegment(trip: Trip, startedAt: string): TripSeg
     deviceId: trip.deviceId,
     userId: trip.userId,
     recordingProfile: trip.recordingProfile,
+    pointCount: 0,
+    distanceMeters: 0,
+    durationMs: 0,
+    statsUpdatedAt: startedAt,
     startedAt,
     endedAt: null,
     createdAt: startedAt,
@@ -142,6 +146,10 @@ export function startNextTripSegment(
     deviceId: trip.deviceId,
     userId: trip.userId,
     recordingProfile,
+    pointCount: 0,
+    distanceMeters: 0,
+    durationMs: 0,
+    statsUpdatedAt: startedAt,
     startedAt,
     endedAt: null,
     createdAt: startedAt,
@@ -190,17 +198,25 @@ export function buildTripSegmentsSummary(
 ): TripSegmentSummary[] {
   return getVisibleTripSegmentsForTrip(tripSegments, tripLocalId).map((segment) => {
     const segmentStats = segmentStatsBySegmentId?.get(segment.localId) ?? null;
-    const segmentTripPoints = segmentStats
+    const hasStoredStats = segmentStats || (segment.distanceMeters !== null && segment.durationMs !== null);
+    const segmentTripPoints = hasStoredStats
       ? []
       : getVisibleTripPointsForTrip(tripPoints, tripLocalId).filter(
           (tripPoint) => tripPoint.segmentLocalId === segment.localId,
         );
     const durationMs =
-      segmentStats && segment.endedAt ? segmentStats.duration_ms : getSegmentDurationMs(segment);
+      segmentStats && segment.endedAt
+        ? segmentStats.duration_ms
+        : segment.durationMs !== null && segment.endedAt
+          ? segment.durationMs
+          : getSegmentDurationMs(segment);
 
     return {
       segment,
-      distanceMeters: segmentStats ? segmentStats.distance_meters : calculateTripDistanceMeters(segmentTripPoints),
+      distanceMeters:
+        segmentStats?.distance_meters ??
+        segment.distanceMeters ??
+        calculateTripDistanceMeters(segmentTripPoints),
       durationMs,
       durationLabel: formatDurationSummary(durationMs),
     };

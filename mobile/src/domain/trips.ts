@@ -37,6 +37,9 @@ export interface Trip {
   batteryStartState: string | null;
   batteryEndLevelPercent: number | null;
   batteryEndState: string | null;
+  pointCount: number | null;
+  distanceMeters: number | null;
+  statsUpdatedAt: string | null;
   status: TripStatus;
   startedAt: string;
   endedAt: string | null;
@@ -66,6 +69,10 @@ export interface TripSegment {
   deviceId: string;
   userId: string;
   recordingProfile: RecordingProfile;
+  pointCount: number | null;
+  distanceMeters: number | null;
+  durationMs: number | null;
+  statsUpdatedAt: string | null;
   startedAt: string;
   endedAt: string | null;
   createdAt: string;

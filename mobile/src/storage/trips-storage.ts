@@ -27,6 +27,9 @@ function normalizeTrip(value: Partial<Trip> & Pick<Trip, "localId" | "deviceId" 
     batteryStartState: value.batteryStartState ?? null,
     batteryEndLevelPercent: value.batteryEndLevelPercent ?? null,
     batteryEndState: value.batteryEndState ?? null,
+    pointCount: value.pointCount ?? null,
+    distanceMeters: value.distanceMeters ?? null,
+    statsUpdatedAt: value.statsUpdatedAt ?? null,
     status: inferTripStatus(value),
     startedAt: value.startedAt ?? new Date(0).toISOString(),
     endedAt: value.endedAt ?? null,
@@ -50,6 +53,9 @@ interface TripRow {
   battery_start_state: string | null;
   battery_end_level_percent: number | null;
   battery_end_state: string | null;
+  point_count: number | null;
+  distance_meters: number | null;
+  stats_updated_at: string | null;
   server_id: string | null;
   started_at: string;
   status: Trip["status"];
@@ -73,6 +79,9 @@ function toTripRow(trip: Trip): TripRow {
     battery_start_state: trip.batteryStartState,
     battery_end_level_percent: trip.batteryEndLevelPercent,
     battery_end_state: trip.batteryEndState,
+    point_count: trip.pointCount,
+    distance_meters: trip.distanceMeters,
+    stats_updated_at: trip.statsUpdatedAt,
     server_id: trip.serverId,
     started_at: trip.startedAt,
     status: trip.status,
@@ -97,6 +106,9 @@ function toTripFromRow(row: TripRow): Trip {
     batteryStartState: row.battery_start_state,
     batteryEndLevelPercent: row.battery_end_level_percent,
     batteryEndState: row.battery_end_state,
+    pointCount: row.point_count,
+    distanceMeters: row.distance_meters,
+    statsUpdatedAt: row.stats_updated_at,
     serverId: row.server_id,
     startedAt: row.started_at,
     status: row.status,
@@ -150,6 +162,9 @@ async function ensureTripsMigrated(): Promise<void> {
           battery_start_state,
           battery_end_level_percent,
           battery_end_state,
+          point_count,
+          distance_meters,
+          stats_updated_at,
           status,
           started_at,
           ended_at,
@@ -157,7 +172,7 @@ async function ensureTripsMigrated(): Promise<void> {
           updated_at,
           deleted_at,
           sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.local_id,
         row.server_id,
         row.device_id,
@@ -170,6 +185,9 @@ async function ensureTripsMigrated(): Promise<void> {
         row.battery_start_state,
         row.battery_end_level_percent,
         row.battery_end_state,
+        row.point_count,
+        row.distance_meters,
+        row.stats_updated_at,
         row.status,
         row.started_at,
         row.ended_at,
@@ -194,8 +212,6 @@ export async function loadTrips(): Promise<Trip[]> {
 export async function saveTrips(trips: Trip[]): Promise<void> {
   await ensureTripsMigrated();
 
-  const database = await getDatabase();
-
   await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM trips");
 
@@ -215,6 +231,9 @@ export async function saveTrips(trips: Trip[]): Promise<void> {
           battery_start_state,
           battery_end_level_percent,
           battery_end_state,
+          point_count,
+          distance_meters,
+          stats_updated_at,
           status,
           started_at,
           ended_at,
@@ -222,7 +241,7 @@ export async function saveTrips(trips: Trip[]): Promise<void> {
           updated_at,
           deleted_at,
           sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.local_id,
         row.server_id,
         row.device_id,
@@ -235,6 +254,9 @@ export async function saveTrips(trips: Trip[]): Promise<void> {
         row.battery_start_state,
         row.battery_end_level_percent,
         row.battery_end_state,
+        row.point_count,
+        row.distance_meters,
+        row.stats_updated_at,
         row.status,
         row.started_at,
         row.ended_at,

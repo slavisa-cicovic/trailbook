@@ -144,7 +144,7 @@ export function buildTripsAggregateSummary(trips: Trip[], tripPoints: TripPoint[
       const isDrive = isDriveProfile(trip.recordingProfile);
       const isBoat = isBoatProfile(trip.recordingProfile);
       const isPlane = isPlaneProfile(trip.recordingProfile);
-      const distanceMeters = calculateTripDistanceMeters(tripPointsByTripId.get(trip.localId) ?? []);
+      const distanceMeters = trip.distanceMeters ?? calculateTripDistanceMeters(tripPointsByTripId.get(trip.localId) ?? []);
 
       summary.totalTripCount += 1;
       summary.totalDurationMs += durationMs;
@@ -244,7 +244,7 @@ export function buildTripSummary(
   );
 
   return {
-    distanceMeters: calculateTripDistanceMeters(orderedTripPoints),
+    distanceMeters: trip.distanceMeters ?? calculateTripDistanceMeters(orderedTripPoints),
     trip,
     waypointCount: tripWaypoints.length,
     photoCount: tripAttachments.length,
@@ -264,7 +264,7 @@ export function buildTripSummaryWithPoints(
   );
 
   return {
-    distanceMeters: calculateTripDistanceMeters(tripPoints),
+    distanceMeters: trip.distanceMeters ?? calculateTripDistanceMeters(tripPoints),
     trip,
     waypointCount: tripWaypoints.length,
     photoCount: tripAttachments.length,

@@ -1,5 +1,4 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import * as NavigationBar from "expo-navigation-bar";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -205,18 +204,6 @@ export default function WaypointPhotoViewerScreen({
   const currentAttachment = attachments[currentIndex] ?? null;
   const leadingPageCount = hasPreviousGroup ? 1 : 0;
   const trailingPageIndex = leadingPageCount + attachments.length;
-
-  useEffect(() => {
-    if (Platform.OS !== "android") {
-      return undefined;
-    }
-
-    void NavigationBar.setVisibilityAsync("hidden").catch(() => undefined);
-
-    return () => {
-      void NavigationBar.setVisibilityAsync("visible").catch(() => undefined);
-    };
-  }, []);
 
   useEffect(() => {
     const nextIndex = initialIndex >= 0 ? initialIndex : 0;
