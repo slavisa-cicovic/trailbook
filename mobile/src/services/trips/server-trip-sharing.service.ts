@@ -12,6 +12,7 @@ import {
 import {
   assignMissingTripPointSegments,
   finalizeEndedTripSegments,
+  recoverSegmentlessTripSections,
 } from "../trip-segments/trip-segments.service";
 
 const TRIP_POINTS_SYNC_BATCH_SIZE = 500;
@@ -216,16 +217,17 @@ export async function syncTripToServer(
     waypoints: Waypoint[];
   },
 ) {
+  const recoveredState = recoverSegmentlessTripSections(input.trip, input.tripSegments, input.tripPoints);
   const tripPointsWithAssignedSegments = assignMissingTripPointSegments(
-    input.tripPoints,
-    input.tripSegments,
+    recoveredState.tripPoints,
+    recoveredState.tripSegments,
     input.trip.localId,
   );
   const tripSegments =
     input.trip.endedAt === null
-      ? input.tripSegments
+      ? recoveredState.tripSegments
       : finalizeEndedTripSegments(
-          input.tripSegments,
+          recoveredState.tripSegments,
           tripPointsWithAssignedSegments,
           input.trip.localId,
           input.trip.endedAt,

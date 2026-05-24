@@ -12,6 +12,7 @@ import { syncBackgroundLocationTracking } from "../../services/location/location
 import { syncResolvedRecordingConfig } from "../../services/recording/recording-config.service";
 import { restoreOwnedTripsFromServer } from "../../services/trips/trip-restore.service";
 import { syncTripStatsToServer } from "../../services/trips/server-trip-sharing.service";
+import { recoverSegmentlessTripSections } from "../../services/trip-segments/trip-segments.service";
 import { useRecordingStore } from "../../state/recording-store";
 import { setTripPauses } from "../../state/trip-pauses-store";
 import { setTripPointsInMemory } from "../../state/trip-points-store";
@@ -22,7 +23,7 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { clearLocalTripData, exportDatabaseSnapshot } from "../../storage/sqlite/db";
-import { loadTripPoints, saveTripPoints } from "../../storage/trip-points-storage";
+import { loadTripPoints, loadTripPointsForTrip, replaceTripPointsForTrip, saveTripPoints } from "../../storage/trip-points-storage";
 
 type SettingsIconName = keyof typeof MaterialIcons.glyphMap;
 
@@ -154,6 +155,8 @@ export default function SettingsScreen() {
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [sendStatsBusy, setSendStatsBusy] = useState(false);
   const [sendStatsMessage, setSendStatsMessage] = useState<string | null>(null);
+  const [repairSegmentsBusy, setRepairSegmentsBusy] = useState(false);
+  const [repairSegmentsMessage, setRepairSegmentsMessage] = useState<string | null>(null);
   const [recordingConfigBusy, setRecordingConfigBusy] = useState(false);
   const [recordingConfigMessage, setRecordingConfigMessage] = useState<string | null>(null);
   const [clearTripDataBusy, setClearTripDataBusy] = useState(false);
@@ -270,6 +273,56 @@ export default function SettingsScreen() {
       setSendStatsMessage(error instanceof Error ? error.message : "Stats sync failed.");
     } finally {
       setSendStatsBusy(false);
+    }
+  }
+
+  async function handleRepairSegmentlessPoints() {
+    if (!identitySession || identitySession.mode !== "authenticated") {
+      return;
+    }
+
+    setRepairSegmentsBusy(true);
+    setRepairSegmentsMessage(null);
+
+    try {
+      const currentUserTrips = trips.filter((trip) => trip.userId === identitySession.userId && trip.deletedAt === null);
+      let nextTripSegmentsState = tripSegments;
+      let repairedTripCount = 0;
+      let repairedPointCount = 0;
+
+      for (const trip of currentUserTrips) {
+        const tripPoints = await loadTripPointsForTrip(trip.localId);
+        const tripSegmentList = nextTripSegmentsState.filter((segment) => segment.tripLocalId === trip.localId);
+        const repairedState = recoverSegmentlessTripSections(trip, tripSegmentList, tripPoints);
+        const repairedTripPoints = repairedState.tripPoints;
+
+        if (repairedTripPoints === tripPoints && repairedState.tripSegments === tripSegmentList) {
+          continue;
+        }
+
+        repairedTripCount += 1;
+        repairedPointCount += repairedTripPoints.filter((tripPoint, index) => {
+          const previousTripPoint = tripPoints[index];
+
+          return previousTripPoint?.segmentLocalId !== tripPoint.segmentLocalId;
+        }).length;
+        await replaceTripPointsForTrip(trip.localId, repairedTripPoints);
+        nextTripSegmentsState = [
+          ...nextTripSegmentsState.filter((segment) => segment.tripLocalId !== trip.localId),
+          ...repairedState.tripSegments,
+        ];
+      }
+
+      if (nextTripSegmentsState !== tripSegments) {
+        await setTripSegments(nextTripSegmentsState);
+      }
+
+      setTripPointsInMemory([]);
+      setRepairSegmentsMessage(`Repaired ${repairedPointCount} point(s) in ${repairedTripCount} trip(s).`);
+    } catch (error) {
+      setRepairSegmentsMessage(error instanceof Error ? error.message : "Segment repair failed.");
+    } finally {
+      setRepairSegmentsBusy(false);
     }
   }
 
@@ -453,6 +506,18 @@ export default function SettingsScreen() {
               theme={theme}
               title="Send stats data"
               value={sendStatsBusy ? "Sending..." : "Send"}
+            />
+            <SettingsDivider theme={theme} />
+            <SettingsRow
+              description="Temporary helper that assigns locally stored route points without a segment to the matching trip segment."
+              disabled={repairSegmentsBusy}
+              iconName="timeline"
+              message={repairSegmentsMessage}
+              messageTone={repairSegmentsMessage?.startsWith("Repaired") ? "success" : "danger"}
+              onPress={() => void handleRepairSegmentlessPoints()}
+              theme={theme}
+              title="Repair segmentless points"
+              value={repairSegmentsBusy ? "Repairing..." : "Repair"}
             />
           </SettingsSection>
         ) : null}

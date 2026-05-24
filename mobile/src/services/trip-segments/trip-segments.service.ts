@@ -379,6 +379,128 @@ export function assignMissingTripPointSegments(
   return changed ? nextTripPoints : tripPoints;
 }
 
+function inferSegmentlessProfile(tripPoints: TripPoint[]): RecordingProfile {
+  const speedsKmh = tripPoints
+    .map((tripPoint) => tripPoint.speed)
+    .filter((speed): speed is number => speed !== null && Number.isFinite(speed) && speed > 0)
+    .map((speed) => speed * 3.6)
+    .sort((left, right) => left - right);
+
+  if (speedsKmh.length === 0) {
+    return DEFAULT_RECORDING_PROFILE;
+  }
+
+  const medianSpeedKmh = speedsKmh[Math.floor(speedsKmh.length / 2)];
+
+  if (medianSpeedKmh >= 28) {
+    return "drive";
+  }
+
+  if (medianSpeedKmh >= 8.5 && medianSpeedKmh <= 35) {
+    return "bike";
+  }
+
+  return DEFAULT_RECORDING_PROFILE;
+}
+
+function createRecoveredTripSegment(
+  trip: Pick<Trip, "deviceId" | "localId" | "userId">,
+  tripPoints: TripPoint[],
+  recordingProfile: RecordingProfile,
+): TripSegment {
+  const sortedTripPoints = [...tripPoints].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  const startedAt = sortedTripPoints[0]?.recordedAt ?? new Date().toISOString();
+  const endedAt = sortedTripPoints[sortedTripPoints.length - 1]?.recordedAt ?? startedAt;
+
+  return {
+    localId: `trip-segment-recovered-${startedAt}`,
+    serverId: null,
+    tripLocalId: trip.localId,
+    deviceId: trip.deviceId,
+    userId: trip.userId,
+    recordingProfile,
+    pointCount: 0,
+    distanceMeters: 0,
+    durationMs: 0,
+    statsUpdatedAt: startedAt,
+    startedAt,
+    endedAt,
+    createdAt: startedAt,
+    updatedAt: endedAt,
+    syncStatus: "local-only",
+  };
+}
+
+function groupSegmentlessTripPoints(tripPoints: TripPoint[]): TripPoint[][] {
+  const sortedTripPoints = [...tripPoints].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  const groups: TripPoint[][] = [];
+
+  for (const tripPoint of sortedTripPoints) {
+    const currentGroup = groups[groups.length - 1];
+    const previousPoint = currentGroup?.[currentGroup.length - 1] ?? null;
+    const gapMs = previousPoint
+      ? new Date(tripPoint.recordedAt).getTime() - new Date(previousPoint.recordedAt).getTime()
+      : 0;
+
+    if (!currentGroup || !Number.isFinite(gapMs) || gapMs > 3 * 60 * 1000) {
+      groups.push([tripPoint]);
+    } else {
+      currentGroup.push(tripPoint);
+    }
+  }
+
+  return groups;
+}
+
+export function recoverSegmentlessTripSections(
+  trip: Pick<Trip, "deviceId" | "localId" | "userId">,
+  tripSegments: TripSegment[],
+  tripPoints: TripPoint[],
+): { tripPoints: TripPoint[]; tripSegments: TripSegment[] } {
+  const segmentlessTripPoints = tripPoints.filter(
+    (tripPoint) => tripPoint.tripLocalId === trip.localId && tripPoint.segmentLocalId === null,
+  );
+
+  if (segmentlessTripPoints.length === 0) {
+    return { tripPoints, tripSegments };
+  }
+
+  let nextTripSegments = tripSegments;
+  let nextTripPoints = tripPoints;
+
+  for (const group of groupSegmentlessTripPoints(segmentlessTripPoints)) {
+    if (group.length < 2) {
+      continue;
+    }
+
+    const inferredProfile = inferSegmentlessProfile(group);
+
+    if (inferredProfile === DEFAULT_RECORDING_PROFILE) {
+      continue;
+    }
+
+    const recoveredSegment = createRecoveredTripSegment(trip, group, inferredProfile);
+    nextTripSegments = [...nextTripSegments, recoveredSegment];
+    const recoveredPointIds = new Set(group.map((tripPoint) => tripPoint.localId));
+    nextTripPoints = nextTripPoints.map((tripPoint) =>
+      recoveredPointIds.has(tripPoint.localId)
+        ? {
+            ...tripPoint,
+            segmentLocalId: recoveredSegment.localId,
+            syncStatus: tripPoint.syncStatus === "synced" ? "pending-sync" : tripPoint.syncStatus,
+          }
+        : tripPoint,
+    );
+  }
+
+  const assignedTripPoints = assignMissingTripPointSegments(nextTripPoints, nextTripSegments, trip.localId);
+
+  return {
+    tripPoints: assignedTripPoints,
+    tripSegments: nextTripSegments,
+  };
+}
+
 export function updateTripSegmentMode(
   tripSegments: TripSegment[],
   tripPoints: TripPoint[],

@@ -50,11 +50,10 @@ import {
 import { getBatterySnapshot } from "../../services/device/battery.service";
 import {
   ensureMotionActivityUpdatesForAutoMode,
-  getLatestMotionActivityAsync,
   isMotionActivityAvailableAsync,
   stopMotionActivityUpdates,
 } from "../../services/motion/motion-activity.service";
-import { clearAutoRecordingSamples, recordAutoRecordingSample } from "../../services/recording/auto-recording.service";
+import { clearAutoRecordingSamples } from "../../services/recording/auto-recording.service";
 import {
   closeActiveTrip,
   continueInterruptedRecording,
@@ -68,10 +67,7 @@ import {
   type RecordingDraftInput,
   stopRecordingSession,
   updateRecordingSegment,
-  updateRecordingLastPoint,
-  updateRecordingMotionActivity,
 } from "../../services/recording/recording.service";
-import { applyAutoRecordingTransition } from "../../services/recording/auto-recording.service";
 import {
   closeActiveTripSegment,
   createInitialTripSegment,
@@ -93,12 +89,10 @@ import {
   isDemoSession,
 } from "../../services/demo/demo-mode.service";
 import {
-  appendTripPointIfUseful,
   createTripPointForLocation,
   flushTripPointDiagnostics,
   getVisibleTripPointsForTrip,
   recordLocationCallback,
-  recordTripPointDiagnostic,
   resetPendingTripPointContinuity,
   resetTripPointDiagnostics,
 } from "../../services/trip-points/trip-points.service";
@@ -123,7 +117,6 @@ import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments
 import { setTripPauses, useTripPausesStore } from "../../state/trip-pauses-store";
 import {
   mergeTripPointsInMemory,
-  mergeTripPoints,
   setTripPointsInMemory,
   useTripPointsStore,
 } from "../../state/trip-points-store";
@@ -452,116 +445,17 @@ export default function RecordingScreen() {
   }, [currentLocation, locationPermissionGranted]);
 
   useEffect(() => {
-    if (
-      !currentLocation ||
-      recordingSession.status !== "recording"
-    ) {
+    if (!currentLocation || recordingSession.status !== "recording" || !activeTrip) {
       return;
     }
 
-    if (!activeTrip) {
-      return;
-    }
-
-    if (recordingSession.lastPointRecordedAt === currentLocation.recordedAt) {
-      recordTripPointDiagnostic(
-        activeTrip.localId,
-        recordingSession.recordingProfile,
-        "session-duplicate-recorded-at",
-        {
-          recordedAt: currentLocation.recordedAt,
-          source: "foreground",
-        },
-      );
-      return;
-    }
-
-    const nextTripPoint = createTripPointForLocation(
-      activeTrip,
-      recordingSession.activeSegmentId ?? activeSegment?.localId ?? getOpenTripSegmentForTrip(tripSegments, activeTrip.localId)?.localId ?? null,
-      currentLocation,
-    );
-    const rawAutoSamples =
-      recordingSession.recordingMode === "auto"
-        ? recordAutoRecordingSample(activeTrip.localId, currentLocation)
-        : null;
-    const nextTripPoints = appendTripPointIfUseful(
-      tripPoints,
-      nextTripPoint,
+    recordLocationCallback(
+      activeTrip.localId,
       recordingSession.recordingProfile,
       "foreground",
-      {
-        sessionStartedAt: recordingSession.startedAt,
-        tripStartedAt: activeTrip.startedAt,
-      },
+      currentLocation,
     );
-
-    if (nextTripPoints === tripPoints && recordingSession.recordingMode !== "auto") {
-      return;
-    }
-
-    void (async () => {
-      const motionActivity =
-        recordingSession.recordingMode === "auto"
-          ? await getLatestMotionActivityAsync(currentLocation.recordedAt)
-          : null;
-      let nextRecordingSession = updateRecordingMotionActivity(recordingSession, motionActivity);
-      if (nextTripPoints !== tripPoints) {
-        nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, currentLocation.recordedAt);
-      }
-      const autoTransition = applyAutoRecordingTransition(
-        nextRecordingSession,
-        activeTrip,
-        tripSegments,
-        nextTripPoints,
-        waypoints,
-        currentLocation.recordedAt,
-        motionActivity,
-        rawAutoSamples,
-      );
-
-      if (autoTransition.changed) {
-        await setTripSegments(autoTransition.tripSegments);
-        await setWaypoints(autoTransition.waypoints);
-      }
-
-      if (nextTripPoints !== tripPoints) {
-        await mergeTripPoints(nextTripPoints);
-      }
-
-      if (
-        nextTripPoints !== tripPoints ||
-        autoTransition.changed ||
-        autoTransition.session.autoCandidateProfile !== recordingSession.autoCandidateProfile ||
-        autoTransition.session.autoCandidateSince !== recordingSession.autoCandidateSince ||
-        autoTransition.session.recordingProfile !== recordingSession.recordingProfile ||
-        autoTransition.session.activeSegmentId !== recordingSession.activeSegmentId ||
-        autoTransition.session.motionActivityType !== recordingSession.motionActivityType ||
-        autoTransition.session.motionActivityConfidence !== recordingSession.motionActivityConfidence ||
-        autoTransition.session.motionActivityRecordedAt !== recordingSession.motionActivityRecordedAt ||
-        autoTransition.session.motionActivitySourcePlatform !== recordingSession.motionActivitySourcePlatform
-      ) {
-        await setRecordingSession(autoTransition.session);
-      }
-
-      if (
-        autoTransition.changed &&
-        backgroundRecordingSupported !== false &&
-        backgroundLocationPermissionGranted !== false
-      ) {
-        await restartBackgroundLocationTracking(autoTransition.session.recordingProfile);
-      }
-    })();
-  }, [
-    activeTrip,
-    backgroundLocationPermissionGranted,
-    backgroundRecordingSupported,
-    currentLocation,
-    recordingSession,
-    tripSegments,
-    tripPoints,
-    waypoints,
-  ]);
+  }, [activeTrip, currentLocation, recordingSession.recordingProfile, recordingSession.status]);
 
   async function handleStartRecording() {
     if (!activeIdentitySession) {
