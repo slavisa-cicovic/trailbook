@@ -74,6 +74,14 @@ export default function TripWaypointScreen() {
   const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
   const tripWaypoints = selectedTrip ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTrip.localId) : [];
   const selectedWaypoint = tripWaypoints.find((waypoint) => waypoint.localId === resolvedWaypointId) ?? null;
+  const selectedWaypointIndex = selectedWaypoint
+    ? tripWaypoints.findIndex((waypoint) => waypoint.localId === selectedWaypoint.localId)
+    : -1;
+  const previousWaypoint = selectedWaypointIndex > 0 ? tripWaypoints[selectedWaypointIndex - 1] : null;
+  const nextWaypoint =
+    selectedWaypointIndex >= 0 && selectedWaypointIndex < tripWaypoints.length - 1
+      ? tripWaypoints[selectedWaypointIndex + 1]
+      : null;
   const attachments = selectedWaypoint
     ? getVisibleAttachmentsForWaypoints(currentUserWaypointAttachments, [selectedWaypoint.localId]).sort((left, right) =>
         left.createdAt.localeCompare(right.createdAt),
@@ -232,6 +240,16 @@ export default function TripWaypointScreen() {
     ]);
   }
 
+  function handleNavigateWaypoint(waypointLocalId: string | null) {
+    if (!resolvedTripId || !waypointLocalId) {
+      return;
+    }
+
+    setSelectionMode(false);
+    setSelectedPhotoIds([]);
+    router.replace(`/trips/${resolvedTripId}/waypoints/${waypointLocalId}`);
+  }
+
   if (!identitySession) {
     return <Redirect href="/login" />;
   }
@@ -288,9 +306,39 @@ export default function TripWaypointScreen() {
 
       <View style={styles.headerCard}>
         <View style={styles.headerCardRow}>
-          <Text style={styles.title}>{selectedWaypoint.title}</Text>
-          <Pressable onPress={handleOpenEdit} style={styles.headerEditButton}>
-            <Text style={styles.headerEditButtonText}>Edit</Text>
+          <Pressable
+            accessibilityLabel="Previous waypoint"
+            disabled={!previousWaypoint}
+            onPress={() => handleNavigateWaypoint(previousWaypoint?.localId ?? null)}
+            style={[styles.waypointNavButton, !previousWaypoint && styles.waypointNavButtonDisabled]}
+          >
+            <MaterialIcons
+              color={previousWaypoint ? "#243224" : "#9da894"}
+              name="chevron-left"
+              size={26}
+            />
+          </Pressable>
+          <View style={styles.titleGroup}>
+            <Text numberOfLines={2} style={styles.title}>{selectedWaypoint.title}</Text>
+            <Pressable
+              accessibilityLabel="Edit waypoint"
+              onPress={handleOpenEdit}
+              style={styles.headerIconButton}
+            >
+              <MaterialIcons color="#243224" name="edit" size={18} />
+            </Pressable>
+          </View>
+          <Pressable
+            accessibilityLabel="Next waypoint"
+            disabled={!nextWaypoint}
+            onPress={() => handleNavigateWaypoint(nextWaypoint?.localId ?? null)}
+            style={[styles.waypointNavButton, !nextWaypoint && styles.waypointNavButtonDisabled]}
+          >
+            <MaterialIcons
+              color={nextWaypoint ? "#243224" : "#9da894"}
+              name="chevron-right"
+              size={26}
+            />
           </Pressable>
         </View>
         {selectedWaypoint.note ? <Text style={styles.note}>{selectedWaypoint.note}</Text> : null}
@@ -459,21 +507,37 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: {
-    flex: 1,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "700",
     color: "#243224",
+    flexShrink: 1,
   },
-  headerEditButton: {
+  titleGroup: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    minWidth: 0,
+  },
+  waypointNavButton: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: 999,
     backgroundColor: "#e6ece1",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
   },
-  headerEditButtonText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#243224",
+  waypointNavButtonDisabled: {
+    opacity: 0.45,
+  },
+  headerIconButton: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    backgroundColor: "#e6ece1",
   },
   note: {
     fontSize: 15,
