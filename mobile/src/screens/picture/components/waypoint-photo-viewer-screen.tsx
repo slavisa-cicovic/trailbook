@@ -1,9 +1,11 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import * as NavigationBar from "expo-navigation-bar";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,16 +16,10 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import {
-  PanGestureHandler,
-  PinchGestureHandler,
-  State,
-  TapGestureHandler,
-  type PanGestureHandlerGestureEvent,
-  type PanGestureHandlerStateChangeEvent,
-  type PinchGestureHandlerGestureEvent,
-  type PinchGestureHandlerStateChangeEvent,
-  type TapGestureHandlerStateChangeEvent,
+  Gesture,
+  GestureDetector,
 } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { WaypointAttachment } from "../../../domain/trips";
 
@@ -58,9 +54,6 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps) {
-  const pinchRef = useRef(null);
-  const panRef = useRef(null);
-  const doubleTapRef = useRef(null);
   const [baseScale, setBaseScale] = useState(1);
   const [pinchScale, setPinchScale] = useState(1);
   const [baseTranslate, setBaseTranslate] = useState({ x: 0, y: 0 });
@@ -90,113 +83,95 @@ function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps)
     onZoomChange(false);
   }
 
-  function handlePinchGesture(event: PinchGestureHandlerGestureEvent) {
-    setPinchScale(event.nativeEvent.scale);
-  }
+  const imageGesture = useMemo(() => {
+    const pinchGesture = Gesture.Pinch()
+      .runOnJS(true)
+      .onUpdate((event) => {
+        setPinchScale(event.scale);
+      })
+      .onEnd((event) => {
+        const nextScale = clamp(baseScale * event.scale, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
 
-  function handlePinchStateChange(event: PinchGestureHandlerStateChangeEvent) {
-    if (
-      event.nativeEvent.oldState !== State.ACTIVE ||
-      (event.nativeEvent.state !== State.END &&
-        event.nativeEvent.state !== State.CANCELLED &&
-        event.nativeEvent.state !== State.FAILED)
-    ) {
-      return;
-    }
+        if (nextScale <= 1.01) {
+          resetZoom();
+          return;
+        }
 
-    const nextScale = clamp(baseScale * event.nativeEvent.scale, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
+        setBaseScale(nextScale);
+        setPinchScale(1);
+        setBaseTranslate((current) => clampTranslate(current.x, current.y, nextScale));
+        onZoomChange(true);
+      })
+      .onFinalize(() => {
+        setPinchScale(1);
+      });
 
-    if (nextScale <= 1.01) {
-      resetZoom();
-      return;
-    }
+    const panGesture = Gesture.Pan()
+      .enabled(zoomed)
+      .runOnJS(true)
+      .onUpdate((event) => {
+        setPanTranslate({
+          x: event.translationX,
+          y: event.translationY,
+        });
+      })
+      .onEnd((event) => {
+        const nextTranslate = clampTranslate(
+          baseTranslate.x + event.translationX,
+          baseTranslate.y + event.translationY,
+          currentScale,
+        );
 
-    setBaseScale(nextScale);
-    setPinchScale(1);
-    setBaseTranslate((current) => clampTranslate(current.x, current.y, nextScale));
-    onZoomChange(true);
-  }
+        setBaseTranslate(nextTranslate);
+        setPanTranslate({ x: 0, y: 0 });
+      })
+      .onFinalize(() => {
+        setPanTranslate({ x: 0, y: 0 });
+      });
 
-  function handlePanGesture(event: PanGestureHandlerGestureEvent) {
-    if (!zoomed) {
-      return;
-    }
+    const doubleTapGesture = Gesture.Tap()
+      .enabled(zoomed)
+      .numberOfTaps(2)
+      .runOnJS(true)
+      .onEnd((_event, success) => {
+        if (success) {
+          resetZoom();
+        }
+      });
 
-    setPanTranslate({
-      x: event.nativeEvent.translationX,
-      y: event.nativeEvent.translationY,
-    });
-  }
-
-  function handlePanStateChange(event: PanGestureHandlerStateChangeEvent) {
-    if (
-      event.nativeEvent.oldState !== State.ACTIVE ||
-      (event.nativeEvent.state !== State.END &&
-        event.nativeEvent.state !== State.CANCELLED &&
-        event.nativeEvent.state !== State.FAILED)
-    ) {
-      return;
-    }
-
-    const nextTranslate = clampTranslate(
-      baseTranslate.x + event.nativeEvent.translationX,
-      baseTranslate.y + event.nativeEvent.translationY,
-      currentScale,
-    );
-
-    setBaseTranslate(nextTranslate);
-    setPanTranslate({ x: 0, y: 0 });
-  }
-
-  function handleDoubleTapStateChange(event: TapGestureHandlerStateChangeEvent) {
-    if (event.nativeEvent.state === State.ACTIVE) {
-      resetZoom();
-    }
-  }
+    return Gesture.Simultaneous(pinchGesture, panGesture, doubleTapGesture);
+  }, [
+    baseScale,
+    baseTranslate.x,
+    baseTranslate.y,
+    currentScale,
+    height,
+    onZoomChange,
+    width,
+    zoomed,
+  ]);
 
   return (
-    <TapGestureHandler
-      enabled={zoomed}
-      numberOfTaps={2}
-      onHandlerStateChange={handleDoubleTapStateChange}
-      ref={doubleTapRef}
-    >
-      <View>
-        <PinchGestureHandler
-          onGestureEvent={handlePinchGesture}
-          onHandlerStateChange={handlePinchStateChange}
-          ref={pinchRef}
-          simultaneousHandlers={[panRef, doubleTapRef]}
+    <GestureDetector gesture={imageGesture}>
+      <View style={[styles.zoomGestureSurface, { width, height }]}>
+        <View
+          style={[
+            styles.zoomImageWrap,
+            {
+              width,
+              height,
+              transform: [
+                { translateX: currentTranslate.x },
+                { translateY: currentTranslate.y },
+                { scale: currentScale },
+              ],
+            },
+          ]}
         >
-          <View style={[styles.zoomGestureSurface, { width, height }]}>
-            <PanGestureHandler
-              enabled={zoomed}
-              onGestureEvent={handlePanGesture}
-              onHandlerStateChange={handlePanStateChange}
-              ref={panRef}
-              simultaneousHandlers={[pinchRef, doubleTapRef]}
-            >
-              <View
-                style={[
-                  styles.zoomImageWrap,
-                  {
-                    width,
-                    height,
-                    transform: [
-                      { translateX: currentTranslate.x },
-                      { translateY: currentTranslate.y },
-                      { scale: currentScale },
-                    ],
-                  },
-                ]}
-              >
-                <Image resizeMode="cover" source={{ uri }} style={[styles.image, { width, height }]} />
-              </View>
-            </PanGestureHandler>
-          </View>
-        </PinchGestureHandler>
+          <Image resizeMode="cover" source={{ uri }} style={[styles.image, { width, height }]} />
+        </View>
       </View>
-    </TapGestureHandler>
+    </GestureDetector>
   );
 }
 
@@ -216,6 +191,7 @@ export default function WaypointPhotoViewerScreen({
   waypointTitle,
 }: WaypointPhotoViewerScreenProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const safeAreaInsets = useSafeAreaInsets();
   const transitionOpacity = useRef(new Animated.Value(0)).current;
   const scrollRef = useRef<ScrollView | null>(null);
   const initialIndex = useMemo(
@@ -229,6 +205,18 @@ export default function WaypointPhotoViewerScreen({
   const currentAttachment = attachments[currentIndex] ?? null;
   const leadingPageCount = hasPreviousGroup ? 1 : 0;
   const trailingPageIndex = leadingPageCount + attachments.length;
+
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return undefined;
+    }
+
+    void NavigationBar.setVisibilityAsync("hidden").catch(() => undefined);
+
+    return () => {
+      void NavigationBar.setVisibilityAsync("visible").catch(() => undefined);
+    };
+  }, []);
 
   useEffect(() => {
     const nextIndex = initialIndex >= 0 ? initialIndex : 0;
@@ -322,8 +310,19 @@ export default function WaypointPhotoViewerScreen({
         </View>
       ) : null}
 
-      <View pointerEvents="box-none" style={styles.bottomOverlay}>
-        <Pressable accessibilityLabel="Back to waypoint" onPress={onBack} style={styles.iconButton}>
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.bottomOverlay,
+          { bottom: Math.max(22, safeAreaInsets.bottom + 18) },
+        ]}
+      >
+        <Pressable
+          accessibilityLabel="Back to waypoint"
+          hitSlop={14}
+          onPress={onBack}
+          style={styles.iconButton}
+        >
           <MaterialIcons color="#fffdf8" name="arrow-back" size={24} />
         </Pressable>
         <Text numberOfLines={1} style={styles.bottomInfo}>
@@ -332,6 +331,7 @@ export default function WaypointPhotoViewerScreen({
         {currentAttachment && !readOnly && onRemoveCurrent ? (
           <Pressable
             accessibilityLabel="Remove current photo"
+            hitSlop={14}
             onPress={() => onRemoveCurrent(currentAttachment.localId)}
             style={[styles.iconButton, styles.removeIconButton]}
           >
@@ -397,11 +397,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 18,
     right: 18,
-    bottom: 22,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    zIndex: 10,
+    elevation: 10,
   },
   bottomInfo: {
     flex: 1,
