@@ -9,6 +9,10 @@ import {
   loadTripSegmentStatsByTripLocalIds,
   loadTripStatsByTripLocalIds,
 } from "../../storage/trip-points-storage";
+import {
+  assignMissingTripPointSegments,
+  finalizeEndedTripSegments,
+} from "../trip-segments/trip-segments.service";
 
 const TRIP_POINTS_SYNC_BATCH_SIZE = 500;
 
@@ -133,32 +137,49 @@ async function buildTripStatsSyncPayload(input: {
     loadTripSegmentStatsByTripLocalIds([input.trip.localId]),
   ]);
   const tripStats = tripStatsById.get(input.trip.localId);
+  const segmentStats = input.tripSegments
+    .map((segment) => {
+      const stats = segmentStatsById.get(segment.localId);
+
+      if (!stats) {
+        return null;
+      }
+
+      return {
+        segmentLocalId: segment.localId,
+        distanceMeters: stats.distance_meters,
+        durationMs: stats.duration_ms,
+        pointCount: stats.point_count,
+        updatedAt: stats.updated_at,
+      };
+    })
+    .filter((stats): stats is NonNullable<typeof stats> => stats !== null);
+  const segmentDistanceMeters = segmentStats.reduce((total, stats) => total + stats.distanceMeters, 0);
+  const segmentPointCount = segmentStats.reduce((total, stats) => total + stats.pointCount, 0);
+  const segmentUpdatedAt = segmentStats.reduce<string | null>(
+    (latest, stats) => (!latest || stats.updatedAt > latest ? stats.updatedAt : latest),
+    null,
+  );
+  const shouldUseSegmentStatsForTrip =
+    segmentStats.length > 0 &&
+    segmentPointCount > 0 &&
+    (!tripStats || (tripStats.point_count === 0 && segmentPointCount > 0));
 
   return {
-    tripStats: tripStats
+    tripStats: shouldUseSegmentStatsForTrip
+      ? {
+          distanceMeters: segmentDistanceMeters,
+          pointCount: segmentPointCount,
+          updatedAt: segmentUpdatedAt ?? input.trip.updatedAt,
+        }
+      : tripStats
       ? {
           distanceMeters: tripStats.distance_meters,
           pointCount: tripStats.point_count,
           updatedAt: tripStats.updated_at,
         }
       : null,
-    segmentStats: input.tripSegments
-      .map((segment) => {
-        const segmentStats = segmentStatsById.get(segment.localId);
-
-        if (!segmentStats) {
-          return null;
-        }
-
-        return {
-          segmentLocalId: segment.localId,
-          distanceMeters: segmentStats.distance_meters,
-          durationMs: segmentStats.duration_ms,
-          pointCount: segmentStats.point_count,
-          updatedAt: segmentStats.updated_at,
-        };
-      })
-      .filter((stats): stats is NonNullable<typeof stats> => stats !== null),
+    segmentStats,
   };
 }
 
@@ -195,6 +216,21 @@ export async function syncTripToServer(
     waypoints: Waypoint[];
   },
 ) {
+  const tripPointsWithAssignedSegments = assignMissingTripPointSegments(
+    input.tripPoints,
+    input.tripSegments,
+    input.trip.localId,
+  );
+  const tripSegments =
+    input.trip.endedAt === null
+      ? input.tripSegments
+      : finalizeEndedTripSegments(
+          input.tripSegments,
+          tripPointsWithAssignedSegments,
+          input.trip.localId,
+          input.trip.endedAt,
+        );
+  const tripPoints = assignMissingTripPointSegments(tripPointsWithAssignedSegments, tripSegments, input.trip.localId);
   const diagnostics =
     isTripDiagnosticsEnabled() ? await getTripDiagnosticsForSync(input.trip.localId) : null;
 
@@ -281,7 +317,7 @@ export async function syncTripToServer(
         updatedAt: attachment.updatedAt,
         deletedAt: attachment.deletedAt,
       })),
-      segments: input.tripSegments.map((segment) => ({
+      segments: tripSegments.map((segment) => ({
         localId: segment.localId,
         recordingProfile: segment.recordingProfile,
         startedAt: segment.startedAt,
@@ -305,7 +341,7 @@ export async function syncTripToServer(
     }),
   });
 
-  const orderedTripPoints = [...input.tripPoints].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  const orderedTripPoints = [...tripPoints].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
 
   for (const tripPointChunk of chunkItems(orderedTripPoints, TRIP_POINTS_SYNC_BATCH_SIZE)) {
     await request<{ accepted: number; syncedAt: string; tripId: string; tripLocalId: string }>(
@@ -325,7 +361,7 @@ export async function syncTripToServer(
     sessionToken,
     {
       method: "POST",
-      body: JSON.stringify(await buildTripStatsSyncPayload(input)),
+      body: JSON.stringify(await buildTripStatsSyncPayload({ trip: input.trip, tripSegments })),
     },
   );
 

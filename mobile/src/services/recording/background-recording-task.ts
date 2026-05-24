@@ -21,6 +21,7 @@ import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
 import { loadTripSegments } from "../../storage/trip-segments-storage";
 import { loadTrips } from "../../storage/trips-storage";
 import { loadWaypoints } from "../../storage/waypoints-storage";
+import { getOpenTripSegmentForTrip } from "../trip-segments/trip-segments.service";
 
 interface BackgroundLocationTaskData {
   locations: Location.LocationObject[];
@@ -52,14 +53,6 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
   }
 
   const tripSegments = await loadTripSegments();
-  const activeSegmentById = recordingSession.activeSegmentId
-    ? tripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId)
-    : undefined;
-  const activeOpenSegment = tripSegments.find(
-    (segment) => segment.tripLocalId === activeTrip.localId && segment.endedAt === null,
-  );
-  const activeSegment = activeSegmentById ?? activeOpenSegment ?? null;
-
   let nextTripPoints = await loadTripPointsForTrip(activeTrip.localId);
   const waypoints = await loadWaypoints();
   let nextWaypoints = waypoints;
@@ -91,9 +84,11 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
       }
     }
 
+    const fallbackOpenSegment = getOpenTripSegmentForTrip(nextTripSegments, activeTrip.localId);
+    const activeSegmentLocalId = nextRecordingSession.activeSegmentId ?? fallbackOpenSegment?.localId ?? null;
     const appendedTripPoints = appendTripPointIfUseful(
       nextTripPoints,
-      createTripPointForLocation(activeTrip, nextRecordingSession.activeSegmentId ?? activeSegment?.localId ?? null, snapshot),
+      createTripPointForLocation(activeTrip, activeSegmentLocalId, snapshot),
       nextRecordingSession.recordingProfile,
       "background",
       {

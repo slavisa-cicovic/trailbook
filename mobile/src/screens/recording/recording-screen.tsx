@@ -75,6 +75,7 @@ import { applyAutoRecordingTransition } from "../../services/recording/auto-reco
 import {
   closeActiveTripSegment,
   createInitialTripSegment,
+  finalizeEndedTripSegments,
   getOpenTripSegmentForTrip,
   normalizeAutoClosedTripSegment,
   startNextTripSegment,
@@ -477,7 +478,7 @@ export default function RecordingScreen() {
 
     const nextTripPoint = createTripPointForLocation(
       activeTrip,
-      recordingSession.activeSegmentId,
+      recordingSession.activeSegmentId ?? activeSegment?.localId ?? getOpenTripSegmentForTrip(tripSegments, activeTrip.localId)?.localId ?? null,
       currentLocation,
     );
     const rawAutoSamples =
@@ -726,7 +727,12 @@ export default function RecordingScreen() {
     }
     await stopMotionActivityUpdates();
     resetPendingTripPointContinuity(recordingSession.activeTripId);
-    const closedTripSegments = closeActiveTripSegment(tripSegments, recordingSession.activeSegmentId, endedAt);
+    const closedTripSegments = finalizeEndedTripSegments(
+      closeActiveTripSegment(tripSegments, recordingSession.activeSegmentId, endedAt),
+      tripPoints,
+      recordingSession.activeTripId,
+      endedAt,
+    );
     const normalizedState =
       recordingSession.recordingMode === "auto" && activeTrip
         ? normalizeAutoClosedTripSegment(
@@ -900,7 +906,7 @@ export default function RecordingScreen() {
     const createdAt = new Date().toISOString();
     const nextWaypoint = createWaypointForTrip(
       activeTrip,
-      recordingSession.activeSegmentId,
+      recordingSession.activeSegmentId ?? activeSegment?.localId ?? getOpenTripSegmentForTrip(tripSegments, activeTrip.localId)?.localId ?? null,
       currentLocation,
       waypointDraft,
       createdAt,

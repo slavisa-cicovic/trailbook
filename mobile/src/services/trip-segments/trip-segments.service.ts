@@ -133,6 +133,54 @@ export function closeActiveTripSegment(
   );
 }
 
+export function finalizeEndedTripSegments(
+  tripSegments: TripSegment[],
+  tripPoints: TripPoint[],
+  tripLocalId: string,
+  endedAt: string,
+): TripSegment[] {
+  const pointCountBySegmentId = new Map<string, number>();
+
+  for (const tripPoint of tripPoints) {
+    if (tripPoint.tripLocalId !== tripLocalId || !tripPoint.segmentLocalId) {
+      continue;
+    }
+
+    pointCountBySegmentId.set(
+      tripPoint.segmentLocalId,
+      (pointCountBySegmentId.get(tripPoint.segmentLocalId) ?? 0) + 1,
+    );
+  }
+
+  const tripSegmentIds = new Set(
+    tripSegments
+      .filter((segment) => segment.tripLocalId === tripLocalId)
+      .map((segment) => segment.localId),
+  );
+  const removableEmptySegmentIds = new Set<string>();
+
+  if (tripSegmentIds.size > 1) {
+    for (const segmentId of tripSegmentIds) {
+      if ((pointCountBySegmentId.get(segmentId) ?? 0) === 0) {
+        removableEmptySegmentIds.add(segmentId);
+      }
+    }
+  }
+
+  return tripSegments
+    .filter((segment) => segment.tripLocalId !== tripLocalId || !removableEmptySegmentIds.has(segment.localId))
+    .map((segment) =>
+      segment.tripLocalId === tripLocalId && segment.endedAt === null
+        ? {
+            ...segment,
+            endedAt,
+            updatedAt: endedAt,
+            syncStatus: "pending-sync",
+          }
+        : segment,
+    );
+}
+
 export function startNextTripSegment(
   trip: Trip,
   tripSegments: TripSegment[],
@@ -248,9 +296,10 @@ export function buildSegmentPolylines(
   tripPoints: TripPoint[],
   tripLocalId: string,
 ): SegmentPolyline[] {
-  return getVisibleTripSegmentsForTrip(tripSegments, tripLocalId)
+  const visibleTripPoints = getVisibleTripPointsForTrip(tripPoints, tripLocalId);
+  const segmentPolylines = getVisibleTripSegmentsForTrip(tripSegments, tripLocalId)
     .map((segment) => {
-      const coordinates = getVisibleTripPointsForTrip(tripPoints, tripLocalId)
+      const coordinates = visibleTripPoints
         .filter((tripPoint) => tripPoint.segmentLocalId === segment.localId)
         .map((tripPoint) => ({
           latitude: tripPoint.latitude,
@@ -264,6 +313,70 @@ export function buildSegmentPolylines(
       };
     })
     .filter((segment) => segment.coordinates.length > 1);
+  const segmentlessCoordinates = visibleTripPoints
+    .filter((tripPoint) => tripPoint.segmentLocalId === null)
+    .map((tripPoint) => ({
+      latitude: tripPoint.latitude,
+      longitude: tripPoint.longitude,
+    }));
+
+  if (segmentlessCoordinates.length <= 1) {
+    return segmentPolylines;
+  }
+
+  return [
+    ...segmentPolylines,
+    {
+      segmentLocalId: `${tripLocalId}:segmentless`,
+      coordinates: segmentlessCoordinates,
+      color: getRecordingProfileColor(DEFAULT_RECORDING_PROFILE),
+    },
+  ];
+}
+
+export function assignMissingTripPointSegments(
+  tripPoints: TripPoint[],
+  tripSegments: TripSegment[],
+  tripLocalId: string,
+): TripPoint[] {
+  const orderedSegments = getVisibleTripSegmentsForTrip(tripSegments, tripLocalId);
+
+  if (orderedSegments.length === 0) {
+    return tripPoints;
+  }
+
+  let changed = false;
+  const nextTripPoints = tripPoints.map((tripPoint) => {
+    if (tripPoint.tripLocalId !== tripLocalId || tripPoint.segmentLocalId !== null) {
+      return tripPoint;
+    }
+
+    const recordedAtMs = new Date(tripPoint.recordedAt).getTime();
+
+    if (Number.isNaN(recordedAtMs)) {
+      return tripPoint;
+    }
+
+    const matchingSegment = orderedSegments.find((segment) => {
+      const startedAtMs = new Date(segment.startedAt).getTime();
+      const endedAtMs = segment.endedAt ? new Date(segment.endedAt).getTime() : Number.POSITIVE_INFINITY;
+
+      return !Number.isNaN(startedAtMs) && !Number.isNaN(endedAtMs) && recordedAtMs >= startedAtMs && recordedAtMs <= endedAtMs;
+    });
+
+    if (!matchingSegment) {
+      return tripPoint;
+    }
+
+    changed = true;
+    return {
+      ...tripPoint,
+      segmentLocalId: matchingSegment.localId,
+      syncStatus: tripPoint.syncStatus === "synced" ? "pending-sync" : tripPoint.syncStatus,
+    };
+  });
+
+  return changed ? nextTripPoints : tripPoints;
 }
 
 export function updateTripSegmentMode(
