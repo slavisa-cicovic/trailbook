@@ -61,6 +61,7 @@ module.exports = {
     },
     android: {
       package: "com.slavisacicovic.trailbook",
+      permissions: ["CAMERA"],
       usesCleartextTraffic: true,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",

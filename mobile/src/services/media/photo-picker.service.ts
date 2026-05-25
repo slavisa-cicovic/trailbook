@@ -100,23 +100,28 @@ export async function pickPhotosFromLibrary(): Promise<PickedPhoto[]> {
 }
 
 export async function capturePhotoWithCamera(): Promise<PickedPhoto | null> {
-  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  try {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
 
-  if (!permission.granted) {
+    if (!permission.granted) {
+      return null;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      quality: 0.8,
+      allowsEditing: false,
+    });
+
+    if (result.canceled || result.assets.length === 0) {
+      return null;
+    }
+
+    return normalizePhotoAsset(result.assets[0]);
+  } catch (error) {
+    console.warn("[Trailbook][photo-picker] Camera capture failed", error);
     return null;
   }
-
-  const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ["images"],
-    quality: 0.8,
-    allowsEditing: false,
-  });
-
-  if (result.canceled || result.assets.length === 0) {
-    return null;
-  }
-
-  return normalizePhotoAsset(result.assets[0]);
 }
 
 export async function downloadPhotoToLocalStorage(input: {
