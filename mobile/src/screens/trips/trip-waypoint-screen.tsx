@@ -74,13 +74,17 @@ export default function TripWaypointScreen() {
   const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
   const tripWaypoints = selectedTrip ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTrip.localId) : [];
   const selectedWaypoint = tripWaypoints.find((waypoint) => waypoint.localId === resolvedWaypointId) ?? null;
+  const waypointNavigationOrder = useMemo(
+    () => [...tripWaypoints].sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
+    [tripWaypoints],
+  );
   const selectedWaypointIndex = selectedWaypoint
-    ? tripWaypoints.findIndex((waypoint) => waypoint.localId === selectedWaypoint.localId)
+    ? waypointNavigationOrder.findIndex((waypoint) => waypoint.localId === selectedWaypoint.localId)
     : -1;
-  const previousWaypoint = selectedWaypointIndex > 0 ? tripWaypoints[selectedWaypointIndex - 1] : null;
+  const previousWaypoint = selectedWaypointIndex > 0 ? waypointNavigationOrder[selectedWaypointIndex - 1] : null;
   const nextWaypoint =
-    selectedWaypointIndex >= 0 && selectedWaypointIndex < tripWaypoints.length - 1
-      ? tripWaypoints[selectedWaypointIndex + 1]
+    selectedWaypointIndex >= 0 && selectedWaypointIndex < waypointNavigationOrder.length - 1
+      ? waypointNavigationOrder[selectedWaypointIndex + 1]
       : null;
   const attachments = selectedWaypoint
     ? getVisibleAttachmentsForWaypoints(currentUserWaypointAttachments, [selectedWaypoint.localId]).sort((left, right) =>
