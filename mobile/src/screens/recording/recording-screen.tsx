@@ -54,6 +54,7 @@ import {
   stopMotionActivityUpdates,
 } from "../../services/motion/motion-activity.service";
 import { clearAutoRecordingSamples } from "../../services/recording/auto-recording.service";
+import { persistForegroundRecordedLocation } from "../../services/recording/background-recording-task";
 import {
   closeActiveTrip,
   continueInterruptedRecording,
@@ -92,7 +93,6 @@ import {
   createTripPointForLocation,
   flushTripPointDiagnostics,
   getVisibleTripPointsForTrip,
-  recordLocationCallback,
   resetPendingTripPointContinuity,
   resetTripPointDiagnostics,
 } from "../../services/trip-points/trip-points.service";
@@ -355,12 +355,7 @@ export default function RecordingScreen() {
             })
           : await watchForegroundLocation(activeRecordingProfile, (nextLocation) => {
               if (activeTrip) {
-                recordLocationCallback(
-                  activeTrip.localId,
-                  activeRecordingProfile,
-                  "foreground",
-                  nextLocation,
-                );
+                void persistForegroundRecordedLocation(nextLocation);
               }
               setCurrentLocation(nextLocation);
             });
@@ -443,19 +438,6 @@ export default function RecordingScreen() {
       subscription.remove();
     };
   }, [currentLocation, locationPermissionGranted]);
-
-  useEffect(() => {
-    if (!currentLocation || recordingSession.status !== "recording" || !activeTrip) {
-      return;
-    }
-
-    recordLocationCallback(
-      activeTrip.localId,
-      recordingSession.recordingProfile,
-      "foreground",
-      currentLocation,
-    );
-  }, [activeTrip, currentLocation, recordingSession.recordingProfile, recordingSession.status]);
 
   async function handleStartRecording() {
     if (!activeIdentitySession) {

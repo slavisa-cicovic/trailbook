@@ -10,6 +10,7 @@ import {
   recordLocationCallback,
   recordTripPointDiagnostic,
 } from "../trip-points/trip-points.service";
+import type { LocationCallbackSource } from "../trip-points/trip-point-diagnostics.service";
 import { applyAutoRecordingTransition, recordAutoRecordingSample } from "./auto-recording.service";
 import { updateRecordingLastPoint, updateRecordingMotionActivity } from "./recording.service";
 import { setRecordingSession } from "../../state/recording-store";
@@ -30,6 +31,7 @@ interface BackgroundLocationTaskData {
 const AUTO_REJECTED_RECOVERY_MAX_AGE_MS = 10 * 60 * 1000;
 const AUTO_REJECTED_RECOVERY_MAX_COUNT = 120;
 const rejectedAutoSnapshotsByTripLocalId = new Map<string, CurrentLocationSnapshot[]>();
+let recordingPipelineWriteQueue = Promise.resolve();
 
 function getRejectedAutoRecoverySnapshots(tripLocalId: string, recordedAt: string): CurrentLocationSnapshot[] {
   const recordedAtMs = new Date(recordedAt).getTime();
@@ -76,7 +78,10 @@ function forgetRejectedAutoSnapshots(tripLocalId: string, snapshots: CurrentLoca
   }
 }
 
-async function persistRecordedLocations(locations: Location.LocationObject[]): Promise<void> {
+async function persistRecordedLocationSnapshots(
+  snapshots: CurrentLocationSnapshot[],
+  callbackSource: LocationCallbackSource,
+): Promise<void> {
   const recordingSession = await loadRecordingSession();
 
   if (
@@ -118,7 +123,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
       nextTripPoints,
       createTripPointForLocation(recordingTrip, activeSegmentLocalId, snapshot),
       nextRecordingSession.recordingProfile,
-      "background",
+      callbackSource,
       {
         sessionStartedAt: nextRecordingSession.startedAt,
         tripStartedAt: recordingTrip.startedAt,
@@ -135,9 +140,8 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
     return pointsWereAppended;
   }
 
-  for (const location of locations) {
-    const snapshot = toSnapshot(location);
-    recordLocationCallback(recordingTrip.localId, nextRecordingSession.recordingProfile, "background", snapshot);
+  for (const snapshot of snapshots) {
+    recordLocationCallback(recordingTrip.localId, nextRecordingSession.recordingProfile, callbackSource, snapshot);
     const rawAutoSamples =
       nextRecordingSession.recordingMode === "auto"
         ? recordAutoRecordingSample(recordingTrip.localId, snapshot)
@@ -150,7 +154,7 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
         "session-duplicate-recorded-at",
         {
           recordedAt: snapshot.recordedAt,
-          source: "background",
+          source: callbackSource,
         },
       );
       if (nextRecordingSession.recordingMode !== "auto") {
@@ -241,6 +245,25 @@ async function persistRecordedLocations(locations: Location.LocationObject[]): P
   }
 }
 
+function enqueueRecordedLocationSnapshots(
+  snapshots: CurrentLocationSnapshot[],
+  callbackSource: LocationCallbackSource,
+): Promise<void> {
+  recordingPipelineWriteQueue = recordingPipelineWriteQueue
+    .catch(() => undefined)
+    .then(() => persistRecordedLocationSnapshots(snapshots, callbackSource));
+
+  return recordingPipelineWriteQueue;
+}
+
+export function persistForegroundRecordedLocation(snapshot: CurrentLocationSnapshot): Promise<void> {
+  return enqueueRecordedLocationSnapshots([snapshot], "foreground");
+}
+
+function persistBackgroundRecordedLocations(locations: Location.LocationObject[]): Promise<void> {
+  return enqueueRecordedLocationSnapshots(locations.map(toSnapshot), "background");
+}
+
 if (!TaskManager.isTaskDefined(BACKGROUND_RECORDING_LOCATION_TASK_NAME)) {
   TaskManager.defineTask<BackgroundLocationTaskData>(
     BACKGROUND_RECORDING_LOCATION_TASK_NAME,
@@ -249,7 +272,7 @@ if (!TaskManager.isTaskDefined(BACKGROUND_RECORDING_LOCATION_TASK_NAME)) {
         return;
       }
 
-      await persistRecordedLocations(data.locations);
+      await persistBackgroundRecordedLocations(data.locations);
     },
   );
 }
