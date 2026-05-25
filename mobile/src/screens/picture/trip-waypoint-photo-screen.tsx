@@ -1,6 +1,8 @@
 import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 
-import type { Waypoint, WaypointAttachment } from "../../domain/trips";
+import type { TripPoint, Waypoint, WaypointAttachment } from "../../domain/trips";
+import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
 import {
   getVisibleAttachmentsForWaypoints,
   getVisibleTrips,
@@ -28,6 +30,8 @@ export default function TripWaypointPhotoScreen() {
   const trips = useTripsStore((state) => state.trips);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
+  const [routeTripId, setRouteTripId] = useState<string | null>(null);
+  const [routePoints, setRoutePoints] = useState<TripPoint[]>([]);
 
   const resolvedAttachmentId = Array.isArray(params.attachmentId) ? params.attachmentId[0] : params.attachmentId;
   const resolvedPhotoTransition = Array.isArray(params.photoTransition)
@@ -71,6 +75,31 @@ export default function TripWaypointPhotoScreen() {
     tripWaypoints.slice(selectedWaypointIndex + 1),
     currentUserWaypointAttachments,
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRoutePoints() {
+      if (!selectedTrip) {
+        setRouteTripId(null);
+        setRoutePoints([]);
+        return;
+      }
+
+      const points = await loadTripPointsForTrip(selectedTrip.localId);
+
+      if (!cancelled) {
+        setRouteTripId(selectedTrip.localId);
+        setRoutePoints(points);
+      }
+    }
+
+    void loadRoutePoints();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTrip?.localId]);
 
   if (!selectedTrip || !selectedWaypoint || attachments.length === 0) {
     return <Redirect href={`/trips/${resolvedTripId}/waypoints/${resolvedWaypointId}`} />;
@@ -128,8 +157,17 @@ export default function TripWaypointPhotoScreen() {
         onScrollPastEnd={() => navigateToWaypointPhoto(nextPhotoWaypoint, "first", "next")}
         onScrollPastStart={() => navigateToWaypointPhoto(previousPhotoWaypoint, "last", "previous")}
         previousGroupTitle={previousPhotoWaypoint?.title ?? null}
+        routeCoordinates={
+          routeTripId === selectedTrip.localId
+            ? routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude }))
+            : []
+        }
         selectedAttachmentId={resolvedAttachmentId ?? null}
         tripTitle={selectedTrip.title}
+        waypointCoordinate={{
+          latitude: selectedWaypoint.latitude,
+          longitude: selectedWaypoint.longitude,
+        }}
         waypointTitle={selectedWaypoint.title}
       />
     </>

@@ -18,6 +18,7 @@ import {
   Gesture,
   GestureDetector,
 } from "react-native-gesture-handler";
+import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { WaypointAttachment } from "../../../domain/trips";
@@ -33,8 +34,10 @@ interface WaypointPhotoViewerScreenProps {
   onRemoveCurrent?: (attachmentLocalId: string) => void;
   previousGroupTitle?: string | null;
   readOnly?: boolean;
+  routeCoordinates?: MapCoordinate[];
   selectedAttachmentId: string | null;
   tripTitle?: string;
+  waypointCoordinate?: MapCoordinate | null;
   waypointTitle: string;
 }
 
@@ -45,11 +48,78 @@ interface ZoomablePhotoProps {
   width: number;
 }
 
+interface MapCoordinate {
+  latitude: number;
+  longitude: number;
+}
+
 const MAX_ZOOM_SCALE = 4;
 const MIN_ZOOM_SCALE = 1;
+const MAX_PREVIEW_ROUTE_POINTS = 240;
+const ROUTE_PREVIEW_BASE_SIZE = 68;
+const ROUTE_PREVIEW_MAX_ASPECT_RATIO = 1.85;
+const ROUTE_PREVIEW_MIN_ASPECT_RATIO = 0.64;
+const ROUTE_PREVIEW_LINE_COLOR = "#00D9FF";
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function buildRoutePreviewRegion(
+  coordinates: MapCoordinate[],
+): { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | null {
+  if (coordinates.length === 0) {
+    return null;
+  }
+
+  let minLatitude = coordinates[0].latitude;
+  let maxLatitude = coordinates[0].latitude;
+  let minLongitude = coordinates[0].longitude;
+  let maxLongitude = coordinates[0].longitude;
+
+  for (const coordinate of coordinates) {
+    minLatitude = Math.min(minLatitude, coordinate.latitude);
+    maxLatitude = Math.max(maxLatitude, coordinate.latitude);
+    minLongitude = Math.min(minLongitude, coordinate.longitude);
+    maxLongitude = Math.max(maxLongitude, coordinate.longitude);
+  }
+
+  const latitudeDelta = Math.max((maxLatitude - minLatitude) * 1.35, 0.004);
+  const longitudeDelta = Math.max((maxLongitude - minLongitude) * 1.35, 0.004);
+
+  return {
+    latitude: (minLatitude + maxLatitude) / 2,
+    longitude: (minLongitude + maxLongitude) / 2,
+    latitudeDelta,
+    longitudeDelta,
+  };
+}
+
+function downsampleRouteCoordinates(coordinates: MapCoordinate[]): MapCoordinate[] {
+  if (coordinates.length <= MAX_PREVIEW_ROUTE_POINTS) {
+    return coordinates;
+  }
+
+  const step = Math.ceil(coordinates.length / MAX_PREVIEW_ROUTE_POINTS);
+
+  return coordinates.filter((_, index) => index % step === 0 || index === coordinates.length - 1);
+}
+
+function getRoutePreviewSize(region: NonNullable<ReturnType<typeof buildRoutePreviewRegion>>) {
+  const rawAspectRatio = region.longitudeDelta / region.latitudeDelta;
+  const aspectRatio = clamp(rawAspectRatio, ROUTE_PREVIEW_MIN_ASPECT_RATIO, ROUTE_PREVIEW_MAX_ASPECT_RATIO);
+
+  if (aspectRatio >= 1) {
+    return {
+      width: ROUTE_PREVIEW_BASE_SIZE * aspectRatio,
+      height: ROUTE_PREVIEW_BASE_SIZE,
+    };
+  }
+
+  return {
+    width: ROUTE_PREVIEW_BASE_SIZE,
+    height: ROUTE_PREVIEW_BASE_SIZE / aspectRatio,
+  };
 }
 
 function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps) {
@@ -185,8 +255,10 @@ export default function WaypointPhotoViewerScreen({
   onRemoveCurrent,
   previousGroupTitle = null,
   readOnly = false,
+  routeCoordinates = [],
   selectedAttachmentId,
   tripTitle,
+  waypointCoordinate = null,
   waypointTitle,
 }: WaypointPhotoViewerScreenProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -201,14 +273,22 @@ export default function WaypointPhotoViewerScreen({
   const [zoomedAttachmentId, setZoomedAttachmentId] = useState<string | null>(null);
   const [transitionTitle, setTransitionTitle] = useState<string | null>(null);
   const [transitionDirection, setTransitionDirection] = useState<"Next" | "Previous" | null>(null);
+  const [routeExpanded, setRouteExpanded] = useState(false);
   const currentAttachment = attachments[currentIndex] ?? null;
   const leadingPageCount = hasPreviousGroup ? 1 : 0;
   const trailingPageIndex = leadingPageCount + attachments.length;
+  const previewRouteCoordinates = useMemo(() => downsampleRouteCoordinates(routeCoordinates), [routeCoordinates]);
+  const routePreviewRegion = useMemo(
+    () => buildRoutePreviewRegion(waypointCoordinate ? [...previewRouteCoordinates, waypointCoordinate] : previewRouteCoordinates),
+    [previewRouteCoordinates, waypointCoordinate],
+  );
+  const routePreviewSize = routePreviewRegion ? getRoutePreviewSize(routePreviewRegion) : null;
 
   useEffect(() => {
     const nextIndex = initialIndex >= 0 ? initialIndex : 0;
     setCurrentIndex(nextIndex);
     setZoomedAttachmentId(null);
+    setRouteExpanded(false);
 
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({
@@ -241,6 +321,7 @@ export default function WaypointPhotoViewerScreen({
   ) {
     setTransitionTitle(title);
     setTransitionDirection(direction);
+    setRouteExpanded(false);
     transitionOpacity.setValue(0);
 
     Animated.timing(transitionOpacity, {
@@ -295,6 +376,86 @@ export default function WaypointPhotoViewerScreen({
             {tripTitle}
           </Text>
         </View>
+      ) : null}
+
+      {routeExpanded && routePreviewRegion && routePreviewSize && waypointCoordinate ? (
+        <View style={styles.expandedRoute}>
+          <MapView
+            key={`expanded:${routePreviewRegion.latitude}:${routePreviewRegion.longitude}:${routePreviewRegion.latitudeDelta}:${routePreviewRegion.longitudeDelta}`}
+            mapType="standard"
+            pitchEnabled={false}
+            region={routePreviewRegion}
+            rotateEnabled={false}
+            style={styles.expandedRouteMap}
+            toolbarEnabled={false}
+          >
+            {previewRouteCoordinates.length > 1 ? (
+              <Polyline
+                coordinates={previewRouteCoordinates}
+                strokeColor={ROUTE_PREVIEW_LINE_COLOR}
+                strokeWidth={4}
+              />
+            ) : null}
+            <Marker coordinate={waypointCoordinate} tracksViewChanges={false}>
+              <View style={styles.routePreviewMarker} />
+            </Marker>
+          </MapView>
+          <Pressable
+            accessibilityLabel="Back to photo"
+            onPress={() => setRouteExpanded(false)}
+            style={StyleSheet.absoluteFill}
+          />
+          {currentAttachment ? (
+            <Pressable
+              accessibilityLabel="Back to photo"
+              onPress={() => setRouteExpanded(false)}
+              style={[
+                styles.photoPreview,
+                routePreviewSize,
+                { bottom: Math.max(88, safeAreaInsets.bottom + 84) },
+              ]}
+            >
+              <Image resizeMode="cover" source={{ uri: currentAttachment.localUri }} style={styles.photoPreviewImage} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      {!routeExpanded && routePreviewRegion && routePreviewSize && waypointCoordinate ? (
+        <Pressable
+          accessibilityLabel="Open route preview"
+          onPress={() => setRouteExpanded(true)}
+          style={[
+            styles.routePreview,
+            routePreviewSize,
+            { bottom: Math.max(88, safeAreaInsets.bottom + 84) },
+          ]}
+        >
+          <MapView
+            key={`${routePreviewRegion.latitude}:${routePreviewRegion.longitude}:${routePreviewRegion.latitudeDelta}:${routePreviewRegion.longitudeDelta}`}
+            region={routePreviewRegion}
+            liteMode={Platform.OS === "android"}
+            mapType="standard"
+            pitchEnabled={false}
+            pointerEvents="none"
+            rotateEnabled={false}
+            scrollEnabled={false}
+            style={styles.routePreviewMap}
+            toolbarEnabled={false}
+            zoomEnabled={false}
+          >
+            {previewRouteCoordinates.length > 1 ? (
+              <Polyline
+                coordinates={previewRouteCoordinates}
+                strokeColor={ROUTE_PREVIEW_LINE_COLOR}
+                strokeWidth={3}
+              />
+            ) : null}
+            <Marker coordinate={waypointCoordinate} tracksViewChanges={false}>
+              <View style={styles.routePreviewMarker} />
+            </Marker>
+          </MapView>
+        </Pressable>
       ) : null}
 
       <View
@@ -414,6 +575,56 @@ const styles = StyleSheet.create({
   },
   removeIconButton: {
     backgroundColor: "rgba(143, 52, 40, 0.58)",
+  },
+  routePreview: {
+    position: "absolute",
+    right: 18,
+    opacity: 0.66,
+    overflow: "hidden",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255, 253, 248, 0.28)",
+    backgroundColor: "rgba(12, 16, 12, 0.44)",
+    zIndex: 8,
+    elevation: 8,
+  },
+  routePreviewMap: {
+    width: "100%",
+    height: "100%",
+  },
+  routePreviewMarker: {
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: "#e53935",
+    borderWidth: 2,
+    borderColor: "#fffdf8",
+  },
+  expandedRoute: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 7,
+    elevation: 7,
+    backgroundColor: "#0c100c",
+  },
+  expandedRouteMap: {
+    width: "100%",
+    height: "100%",
+  },
+  photoPreview: {
+    position: "absolute",
+    right: 18,
+    opacity: 0.86,
+    overflow: "hidden",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255, 253, 248, 0.28)",
+    backgroundColor: "rgba(12, 16, 12, 0.44)",
+    zIndex: 9,
+    elevation: 9,
+  },
+  photoPreviewImage: {
+    width: "100%",
+    height: "100%",
   },
   transitionOverlay: {
     position: "absolute",
