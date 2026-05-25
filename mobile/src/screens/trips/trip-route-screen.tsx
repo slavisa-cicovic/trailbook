@@ -16,11 +16,12 @@ import {
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
-import type { Trip, TripPoint, Waypoint } from "../../domain/trips";
+import type { Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
 import type { TripTimelineEntry } from "../../services/trip-pauses/trip-pauses.service";
 import {
   buildSegmentPolylines,
   buildTripSegmentsSummary,
+  finalizeEndedTripSegments,
   updateTripSegmentMode,
 } from "../../services/trip-segments/trip-segments.service";
 import { buildTripTimelineEntries } from "../../services/trip-pauses/trip-pauses.service";
@@ -137,6 +138,21 @@ function formatBatteryConsumption(startLevelPercent: number | null, endLevelPerc
   return `${consumed}%`;
 }
 
+function getDisplayTripSegments(tripSegments: TripSegment[], selectedTrip: Trip | null): TripSegment[] {
+  if (!selectedTrip?.endedAt) {
+    return tripSegments;
+  }
+
+  return tripSegments.map((segment) =>
+    segment.tripLocalId === selectedTrip.localId && segment.endedAt === null
+      ? {
+          ...segment,
+          endedAt: selectedTrip.endedAt,
+        }
+      : segment,
+  );
+}
+
 export default function TripRouteScreen() {
   const router = useRouter();
   const { tripId } = useLocalSearchParams<{ tripId?: string | string[] }>();
@@ -210,9 +226,10 @@ export default function TripRouteScreen() {
   const loadedSelectedTripPoints =
     selectedTrip && selectedTripPointsTripId === selectedTrip.localId ? selectedTripPoints : [];
   const routeLoading = Boolean(selectedTrip && (routePointsLoading || selectedTripPointsTripId !== selectedTrip.localId));
+  const displayTripSegments = getDisplayTripSegments(currentUserTripSegments, selectedTrip);
   const selectedTripSegments = selectedTrip
     ? buildTripSegmentsSummary(
-        currentUserTripSegments,
+        displayTripSegments,
         loadedSelectedTripPoints,
         selectedTrip.localId,
         tripSegmentStatsBySegmentId,
@@ -238,7 +255,7 @@ export default function TripRouteScreen() {
     longitude: tripPoint.longitude,
   }));
   const segmentPolylines = selectedTrip
-    ? buildSegmentPolylines(currentUserTripSegments, loadedSelectedTripPoints, selectedTrip.localId)
+    ? buildSegmentPolylines(displayTripSegments, loadedSelectedTripPoints, selectedTrip.localId)
     : [];
   const fallbackCoordinates = selectedTripWaypoints.map((waypoint) => ({
     latitude: waypoint.latitude,
@@ -339,6 +356,44 @@ export default function TripRouteScreen() {
       cancelled = true;
     };
   }, [selectedTrip?.localId]);
+
+  useEffect(() => {
+    if (
+      !selectedTrip?.endedAt ||
+      routePointsLoading ||
+      selectedTripPointsTripId !== selectedTrip.localId ||
+      currentUserTripSegments.every(
+        (segment) => segment.tripLocalId !== selectedTrip.localId || segment.endedAt !== null,
+      )
+    ) {
+      return;
+    }
+
+    const finalizedTripSegments = finalizeEndedTripSegments(
+      tripSegments,
+      loadedSelectedTripPoints,
+      selectedTrip.localId,
+      selectedTrip.endedAt,
+    );
+    const changed =
+      finalizedTripSegments.length !== tripSegments.length ||
+      finalizedTripSegments.some((segment, index) => {
+        const currentSegment = tripSegments[index];
+        return !currentSegment || currentSegment.localId !== segment.localId || currentSegment.endedAt !== segment.endedAt;
+      });
+
+    if (changed) {
+      void setTripSegments(finalizedTripSegments);
+    }
+  }, [
+    currentUserTripSegments,
+    loadedSelectedTripPoints,
+    routePointsLoading,
+    selectedTrip?.endedAt,
+    selectedTrip?.localId,
+    selectedTripPointsTripId,
+    tripSegments,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
