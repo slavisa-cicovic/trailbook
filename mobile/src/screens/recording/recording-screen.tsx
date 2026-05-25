@@ -54,7 +54,7 @@ import {
   stopMotionActivityUpdates,
 } from "../../services/motion/motion-activity.service";
 import { clearAutoRecordingSamples } from "../../services/recording/auto-recording.service";
-import { persistForegroundRecordedLocation } from "../../services/recording/background-recording-task";
+import { persistForegroundRecordedLocation } from "../../services/recording/recording-pipeline.service";
 import {
   closeActiveTrip,
   continueInterruptedRecording,
