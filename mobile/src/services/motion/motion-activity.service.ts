@@ -36,6 +36,36 @@ async function ensureAndroidActivityRecognitionPermission(): Promise<boolean> {
   return status === PermissionsAndroid.RESULTS.GRANTED;
 }
 
+export async function getMotionActivityAccess(): Promise<boolean> {
+  if (!(await isMotionActivityAvailableAsync())) {
+    return true;
+  }
+
+  if (Platform.OS !== "android") {
+    return true;
+  }
+
+  if (typeof Platform.Version === "number" && Platform.Version < 29) {
+    return true;
+  }
+
+  const permission = PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION;
+
+  if (!permission) {
+    return true;
+  }
+
+  return PermissionsAndroid.check(permission);
+}
+
+export async function requestMotionActivityAccess(): Promise<boolean> {
+  if (!(await isMotionActivityAvailableAsync())) {
+    return true;
+  }
+
+  return ensureAndroidActivityRecognitionPermission();
+}
+
 export async function isMotionActivityAvailableAsync(): Promise<boolean> {
   if (!TrailbookMotionActivity) {
     return false;

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../../services/demo/demo-mode.service";
 import {
   capturePhotoWithCamera,
+  isCameraPermissionDeniedError,
   pickPhotosFromLibrary,
 } from "../../services/media/photo-picker.service";
 import {
@@ -185,7 +186,27 @@ export default function TripWaypointScreen() {
     const createdAt = new Date().toISOString();
 
     if (source === "camera") {
-      const photo = await capturePhotoWithCamera();
+      let photo = null;
+
+      try {
+        photo = await capturePhotoWithCamera();
+      } catch (error) {
+        if (isCameraPermissionDeniedError(error)) {
+          Alert.alert(
+            "Camera permission needed",
+            "Trailbook needs camera access to attach waypoint photos.",
+            error.canAskAgain
+              ? [{ text: "OK" }]
+              : [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Open settings", onPress: () => void Linking.openSettings() },
+                ],
+          );
+          return;
+        }
+
+        throw error;
+      }
 
       if (!photo) {
         return;

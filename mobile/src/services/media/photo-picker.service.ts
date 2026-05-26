@@ -1,5 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { PermissionsAndroid, Platform } from "react-native";
 
 import {
   buildPhotoStorageUri,
@@ -10,6 +11,71 @@ export interface PickedPhoto {
   fileSize: number | null;
   localUri: string;
   mimeType: string | null;
+}
+
+export class CameraPermissionDeniedError extends Error {
+  canAskAgain: boolean;
+
+  constructor(canAskAgain: boolean) {
+    super("Camera permission denied");
+    this.name = "CameraPermissionDeniedError";
+    this.canAskAgain = canAskAgain;
+  }
+}
+
+export function isCameraPermissionDeniedError(error: unknown): error is CameraPermissionDeniedError {
+  return error instanceof CameraPermissionDeniedError;
+}
+
+function wait(delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
+export async function getCameraAccess(): Promise<boolean> {
+  if (Platform.OS !== "android") {
+    const permission = await ImagePicker.getCameraPermissionsAsync();
+    return permission.granted;
+  }
+
+  return PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
+}
+
+export async function requestCameraAccess() {
+  if (Platform.OS !== "android") {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      throw new CameraPermissionDeniedError(permission.canAskAgain);
+    }
+
+    return;
+  }
+
+  const permission = PermissionsAndroid.PERMISSIONS.CAMERA;
+
+  if (await PermissionsAndroid.check(permission)) {
+    console.warn("[Trailbook][camera] permission already granted");
+    return;
+  }
+
+  console.warn("[Trailbook][camera] requesting Android camera permission");
+  const status = await PermissionsAndroid.request(permission, {
+    title: "Camera permission needed",
+    message: "Trailbook needs camera access to attach waypoint photos.",
+    buttonPositive: "Allow",
+    buttonNegative: "Deny",
+  });
+
+  if (status !== PermissionsAndroid.RESULTS.GRANTED) {
+    console.warn("[Trailbook][camera] permission denied", { status });
+    throw new CameraPermissionDeniedError(status !== PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
+  }
+
+  console.warn("[Trailbook][camera] permission granted");
+  await wait(500);
+  console.warn("[Trailbook][camera] permission ready");
 }
 
 function resolvePhotoExtensionFromMimeType(mimeType: string | null) {
@@ -100,13 +166,10 @@ export async function pickPhotosFromLibrary(): Promise<PickedPhoto[]> {
 }
 
 export async function capturePhotoWithCamera(): Promise<PickedPhoto | null> {
+  await requestCameraAccess();
+
   try {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-
-    if (!permission.granted) {
-      return null;
-    }
-
+    console.warn("[Trailbook][camera] launching camera");
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ["images"],
       quality: 0.8,
@@ -114,9 +177,11 @@ export async function capturePhotoWithCamera(): Promise<PickedPhoto | null> {
     });
 
     if (result.canceled || result.assets.length === 0) {
+      console.warn("[Trailbook][camera] capture canceled");
       return null;
     }
 
+    console.warn("[Trailbook][camera] capture received", { assets: result.assets.length });
     return normalizePhotoAsset(result.assets[0]);
   } catch (error) {
     console.warn("[Trailbook][photo-picker] Camera capture failed", error);

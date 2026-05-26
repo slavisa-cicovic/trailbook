@@ -248,10 +248,6 @@ function enqueueRecordedLocationSnapshots(
   return recordingPipelineWriteQueue;
 }
 
-export function persistForegroundRecordedLocation(snapshot: CurrentLocationSnapshot): Promise<void> {
-  return enqueueRecordedLocationSnapshots([snapshot], "foreground");
-}
-
 export function persistBackgroundRecordedLocations(locations: Location.LocationObject[]): Promise<void> {
   return enqueueRecordedLocationSnapshots(locations.map(toSnapshot), "background");
 }

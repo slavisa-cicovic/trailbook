@@ -39,6 +39,11 @@ export async function requestForegroundLocationAccess(): Promise<boolean> {
   return permission.granted;
 }
 
+export async function getForegroundLocationAccess(): Promise<boolean> {
+  const permission = await Location.getForegroundPermissionsAsync();
+  return permission.granted;
+}
+
 export async function requestBackgroundLocationAccess(): Promise<boolean> {
   const permission = await Location.requestBackgroundPermissionsAsync();
   return permission.granted;
@@ -200,6 +205,12 @@ function backgroundTrackingOptionsMatch(
   );
 }
 
+function wait(delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
 export async function startBackgroundLocationTracking(
   profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
 ): Promise<void> {
@@ -211,6 +222,32 @@ export async function startBackgroundLocationTracking(
     BACKGROUND_RECORDING_LOCATION_TASK_NAME,
     buildBackgroundTrackingOptions(profile),
   );
+}
+
+export async function startBackgroundLocationTrackingWithRetry(
+  profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
+  onAttemptFailure?: (attempt: number, error: unknown) => void,
+): Promise<void> {
+  const retryDelaysMs = [0, 750, 1500, 3000, 5000, 8000];
+  let lastError: unknown = null;
+
+  for (let index = 0; index < retryDelaysMs.length; index += 1) {
+    const delayMs = retryDelaysMs[index];
+
+    if (delayMs > 0) {
+      await wait(delayMs);
+    }
+
+    try {
+      await startBackgroundLocationTracking(profile);
+      return;
+    } catch (error) {
+      lastError = error;
+      onAttemptFailure?.(index + 1, error);
+    }
+  }
+
+  throw lastError;
 }
 
 export async function stopBackgroundLocationTracking(): Promise<void> {
