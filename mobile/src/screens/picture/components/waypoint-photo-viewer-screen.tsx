@@ -396,9 +396,7 @@ export default function WaypointPhotoViewerScreen({
                 strokeWidth={4}
               />
             ) : null}
-            <Marker coordinate={waypointCoordinate} tracksViewChanges={false}>
-              <View style={styles.routePreviewMarker} />
-            </Marker>
+            <Marker coordinate={waypointCoordinate} pinColor="#e53935" tracksViewChanges={false} />
           </MapView>
           <Pressable
             accessibilityLabel="Back to photo"
@@ -451,9 +449,7 @@ export default function WaypointPhotoViewerScreen({
                 strokeWidth={3}
               />
             ) : null}
-            <Marker coordinate={waypointCoordinate} tracksViewChanges={false}>
-              <View style={styles.routePreviewMarker} />
-            </Marker>
+            <Marker coordinate={waypointCoordinate} pinColor="#e53935" tracksViewChanges={false} />
           </MapView>
         </Pressable>
       ) : null}
@@ -591,14 +587,6 @@ const styles = StyleSheet.create({
   routePreviewMap: {
     width: "100%",
     height: "100%",
-  },
-  routePreviewMarker: {
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    backgroundColor: "#e53935",
-    borderWidth: 2,
-    borderColor: "#fffdf8",
   },
   expandedRoute: {
     ...StyleSheet.absoluteFillObject,
