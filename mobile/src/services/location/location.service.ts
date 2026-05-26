@@ -296,6 +296,7 @@ export async function syncBackgroundLocationTracking(
 
   if (status !== "recording" || !activeTripId) {
     if (started) {
+      console.warn("[Trailbook][background-sync] stopping", { status, activeTripId });
       await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
     }
     return;
@@ -304,7 +305,8 @@ export async function syncBackgroundLocationTracking(
   const nextOptions = buildBackgroundTrackingOptions(profile);
 
   if (!started) {
-    await Location.startLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME, nextOptions);
+    console.warn("[Trailbook][background-sync] starting", { activeTripId, profile });
+    await startBackgroundLocationTrackingWithRetry(profile);
     return;
   }
 
@@ -314,8 +316,9 @@ export async function syncBackgroundLocationTracking(
     );
 
   if (!backgroundTrackingOptionsMatch(currentOptions, nextOptions)) {
+    console.warn("[Trailbook][background-sync] restarting-options", { activeTripId, profile });
     await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
-    await Location.startLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME, nextOptions);
+    await startBackgroundLocationTrackingWithRetry(profile);
   }
 }
 

@@ -88,6 +88,37 @@ export default function RootLayout() {
   ]);
 
   useEffect(() => {
+    if (
+      !recordingHydrated ||
+      !tripsHydrated ||
+      !tripSegmentsHydrated ||
+      recordingStatus !== "recording" ||
+      !activeRecordingTripId
+    ) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      void syncBackgroundLocationTracking(
+        recordingStatus,
+        activeRecordingTripId,
+        activeRecordingProfile,
+      ).catch((error) => {
+        console.warn("[Trailbook][background-watchdog] sync failed", error);
+      });
+    }, 30 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [
+    activeRecordingProfile,
+    activeRecordingTripId,
+    recordingHydrated,
+    recordingStatus,
+    tripSegmentsHydrated,
+    tripsHydrated,
+  ]);
+
+  useEffect(() => {
     if (!sessionHydrated) {
       return;
     }

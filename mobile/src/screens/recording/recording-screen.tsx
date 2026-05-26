@@ -9,6 +9,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  PermissionsAndroid,
   ScrollView,
   StyleSheet,
   Text,
@@ -176,6 +177,36 @@ export default function RecordingScreen() {
 
   function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  async function getNotificationAccess() {
+    if (Platform.OS !== "android" || typeof Platform.Version !== "number" || Platform.Version < 33) {
+      return true;
+    }
+
+    const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
+    return permission ? PermissionsAndroid.check(permission) : true;
+  }
+
+  async function requestNotificationAccess() {
+    if (Platform.OS !== "android" || typeof Platform.Version !== "number" || Platform.Version < 33) {
+      return true;
+    }
+
+    const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
+
+    if (!permission || (await PermissionsAndroid.check(permission))) {
+      return true;
+    }
+
+    const status = await PermissionsAndroid.request(permission, {
+      title: "Recording notification",
+      message: "Trailbook needs notifications so Android can keep the recording service visible.",
+      buttonPositive: "Allow",
+      buttonNegative: "Deny",
+    });
+
+    return status === PermissionsAndroid.RESULTS.GRANTED;
   }
 
   const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>({
@@ -366,6 +397,9 @@ export default function RecordingScreen() {
       const motionGranted = await requestMotionActivityAccess();
       logPermissionSetupStep("motion-activity", { granted: motionGranted });
 
+      const notificationGranted = await requestNotificationAccess();
+      logPermissionSetupStep("notification", { granted: notificationGranted });
+
       try {
         await requestCameraAccess();
         logPermissionSetupStep("camera", { granted: true });
@@ -405,6 +439,7 @@ export default function RecordingScreen() {
       const foregroundGranted = await getForegroundLocationAccess();
       const backgroundGranted = backgroundSupported ? await getBackgroundLocationAccess() : true;
       const motionGranted = await getMotionActivityAccess();
+      const notificationGranted = await getNotificationAccess();
       const cameraGranted = await getCameraAccess();
 
       if (!active) {
@@ -416,7 +451,7 @@ export default function RecordingScreen() {
       setBackgroundLocationPermissionGranted(backgroundSupported ? backgroundGranted : false);
 
       const missingPermissions =
-        !foregroundGranted || !backgroundGranted || !motionGranted || !cameraGranted;
+        !foregroundGranted || !backgroundGranted || !motionGranted || !notificationGranted || !cameraGranted;
 
       logPermissionSetupStep("status", {
         foregroundGranted,
@@ -424,6 +459,7 @@ export default function RecordingScreen() {
         backgroundSupported,
         cameraGranted,
         motionGranted,
+        notificationGranted,
       });
 
       if (!missingPermissions) {
@@ -431,22 +467,7 @@ export default function RecordingScreen() {
       }
 
       permissionSetupPromptedRef.current = true;
-      Alert.alert(
-        "Set up Trailbook permissions",
-        "Trailbook needs location all the time for background recording, motion activity for Auto mode, and camera access for waypoint photos.",
-        [
-          {
-            text: "Later",
-            style: "cancel",
-          },
-          {
-            text: "Set up now",
-            onPress: () => {
-              void runPermissionSetup();
-            },
-          },
-        ],
-      );
+      void runPermissionSetup();
     }
 
     void maybePromptPermissionSetup();
