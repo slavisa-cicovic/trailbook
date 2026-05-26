@@ -732,12 +732,6 @@ export default function RecordingScreen() {
       logRecordingStartStep("segment-written", { segmentLocalId: nextSegment.localId });
       await setRecordingSession(nextSession);
       logRecordingStartStep("session-written", { status: nextSession.status });
-      setStartModalVisible(false);
-      setRecordingDraft({
-        title: "",
-        description: "",
-        recordingMode: DEFAULT_RECORDING_PROFILE,
-      });
 
       try {
         await startBackgroundLocationTrackingWithRetry(concreteRecordingProfile, (attempt, error) => {
@@ -768,6 +762,12 @@ export default function RecordingScreen() {
         void ensureMotionActivityUpdatesForAutoMode();
       }
 
+      setStartModalVisible(false);
+      setRecordingDraft({
+        title: "",
+        description: "",
+        recordingMode: DEFAULT_RECORDING_PROFILE,
+      });
       logRecordingStartStep("done", { tripLocalId: nextTrip.localId });
     } catch {
       logRecordingStartStep("failed");
