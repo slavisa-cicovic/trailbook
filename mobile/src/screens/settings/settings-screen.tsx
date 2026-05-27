@@ -563,6 +563,17 @@ export default function SettingsScreen() {
             value={exportDatabaseBusy ? "Exporting..." : "Export"}
           />
         </SettingsSection>
+
+        <SettingsSection theme={theme} title="About">
+          <SettingsRow
+            description="App information, version and author contact."
+            iconName="info-outline"
+            onPress={() => router.push("/settings/about")}
+            theme={theme}
+            title="About Trailbook"
+            value="Open"
+          />
+        </SettingsSection>
       </View>
     </ScreenLayout>
   );
