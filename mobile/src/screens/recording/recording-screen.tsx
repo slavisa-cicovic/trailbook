@@ -467,7 +467,18 @@ export default function RecordingScreen() {
       }
 
       permissionSetupPromptedRef.current = true;
-      void runPermissionSetup();
+      Alert.alert(
+        "Set up Trailbook permissions",
+        "Trailbook needs location all the time for background recording, motion activity for Auto mode, notifications for Android recording service, and camera access for waypoint photos.",
+        [
+          {
+            text: "Set up now",
+            onPress: () => {
+              void runPermissionSetup();
+            },
+          },
+        ],
+      );
     }
 
     void maybePromptPermissionSetup();
