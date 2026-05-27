@@ -1,12 +1,13 @@
 import { useSyncExternalStore } from "react";
 
 import {
+  type AuthenticatedUserSummary,
   DEMO_CREDENTIALS,
   type AuthenticatedDeviceSession,
   type TemporaryUserCredentials,
 } from "../domain/identity";
 import { BackendRequestError } from "../services/api/mobile-api.service";
-import { refreshMobileSessionWithBackend } from "../services/auth/mobile-auth.service";
+import { getCurrentBackendUser, refreshMobileSessionWithBackend } from "../services/auth/mobile-auth.service";
 import { getOrCreateDeviceId } from "../storage/device-storage";
 import { loadSession, saveSession } from "../storage/session-storage";
 
@@ -32,6 +33,7 @@ let state: SessionState = {
 };
 
 let refreshInFlight: Promise<AuthenticatedDeviceSession | null> | null = null;
+let userRefreshInFlight: Promise<AuthenticatedDeviceSession | null> | null = null;
 
 function emitChange() {
   listeners.forEach((listener) => listener());
@@ -163,6 +165,61 @@ export async function refreshActiveIdentitySessionIfPossible(): Promise<Authenti
   return refreshInFlight;
 }
 
+export async function refreshActiveIdentityUserFromBackend(): Promise<AuthenticatedDeviceSession | null> {
+  if (userRefreshInFlight) {
+    return userRefreshInFlight;
+  }
+
+  const activeSession = state.identitySession;
+
+  if (
+    !activeSession ||
+    activeSession.mode !== "authenticated" ||
+    !activeSession.sessionToken
+  ) {
+    return activeSession;
+  }
+
+  userRefreshInFlight = (async () => {
+    try {
+      return await refreshIdentityUser(activeSession);
+    } catch (error) {
+      if (error instanceof BackendRequestError && (error.status === 401 || error.status === 403)) {
+        const refreshedSession = await refreshActiveIdentitySessionIfPossible();
+
+        if (
+          refreshedSession?.mode === "authenticated" &&
+          refreshedSession.sessionToken &&
+          refreshedSession.sessionToken !== activeSession.sessionToken
+        ) {
+          try {
+            return await refreshIdentityUser(refreshedSession);
+          } catch {
+            return refreshedSession;
+          }
+        }
+
+        return refreshedSession;
+      }
+
+      if (__DEV__) {
+        console.warn(
+          "[Session] User refresh failed",
+          error instanceof BackendRequestError
+            ? { message: error.message, status: error.status }
+            : { message: error instanceof Error ? error.message : "Unknown error" },
+        );
+      }
+
+      return activeSession;
+    } finally {
+      userRefreshInFlight = null;
+    }
+  })();
+
+  return userRefreshInFlight;
+}
+
 export function updateSessionCredentials(partial: Partial<TemporaryUserCredentials>) {
   setState((currentState) => ({
     ...currentState,
@@ -214,5 +271,48 @@ function mergeRefreshedIdentitySession(
     sessionExpiresAt: refreshedSession.sessionExpiresAt,
     refreshToken: refreshedSession.refreshToken,
     refreshExpiresAt: refreshedSession.refreshExpiresAt,
+  };
+}
+
+async function refreshIdentityUser(
+  identitySession: AuthenticatedDeviceSession,
+): Promise<AuthenticatedDeviceSession> {
+  if (!identitySession.sessionToken) {
+    return identitySession;
+  }
+
+  const { user } = await getCurrentBackendUser(identitySession.sessionToken);
+
+  if (!user) {
+    return identitySession;
+  }
+
+  const nextSession = mergeUserIdentitySession(identitySession, user);
+
+  setState((currentState) => ({
+    ...currentState,
+    identitySession: nextSession,
+    credentials: {
+      email: nextSession.userEmail,
+      password: "",
+    },
+    deviceId: nextSession.deviceId,
+  }));
+
+  await saveSession(nextSession);
+  return nextSession;
+}
+
+function mergeUserIdentitySession(
+  identitySession: AuthenticatedDeviceSession,
+  user: AuthenticatedUserSummary,
+): AuthenticatedDeviceSession {
+  return {
+    ...identitySession,
+    userId: user.id,
+    userEmail: user.email.trim().toLowerCase(),
+    displayName: user.displayName,
+    providers: user.providers,
+    role: user.role,
   };
 }

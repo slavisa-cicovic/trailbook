@@ -9,6 +9,7 @@ datasource db {
 
 enum UserRole {
   user
+  test_user
   admin
 
   @@map("user_role")

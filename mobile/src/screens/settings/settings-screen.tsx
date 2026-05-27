@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Redirect, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -17,7 +17,12 @@ import { useRecordingStore } from "../../state/recording-store";
 import { setTripPauses } from "../../state/trip-pauses-store";
 import { setTripPointsInMemory } from "../../state/trip-points-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
-import { clearSessionCredentials, setActiveIdentitySession, useSessionStore } from "../../state/session-store";
+import {
+  clearSessionCredentials,
+  refreshActiveIdentityUserFromBackend,
+  setActiveIdentitySession,
+  useSessionStore,
+} from "../../state/session-store";
 import { setThemeMode, useThemeStore } from "../../state/theme-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
@@ -151,6 +156,7 @@ export default function SettingsScreen() {
   const systemColorScheme = useColorScheme();
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
   const theme = getAppTheme(resolvedThemeMode);
+  const isTestUser = identitySession?.mode === "authenticated" && identitySession.role === "test_user";
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [sendStatsBusy, setSendStatsBusy] = useState(false);
@@ -163,6 +169,14 @@ export default function SettingsScreen() {
   const [clearTripDataMessage, setClearTripDataMessage] = useState<string | null>(null);
   const [exportDatabaseBusy, setExportDatabaseBusy] = useState(false);
   const [exportDatabaseMessage, setExportDatabaseMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (identitySession?.mode !== "authenticated" || !identitySession.sessionToken) {
+      return;
+    }
+
+    void refreshActiveIdentityUserFromBackend();
+  }, [identitySession?.mode, identitySession?.sessionToken]);
 
   async function handleLogout() {
     if (identitySession?.sessionToken) {
@@ -473,7 +487,7 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
 
-        {identitySession.mode === "authenticated" ? (
+        {isTestUser ? (
           <SettingsSection theme={theme} title="Recording">
             <SettingsRow
               description="Pulls the latest resolved recording profile config from the server and applies it immediately."
@@ -522,7 +536,7 @@ export default function SettingsScreen() {
           </SettingsSection>
         ) : null}
 
-        {identitySession.mode === "authenticated" ? (
+        {isTestUser ? (
           <SettingsSection theme={theme} title="Data transfer">
             <SettingsRow
               description="Imports server-backed trips that are not already present on this device."
@@ -538,31 +552,33 @@ export default function SettingsScreen() {
           </SettingsSection>
         ) : null}
 
-        <SettingsSection theme={theme} title="Debug">
-          <SettingsRow
-            description="Temporary helper that clears local SQLite trip data before restoring from server. Does not delete auth or photo files."
-            disabled={clearTripDataBusy}
-            iconName="delete-sweep"
-            message={clearTripDataMessage}
-            messageTone={clearTripDataMessage?.startsWith("Local trip data deleted") ? "success" : "danger"}
-            onPress={handleConfirmClearLocalTripData}
-            theme={theme}
-            title="Delete local trips"
-            value={clearTripDataBusy ? "Deleting..." : "Delete"}
-          />
-          <SettingsDivider theme={theme} />
-          <SettingsRow
-            description="Temporary helper that exports the local SQLite database snapshot."
-            disabled={exportDatabaseBusy}
-            iconName="storage"
-            message={exportDatabaseMessage}
-            messageTone={exportDatabaseMessage?.startsWith("Database exported:") ? "success" : "danger"}
-            onPress={() => void handleExportDatabase()}
-            theme={theme}
-            title="Export database"
-            value={exportDatabaseBusy ? "Exporting..." : "Export"}
-          />
-        </SettingsSection>
+        {isTestUser ? (
+          <SettingsSection theme={theme} title="Debug">
+            <SettingsRow
+              description="Temporary helper that clears local SQLite trip data before restoring from server. Does not delete auth or photo files."
+              disabled={clearTripDataBusy}
+              iconName="delete-sweep"
+              message={clearTripDataMessage}
+              messageTone={clearTripDataMessage?.startsWith("Local trip data deleted") ? "success" : "danger"}
+              onPress={handleConfirmClearLocalTripData}
+              theme={theme}
+              title="Delete local trips"
+              value={clearTripDataBusy ? "Deleting..." : "Delete"}
+            />
+            <SettingsDivider theme={theme} />
+            <SettingsRow
+              description="Temporary helper that exports the local SQLite database snapshot."
+              disabled={exportDatabaseBusy}
+              iconName="storage"
+              message={exportDatabaseMessage}
+              messageTone={exportDatabaseMessage?.startsWith("Database exported:") ? "success" : "danger"}
+              onPress={() => void handleExportDatabase()}
+              theme={theme}
+              title="Export database"
+              value={exportDatabaseBusy ? "Exporting..." : "Export"}
+            />
+          </SettingsSection>
+        ) : null}
 
         <SettingsSection theme={theme} title="About">
           <SettingsRow

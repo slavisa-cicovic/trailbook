@@ -18,6 +18,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Redirect } from "expo-router";
+import Constants from "expo-constants";
 import { MaterialIcons } from "@expo/vector-icons";
 import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 
@@ -133,6 +134,8 @@ import {
 } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
+
+const RUNS_IN_EXPO_GO = Constants.executionEnvironment === "storeClient";
 
 export default function RecordingScreen() {
   const { width: screenWidth } = useWindowDimensions();
@@ -384,14 +387,25 @@ export default function RecordingScreen() {
       logPermissionSetupStep("background-supported", { supported: backgroundSupported });
 
       if (foregroundGranted && backgroundSupported) {
-        let backgroundGranted = await requestBackgroundLocationAccess();
+        let backgroundGranted = false;
 
-        if (!backgroundGranted) {
-          backgroundGranted = await getBackgroundLocationAccess();
+        try {
+          backgroundGranted = await requestBackgroundLocationAccess();
+
+          if (!backgroundGranted) {
+            backgroundGranted = await getBackgroundLocationAccess();
+          }
+        } catch (error) {
+          logPermissionSetupStep("background-location", {
+            granted: false,
+            error: getErrorMessage(error),
+          });
         }
 
         setBackgroundLocationPermissionGranted(backgroundGranted);
-        logPermissionSetupStep("background-location", { granted: backgroundGranted });
+        if (backgroundGranted) {
+          logPermissionSetupStep("background-location", { granted: true });
+        }
       }
 
       const motionGranted = await requestMotionActivityAccess();
@@ -463,6 +477,11 @@ export default function RecordingScreen() {
       });
 
       if (!missingPermissions) {
+        return;
+      }
+
+      if (RUNS_IN_EXPO_GO) {
+        logPermissionSetupStep("skip-expo-go");
         return;
       }
 

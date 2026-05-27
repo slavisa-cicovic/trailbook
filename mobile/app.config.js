@@ -42,6 +42,12 @@ module.exports = {
       bundleIdentifier: "com.slavisacicovic.trailbook",
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        NSLocationWhenInUseUsageDescription:
+          "Trailbook uses your location to show where you are and support trip recording.",
+        NSLocationAlwaysAndWhenInUseUsageDescription:
+          "Trailbook uses your location to keep recording trips when the app is in the background or the screen is locked.",
+        NSLocationAlwaysUsageDescription:
+          "Trailbook uses your location to keep recording trips when the app is in the background or the screen is locked.",
         NSMotionUsageDescription:
           "Trailbook uses motion activity to distinguish walking, cycling, and driving more reliably in auto mode.",
         UIBackgroundModes: ["location"],

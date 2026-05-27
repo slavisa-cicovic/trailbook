@@ -1,4 +1,4 @@
-export type UserRole = "user" | "admin";
+export type UserRole = "user" | "test_user" | "admin";
 
 export type AuthProvider = "local" | "google" | "facebook" | "apple";
 

@@ -5,13 +5,14 @@ export interface TemporaryUserCredentials {
 
 export type AuthProvider = "local" | "google" | "facebook" | "apple";
 export type SessionMode = "demo" | "authenticated";
+export type UserRole = "user" | "web_user" | "test_user" | "admin";
 
 export interface AuthenticatedUserSummary {
   displayName: string;
   email: string;
   id: string;
   providers: AuthProvider[];
-  role: "user" | "admin";
+  role: UserRole;
 }
 
 export interface AuthenticatedDeviceSession {
@@ -22,7 +23,7 @@ export interface AuthenticatedDeviceSession {
   mode: SessionMode;
   displayName: string;
   providers: AuthProvider[];
-  role: "user" | "admin";
+  role: UserRole;
   sessionToken: string | null;
   sessionExpiresAt: string | null;
   refreshToken: string | null;
