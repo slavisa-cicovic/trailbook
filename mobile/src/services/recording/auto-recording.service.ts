@@ -260,6 +260,8 @@ function inferLocationOnlyAutoRecordingProfile(tripPoints: AutoLocationPoint[]):
   const driveWindow = getMovingStableWindow(speedSamples, 10 * 60 * 1000);
   const planeWindow = getMovingStableWindow(speedSamples, 6 * 60 * 1000);
 
+  // This returns a candidate. applyAutoRecordingTransition owns the stability timer,
+  // otherwise a profile switch needs two full stability windows and reacts too late.
   if (planeWindow.length >= 3) {
     const planeMedian = median(planeWindow.map((sample) => sample.speedKmh));
     const planeMax = Math.max(...planeWindow.map((sample) => sample.speedKmh));
@@ -276,7 +278,7 @@ function inferLocationOnlyAutoRecordingProfile(tripPoints: AutoLocationPoint[]):
   if (driveWindow.length >= 4) {
     const driveMedian = median(driveWindow.map((sample) => sample.speedKmh));
 
-    if (getWindowDurationMs(driveWindow) >= DRIVE_STABILITY_MS && driveMedian >= DRIVE_MIN_KMH) {
+    if (driveMedian >= DRIVE_MIN_KMH) {
       return "drive";
     }
   }
@@ -285,7 +287,6 @@ function inferLocationOnlyAutoRecordingProfile(tripPoints: AutoLocationPoint[]):
     const bikeMedian = median(bikeWindow.map((sample) => sample.speedKmh));
 
     if (
-      getWindowDurationMs(bikeWindow) >= BIKE_STABILITY_MS &&
       bikeMedian >= BIKE_MIN_KMH &&
       bikeMedian <= BIKE_MAX_KMH
     ) {
@@ -296,7 +297,7 @@ function inferLocationOnlyAutoRecordingProfile(tripPoints: AutoLocationPoint[]):
   if (walkWindow.length >= 4) {
     const walkMedian = median(walkWindow.map((sample) => sample.speedKmh));
 
-    if (getWindowDurationMs(walkWindow) >= WALK_STABILITY_MS && walkMedian <= WALK_MAX_KMH) {
+    if (walkMedian <= WALK_MAX_KMH) {
       return "walk";
     }
   }
