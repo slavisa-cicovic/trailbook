@@ -137,6 +137,17 @@ import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 
 const RUNS_IN_EXPO_GO = Constants.executionEnvironment === "storeClient";
 
+function getBackgroundTrackingProfileForSession(
+  recordingMode: RecordingMode,
+  recordingProfile: RecordingProfile,
+): RecordingProfile {
+  if (Platform.OS === "android" && recordingMode === "auto" && recordingProfile === "walk") {
+    return "drive";
+  }
+
+  return recordingProfile;
+}
+
 export default function RecordingScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
@@ -785,13 +796,21 @@ export default function RecordingScreen() {
       logRecordingStartStep("session-written", { status: nextSession.status });
 
       try {
-        await startBackgroundLocationTrackingWithRetry(concreteRecordingProfile, (attempt, error) => {
+        const backgroundTrackingProfile = getBackgroundTrackingProfileForSession(
+          recordingDraft.recordingMode,
+          concreteRecordingProfile,
+        );
+
+        await startBackgroundLocationTrackingWithRetry(backgroundTrackingProfile, (attempt, error) => {
           logRecordingStartStep("background-start-retry", {
             attempt,
             error: getErrorMessage(error),
           });
         });
-        logRecordingStartStep("background-started", { concreteRecordingProfile });
+        logRecordingStartStep("background-started", {
+          concreteRecordingProfile,
+          backgroundTrackingProfile,
+        });
       } catch (error) {
         const refreshedBackgroundPermissionGranted = await getBackgroundLocationAccess();
         setBackgroundLocationPermissionGranted(refreshedBackgroundPermissionGranted);
@@ -959,7 +978,12 @@ export default function RecordingScreen() {
     await setRecordingSession(nextState.session);
 
     if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
-      await startBackgroundLocationTracking(nextState.session.recordingProfile);
+      await startBackgroundLocationTracking(
+        getBackgroundTrackingProfileForSession(
+          nextState.session.recordingMode,
+          nextState.session.recordingProfile,
+        ),
+      );
     }
 
     if (nextState.session.recordingMode === "auto") {
@@ -975,7 +999,12 @@ export default function RecordingScreen() {
     try {
       await setRecordingSession(nextSession);
       if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
-        await startBackgroundLocationTracking(nextSession.recordingProfile);
+        await startBackgroundLocationTracking(
+          getBackgroundTrackingProfileForSession(
+            nextSession.recordingMode,
+            nextSession.recordingProfile,
+          ),
+        );
       }
       if (nextSession.recordingMode === "auto") {
         await ensureMotionActivityUpdatesForAutoMode();
@@ -1012,7 +1041,9 @@ export default function RecordingScreen() {
       });
       await ensureMotionActivityUpdatesForAutoMode();
       if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
-        await restartBackgroundLocationTracking(recordingSession.recordingProfile);
+        await restartBackgroundLocationTracking(
+          getBackgroundTrackingProfileForSession("auto", recordingSession.recordingProfile),
+        );
       }
       setProfileModalVisible(false);
       return;
