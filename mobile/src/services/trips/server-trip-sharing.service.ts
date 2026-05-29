@@ -10,7 +10,8 @@ import type {
   Waypoint,
   WaypointAttachment,
 } from "../../domain/trips";
-import { BackendRequestError } from "../api/mobile-api.service";
+import { API_ROUTES } from "../../constants/api-routes";
+import { BackendRequestError, getApiBaseUrl } from "../api/mobile-api.service";
 import { getSessionStateSnapshot, refreshActiveIdentitySessionIfPossible } from "../../state/session-store";
 import { getTripDiagnosticsForSync, isTripDiagnosticsEnabled } from "../trip-points/trip-points.service";
 import {
@@ -24,10 +25,6 @@ import {
 } from "../trip-segments/trip-segments.service";
 
 const TRIP_POINTS_SYNC_BATCH_SIZE = 500;
-
-export function getApiBaseUrl() {
-  return process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3001/api";
-}
 
 async function request<T>(path: string, sessionToken: string, init?: RequestInit) {
   try {
@@ -206,7 +203,7 @@ export async function syncTripStatsToServer(
   const statsPayload = await buildTripStatsSyncPayload(input);
 
   return request<{ segmentStatsUpdated: number; syncedAt: string; tripId: string; tripLocalId: string }>(
-    `/trips/${input.trip.serverId}/stats/sync`,
+    API_ROUTES.trips.statsSync(input.trip.serverId),
     sessionToken,
     {
       method: "POST",
@@ -298,7 +295,7 @@ export async function syncTripToServer(
       }
     : null;
 
-  const response = await request<{ syncedAt: string; tripId: string; tripLocalId: string }>("/trips/sync", sessionToken, {
+  const response = await request<{ syncedAt: string; tripId: string; tripLocalId: string }>(API_ROUTES.trips.sync, sessionToken, {
     method: "POST",
     body: JSON.stringify({
       localId: input.trip.localId,
@@ -355,7 +352,7 @@ export async function syncTripToServer(
 
   for (const tripPointChunk of chunkItems(orderedTripPoints, TRIP_POINTS_SYNC_BATCH_SIZE)) {
     await request<{ accepted: number; syncedAt: string; tripId: string; tripLocalId: string }>(
-      `/trips/${response.tripId}/points/sync`,
+      API_ROUTES.trips.pointsSync(response.tripId),
       sessionToken,
       {
         method: "POST",
@@ -367,7 +364,7 @@ export async function syncTripToServer(
   }
 
   await request<{ segmentStatsUpdated: number; syncedAt: string; tripId: string; tripLocalId: string }>(
-    `/trips/${response.tripId}/stats/sync`,
+    API_ROUTES.trips.statsSync(response.tripId),
     sessionToken,
     {
       method: "POST",
@@ -399,20 +396,20 @@ export async function uploadTripAttachmentToServer(
   );
 
   return requestFormData<{ attachmentId: string; attachmentLocalId: string; waypointId: string }>(
-    `/trips/${tripId}/attachments/upload`,
+    API_ROUTES.trips.attachmentUpload(tripId),
     sessionToken,
     formData,
   );
 }
 
 export async function listOwnedTripsFromServer(sessionToken: string) {
-  return request<{ trips: OwnedServerTripSummary[] }>("/trips/mine", sessionToken, {
+  return request<{ trips: OwnedServerTripSummary[] }>(API_ROUTES.trips.mine, sessionToken, {
     method: "GET",
   });
 }
 
 export async function getOwnedTripFromServer(sessionToken: string, tripId: string) {
-  return request<{ trip: OwnedServerTripDetail }>(`/trips/mine/${tripId}`, sessionToken, {
+  return request<{ trip: OwnedServerTripDetail }>(API_ROUTES.trips.byId(tripId), sessionToken, {
     method: "GET",
   });
 }
@@ -428,7 +425,7 @@ export async function syncTripGroupsToServer(
     groups: Array<{ groupId: string; localId: string }>;
     members: Array<{ localId: string; memberId: string }>;
     syncedAt: string;
-  }>("/trips/groups/sync", sessionToken, {
+  }>(API_ROUTES.trips.groupsSync, sessionToken, {
     method: "POST",
     body: JSON.stringify({
       groups: input.groups.map((group) => ({
@@ -477,13 +474,13 @@ export async function listTripGroupsFromServer(sessionToken: string) {
       tripLocalId: string;
       updatedAt: string;
     }>;
-  }>("/trips/groups", sessionToken, {
+  }>(API_ROUTES.trips.groups, sessionToken, {
     method: "GET",
   });
 }
 
 export function buildTripAttachmentContentUrl(sessionToken: string, attachmentId: string) {
-  return `${getApiBaseUrl()}/trips/attachments/${attachmentId}/content?token=${encodeURIComponent(sessionToken)}`;
+  return `${getApiBaseUrl()}${API_ROUTES.trips.attachmentContent(attachmentId)}?token=${encodeURIComponent(sessionToken)}`;
 }
 
 export async function shareTripWithRecipient(sessionToken: string, tripId: string, recipientEmail: string) {
@@ -492,7 +489,7 @@ export async function shareTripWithRecipient(sessionToken: string, tripId: strin
     shareId: string;
     status: "active" | "revoked";
     tripId: string;
-  }>(`/trips/${tripId}/shares`, sessionToken, {
+  }>(API_ROUTES.trips.shares(tripId), sessionToken, {
     method: "POST",
     body: JSON.stringify({ recipientEmail }),
   });
@@ -507,7 +504,7 @@ export async function listTripShares(sessionToken: string, tripId: string) {
       revokedAt: string | null;
       status: "active" | "revoked";
     }>;
-  }>(`/trips/${tripId}/shares`, sessionToken, { method: "GET" });
+  }>(API_ROUTES.trips.shares(tripId), sessionToken, { method: "GET" });
 }
 
 export async function listShareRecipients(sessionToken: string) {
@@ -517,17 +514,17 @@ export async function listShareRecipients(sessionToken: string) {
       email: string;
       id: string;
     }>;
-  }>("/trips/shares/recipients", sessionToken, { method: "GET" });
+  }>(API_ROUTES.trips.sharesRecipients, sessionToken, { method: "GET" });
 }
 
 export async function listSharedTrips(sessionToken: string) {
-  return request<{ sharedTrips: SharedTripSummary[] }>("/trips/shared/list", sessionToken, {
+  return request<{ sharedTrips: SharedTripSummary[] }>(API_ROUTES.trips.sharedList, sessionToken, {
     method: "GET",
   });
 }
 
 export async function getSharedTrip(sessionToken: string, shareId: string) {
-  return request<SharedTripDetail>(`/trips/shared/${shareId}`, sessionToken, {
+  return request<SharedTripDetail>(API_ROUTES.trips.shared(shareId), sessionToken, {
     method: "GET",
   });
 }

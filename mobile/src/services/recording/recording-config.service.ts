@@ -12,6 +12,7 @@ import type {
   TrackingProfileConfig,
 } from "../../domain/recording-config";
 import type { RecordingMode } from "../../domain/trips";
+import { API_ROUTES } from "../../constants/api-routes";
 import { requestFromBackend } from "../api/mobile-api.service";
 import { refreshActiveIdentitySessionIfPossible } from "../../state/session-store";
 import { loadRecordingConfig, saveRecordingConfig } from "../../storage/recording-config-storage";
@@ -124,7 +125,7 @@ export async function syncResolvedRecordingConfig(
         : authenticatedSession;
 
     const remoteConfig = await requestFromBackend<MobileRecordingConfig>(
-      "/auth/mobile/recording-config",
+      API_ROUTES.auth.recordingConfig,
       { method: "GET" },
       sessionForRequest.sessionToken ?? undefined,
     );
@@ -209,7 +210,7 @@ export async function resetRecordingConfigToServerDefaults(
   identitySession: AuthenticatedDeviceSession,
 ): Promise<MobileRecordingConfig> {
   const remoteConfig = await requestFromBackend<MobileRecordingConfig>(
-    "/auth/mobile/recording-config",
+    API_ROUTES.auth.recordingConfig,
     { method: "GET" },
     identitySession.sessionToken ?? undefined,
   );

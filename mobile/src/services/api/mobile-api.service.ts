@@ -8,7 +8,7 @@ export class BackendRequestError extends Error {
   }
 }
 
-function getApiBaseUrl() {
+export function getApiBaseUrl() {
   const configuredBaseUrl =
     process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_SERVER_API_URL;
 
