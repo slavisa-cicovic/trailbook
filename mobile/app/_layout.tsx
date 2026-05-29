@@ -6,73 +6,26 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import "../src/services/recording/background-recording-task";
 import { getAppTheme, resolveAppThemeMode } from "../src/constants/app-theme";
+import { useAppHydration } from "../src/core/hooks/use-app-hydration";
 import { syncBackgroundLocationTracking } from "../src/services/location/location.service";
 import { syncResolvedRecordingConfig } from "../src/services/recording/recording-config.service";
-import {
-  hydrateRecordingStore,
-  reconcileHydratedRecordingState,
-  useRecordingStore,
-} from "../src/state/recording-store";
-import { hydrateSessionStore, useSessionStore } from "../src/state/session-store";
-import { hydrateThemeStore, useThemeStore } from "../src/state/theme-store";
-import {
-  getTripSegmentsStateSnapshot,
-  hydrateTripSegmentsStore,
-  useTripSegmentsStore,
-} from "../src/state/trip-segments-store";
-import { hydrateTripGroupMembersStore, useTripGroupMembersStore } from "../src/state/trip-group-members-store";
-import { hydrateTripGroupsStore, useTripGroupsStore } from "../src/state/trip-groups-store";
-import { hydrateTripPausesStore, useTripPausesStore } from "../src/state/trip-pauses-store";
-import { getTripsStateSnapshot, hydrateTripsStore, useTripsStore } from "../src/state/trips-store";
-import {
-  hydrateWaypointAttachmentsStore,
-  useWaypointAttachmentsStore,
-} from "../src/state/waypoint-attachments-store";
-import { hydrateWaypointsStore, useWaypointsStore } from "../src/state/waypoints-store";
+import { useRecordingStore } from "../src/state/recording-store";
+import { useSessionStore } from "../src/state/session-store";
+import { useThemeStore } from "../src/state/theme-store";
 
 export default function RootLayout() {
-  const sessionHydrated = useSessionStore((state) => state.hydrated);
+  const { appHydrated, sessionHydrated, recordingHydrated, tripsHydrated, tripSegmentsHydrated } =
+    useAppHydration();
+
   const identitySession = useSessionStore((state) => state.identitySession);
-  const themeHydrated = useThemeStore((state) => state.hydrated);
   const themeMode = useThemeStore((state) => state.mode);
   const systemColorScheme = useColorScheme();
-  const recordingHydrated = useRecordingStore((state) => state.hydrated);
   const recordingStatus = useRecordingStore((state) => state.session.status);
   const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
   const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
-  const tripsHydrated = useTripsStore((state) => state.hydrated);
-  const tripSegmentsHydrated = useTripSegmentsStore((state) => state.hydrated);
-  const tripGroupsHydrated = useTripGroupsStore((state) => state.hydrated);
-  const tripGroupMembersHydrated = useTripGroupMembersStore((state) => state.hydrated);
-  const tripPausesHydrated = useTripPausesStore((state) => state.hydrated);
-  const waypointsHydrated = useWaypointsStore((state) => state.hydrated);
-  const waypointAttachmentsHydrated = useWaypointAttachmentsStore((state) => state.hydrated);
 
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
   const theme = getAppTheme(resolvedThemeMode);
-
-  useEffect(() => {
-    async function hydrateAppState() {
-      await Promise.all([
-        hydrateThemeStore(),
-        hydrateSessionStore(),
-        hydrateRecordingStore(),
-        hydrateTripsStore(),
-        hydrateTripPausesStore(),
-        hydrateTripSegmentsStore(),
-        hydrateTripGroupsStore(),
-        hydrateTripGroupMembersStore(),
-        hydrateWaypointsStore(),
-        hydrateWaypointAttachmentsStore(),
-      ]);
-      await reconcileHydratedRecordingState(
-        getTripsStateSnapshot().trips,
-        getTripSegmentsStateSnapshot().tripSegments,
-      );
-    }
-
-    void hydrateAppState();
-  }, []);
 
   useEffect(() => {
     if (!recordingHydrated || !tripsHydrated || !tripSegmentsHydrated) {
@@ -148,18 +101,7 @@ export default function RootLayout() {
     sessionHydrated,
   ]);
 
-  if (
-    !themeHydrated ||
-    !sessionHydrated ||
-    !recordingHydrated ||
-    !tripsHydrated ||
-    !tripGroupsHydrated ||
-    !tripGroupMembersHydrated ||
-    !tripPausesHydrated ||
-    !tripSegmentsHydrated ||
-    !waypointsHydrated ||
-    !waypointAttachmentsHydrated
-  ) {
+  if (!appHydrated) {
     return (
       <View style={[styles.loadingScreen, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.accent} />
