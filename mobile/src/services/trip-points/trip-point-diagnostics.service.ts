@@ -8,6 +8,7 @@ import type {
   TripDiagnosticsRecentEvent,
 } from "../../domain/trip-diagnostics";
 import type { RecordingMode } from "../../domain/trips";
+import { STATIC_FLAGS } from "../../constants/feature-flags";
 import {
   loadTripDiagnostics as loadPersistedTripDiagnostics,
   saveTripDiagnostics,
@@ -84,7 +85,7 @@ function getPlatform(): TripDiagnosticsPlatform {
 }
 
 export function isTripDiagnosticsEnabled() {
-  return process.env.EXPO_PUBLIC_ENABLE_TRIP_DIAGNOSTICS === "true";
+  return STATIC_FLAGS.tripDiagnosticsEnabled;
 }
 
 function createEmptyDiagnostics(

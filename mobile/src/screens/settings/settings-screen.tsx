@@ -5,6 +5,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { Alert, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
 import { type AppThemePalette, getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
+import { useFeatureFlags } from "../../core/hooks/use-feature-flags";
 import ScreenLayout from "../../components/layout/screen-layout";
 import { showDemoModeInfoDialog } from "../../services/demo/demo-mode.service";
 import { logoutFromBackend } from "../../services/auth/mobile-auth.service";
@@ -160,7 +161,7 @@ export default function SettingsScreen() {
   const systemColorScheme = useColorScheme();
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
   const theme = getAppTheme(resolvedThemeMode);
-  const isTestUser = identitySession?.mode === "authenticated" && identitySession.role === "test_user";
+  const { testSettingsEnabled } = useFeatureFlags();
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [sendStatsBusy, setSendStatsBusy] = useState(false);
@@ -497,7 +498,7 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
 
-        {isTestUser ? (
+        {testSettingsEnabled ? (
           <SettingsSection theme={theme} title="Recording">
             <SettingsRow
               description="Pulls the latest resolved recording profile config from the server and applies it immediately."
@@ -546,7 +547,7 @@ export default function SettingsScreen() {
           </SettingsSection>
         ) : null}
 
-        {isTestUser ? (
+        {testSettingsEnabled ? (
           <SettingsSection theme={theme} title="Data transfer">
             <SettingsRow
               description="Imports server-backed trips that are not already present on this device."
@@ -562,7 +563,7 @@ export default function SettingsScreen() {
           </SettingsSection>
         ) : null}
 
-        {isTestUser ? (
+        {testSettingsEnabled ? (
           <SettingsSection theme={theme} title="Debug">
             <SettingsRow
               description="Temporary helper that clears local SQLite trip data before restoring from server. Does not delete auth or photo files."
