@@ -49,12 +49,7 @@ import {
   isMotionActivityAvailableAsync,
   stopMotionActivityUpdates,
 } from "../../services/motion/motion-activity.service";
-import {
-  formatMissingTrailbookPermissions,
-  getTrailbookPermissionStatus,
-  requestTrailbookPermissions,
-  type TrailbookPermissionStatus,
-} from "../../services/permissions/permission-manager.service";
+import { useTrailbookPermissions } from "../../core/hooks/use-trailbook-permissions";
 import { clearAutoRecordingSamples } from "../../services/recording/auto-recording.service";
 import {
   closeActiveTrip,
@@ -156,7 +151,17 @@ export default function RecordingScreen() {
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
-  const [permissionStatus, setPermissionStatus] = useState<TrailbookPermissionStatus | null>(null);
+  const {
+    backgroundLocationPermissionGranted,
+    backgroundRecordingSupported,
+    locationPermissionGranted,
+    missingPermissionsText,
+    missingRequired,
+    permissionsReady,
+    refreshStatus,
+    requestPermissions,
+  } = useTrailbookPermissions();
+
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
   const [startModalVisible, setStartModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
@@ -166,8 +171,6 @@ export default function RecordingScreen() {
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
   const recordingTitleInputRef = useRef<TextInput | null>(null);
   const recordingDescriptionInputRef = useRef<TextInput | null>(null);
-  const permissionSetupPromptedRef = useRef(false);
-  const permissionSetupRunningRef = useRef(false);
 
   function logRecordingStartStep(step: string, details?: Record<string, unknown>) {
     console.warn("[Trailbook][recording-start]", details ? { step, ...details } : { step });
@@ -190,11 +193,6 @@ export default function RecordingScreen() {
   });
 
   const activeIdentitySession = identitySession;
-  const permissionsReady = permissionStatus?.allRequiredGranted === true;
-  const locationPermissionGranted = permissionStatus?.foregroundLocationGranted ?? null;
-  const backgroundRecordingSupported = permissionStatus?.backgroundLocationSupported ?? null;
-  const backgroundLocationPermissionGranted = permissionStatus?.backgroundLocationGranted ?? null;
-  const missingPermissionsText = formatMissingTrailbookPermissions(permissionStatus);
   const currentUserTrips = activeIdentitySession
     ? trips.filter((trip) => trip.userId === activeIdentitySession.userId)
     : [];
@@ -324,22 +322,6 @@ export default function RecordingScreen() {
     setWaypointModalVisible(true);
   }
 
-  async function runPermissionSetup() {
-    if (permissionSetupRunningRef.current) {
-      console.warn("[Trailbook][permission-setup]", { step: "skip-already-running" });
-      return;
-    }
-
-    permissionSetupRunningRef.current = true;
-    console.warn("[Trailbook][permission-setup]", { step: "button-pressed" });
-
-    try {
-      setPermissionStatus(await requestTrailbookPermissions());
-    } finally {
-      permissionSetupRunningRef.current = false;
-    }
-  }
-
   useEffect(() => {
     if (!startModalVisible) {
       return;
@@ -351,43 +333,6 @@ export default function RecordingScreen() {
 
     return () => clearTimeout(timeoutId);
   }, [startModalVisible]);
-
-  useEffect(() => {
-    permissionSetupPromptedRef.current = false;
-  }, [activeIdentitySession?.userId]);
-
-  useEffect(() => {
-    if (!activeIdentitySession || permissionSetupPromptedRef.current) {
-      return;
-    }
-
-    let active = true;
-
-    async function setupPermissionsAfterLogin() {
-      permissionSetupPromptedRef.current = true;
-      const currentStatus = await getTrailbookPermissionStatus();
-
-      if (!active) {
-        return;
-      }
-
-      setPermissionStatus(currentStatus);
-
-      if (!currentStatus.allRequiredGranted) {
-        const requestedStatus = await requestTrailbookPermissions();
-
-        if (active) {
-          setPermissionStatus(requestedStatus);
-        }
-      }
-    }
-
-    void setupPermissionsAfterLogin();
-
-    return () => {
-      active = false;
-    };
-  }, [activeIdentitySession?.userId]);
 
   useEffect(() => {
     let active = true;
@@ -421,33 +366,6 @@ export default function RecordingScreen() {
       stopWatchingLocation?.();
     };
   }, [activeRecordingProfile, activeTrip, locationPermissionGranted, recordingSession.status]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function refreshPermissions() {
-      const nextStatus = await getTrailbookPermissionStatus();
-
-      if (!active) {
-        return;
-      }
-
-      setPermissionStatus(nextStatus);
-    }
-
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      if (nextAppState === "active") {
-        void refreshPermissions();
-      }
-    });
-
-    void refreshPermissions();
-
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -599,8 +517,7 @@ export default function RecordingScreen() {
           backgroundTrackingProfile,
         });
       } catch (error) {
-        const refreshedPermissionStatus = await getTrailbookPermissionStatus();
-        setPermissionStatus(refreshedPermissionStatus);
+        const refreshedPermissionStatus = await refreshStatus();
         logRecordingStartStep("background-start-failed", {
           refreshedBackgroundPermissionGranted: refreshedPermissionStatus.backgroundLocationGranted,
           error: getErrorMessage(error),
@@ -906,10 +823,10 @@ export default function RecordingScreen() {
       "Camera permission needed",
       "Trailbook needs camera access to attach waypoint photos. Run permission setup again and allow camera access.",
       canAskAgain
-        ? [{ text: "Set up permissions", onPress: () => void runPermissionSetup() }]
+        ? [{ text: "Set up permissions", onPress: () => void requestPermissions() }]
         : [
             { text: "Cancel", style: "cancel" },
-            { text: "Set up permissions", onPress: () => void runPermissionSetup() },
+            { text: "Set up permissions", onPress: () => void requestPermissions() },
           ],
     );
   }
@@ -1713,7 +1630,7 @@ export default function RecordingScreen() {
               </Text>
             </Pressable>
           </View>
-          {permissionStatus && !permissionsReady ? (
+          {missingRequired !== null && !permissionsReady ? (
             <View style={styles.permissionWarningCard}>
               <Text style={styles.permissionWarningTitle}>Trailbook needs permissions</Text>
               <Text style={styles.permissionWarningText}>
@@ -1721,7 +1638,7 @@ export default function RecordingScreen() {
               </Text>
               <Pressable
                 hitSlop={10}
-                onPress={() => void runPermissionSetup()}
+                onPress={() => void requestPermissions()}
                 style={styles.permissionWarningButton}
               >
                 <Text style={styles.permissionWarningButtonText}>Set up permissions</Text>
