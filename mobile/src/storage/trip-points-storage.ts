@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripPoint } from "../domain/trips";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { migrateOnce } from "./sqlite/migrate-once";
 
 export interface TripStatsRow {
   distance_meters: number;
@@ -428,53 +429,55 @@ async function loadLegacyTripPointsFromAsyncStorage(): Promise<TripPoint[]> {
 }
 
 async function ensureTripPointsMigrated(): Promise<void> {
-  const database = await getDatabase();
-  const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM trip_points");
+  await migrateOnce("async-storage/trip-points", async () => {
+    const database = await getDatabase();
+    const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM trip_points");
 
-  if ((countRow?.count ?? 0) > 0) {
-    return;
-  }
-
-  const legacyTripPoints = await loadLegacyTripPointsFromAsyncStorage();
-
-  if (legacyTripPoints.length === 0) {
-    return;
-  }
-
-  await runExclusiveDatabaseWrite(async (database) => {
-    for (const tripPoint of legacyTripPoints) {
-      const row = toTripPointRow(tripPoint);
-      await database.runAsync(
-        `INSERT OR REPLACE INTO trip_points (
-          local_id,
-          server_id,
-          trip_local_id,
-          segment_local_id,
-          device_id,
-          user_id,
-          latitude,
-          longitude,
-          recorded_at,
-          accuracy,
-          altitude,
-          speed,
-          sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.local_id,
-        row.server_id,
-        row.trip_local_id,
-        row.segment_local_id,
-        row.device_id,
-        row.user_id,
-        row.latitude,
-        row.longitude,
-        row.recorded_at,
-        row.accuracy,
-        row.altitude,
-        row.speed,
-        row.sync_status,
-      );
+    if ((countRow?.count ?? 0) > 0) {
+      return;
     }
+
+    const legacyTripPoints = await loadLegacyTripPointsFromAsyncStorage();
+
+    if (legacyTripPoints.length === 0) {
+      return;
+    }
+
+    await runExclusiveDatabaseWrite(async (database) => {
+      for (const tripPoint of legacyTripPoints) {
+        const row = toTripPointRow(tripPoint);
+        await database.runAsync(
+          `INSERT OR REPLACE INTO trip_points (
+            local_id,
+            server_id,
+            trip_local_id,
+            segment_local_id,
+            device_id,
+            user_id,
+            latitude,
+            longitude,
+            recorded_at,
+            accuracy,
+            altitude,
+            speed,
+            sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          row.local_id,
+          row.server_id,
+          row.trip_local_id,
+          row.segment_local_id,
+          row.device_id,
+          row.user_id,
+          row.latitude,
+          row.longitude,
+          row.recorded_at,
+          row.accuracy,
+          row.altitude,
+          row.speed,
+          row.sync_status,
+        );
+      }
+    });
   });
 }
 

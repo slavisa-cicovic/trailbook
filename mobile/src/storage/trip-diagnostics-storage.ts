@@ -9,6 +9,7 @@ import type {
 } from "../domain/trip-diagnostics";
 import type { RecordingMode } from "../domain/trips";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { migrateOnce } from "./sqlite/migrate-once";
 
 function normalizeRecentEvent(
   value: Partial<TripDiagnosticsRecentEvent> & Pick<TripDiagnosticsRecentEvent, "receivedAt" | "recordedAt">,
@@ -199,79 +200,81 @@ async function loadLegacyTripDiagnosticsFromAsyncStorage(): Promise<TripDiagnost
 }
 
 async function ensureTripDiagnosticsMigrated(): Promise<void> {
-  const database = await getDatabase();
-  const countRow = await database.getFirstAsync<{ count: number }>(
-    "SELECT COUNT(*) as count FROM trip_diagnostics",
-  );
+  await migrateOnce("async-storage/trip-diagnostics", async () => {
+    const database = await getDatabase();
+    const countRow = await database.getFirstAsync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM trip_diagnostics",
+    );
 
-  if ((countRow?.count ?? 0) > 0) {
-    return;
-  }
-
-  const legacyTripDiagnostics = await loadLegacyTripDiagnosticsFromAsyncStorage();
-
-  if (legacyTripDiagnostics.length === 0) {
-    return;
-  }
-
-  await runExclusiveDatabaseWrite(async (database) => {
-    for (const tripDiagnostics of legacyTripDiagnostics) {
-      const row = toTripDiagnosticsRow(tripDiagnostics);
-      await database.runAsync(
-        `INSERT OR REPLACE INTO trip_diagnostics (
-          trip_local_id,
-          accepted,
-          accepted_after_long_gap,
-          accuracy_histogram_json,
-          background_accepted,
-          background_callbacks,
-          background_rejected,
-          callback_count,
-          decision_count,
-          duplicate_coordinates,
-          duplicate_timestamp,
-          foreground_accepted,
-          foreground_callbacks,
-          foreground_rejected,
-          max_callback_gap_ms,
-          max_recorded_gap_ms,
-          platform,
-          recent_events_json,
-          recording_mode,
-          rejected_by_accuracy,
-          rejected_by_implied_speed,
-          rejected_by_jump_distance,
-          rejected_by_min_movement,
-          session_duplicate_recorded_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.trip_local_id,
-        row.accepted,
-        row.accepted_after_long_gap,
-        row.accuracy_histogram_json,
-        row.background_accepted,
-        row.background_callbacks,
-        row.background_rejected,
-        row.callback_count,
-        row.decision_count,
-        row.duplicate_coordinates,
-        row.duplicate_timestamp,
-        row.foreground_accepted,
-        row.foreground_callbacks,
-        row.foreground_rejected,
-        row.max_callback_gap_ms,
-        row.max_recorded_gap_ms,
-        row.platform,
-        row.recent_events_json,
-        row.recording_mode,
-        row.rejected_by_accuracy,
-        row.rejected_by_implied_speed,
-        row.rejected_by_jump_distance,
-        row.rejected_by_min_movement,
-        row.session_duplicate_recorded_at,
-        row.updated_at,
-      );
+    if ((countRow?.count ?? 0) > 0) {
+      return;
     }
+
+    const legacyTripDiagnostics = await loadLegacyTripDiagnosticsFromAsyncStorage();
+
+    if (legacyTripDiagnostics.length === 0) {
+      return;
+    }
+
+    await runExclusiveDatabaseWrite(async (database) => {
+      for (const tripDiagnostics of legacyTripDiagnostics) {
+        const row = toTripDiagnosticsRow(tripDiagnostics);
+        await database.runAsync(
+          `INSERT OR REPLACE INTO trip_diagnostics (
+            trip_local_id,
+            accepted,
+            accepted_after_long_gap,
+            accuracy_histogram_json,
+            background_accepted,
+            background_callbacks,
+            background_rejected,
+            callback_count,
+            decision_count,
+            duplicate_coordinates,
+            duplicate_timestamp,
+            foreground_accepted,
+            foreground_callbacks,
+            foreground_rejected,
+            max_callback_gap_ms,
+            max_recorded_gap_ms,
+            platform,
+            recent_events_json,
+            recording_mode,
+            rejected_by_accuracy,
+            rejected_by_implied_speed,
+            rejected_by_jump_distance,
+            rejected_by_min_movement,
+            session_duplicate_recorded_at,
+            updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          row.trip_local_id,
+          row.accepted,
+          row.accepted_after_long_gap,
+          row.accuracy_histogram_json,
+          row.background_accepted,
+          row.background_callbacks,
+          row.background_rejected,
+          row.callback_count,
+          row.decision_count,
+          row.duplicate_coordinates,
+          row.duplicate_timestamp,
+          row.foreground_accepted,
+          row.foreground_callbacks,
+          row.foreground_rejected,
+          row.max_callback_gap_ms,
+          row.max_recorded_gap_ms,
+          row.platform,
+          row.recent_events_json,
+          row.recording_mode,
+          row.rejected_by_accuracy,
+          row.rejected_by_implied_speed,
+          row.rejected_by_jump_distance,
+          row.rejected_by_min_movement,
+          row.session_duplicate_recorded_at,
+          row.updated_at,
+        );
+      }
+    });
   });
 }
 

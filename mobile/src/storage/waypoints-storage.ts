@@ -4,6 +4,7 @@ import { DEFAULT_WAYPOINT_CATEGORY, normalizeWaypointCategory } from "../constan
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { Waypoint } from "../domain/trips";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { migrateOnce } from "./sqlite/migrate-once";
 
 function normalizeWaypoint(
   value: Partial<Waypoint> & Pick<Waypoint, "localId" | "tripLocalId" | "deviceId" | "userId">,
@@ -102,57 +103,59 @@ async function loadLegacyWaypointsFromAsyncStorage(): Promise<Waypoint[]> {
 }
 
 async function ensureWaypointsMigrated(): Promise<void> {
-  const database = await getDatabase();
-  const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM waypoints");
+  await migrateOnce("async-storage/waypoints", async () => {
+    const database = await getDatabase();
+    const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM waypoints");
 
-  if ((countRow?.count ?? 0) > 0) {
-    return;
-  }
-
-  const legacyWaypoints = await loadLegacyWaypointsFromAsyncStorage();
-
-  if (legacyWaypoints.length === 0) {
-    return;
-  }
-
-  await runExclusiveDatabaseWrite(async (database) => {
-    for (const waypoint of legacyWaypoints) {
-      const row = toWaypointRow(waypoint);
-      await database.runAsync(
-        `INSERT OR REPLACE INTO waypoints (
-          local_id,
-          server_id,
-          trip_local_id,
-          segment_local_id,
-          device_id,
-          user_id,
-          latitude,
-          longitude,
-          category,
-          title,
-          note,
-          created_at,
-          updated_at,
-          deleted_at,
-          sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.local_id,
-        row.server_id,
-        row.trip_local_id,
-        row.segment_local_id,
-        row.device_id,
-        row.user_id,
-        row.latitude,
-        row.longitude,
-        row.category,
-        row.title,
-        row.note,
-        row.created_at,
-        row.updated_at,
-        row.deleted_at,
-        row.sync_status,
-      );
+    if ((countRow?.count ?? 0) > 0) {
+      return;
     }
+
+    const legacyWaypoints = await loadLegacyWaypointsFromAsyncStorage();
+
+    if (legacyWaypoints.length === 0) {
+      return;
+    }
+
+    await runExclusiveDatabaseWrite(async (database) => {
+      for (const waypoint of legacyWaypoints) {
+        const row = toWaypointRow(waypoint);
+        await database.runAsync(
+          `INSERT OR REPLACE INTO waypoints (
+            local_id,
+            server_id,
+            trip_local_id,
+            segment_local_id,
+            device_id,
+            user_id,
+            latitude,
+            longitude,
+            category,
+            title,
+            note,
+            created_at,
+            updated_at,
+            deleted_at,
+            sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          row.local_id,
+          row.server_id,
+          row.trip_local_id,
+          row.segment_local_id,
+          row.device_id,
+          row.user_id,
+          row.latitude,
+          row.longitude,
+          row.category,
+          row.title,
+          row.note,
+          row.created_at,
+          row.updated_at,
+          row.deleted_at,
+          row.sync_status,
+        );
+      }
+    });
   });
 }
 

@@ -4,6 +4,7 @@ import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { WaypointAttachment } from "../domain/trips";
 import { resolveStoredPhotoUri } from "../services/media/photo-storage.service";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { migrateOnce } from "./sqlite/migrate-once";
 
 function normalizeWaypointAttachment(
   value: Partial<WaypointAttachment> &
@@ -96,55 +97,57 @@ async function loadLegacyWaypointAttachmentsFromAsyncStorage(): Promise<Waypoint
 }
 
 async function ensureWaypointAttachmentsMigrated(): Promise<void> {
-  const database = await getDatabase();
-  const countRow = await database.getFirstAsync<{ count: number }>(
-    "SELECT COUNT(*) as count FROM waypoint_attachments",
-  );
+  await migrateOnce("async-storage/waypoint-attachments", async () => {
+    const database = await getDatabase();
+    const countRow = await database.getFirstAsync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM waypoint_attachments",
+    );
 
-  if ((countRow?.count ?? 0) > 0) {
-    return;
-  }
-
-  const legacyAttachments = await loadLegacyWaypointAttachmentsFromAsyncStorage();
-
-  if (legacyAttachments.length === 0) {
-    return;
-  }
-
-  await runExclusiveDatabaseWrite(async (database) => {
-    for (const attachment of legacyAttachments) {
-      const row = toWaypointAttachmentRow(attachment);
-      await database.runAsync(
-        `INSERT OR REPLACE INTO waypoint_attachments (
-          local_id,
-          server_id,
-          waypoint_local_id,
-          device_id,
-          user_id,
-          type,
-          local_uri,
-          mime_type,
-          file_size,
-          created_at,
-          updated_at,
-          deleted_at,
-          sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.local_id,
-        row.server_id,
-        row.waypoint_local_id,
-        row.device_id,
-        row.user_id,
-        row.type,
-        row.local_uri,
-        row.mime_type,
-        row.file_size,
-        row.created_at,
-        row.updated_at,
-        row.deleted_at,
-        row.sync_status,
-      );
+    if ((countRow?.count ?? 0) > 0) {
+      return;
     }
+
+    const legacyAttachments = await loadLegacyWaypointAttachmentsFromAsyncStorage();
+
+    if (legacyAttachments.length === 0) {
+      return;
+    }
+
+    await runExclusiveDatabaseWrite(async (database) => {
+      for (const attachment of legacyAttachments) {
+        const row = toWaypointAttachmentRow(attachment);
+        await database.runAsync(
+          `INSERT OR REPLACE INTO waypoint_attachments (
+            local_id,
+            server_id,
+            waypoint_local_id,
+            device_id,
+            user_id,
+            type,
+            local_uri,
+            mime_type,
+            file_size,
+            created_at,
+            updated_at,
+            deleted_at,
+            sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          row.local_id,
+          row.server_id,
+          row.waypoint_local_id,
+          row.device_id,
+          row.user_id,
+          row.type,
+          row.local_uri,
+          row.mime_type,
+          row.file_size,
+          row.created_at,
+          row.updated_at,
+          row.deleted_at,
+          row.sync_status,
+        );
+      }
+    });
   });
 }
 

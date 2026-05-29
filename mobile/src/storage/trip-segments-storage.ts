@@ -4,6 +4,7 @@ import { DEFAULT_RECORDING_PROFILE, normalizeRecordingProfile } from "../constan
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripSegment } from "../domain/trips";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { migrateOnce } from "./sqlite/migrate-once";
 import { refreshTripSegmentStatsForTripLocalIds, refreshTripStatsForTripLocalIds } from "./trip-points-storage";
 
 function normalizeTripSegment(
@@ -103,65 +104,67 @@ async function loadLegacyTripSegmentsFromAsyncStorage(): Promise<TripSegment[]> 
 }
 
 async function ensureTripSegmentsMigrated(): Promise<void> {
-  const database = await getDatabase();
-  const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM trip_segments");
+  await migrateOnce("async-storage/trip-segments", async () => {
+    const database = await getDatabase();
+    const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM trip_segments");
 
-  if ((countRow?.count ?? 0) > 0) {
-    return;
-  }
-
-  const legacyTripSegments = await loadLegacyTripSegmentsFromAsyncStorage();
-
-  if (legacyTripSegments.length === 0) {
-    return;
-  }
-
-  await runExclusiveDatabaseWrite(async (database) => {
-    for (const tripSegment of legacyTripSegments) {
-      const row = toTripSegmentRow(tripSegment);
-      await database.runAsync(
-        `INSERT OR REPLACE INTO trip_segments (
-          local_id,
-          server_id,
-          trip_local_id,
-          device_id,
-          user_id,
-          recording_profile,
-          point_count,
-          distance_meters,
-          duration_ms,
-          stats_updated_at,
-          started_at,
-          ended_at,
-          created_at,
-          updated_at,
-          sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.local_id,
-        row.server_id,
-        row.trip_local_id,
-        row.device_id,
-        row.user_id,
-        row.recording_profile,
-        row.point_count,
-        row.distance_meters,
-        row.duration_ms,
-        row.stats_updated_at,
-        row.started_at,
-        row.ended_at,
-        row.created_at,
-        row.updated_at,
-        row.sync_status,
-      );
+    if ((countRow?.count ?? 0) > 0) {
+      return;
     }
-  });
 
-  await refreshTripSegmentStatsForTripLocalIds(
-    Array.from(new Set(legacyTripSegments.map((tripSegment) => tripSegment.tripLocalId))),
-  );
-  await refreshTripStatsForTripLocalIds(
-    Array.from(new Set(legacyTripSegments.map((tripSegment) => tripSegment.tripLocalId))),
-  );
+    const legacyTripSegments = await loadLegacyTripSegmentsFromAsyncStorage();
+
+    if (legacyTripSegments.length === 0) {
+      return;
+    }
+
+    await runExclusiveDatabaseWrite(async (database) => {
+      for (const tripSegment of legacyTripSegments) {
+        const row = toTripSegmentRow(tripSegment);
+        await database.runAsync(
+          `INSERT OR REPLACE INTO trip_segments (
+            local_id,
+            server_id,
+            trip_local_id,
+            device_id,
+            user_id,
+            recording_profile,
+            point_count,
+            distance_meters,
+            duration_ms,
+            stats_updated_at,
+            started_at,
+            ended_at,
+            created_at,
+            updated_at,
+            sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          row.local_id,
+          row.server_id,
+          row.trip_local_id,
+          row.device_id,
+          row.user_id,
+          row.recording_profile,
+          row.point_count,
+          row.distance_meters,
+          row.duration_ms,
+          row.stats_updated_at,
+          row.started_at,
+          row.ended_at,
+          row.created_at,
+          row.updated_at,
+          row.sync_status,
+        );
+      }
+    });
+
+    await refreshTripSegmentStatsForTripLocalIds(
+      Array.from(new Set(legacyTripSegments.map((tripSegment) => tripSegment.tripLocalId))),
+    );
+    await refreshTripStatsForTripLocalIds(
+      Array.from(new Set(legacyTripSegments.map((tripSegment) => tripSegment.tripLocalId))),
+    );
+  });
 }
 
 export async function loadTripSegments(): Promise<TripSegment[]> {

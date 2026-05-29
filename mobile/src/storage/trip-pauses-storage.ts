@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripPause } from "../domain/trips";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { migrateOnce } from "./sqlite/migrate-once";
 
 function normalizeTripPause(
   value: Partial<TripPause> & Pick<TripPause, "localId" | "tripLocalId" | "deviceId" | "userId">,
@@ -81,47 +82,49 @@ async function loadLegacyTripPausesFromAsyncStorage(): Promise<TripPause[]> {
 }
 
 async function ensureTripPausesMigrated(): Promise<void> {
-  const database = await getDatabase();
-  const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM trip_pauses");
+  await migrateOnce("async-storage/trip-pauses", async () => {
+    const database = await getDatabase();
+    const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM trip_pauses");
 
-  if ((countRow?.count ?? 0) > 0) {
-    return;
-  }
-
-  const legacyTripPauses = await loadLegacyTripPausesFromAsyncStorage();
-
-  if (legacyTripPauses.length === 0) {
-    return;
-  }
-
-  await runExclusiveDatabaseWrite(async (database) => {
-    for (const tripPause of legacyTripPauses) {
-      const row = toTripPauseRow(tripPause);
-      await database.runAsync(
-        `INSERT OR REPLACE INTO trip_pauses (
-          local_id,
-          server_id,
-          trip_local_id,
-          device_id,
-          user_id,
-          started_at,
-          ended_at,
-          created_at,
-          updated_at,
-          sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.local_id,
-        row.server_id,
-        row.trip_local_id,
-        row.device_id,
-        row.user_id,
-        row.started_at,
-        row.ended_at,
-        row.created_at,
-        row.updated_at,
-        row.sync_status,
-      );
+    if ((countRow?.count ?? 0) > 0) {
+      return;
     }
+
+    const legacyTripPauses = await loadLegacyTripPausesFromAsyncStorage();
+
+    if (legacyTripPauses.length === 0) {
+      return;
+    }
+
+    await runExclusiveDatabaseWrite(async (database) => {
+      for (const tripPause of legacyTripPauses) {
+        const row = toTripPauseRow(tripPause);
+        await database.runAsync(
+          `INSERT OR REPLACE INTO trip_pauses (
+            local_id,
+            server_id,
+            trip_local_id,
+            device_id,
+            user_id,
+            started_at,
+            ended_at,
+            created_at,
+            updated_at,
+            sync_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          row.local_id,
+          row.server_id,
+          row.trip_local_id,
+          row.device_id,
+          row.user_id,
+          row.started_at,
+          row.ended_at,
+          row.created_at,
+          row.updated_at,
+          row.sync_status,
+        );
+      }
+    });
   });
 }
 
