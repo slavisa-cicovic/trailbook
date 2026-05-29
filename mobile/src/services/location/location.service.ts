@@ -34,26 +34,6 @@ export function toSnapshot(location: Location.LocationObject): CurrentLocationSn
   };
 }
 
-export async function requestForegroundLocationAccess(): Promise<boolean> {
-  const permission = await Location.requestForegroundPermissionsAsync();
-  return permission.granted;
-}
-
-export async function getForegroundLocationAccess(): Promise<boolean> {
-  const permission = await Location.getForegroundPermissionsAsync();
-  return permission.granted;
-}
-
-export async function requestBackgroundLocationAccess(): Promise<boolean> {
-  const permission = await Location.requestBackgroundPermissionsAsync();
-  return permission.granted;
-}
-
-export async function getBackgroundLocationAccess(): Promise<boolean> {
-  const permission = await Location.getBackgroundPermissionsAsync();
-  return permission.granted;
-}
-
 export async function isBackgroundLocationTrackingSupported(): Promise<boolean> {
   return TaskManager.isAvailableAsync();
 }

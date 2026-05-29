@@ -5,6 +5,7 @@ import type { RecordingStatus } from "../../domain/trips";
 
 interface RecordingControlProps {
   compact?: boolean;
+  disabled?: boolean;
   onPress: () => void;
   status: RecordingStatus;
 }
@@ -40,6 +41,7 @@ const controlByStatus: Record<
 
 export default function RecordingControl({
   compact = false,
+  disabled = false,
   onPress,
   status,
 }: RecordingControlProps) {
@@ -48,9 +50,11 @@ export default function RecordingControl({
   return (
     <View style={styles.wrapper}>
       <Pressable
+        disabled={disabled}
         onPress={onPress}
         style={[
           styles.outerRing,
+          disabled && styles.outerRingDisabled,
           {
             backgroundColor: config.ringColor,
           },
@@ -84,6 +88,9 @@ const styles = StyleSheet.create({
     borderRadius: 41,
     alignItems: "center",
     justifyContent: "center",
+  },
+  outerRingDisabled: {
+    opacity: 0.45,
   },
   innerButton: {
     width: 60,

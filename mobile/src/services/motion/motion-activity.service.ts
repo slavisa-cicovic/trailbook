@@ -6,36 +6,6 @@ import TrailbookMotionActivity from "./trailbook-motion-activity.native";
 
 const MOTION_ACTIVITY_MAX_AGE_MS = 10 * 60 * 1000;
 
-async function ensureAndroidActivityRecognitionPermission(): Promise<boolean> {
-  if (Platform.OS !== "android") {
-    return true;
-  }
-
-  if (typeof Platform.Version === "number" && Platform.Version < 29) {
-    return true;
-  }
-
-  const permission = PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION;
-
-  if (!permission) {
-    return false;
-  }
-
-  if (await PermissionsAndroid.check(permission)) {
-    return true;
-  }
-
-  const status = await PermissionsAndroid.request(permission, {
-    title: "Activity recognition",
-    message:
-      "Trailbook uses motion activity to distinguish walking, cycling, and driving more reliably in auto mode.",
-    buttonPositive: "Allow",
-    buttonNegative: "Deny",
-  });
-
-  return status === PermissionsAndroid.RESULTS.GRANTED;
-}
-
 export async function getMotionActivityAccess(): Promise<boolean> {
   if (!(await isMotionActivityAvailableAsync())) {
     return true;
@@ -58,14 +28,6 @@ export async function getMotionActivityAccess(): Promise<boolean> {
   return PermissionsAndroid.check(permission);
 }
 
-export async function requestMotionActivityAccess(): Promise<boolean> {
-  if (!(await isMotionActivityAvailableAsync())) {
-    return true;
-  }
-
-  return ensureAndroidActivityRecognitionPermission();
-}
-
 export async function isMotionActivityAvailableAsync(): Promise<boolean> {
   if (!TrailbookMotionActivity) {
     return false;
@@ -83,7 +45,7 @@ export async function ensureMotionActivityUpdatesForAutoMode(): Promise<boolean>
     return false;
   }
 
-  if (!(await ensureAndroidActivityRecognitionPermission())) {
+  if (!(await getMotionActivityAccess())) {
     return false;
   }
 

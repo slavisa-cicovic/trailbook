@@ -5,11 +5,9 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   Pressable,
-  PermissionsAndroid,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,7 +16,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Redirect } from "expo-router";
-import Constants from "expo-constants";
 import { MaterialIcons } from "@expo/vector-icons";
 import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 
@@ -37,12 +34,7 @@ import {
 import type { RecordingMode, RecordingProfile } from "../../domain/trips";
 import type { TrailbookMapType } from "../trips/components/trip-route-map";
 import {
-  getBackgroundLocationAccess,
   getCurrentForegroundLocation,
-  getForegroundLocationAccess,
-  isBackgroundLocationTrackingSupported,
-  requestBackgroundLocationAccess,
-  requestForegroundLocationAccess,
   restartBackgroundLocationTracking,
   startBackgroundLocationTracking,
   startBackgroundLocationTrackingWithRetry,
@@ -54,11 +46,15 @@ import {
 import { getBatterySnapshot } from "../../services/device/battery.service";
 import {
   ensureMotionActivityUpdatesForAutoMode,
-  getMotionActivityAccess,
   isMotionActivityAvailableAsync,
-  requestMotionActivityAccess,
   stopMotionActivityUpdates,
 } from "../../services/motion/motion-activity.service";
+import {
+  formatMissingTrailbookPermissions,
+  getTrailbookPermissionStatus,
+  requestTrailbookPermissions,
+  type TrailbookPermissionStatus,
+} from "../../services/permissions/permission-manager.service";
 import { clearAutoRecordingSamples } from "../../services/recording/auto-recording.service";
 import {
   closeActiveTrip,
@@ -85,10 +81,8 @@ import {
 import { getVisibleTripPausesForTrip } from "../../services/trip-pauses/trip-pauses.service";
 import {
   capturePhotoWithCamera,
-  getCameraAccess,
   isCameraPermissionDeniedError,
   pickPhotosFromLibrary,
-  requestCameraAccess,
 } from "../../services/media/photo-picker.service";
 import {
   DEMO_MONTHLY_TRIP_LIMIT,
@@ -135,8 +129,6 @@ import {
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 
-const RUNS_IN_EXPO_GO = Constants.executionEnvironment === "storeClient";
-
 function getBackgroundTrackingProfileForSession(
   recordingMode: RecordingMode,
   recordingProfile: RecordingProfile,
@@ -164,11 +156,7 @@ export default function RecordingScreen() {
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
-  const [locationPermissionGranted, setLocationPermissionGranted] = useState<boolean | null>(null);
-  const [backgroundRecordingSupported, setBackgroundRecordingSupported] = useState<boolean | null>(null);
-  const [backgroundLocationPermissionGranted, setBackgroundLocationPermissionGranted] = useState<boolean | null>(
-    null,
-  );
+  const [permissionStatus, setPermissionStatus] = useState<TrailbookPermissionStatus | null>(null);
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
   const [startModalVisible, setStartModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
@@ -185,42 +173,8 @@ export default function RecordingScreen() {
     console.warn("[Trailbook][recording-start]", details ? { step, ...details } : { step });
   }
 
-  function logPermissionSetupStep(step: string, details?: Record<string, unknown>) {
-    console.warn("[Trailbook][permission-setup]", details ? { step, ...details } : { step });
-  }
-
   function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
-  }
-
-  async function getNotificationAccess() {
-    if (Platform.OS !== "android" || typeof Platform.Version !== "number" || Platform.Version < 33) {
-      return true;
-    }
-
-    const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
-    return permission ? PermissionsAndroid.check(permission) : true;
-  }
-
-  async function requestNotificationAccess() {
-    if (Platform.OS !== "android" || typeof Platform.Version !== "number" || Platform.Version < 33) {
-      return true;
-    }
-
-    const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
-
-    if (!permission || (await PermissionsAndroid.check(permission))) {
-      return true;
-    }
-
-    const status = await PermissionsAndroid.request(permission, {
-      title: "Recording notification",
-      message: "Trailbook needs notifications so Android can keep the recording service visible.",
-      buttonPositive: "Allow",
-      buttonNegative: "Deny",
-    });
-
-    return status === PermissionsAndroid.RESULTS.GRANTED;
   }
 
   const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>({
@@ -236,6 +190,11 @@ export default function RecordingScreen() {
   });
 
   const activeIdentitySession = identitySession;
+  const permissionsReady = permissionStatus?.allRequiredGranted === true;
+  const locationPermissionGranted = permissionStatus?.foregroundLocationGranted ?? null;
+  const backgroundRecordingSupported = permissionStatus?.backgroundLocationSupported ?? null;
+  const backgroundLocationPermissionGranted = permissionStatus?.backgroundLocationGranted ?? null;
+  const missingPermissionsText = formatMissingTrailbookPermissions(permissionStatus);
   const currentUserTrips = activeIdentitySession
     ? trips.filter((trip) => trip.userId === activeIdentitySession.userId)
     : [];
@@ -288,7 +247,7 @@ export default function RecordingScreen() {
     ),
   }));
   const canChangeMode = recordingSession.activeTripId !== null;
-  const canStartRecording = recordingDraft.title.trim().length > 0;
+  const canStartRecording = recordingDraft.title.trim().length > 0 && permissionsReady;
   const canSaveWaypoint = waypointDraft.title.trim().length > 0;
   const draftPhotoCardWidth = Math.min(Math.max(screenWidth * 0.5, 170), 230);
   const selectedPhotoAttachment =
@@ -346,21 +305,6 @@ export default function RecordingScreen() {
     }
   }
 
-  function promptOpenBackgroundLocationSettings(message: string) {
-    Alert.alert("Background permission not enabled", message, [
-      {
-        text: "Not now",
-        style: "cancel",
-      },
-      {
-        text: "Open Settings",
-        onPress: () => {
-          void Linking.openSettings();
-        },
-      },
-    ]);
-  }
-
   function resetWaypointDraft() {
     setWaypointDraft({
       category: DEFAULT_WAYPOINT_CATEGORY,
@@ -382,61 +326,17 @@ export default function RecordingScreen() {
 
   async function runPermissionSetup() {
     if (permissionSetupRunningRef.current) {
+      console.warn("[Trailbook][permission-setup]", { step: "skip-already-running" });
       return;
     }
 
     permissionSetupRunningRef.current = true;
-    logPermissionSetupStep("start");
+    console.warn("[Trailbook][permission-setup]", { step: "button-pressed" });
 
     try {
-      const foregroundGranted = await requestForegroundLocationAccess();
-      setLocationPermissionGranted(foregroundGranted);
-      logPermissionSetupStep("foreground-location", { granted: foregroundGranted });
-
-      const backgroundSupported = await isBackgroundLocationTrackingSupported();
-      setBackgroundRecordingSupported(backgroundSupported);
-      logPermissionSetupStep("background-supported", { supported: backgroundSupported });
-
-      if (foregroundGranted && backgroundSupported) {
-        let backgroundGranted = false;
-
-        try {
-          backgroundGranted = await requestBackgroundLocationAccess();
-
-          if (!backgroundGranted) {
-            backgroundGranted = await getBackgroundLocationAccess();
-          }
-        } catch (error) {
-          logPermissionSetupStep("background-location", {
-            granted: false,
-            error: getErrorMessage(error),
-          });
-        }
-
-        setBackgroundLocationPermissionGranted(backgroundGranted);
-        if (backgroundGranted) {
-          logPermissionSetupStep("background-location", { granted: true });
-        }
-      }
-
-      const motionGranted = await requestMotionActivityAccess();
-      logPermissionSetupStep("motion-activity", { granted: motionGranted });
-
-      const notificationGranted = await requestNotificationAccess();
-      logPermissionSetupStep("notification", { granted: notificationGranted });
-
-      try {
-        await requestCameraAccess();
-        logPermissionSetupStep("camera", { granted: true });
-      } catch (error) {
-        logPermissionSetupStep("camera", {
-          granted: false,
-          error: getErrorMessage(error),
-        });
-      }
+      setPermissionStatus(await requestTrailbookPermissions());
     } finally {
       permissionSetupRunningRef.current = false;
-      logPermissionSetupStep("done");
     }
   }
 
@@ -453,65 +353,36 @@ export default function RecordingScreen() {
   }, [startModalVisible]);
 
   useEffect(() => {
+    permissionSetupPromptedRef.current = false;
+  }, [activeIdentitySession?.userId]);
+
+  useEffect(() => {
     if (!activeIdentitySession || permissionSetupPromptedRef.current) {
       return;
     }
 
     let active = true;
 
-    async function maybePromptPermissionSetup() {
-      const backgroundSupported = await isBackgroundLocationTrackingSupported();
-      const foregroundGranted = await getForegroundLocationAccess();
-      const backgroundGranted = backgroundSupported ? await getBackgroundLocationAccess() : true;
-      const motionGranted = await getMotionActivityAccess();
-      const notificationGranted = await getNotificationAccess();
-      const cameraGranted = await getCameraAccess();
+    async function setupPermissionsAfterLogin() {
+      permissionSetupPromptedRef.current = true;
+      const currentStatus = await getTrailbookPermissionStatus();
 
       if (!active) {
         return;
       }
 
-      setBackgroundRecordingSupported(backgroundSupported);
-      setLocationPermissionGranted(foregroundGranted);
-      setBackgroundLocationPermissionGranted(backgroundSupported ? backgroundGranted : false);
+      setPermissionStatus(currentStatus);
 
-      const missingPermissions =
-        !foregroundGranted || !backgroundGranted || !motionGranted || !notificationGranted || !cameraGranted;
+      if (!currentStatus.allRequiredGranted) {
+        const requestedStatus = await requestTrailbookPermissions();
 
-      logPermissionSetupStep("status", {
-        foregroundGranted,
-        backgroundGranted,
-        backgroundSupported,
-        cameraGranted,
-        motionGranted,
-        notificationGranted,
-      });
-
-      if (!missingPermissions) {
-        return;
+        if (active) {
+          setPermissionStatus(requestedStatus);
+        }
       }
-
-      if (RUNS_IN_EXPO_GO) {
-        logPermissionSetupStep("skip-expo-go");
-        return;
-      }
-
-      permissionSetupPromptedRef.current = true;
-      Alert.alert(
-        "Set up Trailbook permissions",
-        "Trailbook needs location all the time for background recording, motion activity for Auto mode, notifications for Android recording service, and camera access for waypoint photos.",
-        [
-          {
-            text: "Set up now",
-            onPress: () => {
-              void runPermissionSetup();
-            },
-          },
-        ],
-      );
     }
 
-    void maybePromptPermissionSetup();
+    void setupPermissionsAfterLogin();
 
     return () => {
       active = false;
@@ -523,34 +394,8 @@ export default function RecordingScreen() {
     let stopWatchingLocation: (() => void) | null = null;
 
     async function hydrateLocation() {
-      const backgroundSupported = await isBackgroundLocationTrackingSupported();
-
-      if (!active) {
+      if (locationPermissionGranted !== true) {
         return;
-      }
-
-      setBackgroundRecordingSupported(backgroundSupported);
-
-      const granted = await getForegroundLocationAccess();
-
-      if (!active) {
-        return;
-      }
-
-      setLocationPermissionGranted(granted);
-
-      if (!granted) {
-        return;
-      }
-
-      if (backgroundSupported) {
-        const backgroundGranted = await getBackgroundLocationAccess();
-
-        if (!active) {
-          return;
-        }
-
-        setBackgroundLocationPermissionGranted(backgroundGranted);
       }
 
       const initialLocation = await getCurrentForegroundLocation();
@@ -575,35 +420,28 @@ export default function RecordingScreen() {
       active = false;
       stopWatchingLocation?.();
     };
-  }, [activeRecordingProfile, activeTrip, recordingSession.status]);
+  }, [activeRecordingProfile, activeTrip, locationPermissionGranted, recordingSession.status]);
 
   useEffect(() => {
     let active = true;
 
-    async function refreshBackgroundPermission() {
-      const backgroundSupported = await isBackgroundLocationTrackingSupported();
+    async function refreshPermissions() {
+      const nextStatus = await getTrailbookPermissionStatus();
 
       if (!active) {
         return;
       }
 
-      setBackgroundRecordingSupported(backgroundSupported);
-
-      if (!backgroundSupported) {
-        setBackgroundLocationPermissionGranted(false);
-        return;
-      }
-
-      setBackgroundLocationPermissionGranted(await getBackgroundLocationAccess());
+      setPermissionStatus(nextStatus);
     }
 
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (nextAppState === "active") {
-        void refreshBackgroundPermission();
+        void refreshPermissions();
       }
     });
 
-    void refreshBackgroundPermission();
+    void refreshPermissions();
 
     return () => {
       active = false;
@@ -711,61 +549,10 @@ export default function RecordingScreen() {
       return;
     }
 
-    const foregroundGranted =
-      locationPermissionGranted ?? (await requestForegroundLocationAccess());
-
-    setLocationPermissionGranted(foregroundGranted);
-    logRecordingStartStep("foreground-permission", { foregroundGranted });
-
-    if (!foregroundGranted) {
-      logRecordingStartStep("blocked-foreground-permission");
-      Alert.alert(
-        "Location required",
-        "Allow location access so Trailbook can start recording this trip.",
-      );
-      return;
-    }
-
-    const supportsBackgroundRecording =
-      backgroundRecordingSupported ?? (await isBackgroundLocationTrackingSupported());
-
-    setBackgroundRecordingSupported(supportsBackgroundRecording);
-    logRecordingStartStep("background-support", { supportsBackgroundRecording });
-
-    if (!supportsBackgroundRecording) {
-      logRecordingStartStep("blocked-background-unsupported");
-      Alert.alert(
-        "Recording unavailable",
-        "Trailbook could not start background trip recording on this device.",
-      );
-      return;
-    }
-
-    let backgroundPermissionGranted = backgroundLocationPermissionGranted ?? false;
-
-    if (!backgroundPermissionGranted) {
-      try {
-        backgroundPermissionGranted = await requestBackgroundLocationAccess();
-        setBackgroundLocationPermissionGranted(backgroundPermissionGranted);
-        logRecordingStartStep("background-permission-request", { backgroundPermissionGranted });
-      } catch {
-        backgroundPermissionGranted = false;
-        setBackgroundLocationPermissionGranted(false);
-        logRecordingStartStep("background-permission-request-failed");
-      }
-    }
-
-    if (!backgroundPermissionGranted) {
-      backgroundPermissionGranted = await getBackgroundLocationAccess();
-      setBackgroundLocationPermissionGranted(backgroundPermissionGranted);
-      logRecordingStartStep("background-permission-refresh", { backgroundPermissionGranted });
-    }
-
-    if (!backgroundPermissionGranted) {
-      logRecordingStartStep("blocked-background-permission");
-      promptOpenBackgroundLocationSettings(
-        "Trailbook needs location permission set to allow all the time before it can start recording. Open app settings and enable Location > Allow all the time.",
-      );
+    if (!permissionsReady) {
+      logRecordingStartStep("blocked-permissions", {
+        missingRequired: permissionStatus?.missingRequired ?? null,
+      });
       return;
     }
 
@@ -812,18 +599,12 @@ export default function RecordingScreen() {
           backgroundTrackingProfile,
         });
       } catch (error) {
-        const refreshedBackgroundPermissionGranted = await getBackgroundLocationAccess();
-        setBackgroundLocationPermissionGranted(refreshedBackgroundPermissionGranted);
+        const refreshedPermissionStatus = await getTrailbookPermissionStatus();
+        setPermissionStatus(refreshedPermissionStatus);
         logRecordingStartStep("background-start-failed", {
-          refreshedBackgroundPermissionGranted,
+          refreshedBackgroundPermissionGranted: refreshedPermissionStatus.backgroundLocationGranted,
           error: getErrorMessage(error),
         });
-
-        if (!refreshedBackgroundPermissionGranted) {
-          promptOpenBackgroundLocationSettings(
-            "Trailbook needs location permission set to allow all the time before it can start recording. Open app settings and enable Location > Allow all the time.",
-          );
-        }
 
         throw error;
       }
@@ -1123,12 +904,12 @@ export default function RecordingScreen() {
   function showCameraPermissionAlert(canAskAgain: boolean) {
     Alert.alert(
       "Camera permission needed",
-      "Trailbook needs camera access to attach waypoint photos.",
+      "Trailbook needs camera access to attach waypoint photos. Run permission setup again and allow camera access.",
       canAskAgain
-        ? [{ text: "OK" }]
+        ? [{ text: "Set up permissions", onPress: () => void runPermissionSetup() }]
         : [
             { text: "Cancel", style: "cancel" },
-            { text: "Open settings", onPress: () => void Linking.openSettings() },
+            { text: "Set up permissions", onPress: () => void runPermissionSetup() },
           ],
     );
   }
@@ -1377,6 +1158,10 @@ export default function RecordingScreen() {
 
   function handleRecordingControlPress() {
     if (recordingSession.status === "idle") {
+      if (!permissionsReady) {
+        return;
+      }
+
       setStartModalVisible(true);
       return;
     }
@@ -1910,6 +1695,7 @@ export default function RecordingScreen() {
           <View style={styles.sessionBar}>
             <RecordingControl
               compact
+              disabled={recordingSession.status === "idle" && !permissionsReady}
               onPress={handleRecordingControlPress}
               status={recordingSession.status}
             />
@@ -1919,12 +1705,29 @@ export default function RecordingScreen() {
             >
               <Text style={styles.sessionTriggerLabel}>{sessionTriggerLabel}</Text>
               <Text style={styles.sessionTriggerMeta}>
-                {recordingSession.status === "idle"
+                {recordingSession.status === "idle" && !permissionsReady
+                  ? "Trailbook permissions required"
+                  : recordingSession.status === "idle"
                   ? "Tap for session details"
                   : `${recordingSession.status} • tap for details`}
               </Text>
             </Pressable>
           </View>
+          {permissionStatus && !permissionsReady ? (
+            <View style={styles.permissionWarningCard}>
+              <Text style={styles.permissionWarningTitle}>Trailbook needs permissions</Text>
+              <Text style={styles.permissionWarningText}>
+                Start recording is disabled until these are allowed: {missingPermissionsText}.
+              </Text>
+              <Pressable
+                hitSlop={10}
+                onPress={() => void runPermissionSetup()}
+                style={styles.permissionWarningButton}
+              >
+                <Text style={styles.permissionWarningButtonText}>Set up permissions</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <View style={styles.mapTypeBar}>
             {mapTypeOptions.map((option) => {
               const selected = option.value === mapType;
@@ -2491,6 +2294,8 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     gap: 10,
+    zIndex: 30,
+    elevation: 30,
   },
   sessionBar: {
     width: "100%",
@@ -2542,6 +2347,39 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: "#60705d",
+  },
+  permissionWarningCard: {
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 253, 248, 0.96)",
+    padding: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#e2b15c",
+    zIndex: 31,
+    elevation: 31,
+  },
+  permissionWarningTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#8a5217",
+  },
+  permissionWarningText: {
+    fontSize: 13,
+    color: "#5b4a31",
+  },
+  permissionWarningButton: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    backgroundColor: "#243224",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    zIndex: 32,
+    elevation: 32,
+  },
+  permissionWarningButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fffdf8",
   },
   drawerOverlay: {
     ...StyleSheet.absoluteFillObject,
