@@ -15,6 +15,7 @@ const EARLY_SESSION_THRESHOLD_MS = 2 * 60 * 1000;
 interface AppendTripPointContext {
   sessionStartedAt?: string | null;
   tripStartedAt?: string | null;
+  lastSequentialTripPoint?: TripPoint | null;
 }
 
 interface PendingContinuityCandidate {
@@ -230,6 +231,26 @@ function getImpliedSpeedKmh(previousPoint: TripPoint, nextTripPoint: TripPoint, 
   }
 
   return (distanceMeters / deltaSeconds) * 3.6;
+}
+
+function getImpliedSpeedAnchor(
+  previousAccepted: TripPoint,
+  lastSequential: TripPoint | null | undefined,
+  nextTripPoint: TripPoint,
+): TripPoint {
+  if (!lastSequential) {
+    return previousAccepted;
+  }
+
+  const lastSequentialMs = new Date(lastSequential.recordedAt).getTime();
+  const previousAcceptedMs = new Date(previousAccepted.recordedAt).getTime();
+  const nextMs = new Date(nextTripPoint.recordedAt).getTime();
+
+  if (lastSequentialMs > previousAcceptedMs && lastSequentialMs < nextMs) {
+    return lastSequential;
+  }
+
+  return previousAccepted;
 }
 
 function getElapsedMs(previousPoint: TripPoint, nextTripPoint: TripPoint): number {
@@ -546,7 +567,11 @@ export function appendTripPointIfUseful(
     return tripPoints;
   }
 
-  const impliedSpeedKmh = getImpliedSpeedKmh(previousPoint, nextTripPoint, distanceMeters);
+  const impliedSpeedAnchor = getImpliedSpeedAnchor(previousPoint, context?.lastSequentialTripPoint, nextTripPoint);
+  const impliedSpeedDistance = impliedSpeedAnchor === previousPoint
+    ? distanceMeters
+    : calculateDistanceBetweenPoints(impliedSpeedAnchor, nextTripPoint);
+  const impliedSpeedKmh = getImpliedSpeedKmh(impliedSpeedAnchor, nextTripPoint, impliedSpeedDistance);
 
   if (impliedSpeedKmh > getMaxImpliedSpeedKmh(recordingMode)) {
     recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "implied-speed", {

@@ -109,21 +109,26 @@ async function persistRecordedLocationSnapshots(
   let pointsChanged = false;
   let lastRecordedAt = recordingSession.lastPointRecordedAt;
   let nextRecordingSession = recordingSession;
+  let lastSequentialTripPoint: ReturnType<typeof createTripPointForLocation> | null = null;
 
   function appendSnapshotIfUseful(snapshot: CurrentLocationSnapshot): boolean {
     const fallbackOpenSegment = getOpenTripSegmentForTrip(nextTripSegments, recordingTrip.localId);
     const activeSegmentLocalId = nextRecordingSession.activeSegmentId ?? fallbackOpenSegment?.localId ?? null;
+    const candidateTripPoint = createTripPointForLocation(recordingTrip, activeSegmentLocalId, snapshot);
     const appendedTripPoints = appendTripPointIfUseful(
       nextTripPoints,
-      createTripPointForLocation(recordingTrip, activeSegmentLocalId, snapshot),
+      candidateTripPoint,
       nextRecordingSession.recordingProfile,
       callbackSource,
       {
         sessionStartedAt: nextRecordingSession.startedAt,
         tripStartedAt: recordingTrip.startedAt,
+        lastSequentialTripPoint,
       },
     );
     const pointsWereAppended = appendedTripPoints !== nextTripPoints;
+
+    lastSequentialTripPoint = candidateTripPoint;
 
     if (pointsWereAppended) {
       nextTripPoints = appendedTripPoints;
