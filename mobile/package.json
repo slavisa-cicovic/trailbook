@@ -11,6 +11,7 @@
     "eas:build:ios:production": "eas build --platform ios --profile production",
     "eas:build:android:preview": "eas build --platform android --profile preview",
     "eas:build:android:production": "eas build --platform android --profile production",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "echo \"Lint is not configured yet for mobile.\""
   },
@@ -40,6 +41,7 @@
   "devDependencies": {
     "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.1",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.7"
   }
 }
