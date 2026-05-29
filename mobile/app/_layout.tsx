@@ -6,6 +6,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import "../src/services/recording/background-recording-task";
 import { getAppTheme, resolveAppThemeMode } from "../src/constants/app-theme";
+import { ErrorBoundary } from "../src/core/error-boundary";
+import { setupGlobalErrorHandler } from "../src/core/global-error-handler";
 import { useAppHydration } from "../src/core/hooks/use-app-hydration";
 import { syncBackgroundLocationTracking } from "../src/services/location/location.service";
 import { syncResolvedRecordingConfig } from "../src/services/recording/recording-config.service";
@@ -26,6 +28,10 @@ export default function RootLayout() {
 
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
   const theme = getAppTheme(resolvedThemeMode);
+
+  useEffect(() => {
+    setupGlobalErrorHandler();
+  }, []);
 
   useEffect(() => {
     if (!recordingHydrated || !tripsHydrated || !tripSegmentsHydrated) {
@@ -101,37 +107,37 @@ export default function RootLayout() {
     sessionHydrated,
   ]);
 
-  if (!appHydrated) {
-    return (
-      <View style={[styles.loadingScreen, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.accent} />
-      </View>
-    );
-  }
-
   return (
-    <GestureHandlerRootView style={styles.gestureRoot}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-        <Stack.Screen name="forgot-password" />
-        <Stack.Screen name="auth/callback" />
-        <Stack.Screen name="recording" options={{ animation: "none" }} />
-        <Stack.Screen name="trips/index" options={{ animation: "none" }} />
-        <Stack.Screen name="trips/shared/[shareId]" />
-        <Stack.Screen name="trips/shared/[shareId]/waypoints/[waypointId]" />
-        <Stack.Screen name="trips/shared/[shareId]/waypoints/[waypointId]/photos/[attachmentId]" />
-        <Stack.Screen name="trips/[tripId]" />
-        <Stack.Screen name="trips/[tripId]/waypoints/[waypointId]" />
-        <Stack.Screen name="trips/[tripId]/waypoints/[waypointId]/photos/[attachmentId]" />
-        <Stack.Screen name="settings" options={{ animation: "none" }} />
-        <Stack.Screen name="settings/about" options={{ animation: "none" }} />
-        <Stack.Screen name="settings/recording-config" options={{ animation: "none" }} />
-        <Stack.Screen name="settings/recording-config/[target]" options={{ animation: "none" }} />
-      </Stack>
-      <StatusBar style={resolvedThemeMode === "night" ? "light" : "dark"} />
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      {!appHydrated ? (
+        <View style={[styles.loadingScreen, { backgroundColor: theme.background }]}>
+          <ActivityIndicator size="large" color={theme.accent} />
+        </View>
+      ) : (
+        <GestureHandlerRootView style={styles.gestureRoot}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="login" />
+            <Stack.Screen name="register" />
+            <Stack.Screen name="forgot-password" />
+            <Stack.Screen name="auth/callback" />
+            <Stack.Screen name="recording" options={{ animation: "none" }} />
+            <Stack.Screen name="trips/index" options={{ animation: "none" }} />
+            <Stack.Screen name="trips/shared/[shareId]" />
+            <Stack.Screen name="trips/shared/[shareId]/waypoints/[waypointId]" />
+            <Stack.Screen name="trips/shared/[shareId]/waypoints/[waypointId]/photos/[attachmentId]" />
+            <Stack.Screen name="trips/[tripId]" />
+            <Stack.Screen name="trips/[tripId]/waypoints/[waypointId]" />
+            <Stack.Screen name="trips/[tripId]/waypoints/[waypointId]/photos/[attachmentId]" />
+            <Stack.Screen name="settings" options={{ animation: "none" }} />
+            <Stack.Screen name="settings/about" options={{ animation: "none" }} />
+            <Stack.Screen name="settings/recording-config" options={{ animation: "none" }} />
+            <Stack.Screen name="settings/recording-config/[target]" options={{ animation: "none" }} />
+          </Stack>
+          <StatusBar style={resolvedThemeMode === "night" ? "light" : "dark"} />
+        </GestureHandlerRootView>
+      )}
+    </ErrorBoundary>
   );
 }
 
