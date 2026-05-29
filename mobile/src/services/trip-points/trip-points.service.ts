@@ -602,8 +602,8 @@ export function appendTripPointIfUseful(
     return tripPoints;
   }
 
-  if (distanceMeters > getMaxJumpDistanceMeters(recordingMode)) {
-    if (isLongGap(previousPoint, nextTripPoint)) {
+  if (impliedSpeedDistance > getMaxJumpDistanceMeters(recordingMode)) {
+    if (isLongGap(impliedSpeedAnchor, nextTripPoint)) {
       recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted-after-long-gap", {
         recordedAt: nextTripPoint.recordedAt,
         source: callbackSource,
