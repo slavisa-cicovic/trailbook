@@ -16,6 +16,8 @@ import { recoverSegmentlessTripSections } from "../../services/trip-segments/tri
 import { useRecordingStore } from "../../state/recording-store";
 import { setTripPauses } from "../../state/trip-pauses-store";
 import { setTripPointsInMemory } from "../../state/trip-points-store";
+import { setTripGroupMembers, useTripGroupMembersStore } from "../../state/trip-group-members-store";
+import { setTripGroups, useTripGroupsStore } from "../../state/trip-groups-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import {
   clearSessionCredentials,
@@ -147,6 +149,8 @@ export default function SettingsScreen() {
   const router = useRouter();
   const trips = useTripsStore((state) => state.trips);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
+  const tripGroups = useTripGroupsStore((state) => state.tripGroups);
+  const tripGroupMembers = useTripGroupMembersStore((state) => state.tripGroupMembers);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
   const recordingStatus = useRecordingStore((state) => state.session.status);
@@ -217,6 +221,8 @@ export default function SettingsScreen() {
       const result = await restoreOwnedTripsFromServer(identitySession, {
         trips,
         tripSegments,
+        tripGroups,
+        tripGroupMembers,
         tripPoints,
         waypoints,
         attachments: waypointAttachments,
@@ -224,6 +230,8 @@ export default function SettingsScreen() {
 
       await setTrips(result.nextTrips);
       await setTripSegments(result.nextTripSegments);
+      await setTripGroups(result.nextTripGroups);
+      await setTripGroupMembers(result.nextTripGroupMembers);
       await saveTripPoints(result.nextTripPoints);
       setTripPointsInMemory([]);
       await setWaypoints(result.nextWaypoints);
@@ -372,6 +380,8 @@ export default function SettingsScreen() {
       await clearLocalTripData();
       await setTrips([]);
       await setTripSegments([]);
+      await setTripGroups([]);
+      await setTripGroupMembers([]);
       await setTripPauses([]);
       setTripPointsInMemory([]);
       await setWaypoints([]);

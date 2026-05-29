@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import type { SharedTripSummary } from "../../domain/shared-trips";
-import type { Trip } from "../../domain/trips";
+import type { Trip, TripGroup, TripGroupMember } from "../../domain/trips";
 import {
   buildTripModeSummary,
   getOpenTripSegmentForTrip,
@@ -25,12 +35,21 @@ import {
   type TripUpdateInput,
 } from "../../services/trips/trips-management.service";
 import {
+  buildTripGroupMembersForTrips,
+  buildTripGroupSummaries,
+  createTripGroup,
+  getVisibleTripGroupMembers,
+  getVisibleTripGroups,
+} from "../../services/trips/trip-groups.service";
+import {
   createResumedRecordingState,
   resumePausedTrip,
   stopRecordingSession,
 } from "../../services/recording/recording.service";
 import { setRecordingSession, useRecordingStore } from "../../state/recording-store";
 import { useSessionStore } from "../../state/session-store";
+import { setTripGroupMembers, useTripGroupMembersStore } from "../../state/trip-group-members-store";
+import { setTripGroups, useTripGroupsStore } from "../../state/trip-groups-store";
 import { setTripPauses, useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
@@ -39,6 +58,7 @@ import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
 import {
   listSharedTrips,
+  syncTripGroupsToServer,
   syncTripToServer,
   uploadTripAttachmentToServer,
 } from "../../services/trips/server-trip-sharing.service";
@@ -50,7 +70,12 @@ interface PendingUndoState {
   tripTitle: string;
 }
 
-type TripListMode = "owned" | "shared";
+type TripListMode = "owned" | "groups" | "shared";
+
+interface GroupDraft {
+  description: string;
+  title: string;
+}
 
 const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> = [
   { value: "all", label: "All" },
@@ -67,6 +92,8 @@ export default function TripsScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);
+  const tripGroups = useTripGroupsStore((state) => state.tripGroups);
+  const tripGroupMembers = useTripGroupMembersStore((state) => state.tripGroupMembers);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const tripPauses = useTripPausesStore((state) => state.tripPauses);
   const waypoints = useWaypointsStore((state) => state.waypoints);
@@ -82,8 +109,23 @@ export default function TripsScreen() {
   const [sharedTripsLoading, setSharedTripsLoading] = useState(false);
   const [sharedTripsError, setSharedTripsError] = useState<string | null>(null);
   const [syncingTripId, setSyncingTripId] = useState<string | null>(null);
+  const [syncingGroups, setSyncingGroups] = useState(false);
   const [tripStatsByTripId, setTripStatsByTripId] = useState<Map<string, TripStatsRow>>(new Map());
   const [tripStatsLoading, setTripStatsLoading] = useState(false);
+  const [selectedGroupTripIds, setSelectedGroupTripIds] = useState<string[]>([]);
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
+  const [groupEditModalVisible, setGroupEditModalVisible] = useState(false);
+  const [selectedExistingGroupId, setSelectedExistingGroupId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [groupDraft, setGroupDraft] = useState<GroupDraft>({
+    title: "",
+    description: "",
+  });
+  const [groupEditDraft, setGroupEditDraft] = useState<GroupDraft>({
+    title: "",
+    description: "",
+  });
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -95,6 +137,12 @@ export default function TripsScreen() {
   const currentUserTripSegments = identitySession
     ? tripSegments.filter((segment) => segment.userId === identitySession.userId)
     : [];
+  const currentUserTripGroups = identitySession
+    ? tripGroups.filter((group) => group.userId === identitySession.userId)
+    : [];
+  const currentUserTripGroupMembers = identitySession
+    ? tripGroupMembers.filter((member) => member.userId === identitySession.userId)
+    : [];
   const currentUserWaypoints = identitySession
     ? waypoints.filter((waypoint) => waypoint.userId === identitySession.userId)
     : [];
@@ -103,6 +151,22 @@ export default function TripsScreen() {
     : [];
 
   const visibleTrips = getVisibleTrips(currentUserTrips);
+  const visibleTripGroups = getVisibleTripGroups(currentUserTripGroups);
+  const visibleTripGroupIdsKey = visibleTripGroups.map((group) => group.localId).join("|");
+  const visibleTripGroupMembers = getVisibleTripGroupMembers(currentUserTripGroupMembers);
+  const tripGroupSummaries = buildTripGroupSummaries(visibleTripGroups, visibleTripGroupMembers, visibleTrips);
+  const selectedGroup = selectedGroupId
+    ? visibleTripGroups.find((group) => group.localId === selectedGroupId) ?? null
+    : null;
+  const selectedGroupMembers = selectedGroup
+    ? visibleTripGroupMembers
+        .filter((member) => member.groupLocalId === selectedGroup.localId)
+        .sort((left, right) => left.sortOrder - right.sortOrder)
+    : [];
+  const selectedGroupTrips = selectedGroupMembers
+    .map((member) => visibleTrips.find((trip) => trip.localId === member.tripLocalId))
+    .filter((trip): trip is Trip => trip !== undefined);
+  const isTripSelectionMode = selectedGroupTripIds.length > 0;
   const filteredTrips = filterTripsByDate(visibleTrips, dateFilter);
   const filteredTripIds = filteredTrips.map((trip) => trip.localId);
   const filteredTripIdsKey = filteredTripIds.join("|");
@@ -238,6 +302,22 @@ export default function TripsScreen() {
     void refreshSharedTrips();
   }, [identitySession?.mode, identitySession?.sessionToken, listMode]);
 
+  useEffect(() => {
+    if (listMode !== "owned" && selectedGroupTripIds.length > 0) {
+      setSelectedGroupTripIds([]);
+    }
+  }, [listMode, selectedGroupTripIds.length]);
+
+  useEffect(() => {
+    if (!selectedGroupId) {
+      return;
+    }
+
+    if (!visibleTripGroups.some((group) => group.localId === selectedGroupId)) {
+      setSelectedGroupId(null);
+    }
+  }, [selectedGroupId, visibleTripGroupIdsKey]);
+
   async function refreshSharedTrips() {
     if (!identitySession?.sessionToken) {
       return;
@@ -330,18 +410,18 @@ export default function TripsScreen() {
         uploadedAttachments.push(uploadedAttachment);
       }
 
-      await setTrips(
-        trips.map((candidate) =>
-          candidate.localId === trip.localId
-            ? {
-                ...candidate,
-                serverId: response.tripId,
-                syncStatus: "synced",
-                updatedAt: response.syncedAt,
-              }
-            : candidate,
-        ),
+      const nextTrips = trips.map((candidate) =>
+        candidate.localId === trip.localId
+          ? {
+              ...candidate,
+              serverId: response.tripId,
+              syncStatus: "synced" as const,
+              updatedAt: response.syncedAt,
+            }
+          : candidate,
       );
+
+      await setTrips(nextTrips);
 
       if (uploadedAttachments.length > 0) {
         const uploadedAttachmentIds = new Map(
@@ -361,6 +441,16 @@ export default function TripsScreen() {
           ),
         );
       }
+
+      if (tripGroupMembers.some((member) => member.tripLocalId === trip.localId && member.deletedAt === null)) {
+        await syncTripGroupsMutation(tripGroups, tripGroupMembers, {
+          syncableTripLocalIds: new Set(
+            nextTrips
+              .filter((candidate) => candidate.userId === identitySession.userId && candidate.serverId)
+              .map((candidate) => candidate.localId),
+          ),
+        });
+      }
     } catch (error) {
       await setTrips(
         trips.map((candidate) =>
@@ -377,6 +467,278 @@ export default function TripsScreen() {
     } finally {
       setSyncingTripId(null);
     }
+  }
+
+  function applyTripGroupSyncResponse(
+    nextGroups: TripGroup[],
+    nextMembers: TripGroupMember[],
+    response: {
+      groups: Array<{ groupId: string; localId: string }>;
+      members: Array<{ localId: string; memberId: string }>;
+      syncedAt: string;
+    },
+  ) {
+    const groupIdByLocalId = new Map(response.groups.map((group) => [group.localId, group.groupId]));
+    const memberIdByLocalId = new Map(response.members.map((member) => [member.localId, member.memberId]));
+
+    return {
+      groups: nextGroups.map((group) =>
+        group.userId === identitySession?.userId && groupIdByLocalId.has(group.localId)
+          ? {
+              ...group,
+              serverId: groupIdByLocalId.get(group.localId) ?? group.serverId,
+              syncStatus: "synced" as const,
+              updatedAt: response.syncedAt,
+            }
+          : group,
+      ),
+      members: nextMembers.map((member) =>
+        member.userId === identitySession?.userId && memberIdByLocalId.has(member.localId)
+          ? {
+              ...member,
+              serverId: memberIdByLocalId.get(member.localId) ?? member.serverId,
+              syncStatus: "synced" as const,
+              updatedAt: response.syncedAt,
+            }
+          : member,
+      ),
+    };
+  }
+
+  async function syncTripGroupsMutation(
+    nextGroups: TripGroup[],
+    nextMembers: TripGroupMember[],
+    options: { syncableTripLocalIds?: Set<string> } = {},
+  ) {
+    if (identitySession?.mode !== "authenticated" || !identitySession.sessionToken || syncingGroups) {
+      return;
+    }
+
+    setSyncingGroups(true);
+
+    try {
+      const syncableTripLocalIds =
+        options.syncableTripLocalIds ??
+        new Set(
+          trips
+            .filter((trip) => trip.userId === identitySession.userId && trip.serverId)
+            .map((trip) => trip.localId),
+        );
+      const groupsToSync = nextGroups.filter((group) => group.userId === identitySession.userId);
+      const membersToSync = nextMembers.filter(
+        (member) => member.userId === identitySession.userId && syncableTripLocalIds.has(member.tripLocalId),
+      );
+      const response = await syncTripGroupsToServer(identitySession.sessionToken, {
+        groups: groupsToSync,
+        members: membersToSync,
+      });
+      const syncedState = applyTripGroupSyncResponse(nextGroups, nextMembers, response);
+
+      await setTripGroups(syncedState.groups);
+      await setTripGroupMembers(syncedState.members);
+    } catch (error) {
+      const failedAt = new Date().toISOString();
+
+      await setTripGroups(
+        nextGroups.map((group) =>
+          group.userId === identitySession.userId && group.syncStatus === "pending-sync"
+            ? { ...group, syncStatus: "sync-error", updatedAt: failedAt }
+            : group,
+        ),
+      );
+      await setTripGroupMembers(
+        nextMembers.map((member) =>
+          member.userId === identitySession.userId && member.syncStatus === "pending-sync"
+            ? { ...member, syncStatus: "sync-error", updatedAt: failedAt }
+            : member,
+        ),
+      );
+      Alert.alert("Group sync failed", error instanceof Error ? error.message : "Trip group could not be synced.");
+    } finally {
+      setSyncingGroups(false);
+    }
+  }
+
+  function handleEnterTripSelection(tripLocalId: string) {
+    setSelectedTripId(null);
+    setTripEditVisible(false);
+    setSelectedGroupTripIds([tripLocalId]);
+  }
+
+  function handleToggleTripSelection(tripLocalId: string) {
+    setSelectedGroupTripIds((current) =>
+      current.includes(tripLocalId)
+        ? current.filter((candidate) => candidate !== tripLocalId)
+        : [...current, tripLocalId],
+    );
+  }
+
+  function handleOpenGroupModal() {
+    setGroupDraft({
+      title: "",
+      description: "",
+    });
+    setSelectedExistingGroupId(null);
+    setGroupModalVisible(true);
+  }
+
+  function handleOpenGroupEditModal(group: TripGroup) {
+    setEditingGroupId(group.localId);
+    setGroupEditDraft({
+      title: group.title,
+      description: group.description ?? "",
+    });
+    setGroupEditModalVisible(true);
+  }
+
+  async function handleSaveGroupEdit() {
+    if (!editingGroupId || groupEditDraft.title.trim().length === 0) {
+      return;
+    }
+
+    const updatedAt = new Date().toISOString();
+    const nextGroups = tripGroups.map((group) =>
+      group.localId === editingGroupId
+        ? {
+            ...group,
+            title: groupEditDraft.title.trim(),
+            description: groupEditDraft.description.trim() || null,
+            updatedAt,
+            syncStatus: group.syncStatus === "synced" ? "pending-sync" as const : group.syncStatus,
+          }
+        : group,
+    );
+
+    await setTripGroups(nextGroups);
+    setGroupEditModalVisible(false);
+    setEditingGroupId(null);
+    await syncTripGroupsMutation(nextGroups, tripGroupMembers);
+  }
+
+  async function handleSaveGroupSelection() {
+    if (!identitySession || selectedGroupTripIds.length === 0) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const selectedVisibleTripIds = selectedGroupTripIds.filter((tripLocalId) =>
+      visibleTrips.some((trip) => trip.localId === tripLocalId),
+    );
+
+    if (selectedVisibleTripIds.length === 0) {
+      setGroupModalVisible(false);
+      setSelectedGroupTripIds([]);
+      return;
+    }
+
+    let targetGroup = selectedExistingGroupId
+      ? visibleTripGroups.find((group) => group.localId === selectedExistingGroupId) ?? null
+      : null;
+    let nextGroups = tripGroups;
+
+    if (!targetGroup) {
+      if (groupDraft.title.trim().length === 0) {
+        Alert.alert("Group title required", "Enter a title or select an existing group.");
+        return;
+      }
+
+      targetGroup = createTripGroup(identitySession, {
+        title: groupDraft.title,
+        description: groupDraft.description,
+      }, now);
+      nextGroups = [...tripGroups, targetGroup];
+    } else {
+      nextGroups = tripGroups.map((group) =>
+        group.localId === targetGroup?.localId
+          ? {
+              ...group,
+              updatedAt: now,
+              syncStatus: group.syncStatus === "synced" ? "pending-sync" : group.syncStatus,
+            }
+          : group,
+      );
+    }
+
+    const newMembers = buildTripGroupMembersForTrips(identitySession, {
+      existingMembers: tripGroupMembers,
+      groupLocalId: targetGroup.localId,
+      tripLocalIds: selectedVisibleTripIds,
+    }, now);
+
+    if (newMembers.length === 0) {
+      setGroupModalVisible(false);
+      setSelectedGroupTripIds([]);
+      return;
+    }
+
+    const nextMembers = [...tripGroupMembers, ...newMembers];
+
+    await setTripGroups(nextGroups);
+    await setTripGroupMembers(nextMembers);
+    setGroupModalVisible(false);
+    setSelectedGroupTripIds([]);
+    setListMode("groups");
+    setSelectedGroupId(targetGroup.localId);
+    await syncTripGroupsMutation(nextGroups, nextMembers);
+  }
+
+  async function handleRemoveTripFromGroup(member: TripGroupMember) {
+    const removedAt = new Date().toISOString();
+    const nextMembers = tripGroupMembers.map((candidate) =>
+      candidate.localId === member.localId
+        ? {
+            ...candidate,
+            deletedAt: removedAt,
+            updatedAt: removedAt,
+            syncStatus: candidate.syncStatus === "synced" ? "pending-sync" as const : candidate.syncStatus,
+          }
+        : candidate,
+    );
+
+    await setTripGroupMembers(nextMembers);
+    await syncTripGroupsMutation(tripGroups, nextMembers);
+  }
+
+  function handleConfirmDeleteTripGroup(group: TripGroup) {
+    Alert.alert("Delete group", `Delete "${group.title}"? Trips will not be deleted.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete group",
+        style: "destructive",
+        onPress: () => {
+          void handleDeleteTripGroup(group);
+        },
+      },
+    ]);
+  }
+
+  async function handleDeleteTripGroup(group: TripGroup) {
+    const deletedAt = new Date().toISOString();
+    const nextGroups = tripGroups.map((candidate) =>
+      candidate.localId === group.localId
+        ? {
+            ...candidate,
+            deletedAt,
+            updatedAt: deletedAt,
+            syncStatus: candidate.syncStatus === "synced" ? "pending-sync" as const : candidate.syncStatus,
+          }
+        : candidate,
+    );
+    const nextMembers = tripGroupMembers.map((member) =>
+      member.groupLocalId === group.localId && member.deletedAt === null
+        ? {
+            ...member,
+            deletedAt,
+            updatedAt: deletedAt,
+            syncStatus: member.syncStatus === "synced" ? "pending-sync" as const : member.syncStatus,
+          }
+        : member,
+    );
+
+    await setTripGroups(nextGroups);
+    await setTripGroupMembers(nextMembers);
+    setSelectedGroupId(null);
+    await syncTripGroupsMutation(nextGroups, nextMembers);
   }
 
   async function handleDeleteTrip(trip: Trip) {
@@ -531,6 +893,11 @@ export default function TripsScreen() {
       return;
     }
 
+    if (isTripSelectionMode) {
+      handleToggleTripSelection(tripLocalId);
+      return;
+    }
+
     router.push(`/trips/${tripLocalId}`);
   }
 
@@ -561,6 +928,147 @@ export default function TripsScreen() {
         visible={tripEditVisible}
       />
 
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setGroupModalVisible(false)}
+        transparent
+        visible={groupModalVisible}
+      >
+        <View style={styles.groupModalBackdrop}>
+          <View style={styles.groupModalCard}>
+            <Text style={styles.groupModalTitle}>Add to group</Text>
+            <Text style={styles.groupModalDescription}>
+              {selectedGroupTripIds.length} selected trip{selectedGroupTripIds.length === 1 ? "" : "s"}
+            </Text>
+
+            {visibleTripGroups.length > 0 ? (
+              <View style={styles.existingGroupsBlock}>
+                <Text style={styles.groupModalLabel}>Existing groups</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.existingGroupsRow}>
+                    {visibleTripGroups.map((group) => {
+                      const selected = selectedExistingGroupId === group.localId;
+
+                      return (
+                        <Pressable
+                          key={group.localId}
+                          onPress={() => setSelectedExistingGroupId(selected ? null : group.localId)}
+                          style={[
+                            styles.existingGroupChip,
+                            selected && styles.existingGroupChipSelected,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.existingGroupChipText,
+                              selected && styles.existingGroupChipTextSelected,
+                            ]}
+                          >
+                            {group.title}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+            ) : null}
+
+            <View style={styles.newGroupBlock}>
+              <Text style={styles.groupModalLabel}>New group</Text>
+              <TextInput
+                editable={!selectedExistingGroupId}
+                onChangeText={(title) => setGroupDraft((current) => ({ ...current, title }))}
+                placeholder="Title"
+                placeholderTextColor="#8a9784"
+                style={[styles.groupInput, selectedExistingGroupId && styles.groupInputDisabled]}
+                value={groupDraft.title}
+              />
+              <TextInput
+                editable={!selectedExistingGroupId}
+                multiline
+                onChangeText={(description) =>
+                  setGroupDraft((current) => ({ ...current, description }))
+                }
+                placeholder="Description"
+                placeholderTextColor="#8a9784"
+                style={[
+                  styles.groupInput,
+                  styles.groupDescriptionInput,
+                  selectedExistingGroupId && styles.groupInputDisabled,
+                ]}
+                value={groupDraft.description}
+              />
+            </View>
+
+            <View style={styles.groupModalActions}>
+              <Pressable onPress={() => setGroupModalVisible(false)} style={styles.groupModalSecondaryButton}>
+                <Text style={styles.groupModalSecondaryText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={syncingGroups}
+                onPress={() => void handleSaveGroupSelection()}
+                style={[styles.groupModalPrimaryButton, syncingGroups && styles.groupModalButtonDisabled]}
+              >
+                <Text style={styles.groupModalPrimaryText}>{syncingGroups ? "Saving..." : "Save"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setGroupEditModalVisible(false)}
+        transparent
+        visible={groupEditModalVisible}
+      >
+        <View style={styles.groupModalBackdrop}>
+          <View style={styles.groupModalCard}>
+            <Text style={styles.groupModalTitle}>Edit group</Text>
+            <View style={styles.newGroupBlock}>
+              <Text style={styles.groupModalLabel}>Group details</Text>
+              <TextInput
+                onChangeText={(title) => setGroupEditDraft((current) => ({ ...current, title }))}
+                placeholder="Title"
+                placeholderTextColor="#8a9784"
+                style={styles.groupInput}
+                value={groupEditDraft.title}
+              />
+              <TextInput
+                multiline
+                onChangeText={(description) =>
+                  setGroupEditDraft((current) => ({ ...current, description }))
+                }
+                placeholder="Description"
+                placeholderTextColor="#8a9784"
+                style={[styles.groupInput, styles.groupDescriptionInput]}
+                value={groupEditDraft.description}
+              />
+            </View>
+            <View style={styles.groupModalActions}>
+              <Pressable
+                onPress={() => setGroupEditModalVisible(false)}
+                style={styles.groupModalSecondaryButton}
+              >
+                <Text style={styles.groupModalSecondaryText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={syncingGroups || groupEditDraft.title.trim().length === 0}
+                onPress={() => void handleSaveGroupEdit()}
+                style={[
+                  styles.groupModalPrimaryButton,
+                  (syncingGroups || groupEditDraft.title.trim().length === 0) &&
+                    styles.groupModalButtonDisabled,
+                ]}
+              >
+                <Text style={styles.groupModalPrimaryText}>{syncingGroups ? "Saving..." : "Save"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.tripsRoot}>
         <Text style={styles.subtitle}>Your local recorded routes and saved trip content.</Text>
 
@@ -573,6 +1081,16 @@ export default function TripsScreen() {
               style={[styles.modeToggleText, listMode === "owned" && styles.modeToggleTextSelected]}
             >
               My trips
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setListMode("groups")}
+            style={[styles.modeToggleChip, listMode === "groups" && styles.modeToggleChipSelected]}
+          >
+            <Text
+              style={[styles.modeToggleText, listMode === "groups" && styles.modeToggleTextSelected]}
+            >
+              Groups
             </Text>
           </Pressable>
           <Pressable
@@ -676,6 +1194,25 @@ export default function TripsScreen() {
               ) : null}
             </View>
 
+            {isTripSelectionMode ? (
+              <View style={styles.selectionBar}>
+                <Text style={styles.selectionBarText}>
+                  {selectedGroupTripIds.length} selected
+                </Text>
+                <View style={styles.selectionActions}>
+                  <Pressable
+                    onPress={() => setSelectedGroupTripIds([])}
+                    style={styles.selectionSecondaryButton}
+                  >
+                    <Text style={styles.selectionSecondaryText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={handleOpenGroupModal} style={styles.selectionPrimaryButton}>
+                    <Text style={styles.selectionPrimaryText}>Add to group</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
             <ScrollView contentContainerStyle={styles.listScrollContent} style={styles.listScroll}>
               {tripSummaries.length === 0 ? (
                 <Text style={styles.empty}>No trips match the selected date filter.</Text>
@@ -690,6 +1227,7 @@ export default function TripsScreen() {
                     const isTripSyncing = syncingTripId === trip.localId;
                     const tripModeSummary = buildTripModeSummary(currentUserTripSegments, trip.localId);
                     const tripSegmentsForCard = getVisibleTripSegmentsForTrip(currentUserTripSegments, trip.localId);
+                    const isTripSelected = selectedGroupTripIds.includes(trip.localId);
                     const tripDurationMs = Math.max(
                       0,
                       new Date(trip.endedAt ?? new Date().toISOString()).getTime() -
@@ -700,6 +1238,7 @@ export default function TripsScreen() {
                     return (
                       <Swipeable
                         key={trip.localId}
+                        enabled={!isTripSelectionMode}
                         friction={2}
                         onSwipeableCloseStartDrag={suppressTapAfterSwipe}
                         onSwipeableOpenStartDrag={suppressTapAfterSwipe}
@@ -737,8 +1276,9 @@ export default function TripsScreen() {
                         )}
                       >
                         <View style={styles.tripCardRow}>
-                          <View style={styles.tripCard}>
+                          <View style={[styles.tripCard, isTripSelected && styles.tripCardSelected]}>
                             <Pressable
+                              onLongPress={() => handleEnterTripSelection(trip.localId)}
                               onPress={() => handleTripCardPress(trip.localId)}
                               style={styles.tripBodyPressable}
                             >
@@ -772,6 +1312,18 @@ export default function TripsScreen() {
                                       <Text style={styles.tripBadgeText}>{statusLabel}</Text>
                                     </View>
                                   )
+                                ) : null}
+                                {isTripSelectionMode ? (
+                                  <View
+                                    style={[
+                                      styles.selectionCheck,
+                                      isTripSelected && styles.selectionCheckSelected,
+                                    ]}
+                                  >
+                                    {isTripSelected ? (
+                                      <MaterialIcons color="#fffdf8" name="check" size={16} />
+                                    ) : null}
+                                  </View>
                                 ) : null}
                               </View>
 
@@ -831,6 +1383,165 @@ export default function TripsScreen() {
                       </Swipeable>
                     );
                   })}
+                </View>
+              )}
+            </ScrollView>
+          </>
+        ) : listMode === "groups" ? (
+          <>
+            {selectedGroup ? (
+              <View style={styles.groupDetailHeader}>
+                <Pressable onPress={() => setSelectedGroupId(null)} style={styles.groupBackButton}>
+                  <MaterialIcons color="#355035" name="chevron-left" size={22} />
+                  <Text style={styles.groupBackButtonText}>Groups</Text>
+                </Pressable>
+                <Text style={styles.groupDetailTitle}>{selectedGroup.title}</Text>
+                {selectedGroup.description ? (
+                  <Text style={styles.groupDetailDescription}>{selectedGroup.description}</Text>
+                ) : null}
+                <View style={styles.groupHeaderActions}>
+                  <Pressable
+                    onPress={() => handleOpenGroupEditModal(selectedGroup)}
+                    style={styles.groupEditButton}
+                  >
+                    <MaterialIcons color="#355035" name="edit" size={18} />
+                    <Text style={styles.groupEditButtonText}>Edit</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleConfirmDeleteTripGroup(selectedGroup)}
+                    style={styles.groupDeleteButton}
+                  >
+                    <MaterialIcons color="#9f3f31" name="delete-outline" size={18} />
+                    <Text style={styles.groupDeleteButtonText}>Delete group</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            <ScrollView contentContainerStyle={styles.listScrollContent} style={styles.listScroll}>
+              {selectedGroup ? (
+                selectedGroupTrips.length === 0 ? (
+                  <Text style={styles.empty}>No trips in this group.</Text>
+                ) : (
+                  <View style={styles.list}>
+                    {selectedGroupMembers.map((member) => {
+                      const trip = visibleTrips.find((candidate) => candidate.localId === member.tripLocalId);
+
+                      if (!trip) {
+                        return null;
+                      }
+
+                      const durationMs = trip.endedAt
+                        ? Math.max(0, new Date(trip.endedAt).getTime() - new Date(trip.startedAt).getTime())
+                        : 0;
+
+                      return (
+                        <View key={trip.localId} style={styles.tripCardRow}>
+                          <View style={styles.groupMemberCard}>
+                            <Pressable
+                              onPress={() => router.push(`/trips/${trip.localId}`)}
+                              style={styles.tripBodyPressable}
+                            >
+                              <View style={styles.tripHeader}>
+                                <View style={styles.tripHeaderText}>
+                                  <Text style={styles.tripTitle}>{trip.title}</Text>
+                                  {trip.description ? (
+                                    <Text style={styles.tripDescription}>{trip.description}</Text>
+                                  ) : null}
+                                </View>
+                                <Pressable
+                                  onPress={(event) => {
+                                    event.stopPropagation();
+                                    void handleRemoveTripFromGroup(member);
+                                  }}
+                                  style={styles.groupRemoveButton}
+                                >
+                                  <MaterialIcons color="#9f3f31" name="remove-circle-outline" size={18} />
+                                </Pressable>
+                              </View>
+                              <View style={styles.metaGrid}>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Distance</Text>
+                                  <Text style={styles.metaValue}>
+                                    {formatDistanceKm(trip.distanceMeters ?? 0)}
+                                  </Text>
+                                </View>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Duration</Text>
+                                  <Text style={styles.metaValue}>{formatDurationSummary(durationMs)}</Text>
+                                </View>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Started</Text>
+                                  <Text style={styles.metaValue}>
+                                    {new Date(trip.startedAt).toLocaleDateString()}
+                                  </Text>
+                                </View>
+                                <View style={styles.metaCell}>
+                                  <Text style={styles.metaKey}>Ended</Text>
+                                  <Text style={styles.metaValue}>
+                                    {trip.endedAt ? new Date(trip.endedAt).toLocaleDateString() : "Active"}
+                                  </Text>
+                                </View>
+                              </View>
+                            </Pressable>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )
+              ) : tripGroupSummaries.length === 0 ? (
+                <Text style={styles.empty}>No trip groups yet. Long press a trip to create one.</Text>
+              ) : (
+                <View style={styles.list}>
+                  {tripGroupSummaries.map((summary) => (
+                    <View key={summary.group.localId} style={styles.tripCardRow}>
+                      <Pressable
+                        onPress={() => setSelectedGroupId(summary.group.localId)}
+                        style={styles.groupCard}
+                      >
+                        <View style={styles.tripHeader}>
+                          <View style={styles.tripHeaderText}>
+                            <Text style={styles.tripTitle}>{summary.group.title}</Text>
+                            {summary.description ? (
+                              <Text numberOfLines={2} style={styles.tripDescription}>
+                                {summary.description}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <View style={styles.tripBadge}>
+                            <Text style={styles.tripBadgeText}>{summary.tripCount} trips</Text>
+                          </View>
+                        </View>
+                        <View style={styles.metaGrid}>
+                          <View style={styles.metaCell}>
+                            <Text style={styles.metaKey}>Distance</Text>
+                            <Text style={styles.metaValue}>
+                              {formatDistanceKm(summary.totalDistanceMeters)}
+                            </Text>
+                          </View>
+                          <View style={styles.metaCell}>
+                            <Text style={styles.metaKey}>Duration</Text>
+                            <Text style={styles.metaValue}>
+                              {formatDurationSummary(summary.totalDurationMs)}
+                            </Text>
+                          </View>
+                          <View style={styles.metaCell}>
+                            <Text style={styles.metaKey}>Last trip</Text>
+                            <Text style={styles.metaValue}>
+                              {summary.lastTripStartedAt
+                                ? new Date(summary.lastTripStartedAt).toLocaleDateString()
+                                : ""}
+                            </Text>
+                          </View>
+                          <View style={styles.metaCell}>
+                            <Text style={styles.metaKey}>Sync</Text>
+                            <Text style={styles.metaValue}>{summary.group.syncStatus}</Text>
+                          </View>
+                        </View>
+                      </Pressable>
+                    </View>
+                  ))}
                 </View>
               )}
             </ScrollView>
@@ -977,6 +1688,108 @@ const styles = StyleSheet.create({
   modeToggleTextSelected: {
     color: "#fffdf8",
   },
+  groupModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(20, 28, 20, 0.36)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  groupModalCard: {
+    borderRadius: 24,
+    backgroundColor: "#fffdf8",
+    padding: 20,
+    gap: 14,
+  },
+  groupModalTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#243224",
+  },
+  groupModalDescription: {
+    fontSize: 14,
+    color: "#52624f",
+  },
+  groupModalLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    color: "#76856f",
+  },
+  existingGroupsBlock: {
+    gap: 8,
+  },
+  existingGroupsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  existingGroupChip: {
+    borderRadius: 999,
+    backgroundColor: "#e8ede2",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  existingGroupChipSelected: {
+    backgroundColor: "#243224",
+  },
+  existingGroupChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  existingGroupChipTextSelected: {
+    color: "#fffdf8",
+  },
+  newGroupBlock: {
+    gap: 8,
+  },
+  groupInput: {
+    borderRadius: 14,
+    backgroundColor: "#f6f1e5",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
+    color: "#243224",
+    fontSize: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  groupDescriptionInput: {
+    minHeight: 78,
+    textAlignVertical: "top",
+  },
+  groupInputDisabled: {
+    opacity: 0.42,
+  },
+  groupModalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  groupModalSecondaryButton: {
+    borderRadius: 999,
+    backgroundColor: "#e8ede2",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  groupModalSecondaryText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#355035",
+  },
+  groupModalPrimaryButton: {
+    borderRadius: 999,
+    backgroundColor: "#243224",
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+  },
+  groupModalButtonDisabled: {
+    opacity: 0.62,
+  },
+  groupModalPrimaryText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#fffdf8",
+  },
   filterRow: {
     alignItems: "center",
     gap: 10,
@@ -1106,6 +1919,48 @@ const styles = StyleSheet.create({
   list: {
     paddingBottom: 0,
   },
+  selectionBar: {
+    borderRadius: 18,
+    backgroundColor: "#243224",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  selectionBarText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#fffdf8",
+  },
+  selectionActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  selectionSecondaryButton: {
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 253, 248, 0.14)",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  selectionSecondaryText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#fffdf8",
+  },
+  selectionPrimaryButton: {
+    borderRadius: 999,
+    backgroundColor: "#fffdf8",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  selectionPrimaryText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#243224",
+  },
   tripCardRow: {
     marginBottom: 14,
   },
@@ -1116,6 +1971,100 @@ const styles = StyleSheet.create({
     gap: 14,
     borderWidth: 1,
     borderColor: "#ebe1cf",
+  },
+  tripCardSelected: {
+    borderColor: "#243224",
+    backgroundColor: "#eee7d7",
+  },
+  groupCard: {
+    borderRadius: 22,
+    backgroundColor: "#f6f1e5",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
+    gap: 14,
+    padding: 18,
+  },
+  groupMemberCard: {
+    borderRadius: 22,
+    backgroundColor: "#f6f1e5",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
+    gap: 14,
+    padding: 18,
+  },
+  groupDetailHeader: {
+    borderRadius: 18,
+    backgroundColor: "#f6f1e5",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
+    gap: 6,
+    marginBottom: 12,
+    padding: 14,
+  },
+  groupBackButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginLeft: -6,
+  },
+  groupBackButtonText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#355035",
+  },
+  groupDetailTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#243224",
+  },
+  groupDetailDescription: {
+    fontSize: 14,
+    color: "#52624f",
+    lineHeight: 20,
+  },
+  groupHeaderActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  groupEditButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: "#e8ede2",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  groupEditButtonText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#355035",
+  },
+  groupDeleteButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: "#f7e0db",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  groupDeleteButtonText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#9f3f31",
+  },
+  groupRemoveButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    backgroundColor: "#f7e0db",
+    alignItems: "center",
+    justifyContent: "center",
   },
   sharedTripCard: {
     backgroundColor: "#eef3eb",
@@ -1164,6 +2113,19 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.7,
     color: "#355035",
+  },
+  selectionCheck: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "#9aa691",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  selectionCheckSelected: {
+    borderColor: "#243224",
+    backgroundColor: "#243224",
   },
   sharedTripBadge: {
     backgroundColor: "#d7e3d2",

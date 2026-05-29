@@ -1,12 +1,27 @@
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import type { OwnedServerTripDetail } from "../../domain/server-trips";
-import type { Trip, TripPoint, TripSegment, Waypoint, WaypointAttachment } from "../../domain/trips";
+import type {
+  Trip,
+  TripGroup,
+  TripGroupMember,
+  TripPoint,
+  TripSegment,
+  Waypoint,
+  WaypointAttachment,
+} from "../../domain/trips";
 import { downloadPhotoToLocalStorage } from "../media/photo-picker.service";
-import { buildTripAttachmentContentUrl, getOwnedTripFromServer, listOwnedTripsFromServer } from "./server-trip-sharing.service";
+import {
+  buildTripAttachmentContentUrl,
+  getOwnedTripFromServer,
+  listOwnedTripsFromServer,
+  listTripGroupsFromServer,
+} from "./server-trip-sharing.service";
 
 export interface RestoreTripsResult {
   importedCount: number;
   nextAttachments: WaypointAttachment[];
+  nextTripGroupMembers: TripGroupMember[];
+  nextTripGroups: TripGroup[];
   nextTripPoints: TripPoint[];
   nextTripSegments: TripSegment[];
   nextTrips: Trip[];
@@ -149,6 +164,8 @@ export async function restoreOwnedTripsFromServer(
   identitySession: AuthenticatedDeviceSession,
   currentState: {
     attachments: WaypointAttachment[];
+    tripGroupMembers: TripGroupMember[];
+    tripGroups: TripGroup[];
     tripPoints: TripPoint[];
     tripSegments: TripSegment[];
     trips: Trip[];
@@ -171,6 +188,8 @@ export async function restoreOwnedTripsFromServer(
   let nextTripPoints = currentState.tripPoints;
   let nextWaypoints = currentState.waypoints;
   let nextAttachments = currentState.attachments;
+  let nextTripGroups = currentState.tripGroups;
+  let nextTripGroupMembers = currentState.tripGroupMembers;
   let importedCount = 0;
   let skippedCount = 0;
 
@@ -192,12 +211,68 @@ export async function restoreOwnedTripsFromServer(
     importedCount += 1;
   }
 
+  const tripGroupsResponse = await listTripGroupsFromServer(identitySession.sessionToken);
+  const restoredTripGroups: TripGroup[] = tripGroupsResponse.groups.map((group) => ({
+    localId: group.localId,
+    serverId: group.id,
+    deviceId: identitySession.deviceId,
+    userId: identitySession.userId,
+    title: group.title,
+    description: group.description,
+    createdAt: group.createdAt,
+    updatedAt: group.updatedAt,
+    deletedAt: group.deletedAt,
+    syncStatus: "synced",
+  }));
+  const restoredTripGroupLocalIds = new Set(restoredTripGroups.map((group) => group.localId));
+  const restoredTripLocalIds = new Set(
+    nextTrips
+      .filter((trip) => trip.userId === identitySession.userId)
+      .map((trip) => trip.localId),
+  );
+  const restoredTripGroupMembers: TripGroupMember[] = tripGroupsResponse.members
+    .filter(
+      (member) =>
+        restoredTripGroupLocalIds.has(member.groupLocalId) && restoredTripLocalIds.has(member.tripLocalId),
+    )
+    .map((member) => ({
+      localId: member.localId,
+      serverId: member.id,
+      groupLocalId: member.groupLocalId,
+      tripLocalId: member.tripLocalId,
+      deviceId: identitySession.deviceId,
+      userId: identitySession.userId,
+      sortOrder: member.sortOrder,
+      createdAt: member.createdAt,
+      updatedAt: member.updatedAt,
+      deletedAt: member.deletedAt,
+      syncStatus: "synced",
+    }));
+
+  nextTripGroups = [
+    ...nextTripGroups.filter(
+      (group) =>
+        group.userId !== identitySession.userId ||
+        !restoredTripGroupLocalIds.has(group.localId),
+    ),
+    ...restoredTripGroups,
+  ];
+  nextTripGroupMembers = [
+    ...nextTripGroupMembers.filter(
+      (member) =>
+        member.userId !== identitySession.userId || !restoredTripGroupLocalIds.has(member.groupLocalId),
+    ),
+    ...restoredTripGroupMembers,
+  ];
+
   return {
     importedCount,
     skippedCount,
     nextTrips,
     nextTripSegments,
     nextTripPoints,
+    nextTripGroups,
+    nextTripGroupMembers,
     nextWaypoints,
     nextAttachments,
   };

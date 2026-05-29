@@ -1,7 +1,15 @@
 import type { SharedTripDetail, SharedTripSummary } from "../../domain/shared-trips";
 import type { OwnedServerTripDetail, OwnedServerTripSummary } from "../../domain/server-trips";
 import type { TripDiagnostics } from "../../domain/trip-diagnostics";
-import type { Trip, TripPoint, TripSegment, Waypoint, WaypointAttachment } from "../../domain/trips";
+import type {
+  Trip,
+  TripGroup,
+  TripGroupMember,
+  TripPoint,
+  TripSegment,
+  Waypoint,
+  WaypointAttachment,
+} from "../../domain/trips";
 import { BackendRequestError } from "../api/mobile-api.service";
 import { getSessionStateSnapshot, refreshActiveIdentitySessionIfPossible } from "../../state/session-store";
 import { getTripDiagnosticsForSync, isTripDiagnosticsEnabled } from "../trip-points/trip-points.service";
@@ -405,6 +413,71 @@ export async function listOwnedTripsFromServer(sessionToken: string) {
 
 export async function getOwnedTripFromServer(sessionToken: string, tripId: string) {
   return request<{ trip: OwnedServerTripDetail }>(`/trips/mine/${tripId}`, sessionToken, {
+    method: "GET",
+  });
+}
+
+export async function syncTripGroupsToServer(
+  sessionToken: string,
+  input: {
+    groups: TripGroup[];
+    members: TripGroupMember[];
+  },
+) {
+  return request<{
+    groups: Array<{ groupId: string; localId: string }>;
+    members: Array<{ localId: string; memberId: string }>;
+    syncedAt: string;
+  }>("/trips/groups/sync", sessionToken, {
+    method: "POST",
+    body: JSON.stringify({
+      groups: input.groups.map((group) => ({
+        createdAt: group.createdAt,
+        deletedAt: group.deletedAt,
+        description: group.description,
+        localId: group.localId,
+        serverId: group.serverId,
+        title: group.title,
+        updatedAt: group.updatedAt,
+      })),
+      members: input.members.map((member) => ({
+        createdAt: member.createdAt,
+        deletedAt: member.deletedAt,
+        groupLocalId: member.groupLocalId,
+        localId: member.localId,
+        serverId: member.serverId,
+        sortOrder: member.sortOrder,
+        tripLocalId: member.tripLocalId,
+        updatedAt: member.updatedAt,
+      })),
+    }),
+  });
+}
+
+export async function listTripGroupsFromServer(sessionToken: string) {
+  return request<{
+    groups: Array<{
+      createdAt: string;
+      deletedAt: string | null;
+      description: string | null;
+      id: string;
+      localId: string;
+      title: string;
+      updatedAt: string;
+    }>;
+    members: Array<{
+      createdAt: string;
+      deletedAt: string | null;
+      groupId: string;
+      groupLocalId: string;
+      id: string;
+      localId: string;
+      sortOrder: number;
+      tripId: string;
+      tripLocalId: string;
+      updatedAt: string;
+    }>;
+  }>("/trips/groups", sessionToken, {
     method: "GET",
   });
 }

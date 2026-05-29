@@ -6,7 +6,12 @@ import { UsersService } from "../users/users.service";
 import { MediaStorageService } from "./media-storage.service";
 import type { SaveTripEditDto } from "./dto/save-trip-edit.dto";
 import type { ShareTripDto } from "./dto/share-trip.dto";
-import type { SyncTripDto, SyncTripPointsChunkDto, SyncTripStatsSnapshotDto } from "./dto/sync-trip.dto";
+import type {
+  SyncTripDto,
+  SyncTripGroupsDto,
+  SyncTripPointsChunkDto,
+  SyncTripStatsSnapshotDto,
+} from "./dto/sync-trip.dto";
 import type { UpdateTripDto } from "./dto/update-trip.dto";
 
 @Injectable()
@@ -695,6 +700,216 @@ export class TripsService {
       ...result,
       syncedAt: new Date().toISOString(),
       tripId,
+    };
+  }
+
+  async syncTripGroups(ownerUserId: string, payload: SyncTripGroupsDto) {
+    if (!Array.isArray(payload.groups) || !Array.isArray(payload.members)) {
+      throw new BadRequestException("Trip group sync payload is invalid.");
+    }
+
+    const dedupedGroups = this.dedupeByLocalId(payload.groups);
+    const dedupedMembers = this.dedupeByLocalId(payload.members);
+    const syncedAt = new Date().toISOString();
+
+    const result = await this.databaseService.$transaction(async (tx) => {
+      const groupLocalIds = Array.from(
+        new Set([
+          ...dedupedGroups.map((group) => group.localId),
+          ...dedupedMembers.map((member) => member.groupLocalId),
+        ]),
+      );
+      const tripLocalIds = Array.from(new Set(dedupedMembers.map((member) => member.tripLocalId)));
+      const existingGroups = groupLocalIds.length
+        ? await tx.tripGroup.findMany({
+            where: {
+              ownerUserId,
+              localSourceId: {
+                in: groupLocalIds,
+              },
+            },
+            select: {
+              id: true,
+              localSourceId: true,
+            },
+          })
+        : [];
+      const ownedTrips = tripLocalIds.length
+        ? await tx.trip.findMany({
+            where: {
+              ownerUserId,
+              localSourceId: {
+                in: tripLocalIds,
+              },
+            },
+            select: {
+              id: true,
+              localSourceId: true,
+            },
+          })
+        : [];
+      const groupByLocalId = new Map(existingGroups.map((group) => [group.localSourceId, group]));
+      const tripByLocalId = new Map(ownedTrips.map((trip) => [trip.localSourceId, trip]));
+      const syncedGroups: Array<{ groupId: string; localId: string }> = [];
+      const syncedMembers: Array<{ localId: string; memberId: string }> = [];
+
+      for (const group of dedupedGroups) {
+        const title = group.title.trim();
+
+        if (title.length === 0 && group.deletedAt === null) {
+          throw new BadRequestException("Trip group title is required.");
+        }
+
+        const upsertedGroup = await tx.tripGroup.upsert({
+          where: {
+            ownerUserId_localSourceId: {
+              ownerUserId,
+              localSourceId: group.localId,
+            },
+          },
+          create: {
+            ownerUserId,
+            localSourceId: group.localId,
+            title: title || "Untitled group",
+            description: group.description?.trim() || null,
+            createdAt: this.parseDateOrFallback(group.createdAt, group.updatedAt),
+            updatedAt: this.parseDateOrFallback(group.updatedAt, syncedAt),
+            deletedAt: group.deletedAt ? this.parseDateOrFallback(group.deletedAt, syncedAt) : null,
+          },
+          update: {
+            title: title || "Untitled group",
+            description: group.description?.trim() || null,
+            updatedAt: this.parseDateOrFallback(group.updatedAt, syncedAt),
+            deletedAt: group.deletedAt ? this.parseDateOrFallback(group.deletedAt, syncedAt) : null,
+          },
+          select: {
+            id: true,
+            localSourceId: true,
+          },
+        });
+
+        groupByLocalId.set(group.localId, upsertedGroup);
+        syncedGroups.push({
+          groupId: upsertedGroup.id,
+          localId: group.localId,
+        });
+      }
+
+      for (const member of dedupedMembers) {
+        const group = groupByLocalId.get(member.groupLocalId);
+        const trip = tripByLocalId.get(member.tripLocalId);
+
+        if (!group || !trip) {
+          throw new BadRequestException("Trip group member references an unknown owned group or trip.");
+        }
+
+        const upsertedMember = await tx.tripGroupMember.upsert({
+          where: {
+            ownerUserId_localSourceId: {
+              ownerUserId,
+              localSourceId: member.localId,
+            },
+          },
+          create: {
+            ownerUserId,
+            groupId: group.id,
+            groupLocalSourceId: member.groupLocalId,
+            tripId: trip.id,
+            tripLocalSourceId: member.tripLocalId,
+            localSourceId: member.localId,
+            sortOrder: member.sortOrder,
+            createdAt: this.parseDateOrFallback(member.createdAt, member.updatedAt),
+            updatedAt: this.parseDateOrFallback(member.updatedAt, syncedAt),
+            deletedAt: member.deletedAt ? this.parseDateOrFallback(member.deletedAt, syncedAt) : null,
+          },
+          update: {
+            groupId: group.id,
+            groupLocalSourceId: member.groupLocalId,
+            tripId: trip.id,
+            tripLocalSourceId: member.tripLocalId,
+            sortOrder: member.sortOrder,
+            updatedAt: this.parseDateOrFallback(member.updatedAt, syncedAt),
+            deletedAt: member.deletedAt ? this.parseDateOrFallback(member.deletedAt, syncedAt) : null,
+          },
+          select: {
+            id: true,
+            localSourceId: true,
+          },
+        });
+
+        syncedMembers.push({
+          localId: member.localId,
+          memberId: upsertedMember.id,
+        });
+      }
+
+      return {
+        groups: syncedGroups,
+        members: syncedMembers,
+      };
+    });
+
+    return {
+      ...result,
+      syncedAt,
+    };
+  }
+
+  async listTripGroups(ownerUserId: string) {
+    const groups = await this.databaseService.tripGroup.findMany({
+      where: {
+        ownerUserId,
+      },
+      include: {
+        members: {
+          include: {
+            trip: {
+              select: {
+                ownerUserId: true,
+              },
+            },
+          },
+          orderBy: [
+            {
+              sortOrder: "asc",
+            },
+            {
+              createdAt: "asc",
+            },
+          ],
+        },
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+    });
+
+    return {
+      groups: groups.map((group) => ({
+        createdAt: group.createdAt.toISOString(),
+        deletedAt: group.deletedAt ? group.deletedAt.toISOString() : null,
+        description: group.description,
+        id: group.id,
+        localId: group.localSourceId,
+        title: group.title,
+        updatedAt: group.updatedAt.toISOString(),
+      })),
+      members: groups.flatMap((group) =>
+        group.members
+          .filter((member) => member.ownerUserId === ownerUserId && member.trip.ownerUserId === ownerUserId)
+          .map((member) => ({
+            createdAt: member.createdAt.toISOString(),
+            deletedAt: member.deletedAt ? member.deletedAt.toISOString() : null,
+            groupId: member.groupId,
+            groupLocalId: member.groupLocalSourceId,
+            id: member.id,
+            localId: member.localSourceId,
+            sortOrder: member.sortOrder,
+            tripId: member.tripId,
+            tripLocalId: member.tripLocalSourceId,
+            updatedAt: member.updatedAt.toISOString(),
+          })),
+      ),
     };
   }
 

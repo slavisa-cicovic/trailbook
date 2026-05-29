@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 import * as FileSystem from "expo-file-system/legacy";
 
 const DATABASE_NAME = "trailbook.db";
-const DATABASE_VERSION = 7;
+const DATABASE_VERSION = 8;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let databaseWriteQueue: Promise<void> = Promise.resolve();
@@ -347,6 +347,48 @@ async function migrateDatabaseIfNeeded(database: SQLite.SQLiteDatabase) {
 
     await database.execAsync("PRAGMA user_version = 7;");
   }
+
+  if (currentVersion < 8) {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS trip_groups (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT,
+        device_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT,
+        sync_status TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_trip_groups_user_id_deleted_at_updated_at
+        ON trip_groups(user_id, deleted_at, updated_at);
+
+      CREATE TABLE IF NOT EXISTS trip_group_members (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT,
+        group_local_id TEXT NOT NULL,
+        trip_local_id TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT,
+        sync_status TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_trip_group_members_user_group_deleted_sort
+        ON trip_group_members(user_id, group_local_id, deleted_at, sort_order);
+      CREATE INDEX IF NOT EXISTS idx_trip_group_members_user_trip_deleted
+        ON trip_group_members(user_id, trip_local_id, deleted_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_trip_group_members_active_trip
+        ON trip_group_members(group_local_id, trip_local_id)
+        WHERE deleted_at IS NULL;
+
+      PRAGMA user_version = 8;
+    `);
+  }
 }
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -403,6 +445,8 @@ export async function exportDatabaseSnapshot(): Promise<string> {
 
 export async function clearLocalTripData(): Promise<void> {
   await runExclusiveDatabaseWrite(async (database) => {
+    await database.runAsync("DELETE FROM trip_group_members");
+    await database.runAsync("DELETE FROM trip_groups");
     await database.runAsync("DELETE FROM waypoint_attachments");
     await database.runAsync("DELETE FROM waypoints");
     await database.runAsync("DELETE FROM trip_diagnostics");

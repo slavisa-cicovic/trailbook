@@ -163,3 +163,29 @@ export interface SyncTripStatsSnapshotDto {
   segmentStats: SyncTripSegmentStatsDto[];
   tripStats: SyncTripStatsDto | null;
 }
+
+export interface SyncTripGroupDto {
+  createdAt: string;
+  deletedAt: string | null;
+  description: string | null;
+  localId: string;
+  serverId: string | null;
+  title: string;
+  updatedAt: string;
+}
+
+export interface SyncTripGroupMemberDto {
+  createdAt: string;
+  deletedAt: string | null;
+  groupLocalId: string;
+  localId: string;
+  serverId: string | null;
+  sortOrder: number;
+  tripLocalId: string;
+  updatedAt: string;
+}
+
+export interface SyncTripGroupsDto {
+  groups: SyncTripGroupDto[];
+  members: SyncTripGroupMemberDto[];
+}

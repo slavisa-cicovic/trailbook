@@ -21,7 +21,12 @@ import type { Request, Response } from "express";
 import { AuthService } from "../auth/auth.service";
 import type { ShareTripDto } from "./dto/share-trip.dto";
 import type { SaveTripEditDto } from "./dto/save-trip-edit.dto";
-import type { SyncTripDto, SyncTripPointsChunkDto, SyncTripStatsSnapshotDto } from "./dto/sync-trip.dto";
+import type {
+  SyncTripDto,
+  SyncTripGroupsDto,
+  SyncTripPointsChunkDto,
+  SyncTripStatsSnapshotDto,
+} from "./dto/sync-trip.dto";
 import { UpdateTripDto } from "./dto/update-trip.dto";
 import { TripsService } from "./trips.service";
 
@@ -78,6 +83,18 @@ export class TripsController {
   async getOwnedTrip(@Param("tripId") tripId: string, @Req() request: Request) {
     const user = await this.requireAuthenticatedUser(request);
     return this.tripsService.getOwnedTrip(user.id, tripId);
+  }
+
+  @Get("groups")
+  async listTripGroups(@Req() request: Request) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.tripsService.listTripGroups(user.id);
+  }
+
+  @Post("groups/sync")
+  async syncTripGroups(@Body() payload: SyncTripGroupsDto, @Req() request: Request) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.tripsService.syncTripGroups(user.id, payload);
   }
 
   @Get(":tripId")

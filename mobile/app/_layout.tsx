@@ -20,6 +20,8 @@ import {
   hydrateTripSegmentsStore,
   useTripSegmentsStore,
 } from "../src/state/trip-segments-store";
+import { hydrateTripGroupMembersStore, useTripGroupMembersStore } from "../src/state/trip-group-members-store";
+import { hydrateTripGroupsStore, useTripGroupsStore } from "../src/state/trip-groups-store";
 import { hydrateTripPausesStore, useTripPausesStore } from "../src/state/trip-pauses-store";
 import { getTripsStateSnapshot, hydrateTripsStore, useTripsStore } from "../src/state/trips-store";
 import {
@@ -40,6 +42,8 @@ export default function RootLayout() {
   const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
   const tripsHydrated = useTripsStore((state) => state.hydrated);
   const tripSegmentsHydrated = useTripSegmentsStore((state) => state.hydrated);
+  const tripGroupsHydrated = useTripGroupsStore((state) => state.hydrated);
+  const tripGroupMembersHydrated = useTripGroupMembersStore((state) => state.hydrated);
   const tripPausesHydrated = useTripPausesStore((state) => state.hydrated);
   const waypointsHydrated = useWaypointsStore((state) => state.hydrated);
   const waypointAttachmentsHydrated = useWaypointAttachmentsStore((state) => state.hydrated);
@@ -56,6 +60,8 @@ export default function RootLayout() {
         hydrateTripsStore(),
         hydrateTripPausesStore(),
         hydrateTripSegmentsStore(),
+        hydrateTripGroupsStore(),
+        hydrateTripGroupMembersStore(),
         hydrateWaypointsStore(),
         hydrateWaypointAttachmentsStore(),
       ]);
@@ -147,6 +153,8 @@ export default function RootLayout() {
     !sessionHydrated ||
     !recordingHydrated ||
     !tripsHydrated ||
+    !tripGroupsHydrated ||
+    !tripGroupMembersHydrated ||
     !tripPausesHydrated ||
     !tripSegmentsHydrated ||
     !waypointsHydrated ||

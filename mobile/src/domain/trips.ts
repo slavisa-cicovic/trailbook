@@ -96,6 +96,33 @@ export interface TripPoint {
   syncStatus: SyncStatus;
 }
 
+export interface TripGroup {
+  localId: string;
+  serverId: string | null;
+  deviceId: string;
+  userId: string;
+  title: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  syncStatus: SyncStatus;
+}
+
+export interface TripGroupMember {
+  localId: string;
+  serverId: string | null;
+  groupLocalId: string;
+  tripLocalId: string;
+  deviceId: string;
+  userId: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  syncStatus: SyncStatus;
+}
+
 export interface Waypoint {
   localId: string;
   serverId: string | null;
