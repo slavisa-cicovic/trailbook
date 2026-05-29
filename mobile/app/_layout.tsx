@@ -8,6 +8,7 @@ import "../src/services/recording/background-recording-task";
 import { getAppTheme, resolveAppThemeMode } from "../src/constants/app-theme";
 import { ErrorBoundary } from "../src/core/error-boundary";
 import { setupGlobalErrorHandler } from "../src/core/global-error-handler";
+import { initSentry } from "../src/core/sentry";
 import { useAppHydration } from "../src/core/hooks/use-app-hydration";
 import { syncBackgroundLocationTracking } from "../src/services/location/location.service";
 import { syncResolvedRecordingConfig } from "../src/services/recording/recording-config.service";
@@ -30,6 +31,7 @@ export default function RootLayout() {
   const theme = getAppTheme(resolvedThemeMode);
 
   useEffect(() => {
+    initSentry();
     setupGlobalErrorHandler();
   }, []);
 

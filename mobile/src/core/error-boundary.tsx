@@ -1,6 +1,8 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { captureError } from "./sentry";
+
 interface Props {
   children: React.ReactNode;
 }
@@ -18,6 +20,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error("[Trailbook] Uncaught render error", error, info.componentStack);
+    captureError(error, { componentStack: info.componentStack ?? undefined });
   }
 
   handleRetry = () => {

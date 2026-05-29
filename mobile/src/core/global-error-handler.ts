@@ -1,3 +1,5 @@
+import { captureError } from "./sentry";
+
 type GlobalErrorHandler = (error: Error, isFatal?: boolean) => void;
 
 declare const ErrorUtils: {
@@ -7,7 +9,7 @@ declare const ErrorUtils: {
 
 function logError(error: Error, context: string, extra?: Record<string, unknown>) {
   console.error(`[Trailbook][${context}]`, error.message, extra ?? "");
-  // TODO: forward to Sentry or similar when available
+  captureError(error, { context, ...extra });
 }
 
 export function setupGlobalErrorHandler(): void {
