@@ -19,11 +19,18 @@ import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
 import { loadTripSegments } from "../../storage/trip-segments-storage";
 import { loadTrips } from "../../storage/trips-storage";
 import { loadWaypoints } from "../../storage/waypoints-storage";
-import { applyAutoRecordingTransition, recordAutoRecordingSample } from "./auto-recording.service";
+import {
+  applyAutoRecordingTransition,
+  applyBatchAutoTransitionIfNeeded,
+  recordAutoRecordingSample,
+} from "./auto-recording.service";
 import { updateRecordingLastPoint, updateRecordingMotionActivity } from "./recording.service";
+import { setBatchProcessing } from "../../state/batch-processing-store";
 
 const AUTO_REJECTED_RECOVERY_MAX_AGE_MS = 10 * 60 * 1000;
 const AUTO_REJECTED_RECOVERY_MAX_COUNT = 120;
+const BATCH_DETECTION_MIN_SNAPSHOT_COUNT = 5;
+const BATCH_DETECTION_LAG_MS = 2 * 60 * 1000;
 const rejectedAutoSnapshotsByTripLocalId = new Map<string, CurrentLocationSnapshot[]>();
 let recordingPipelineWriteQueue = Promise.resolve();
 
@@ -76,6 +83,19 @@ async function persistRecordedLocationSnapshots(
   snapshots: CurrentLocationSnapshot[],
   callbackSource: LocationCallbackSource,
 ): Promise<void> {
+  // Detect batch synchronously BEFORE the first await so the UI overlay
+  // is guaranteed to appear before any user interaction can happen.
+  const firstRecordedAtMs = snapshots.length > 0 ? new Date(snapshots[0].recordedAt).getTime() : NaN;
+  const isBatch =
+    snapshots.length >= BATCH_DETECTION_MIN_SNAPSHOT_COUNT &&
+    Number.isFinite(firstRecordedAtMs) &&
+    Date.now() - firstRecordedAtMs >= BATCH_DETECTION_LAG_MS;
+
+  if (isBatch) {
+    setBatchProcessing(true);
+  }
+
+  try {
   const recordingSession = await loadRecordingSession();
 
   if (
@@ -137,6 +157,47 @@ async function persistRecordedLocationSnapshots(
     }
 
     return pointsWereAppended;
+  }
+
+  if (
+    nextRecordingSession.recordingMode === "auto" &&
+    snapshots.length >= BATCH_DETECTION_MIN_SNAPSHOT_COUNT
+  ) {
+    const firstRecordedAtMs = new Date(snapshots[0].recordedAt).getTime();
+    const receivedLagMs = Date.now() - firstRecordedAtMs;
+
+    if (Number.isFinite(firstRecordedAtMs) && receivedLagMs >= BATCH_DETECTION_LAG_MS) {
+      let batchRawSamples = recordAutoRecordingSample(recordingTrip.localId, snapshots[0]);
+
+      for (const snapshot of snapshots.slice(1)) {
+        batchRawSamples = recordAutoRecordingSample(recordingTrip.localId, snapshot);
+      }
+
+      const batchMotionActivity = await getLatestMotionActivityAsync(
+        snapshots[snapshots.length - 1].recordedAt,
+      );
+      nextRecordingSession = updateRecordingMotionActivity(nextRecordingSession, batchMotionActivity);
+
+      const batchTransition = applyBatchAutoTransitionIfNeeded(
+        nextRecordingSession,
+        recordingTrip,
+        nextTripSegments,
+        nextTripPoints,
+        nextWaypoints,
+        batchRawSamples,
+        batchMotionActivity,
+      );
+
+      if (batchTransition.changed) {
+        nextRecordingSession = batchTransition.session;
+        nextTripSegments = batchTransition.tripSegments;
+        nextWaypoints = batchTransition.waypoints;
+        // Do not restart background location tracking here. We are inside a
+        // background location callback and the batch data is already historical.
+        // syncBackgroundLocationTracking will apply the correct profile next time
+        // the app comes to foreground.
+      }
+    }
   }
 
   for (const snapshot of snapshots) {
@@ -239,6 +300,11 @@ async function persistRecordedLocationSnapshots(
 
   if (writes.length > 0) {
     await Promise.all(writes);
+  }
+  } finally {
+    if (isBatch) {
+      setBatchProcessing(false);
+    }
   }
 }
 

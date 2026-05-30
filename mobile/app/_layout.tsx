@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View, useColorScheme } from "react-native";
+import { useBatchProcessing } from "../src/state/batch-processing-store";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import "../src/services/recording/background-recording-task";
@@ -10,7 +11,7 @@ import { ErrorBoundary } from "../src/core/error-boundary";
 import { setupGlobalErrorHandler } from "../src/core/global-error-handler";
 import { initSentry } from "../src/core/sentry";
 import { useAppHydration } from "../src/core/hooks/use-app-hydration";
-import { syncBackgroundLocationTracking } from "../src/services/location/location.service";
+import { getBackgroundTrackingProfile, syncBackgroundLocationTracking } from "../src/services/location/location.service";
 import { syncResolvedRecordingConfig } from "../src/services/recording/recording-config.service";
 import { useRecordingStore } from "../src/state/recording-store";
 import { useSessionStore } from "../src/state/session-store";
@@ -25,7 +26,10 @@ export default function RootLayout() {
   const systemColorScheme = useColorScheme();
   const recordingStatus = useRecordingStore((state) => state.session.status);
   const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
+  const activeRecordingMode = useRecordingStore((state) => state.session.recordingMode);
   const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
+  const activeBackgroundProfile = getBackgroundTrackingProfile(activeRecordingMode, activeRecordingProfile);
+  const isBatchProcessing = useBatchProcessing();
 
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
   const theme = getAppTheme(resolvedThemeMode);
@@ -43,10 +47,10 @@ export default function RootLayout() {
     void syncBackgroundLocationTracking(
       recordingStatus,
       activeRecordingTripId,
-      activeRecordingProfile,
+      activeBackgroundProfile,
     ).catch(() => undefined);
   }, [
-    activeRecordingProfile,
+    activeBackgroundProfile,
     activeRecordingTripId,
     recordingHydrated,
     recordingStatus,
@@ -69,7 +73,7 @@ export default function RootLayout() {
       void syncBackgroundLocationTracking(
         recordingStatus,
         activeRecordingTripId,
-        activeRecordingProfile,
+        activeBackgroundProfile,
       ).catch((error) => {
         console.warn("[Trailbook][background-watchdog] sync failed", error);
       });
@@ -77,7 +81,7 @@ export default function RootLayout() {
 
     return () => clearInterval(intervalId);
   }, [
-    activeRecordingProfile,
+    activeBackgroundProfile,
     activeRecordingTripId,
     recordingHydrated,
     recordingStatus,
@@ -95,12 +99,12 @@ export default function RootLayout() {
         syncBackgroundLocationTracking(
           recordingStatus,
           activeRecordingTripId,
-          activeRecordingProfile,
+          activeBackgroundProfile,
         ),
       )
       .catch(() => undefined);
   }, [
-    activeRecordingProfile,
+    activeBackgroundProfile,
     activeRecordingTripId,
     identitySession?.role,
     identitySession?.sessionToken,
@@ -136,6 +140,11 @@ export default function RootLayout() {
             <Stack.Screen name="settings/recording-config" options={{ animation: "none" }} />
             <Stack.Screen name="settings/recording-config/[target]" options={{ animation: "none" }} />
           </Stack>
+          {isBatchProcessing && recordingStatus === "recording" && (
+            <View style={[styles.batchOverlay, { backgroundColor: theme.background }]} pointerEvents="box-only">
+              <ActivityIndicator size="large" color={theme.accent} />
+            </View>
+          )}
           <StatusBar style={resolvedThemeMode === "night" ? "light" : "dark"} />
         </GestureHandlerRootView>
       )}
@@ -151,5 +160,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  batchOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.85,
   },
 });

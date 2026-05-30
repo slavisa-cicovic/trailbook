@@ -3,10 +3,17 @@ import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 
 import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
-import type { RecordingProfile } from "../../domain/trips";
+import type { RecordingMode, RecordingProfile } from "../../domain/trips";
 import type { RecordingConfigAccuracy, TrackingProfileConfig } from "../../domain/recording-config";
 import { getRuntimeTrackingProfileConfig } from "../recording/recording-config.service";
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "./background-location.constants";
+
+export function getBackgroundTrackingProfile(
+  _recordingMode: RecordingMode,
+  recordingProfile: RecordingProfile,
+): RecordingProfile {
+  return recordingProfile;
+}
 
 export interface CurrentLocationSnapshot {
   accuracy: number | null;

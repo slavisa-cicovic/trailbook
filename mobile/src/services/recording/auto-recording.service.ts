@@ -22,7 +22,7 @@ interface TimedSpeedSample {
   speedKmh: number;
 }
 
-interface AutoLocationPoint {
+export interface AutoLocationPoint {
   accuracy: number | null;
   latitude: number;
   longitude: number;
@@ -562,6 +562,84 @@ export function applyAutoRecordingTransition(
     waypoints,
     trip.localId,
     recordedAt,
+  );
+
+  return {
+    changed: true,
+    session: updateRecordingSegment(recordingSession, nextSegment.localId, inferredProfile),
+    tripSegments: normalizedState.tripSegments,
+    waypoints: normalizedState.waypoints,
+  };
+}
+
+export function applyBatchAutoTransitionIfNeeded(
+  recordingSession: RecordingSessionSummary,
+  trip: Trip,
+  tripSegments: TripSegment[],
+  tripPoints: TripPoint[],
+  waypoints: Waypoint[],
+  batchSamples: AutoLocationPoint[],
+  motionActivity: MotionActivity | null = null,
+): AutoRecordingTransitionResult {
+  if (
+    recordingSession.recordingMode !== "auto" ||
+    batchSamples.length < 2 ||
+    !recordingSession.activeSegmentId
+  ) {
+    return { changed: false, session: recordingSession, tripSegments, waypoints };
+  }
+
+  const sortedSamples = [...batchSamples].sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+  const firstRecordedAt = sortedSamples[0]?.recordedAt;
+  const lastRecordedAt = sortedSamples[sortedSamples.length - 1]?.recordedAt;
+
+  if (!firstRecordedAt || !lastRecordedAt) {
+    return { changed: false, session: recordingSession, tripSegments, waypoints };
+  }
+
+  const firstMs = new Date(firstRecordedAt).getTime();
+  const lastMs = new Date(lastRecordedAt).getTime();
+
+  if (Number.isNaN(firstMs) || Number.isNaN(lastMs)) {
+    return { changed: false, session: recordingSession, tripSegments, waypoints };
+  }
+
+  const batchSpanMs = lastMs - firstMs;
+  const inferredProfile = inferAutoRecordingProfile(sortedSamples, motionActivity);
+
+  const activeSegment =
+    tripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ??
+    getOpenTripSegmentForTrip(tripSegments, trip.localId);
+  const currentProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
+
+  if (!inferredProfile || inferredProfile === currentProfile || !activeSegment) {
+    return { changed: false, session: recordingSession, tripSegments, waypoints };
+  }
+
+  if (batchSpanMs < getAutoStabilityThresholdMs(inferredProfile)) {
+    return { changed: false, session: recordingSession, tripSegments, waypoints };
+  }
+
+  // Clamp transition time: GPS timestamps can precede the segment start by a
+  // few milliseconds (cached fix), which would produce a negative-duration segment.
+  const segmentStartMs = new Date(activeSegment.startedAt).getTime();
+  const transitionAt = Number.isFinite(segmentStartMs) && firstMs < segmentStartMs
+    ? activeSegment.startedAt
+    : firstRecordedAt;
+
+  const closedSegments = closeActiveTripSegment(tripSegments, activeSegment.localId, transitionAt);
+  const { nextSegment, tripSegments: stagedTripSegments } = startNextTripSegment(
+    trip,
+    closedSegments,
+    inferredProfile,
+    transitionAt,
+  );
+  const normalizedState = normalizeAutoClosedTripSegment(
+    stagedTripSegments,
+    tripPoints,
+    waypoints,
+    trip.localId,
+    transitionAt,
   );
 
   return {

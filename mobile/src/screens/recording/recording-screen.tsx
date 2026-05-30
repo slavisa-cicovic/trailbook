@@ -31,7 +31,7 @@ import {
   WAYPOINT_CATEGORY_OPTIONS,
   getWaypointCategoryOption,
 } from "../../constants/waypoint-categories";
-import type { RecordingMode, RecordingProfile } from "../../domain/trips";
+import type { RecordingMode } from "../../domain/trips";
 import type { TrailbookMapType } from "../trips/components/trip-route-map";
 import {
   getCurrentForegroundLocation,
@@ -42,6 +42,7 @@ import {
   type CurrentLocationSnapshot,
   watchImmediateForegroundLocation,
   watchForegroundLocation,
+  getBackgroundTrackingProfile,
 } from "../../services/location/location.service";
 import { getBatterySnapshot } from "../../services/device/battery.service";
 import {
@@ -124,16 +125,6 @@ import {
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 
-function getBackgroundTrackingProfileForSession(
-  recordingMode: RecordingMode,
-  recordingProfile: RecordingProfile,
-): RecordingProfile {
-  if (Platform.OS === "android" && recordingMode === "auto" && recordingProfile === "walk") {
-    return "drive";
-  }
-
-  return recordingProfile;
-}
 
 export default function RecordingScreen() {
   const { width: screenWidth } = useWindowDimensions();
@@ -501,7 +492,7 @@ export default function RecordingScreen() {
       logRecordingStartStep("session-written", { status: nextSession.status });
 
       try {
-        const backgroundTrackingProfile = getBackgroundTrackingProfileForSession(
+        const backgroundTrackingProfile = getBackgroundTrackingProfile(
           recordingDraft.recordingMode,
           concreteRecordingProfile,
         );
@@ -677,7 +668,7 @@ export default function RecordingScreen() {
 
     if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
       await startBackgroundLocationTracking(
-        getBackgroundTrackingProfileForSession(
+        getBackgroundTrackingProfile(
           nextState.session.recordingMode,
           nextState.session.recordingProfile,
         ),
@@ -698,7 +689,7 @@ export default function RecordingScreen() {
       await setRecordingSession(nextSession);
       if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
         await startBackgroundLocationTracking(
-          getBackgroundTrackingProfileForSession(
+          getBackgroundTrackingProfile(
             nextSession.recordingMode,
             nextSession.recordingProfile,
           ),
@@ -740,7 +731,7 @@ export default function RecordingScreen() {
       await ensureMotionActivityUpdatesForAutoMode();
       if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
         await restartBackgroundLocationTracking(
-          getBackgroundTrackingProfileForSession("auto", recordingSession.recordingProfile),
+          getBackgroundTrackingProfile("auto", recordingSession.recordingProfile),
         );
       }
       setProfileModalVisible(false);
