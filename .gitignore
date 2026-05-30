@@ -6,6 +6,7 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/launch.json
+.claude/
 
 # Logs
 *.log
