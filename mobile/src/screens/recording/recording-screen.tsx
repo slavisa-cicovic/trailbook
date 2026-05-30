@@ -460,7 +460,7 @@ export default function RecordingScreen() {
 
     if (!permissionsReady) {
       logRecordingStartStep("blocked-permissions", {
-        missingRequired: permissionStatus?.missingRequired ?? null,
+        missingRequired: missingRequired ?? null,
       });
       return;
     }
