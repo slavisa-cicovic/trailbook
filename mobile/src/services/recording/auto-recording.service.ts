@@ -43,6 +43,11 @@ const AUTO_RAW_SAMPLE_MAX_AGE_MS = 15 * 60 * 1000;
 const AUTO_RAW_SAMPLE_MAX_COUNT = 240;
 
 const WALK_STABILITY_MS = 5 * 60 * 1000;
+// Short inference window for current-activity detection so stale samples
+// from a preceding different-mode segment don't suppress the new mode.
+// Both walk and drive use this window so drive→walk and walk→drive
+// transitions react to the last 2 min, not the last 10 min.
+const ACTIVITY_INFERENCE_WINDOW_MS = 2 * 60 * 1000;
 const BIKE_STABILITY_MS = 75 * 1000;
 const MOTION_ASSISTED_BIKE_STABILITY_MS = 45 * 1000;
 const DRIVE_STABILITY_MS = 75 * 1000;
@@ -255,9 +260,9 @@ function inferLocationOnlyAutoRecordingProfile(tripPoints: AutoLocationPoint[]):
     return null;
   }
 
-  const walkWindow = getMovingStableWindow(speedSamples, 10 * 60 * 1000);
+  const walkWindow = getMovingStableWindow(speedSamples, ACTIVITY_INFERENCE_WINDOW_MS);
   const bikeWindow = getMovingStableWindow(speedSamples, 10 * 60 * 1000);
-  const driveWindow = getMovingStableWindow(speedSamples, 10 * 60 * 1000);
+  const driveWindow = getMovingStableWindow(speedSamples, ACTIVITY_INFERENCE_WINDOW_MS);
   const planeWindow = getMovingStableWindow(speedSamples, 6 * 60 * 1000);
 
   // This returns a candidate. applyAutoRecordingTransition owns the stability timer,

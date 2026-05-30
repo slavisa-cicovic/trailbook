@@ -18,6 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   applyBatchAutoTransitionIfNeeded,
+  inferAutoRecordingProfile,
   type AutoLocationPoint,
 } from "../../services/recording/auto-recording.service";
 import type { RecordingSessionSummary, Trip, TripSegment } from "../../domain/trips";
@@ -312,5 +313,49 @@ describe("applyBatchAutoTransitionIfNeeded", () => {
     );
 
     expect(result.changed).toBe(false);
+  });
+});
+
+// ── inferAutoRecordingProfile — drive→walk inference window ───────────────────
+//
+// WALK_INFERENCE_WINDOW_MS = 2 min (reduced from 10 min).
+// Scenario: user drove for 8 min then walked for 2 min.
+// Old 10-min window: drive samples pollute the window → walk not detected.
+// New 2-min window: only recent walk samples → walk correctly detected.
+
+describe("inferAutoRecordingProfile — drive→walk with short inference window", () => {
+  const NOW_MS = BASE_MS + 10 * 60 * 1000; // 10 min into the trip
+
+  function makeSampleAt(offsetFromNowMs: number, speedMs: number): AutoLocationPoint {
+    return {
+      accuracy: 5,
+      latitude: 45.015,
+      longitude: 19.811,
+      recordedAt: new Date(NOW_MS + offsetFromNowMs).toISOString(),
+      speed: speedMs,
+    };
+  }
+
+  // Drive samples at 50 km/h (13.9 m/s): 8 min ago → 2.5 min ago.
+  // Speed > BIKE_MAX_KMH (35) so the 10-min bike window won't false-trigger.
+  const driveSamples: AutoLocationPoint[] = Array.from({ length: 11 }, (_, i) =>
+    makeSampleAt((-8 * 60 + i * 30) * 1000, 13.9),  // -480 s to -150 s
+  );
+
+  // Walk samples: last 2 min (within the 2-min inference window)
+  const walkSamples: AutoLocationPoint[] = Array.from({ length: 8 }, (_, i) =>
+    makeSampleAt((-2 * 60 + i * 15) * 1000, 1.1),  // -120 s to -15 s
+  );
+
+  const allSamples = [...driveSamples, ...walkSamples];
+
+  it("detects walk when recent 2-min window is all walk-speed", () => {
+    expect(inferAutoRecordingProfile(allSamples, null)).toBe("walk");
+  });
+
+  it("detects walk even if older drive samples dominate the full 10-min pool", () => {
+    // sanity-check: drive samples are the majority (16 vs 8)
+    expect(driveSamples.length).toBeGreaterThan(walkSamples.length);
+    expect(inferAutoRecordingProfile(allSamples, null)).toBe("walk");
   });
 });
