@@ -122,6 +122,14 @@ vi.mock("../../services/trip-segments/trip-segments.service", () => ({
   }),
   normalizeAutoClosedTripSegment: vi.fn(
     (segments: TripSegment[], _points: TripPoint[], waypoints: unknown) => ({
+      tripPoints: _points,
+      tripSegments: segments,
+      waypoints,
+    }),
+  ),
+  removeInitialAutoBootstrapWalkSegment: vi.fn(
+    (segments: TripSegment[], points: TripPoint[], waypoints: unknown) => ({
+      tripPoints: points,
       tripSegments: segments,
       waypoints,
     }),

@@ -1,3 +1,5 @@
+import type { LocationObject } from "expo-location";
+
 import { persistBackgroundRecordedLocations } from "../recording/recording-pipeline.service";
 import {
   getCurrentForegroundLocation,
@@ -45,9 +47,10 @@ export interface ScenarioRunResult {
 }
 
 const MIN = 60_000;
+const TRANSITION_SIMULATION_CHUNK_SIZE = 4;
 
 export const PREDEFINED_SCENARIOS: PredefinedScenario[] = [
-  // --- Transition scenarios (startTs = now-90s, isBatch=false, incremental AUTO detection) ---
+  // --- Transition scenarios (chunked below the batch threshold for incremental AUTO detection) ---
   {
     id: "walk-drive-walk",
     name: "Walk → Drive → Walk",
@@ -137,6 +140,77 @@ function getActivityLabel(activity: SimulationActivity): string {
   }
 }
 
+function getNextSyncStatus<T extends { syncStatus: "local-only" | "pending-sync" | "synced" | "sync-error" }>(
+  entity: T,
+): T["syncStatus"] {
+  return entity.syncStatus === "local-only" ? "local-only" : "pending-sync";
+}
+
+function getLocationRecordedAt(location: LocationObject): string {
+  return new Date(location.timestamp).toISOString();
+}
+
+function getSimulationTripTitle(scenario: PredefinedScenario): string {
+  return `Simulation trip: ${scenario.name}`;
+}
+
+function getSimulationTripDescription(scenario: PredefinedScenario): string {
+  return [
+    `Scenario: ${scenario.id}`,
+    `Strategy: ${scenario.strategy}`,
+    scenario.description,
+    getScenarioSummary(scenario),
+  ].join("\n");
+}
+
+async function prepareActiveSimulationTrip(
+  scenario: PredefinedScenario,
+  firstRecordedAt: string,
+): Promise<void> {
+  const recording = getRecordingStateSnapshot();
+  const activeTripId = recording.session.activeTripId;
+
+  if (recording.session.status !== "recording" || !activeTripId) {
+    return;
+  }
+
+  const updatedAt = new Date().toISOString();
+  const { trips } = getTripsStateSnapshot();
+  const { tripSegments } = getTripSegmentsStateSnapshot();
+  const nextTrips = trips.map((trip) =>
+    trip.localId === activeTripId
+      ? {
+          ...trip,
+          title: getSimulationTripTitle(scenario),
+          description: getSimulationTripDescription(scenario),
+          startedAt: firstRecordedAt,
+          updatedAt,
+          syncStatus: getNextSyncStatus(trip),
+        }
+      : trip,
+  );
+  const nextTripSegments = tripSegments.map((segment) =>
+    segment.localId === recording.session.activeSegmentId
+      ? {
+          ...segment,
+          startedAt: firstRecordedAt,
+          updatedAt,
+          syncStatus: getNextSyncStatus(segment),
+        }
+      : segment,
+  );
+
+  await setTrips(nextTrips);
+  await setTripSegments(nextTripSegments);
+  await setRecordingSession({
+    ...recording.session,
+    startedAt: firstRecordedAt,
+    lastPointRecordedAt: null,
+    autoCandidateProfile: null,
+    autoCandidateSince: null,
+  });
+}
+
 async function getSimulationStartCoords(): Promise<{ lat: number; lon: number }> {
   try {
     const location = await getCurrentForegroundLocation();
@@ -160,9 +234,37 @@ async function countSavedPoints(tripLocalId: string): Promise<number> {
   }
 }
 
-// Injects all scenario locations as a single batch call.
-// Background GPS is stopped first to prevent real GPS timestamps (≈ now) from
-// interfering with simulated timestamps that may be in the past or future.
+async function persistScenarioLocations(
+  scenario: PredefinedScenario,
+  locations: LocationObject[],
+  onProgress: (processed: number, total: number) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const persistOptions = { restartTrackingOnAutoTransition: false };
+
+  if (scenario.strategy === "sleep") {
+    await persistBackgroundRecordedLocations(locations, persistOptions);
+    onProgress(locations.length, locations.length);
+    return;
+  }
+
+  for (let index = 0; index < locations.length; index += TRANSITION_SIMULATION_CHUNK_SIZE) {
+    if (signal.aborted) {
+      return;
+    }
+
+    const chunk = locations.slice(index, index + TRANSITION_SIMULATION_CHUNK_SIZE);
+
+    // Keep transition chunks below the batch threshold so AUTO logic observes
+    // a chronological stream instead of one sleep-recovery batch.
+    await persistBackgroundRecordedLocations(chunk, persistOptions);
+    onProgress(Math.min(index + chunk.length, locations.length), locations.length);
+  }
+}
+
+// Injects sleep scenarios as one batch and transition scenarios as small
+// chronological chunks. Background GPS is stopped first so real-device
+// timestamps do not race against simulated timestamps.
 export async function runScenario(
   scenario: PredefinedScenario,
   onProgress: (processed: number, total: number) => void,
@@ -186,11 +288,14 @@ export async function runScenario(
     return { locationCount: 0, processingMs: 0, savedPoints: 0 };
   }
 
+  if (locations.length > 0) {
+    await prepareActiveSimulationTrip(scenario, getLocationRecordedAt(locations[0]));
+  }
+
   onProgress(0, locations.length);
   const startMs = Date.now();
-  await persistBackgroundRecordedLocations(locations);
+  await persistScenarioLocations(scenario, locations, onProgress, signal);
   const processingMs = Date.now() - startMs;
-  onProgress(locations.length, locations.length);
 
   const savedPoints = await countSavedPoints(activeTripId);
   return { locationCount: locations.length, processingMs, savedPoints };
@@ -246,7 +351,7 @@ export async function stopSimulationRecording(): Promise<void> {
   }
 
   const { activeTripId, activeSegmentId } = recording.session;
-  const endedAt = new Date().toISOString();
+  const endedAt = recording.session.lastPointRecordedAt ?? new Date().toISOString();
   const { trips } = getTripsStateSnapshot();
   const { tripSegments } = getTripSegmentsStateSnapshot();
 

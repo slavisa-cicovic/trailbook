@@ -4,6 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -170,86 +171,102 @@ export default function SimulationScreen() {
   }
 
   return (
-    <ScreenLayout onBack={() => router.back()} title="GPS Simulation">
+    <ScreenLayout
+      contentVariant="plain"
+      onBack={() => router.back()}
+      scrollEnabled={false}
+      title="GPS Simulation"
+    >
       <View style={styles.root}>
-        <View style={[styles.banner, { backgroundColor: theme.accentMuted, borderColor: theme.border }]}>
-          <MaterialIcons color={theme.accent} name="science" size={20} />
-          <Text style={[styles.bannerText, { color: theme.accent }]}>
-            Dev tool — injects synthetic GPS data as a single batch into the recording pipeline.
-          </Text>
-        </View>
-
-        <View style={[styles.recordingControl, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <View style={styles.recordingStatusRow}>
-            <View style={[styles.statusDot, { backgroundColor: isRecording ? theme.accent : theme.mutedText }]} />
-            <Text style={[styles.recordingStatusText, { color: theme.primaryText }]}>
-              {isRecording ? "Recording active" : "No active recording"}
+        <View style={styles.fixedHeader}>
+          <View style={[styles.banner, { backgroundColor: theme.accentMuted, borderColor: theme.border }]}>
+            <MaterialIcons color={theme.accent} name="science" size={20} />
+            <Text style={[styles.bannerText, { color: theme.accent }]}>
+              Dev tool — injects synthetic GPS data into the recording pipeline.
             </Text>
           </View>
 
-          {isRecording ? (
-            <Pressable
-              disabled={simRecordingBusy}
-              onPress={() => void handleStopSimRecording()}
-              style={({ pressed }) => [
-                styles.controlButton,
-                { backgroundColor: theme.danger },
-                (pressed || simRecordingBusy) && styles.runButtonPressed,
-              ]}
-            >
-              <MaterialIcons color={theme.surface} name="stop" size={16} />
-              <Text style={[styles.controlButtonText, { color: theme.surface }]}>Stop recording</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              disabled={simRecordingBusy}
-              onPress={() => void handleStartSimRecording()}
-              style={({ pressed }) => [
-                styles.controlButton,
-                { backgroundColor: theme.accent },
-                (pressed || simRecordingBusy) && styles.runButtonPressed,
-              ]}
-            >
-              {simRecordingBusy ? (
-                <ActivityIndicator color={theme.surface} size="small" />
-              ) : (
-                <MaterialIcons color={theme.surface} name="radio-button-on" size={16} />
-              )}
-              <Text style={[styles.controlButtonText, { color: theme.surface }]}>
-                Start sim recording
+          <View style={[styles.recordingControl, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.recordingStatusRow}>
+              <View style={[styles.statusDot, { backgroundColor: isRecording ? theme.accent : theme.mutedText }]} />
+              <Text style={[styles.recordingStatusText, { color: theme.primaryText }]}>
+                {isRecording ? "Recording active" : "No active recording"}
               </Text>
-            </Pressable>
-          )}
+            </View>
 
-          {simRecordingError !== null && (
-            <Text style={[styles.errorText, { color: theme.danger }]}>{simRecordingError}</Text>
-          )}
+            {isRecording ? (
+              <Pressable
+                disabled={simRecordingBusy}
+                onPress={() => void handleStopSimRecording()}
+                style={({ pressed }) => [
+                  styles.controlButton,
+                  { backgroundColor: theme.danger },
+                  (pressed || simRecordingBusy) && styles.runButtonPressed,
+                ]}
+              >
+                <MaterialIcons color={theme.surface} name="stop" size={16} />
+                <Text style={[styles.controlButtonText, { color: theme.surface }]}>Stop recording</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                disabled={simRecordingBusy}
+                onPress={() => void handleStartSimRecording()}
+                style={({ pressed }) => [
+                  styles.controlButton,
+                  { backgroundColor: theme.accent },
+                  (pressed || simRecordingBusy) && styles.runButtonPressed,
+                ]}
+              >
+                {simRecordingBusy ? (
+                  <ActivityIndicator color={theme.surface} size="small" />
+                ) : (
+                  <MaterialIcons color={theme.surface} name="radio-button-on" size={16} />
+                )}
+                <Text style={[styles.controlButtonText, { color: theme.surface }]}>
+                  Start sim recording
+                </Text>
+              </Pressable>
+            )}
 
-          {isRecording && !isAutoMode && (
-            <Text style={[styles.errorText, { color: theme.danger }]}>
-              Not in AUTO mode — profile transitions won't be detected.
-            </Text>
-          )}
+            {simRecordingError !== null && (
+              <Text style={[styles.errorText, { color: theme.danger }]}>{simRecordingError}</Text>
+            )}
+
+            {isRecording && !isAutoMode && (
+              <Text style={[styles.errorText, { color: theme.danger }]}>
+                Not in AUTO mode — profile transitions won't be detected.
+              </Text>
+            )}
+          </View>
         </View>
 
-        {PREDEFINED_SCENARIOS.map((scenario) => (
-          <ScenarioCard
-            key={scenario.id}
-            error={errors[scenario.id] ?? null}
-            onRun={() => void handleRun(scenario)}
-            result={results[scenario.id] ?? null}
-            running={runningId === scenario.id}
-            scenario={scenario}
-            theme={theme}
-          />
-        ))}
+        <ScrollView
+          contentContainerStyle={styles.scenarioList}
+          keyboardShouldPersistTaps="handled"
+          style={styles.scenarioScroll}
+        >
+          {PREDEFINED_SCENARIOS.map((scenario) => (
+            <ScenarioCard
+              key={scenario.id}
+              error={errors[scenario.id] ?? null}
+              onRun={() => void handleRun(scenario)}
+              result={results[scenario.id] ?? null}
+              running={runningId === scenario.id}
+              scenario={scenario}
+              theme={theme}
+            />
+          ))}
+        </ScrollView>
       </View>
     </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { gap: 12 },
+  root: { flex: 1 },
+  fixedHeader: { gap: 12 },
+  scenarioScroll: { flex: 1 },
+  scenarioList: { gap: 12, paddingBottom: 16, paddingTop: 12 },
   banner: {
     alignItems: "flex-start",
     borderRadius: 14,

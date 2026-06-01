@@ -34,6 +34,10 @@ const BATCH_DETECTION_LAG_MS = 2 * 60 * 1000;
 const rejectedAutoSnapshotsByTripLocalId = new Map<string, CurrentLocationSnapshot[]>();
 let recordingPipelineWriteQueue = Promise.resolve();
 
+interface PersistRecordedLocationOptions {
+  restartTrackingOnAutoTransition?: boolean;
+}
+
 function getRejectedAutoRecoverySnapshots(tripLocalId: string, recordedAt: string): CurrentLocationSnapshot[] {
   const recordedAtMs = new Date(recordedAt).getTime();
   const minRecordedAtMs = Number.isNaN(recordedAtMs)
@@ -82,6 +86,7 @@ function forgetRejectedAutoSnapshots(tripLocalId: string, snapshots: CurrentLoca
 async function persistRecordedLocationSnapshots(
   snapshots: CurrentLocationSnapshot[],
   callbackSource: LocationCallbackSource,
+  options: PersistRecordedLocationOptions = {},
 ): Promise<void> {
   // Detect batch synchronously BEFORE the first await so the UI overlay
   // is guaranteed to appear before any user interaction can happen.
@@ -96,6 +101,7 @@ async function persistRecordedLocationSnapshots(
   }
 
   try {
+  const restartTrackingOnAutoTransition = options.restartTrackingOnAutoTransition ?? true;
   const recordingSession = await loadRecordingSession();
 
   if (
@@ -190,6 +196,10 @@ async function persistRecordedLocationSnapshots(
 
       if (batchTransition.changed) {
         nextRecordingSession = batchTransition.session;
+        if (batchTransition.tripPoints !== nextTripPoints) {
+          nextTripPoints = batchTransition.tripPoints;
+          pointsChanged = true;
+        }
         nextTripSegments = batchTransition.tripSegments;
         nextWaypoints = batchTransition.waypoints;
         // Do not restart background location tracking here. We are inside a
@@ -236,11 +246,18 @@ async function persistRecordedLocationSnapshots(
       );
 
       nextRecordingSession = autoTransition.session;
+      if (autoTransition.tripPoints !== nextTripPoints) {
+        nextTripPoints = autoTransition.tripPoints;
+        pointsChanged = true;
+      }
       nextTripSegments = autoTransition.tripSegments;
       nextWaypoints = autoTransition.waypoints;
 
       if (autoTransition.changed) {
-        await restartBackgroundLocationTracking(nextRecordingSession.recordingProfile);
+        if (restartTrackingOnAutoTransition) {
+          await restartBackgroundLocationTracking(nextRecordingSession.recordingProfile);
+        }
+
         const recoverySnapshots = getRejectedAutoRecoverySnapshots(recordingTrip.localId, snapshot.recordedAt);
         const snapshotsToReevaluate = lastRecordedAt === snapshot.recordedAt
           ? recoverySnapshots
@@ -311,14 +328,18 @@ async function persistRecordedLocationSnapshots(
 function enqueueRecordedLocationSnapshots(
   snapshots: CurrentLocationSnapshot[],
   callbackSource: LocationCallbackSource,
+  options: PersistRecordedLocationOptions = {},
 ): Promise<void> {
   recordingPipelineWriteQueue = recordingPipelineWriteQueue
     .catch(() => undefined)
-    .then(() => persistRecordedLocationSnapshots(snapshots, callbackSource));
+    .then(() => persistRecordedLocationSnapshots(snapshots, callbackSource, options));
 
   return recordingPipelineWriteQueue;
 }
 
-export function persistBackgroundRecordedLocations(locations: Location.LocationObject[]): Promise<void> {
-  return enqueueRecordedLocationSnapshots(locations.map(toSnapshot), "background");
+export function persistBackgroundRecordedLocations(
+  locations: Location.LocationObject[],
+  options: PersistRecordedLocationOptions = {},
+): Promise<void> {
+  return enqueueRecordedLocationSnapshots(locations.map(toSnapshot), "background", options);
 }

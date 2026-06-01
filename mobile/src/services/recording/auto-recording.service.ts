@@ -4,6 +4,7 @@ import {
   closeActiveTripSegment,
   getOpenTripSegmentForTrip,
   normalizeAutoClosedTripSegment,
+  removeInitialAutoBootstrapWalkSegment,
   startNextTripSegment,
 } from "../trip-segments/trip-segments.service";
 import { getVisibleTripPointsForTrip } from "../trip-points/trip-points.service";
@@ -12,6 +13,7 @@ import { updateRecordingAutoCandidate, updateRecordingSegment } from "./recordin
 interface AutoRecordingTransitionResult {
   changed: boolean;
   session: RecordingSessionSummary;
+  tripPoints: TripPoint[];
   tripSegments: TripSegment[];
   waypoints: Waypoint[];
 }
@@ -487,6 +489,7 @@ export function applyAutoRecordingTransition(
     return {
       changed: false,
       session: recordingSession,
+      tripPoints,
       tripSegments,
       waypoints,
     };
@@ -509,6 +512,7 @@ export function applyAutoRecordingTransition(
     return {
       changed: false,
       session: recordingSession,
+      tripPoints,
       tripSegments,
       waypoints,
     };
@@ -522,6 +526,7 @@ export function applyAutoRecordingTransition(
         : recordingSession.autoCandidateProfile === null && recordingSession.autoCandidateSince === null
           ? recordingSession
           : updateRecordingAutoCandidate(recordingSession, null, null),
+      tripPoints,
       tripSegments,
       waypoints,
     };
@@ -531,6 +536,7 @@ export function applyAutoRecordingTransition(
     return {
       changed: false,
       session: updateRecordingAutoCandidate(recordingSession, inferredProfile, recordedAt),
+      tripPoints,
       tripSegments,
       waypoints,
     };
@@ -549,6 +555,7 @@ export function applyAutoRecordingTransition(
     return {
       changed: false,
       session: recordingSession,
+      tripPoints,
       tripSegments,
       waypoints,
     };
@@ -568,12 +575,21 @@ export function applyAutoRecordingTransition(
     trip.localId,
     recordedAt,
   );
+  const prunedState = removeInitialAutoBootstrapWalkSegment(
+    normalizedState.tripSegments,
+    normalizedState.tripPoints,
+    normalizedState.waypoints,
+    trip.localId,
+    nextSegment.localId,
+    recordedAt,
+  );
 
   return {
     changed: true,
     session: updateRecordingSegment(recordingSession, nextSegment.localId, inferredProfile),
-    tripSegments: normalizedState.tripSegments,
-    waypoints: normalizedState.waypoints,
+    tripPoints: prunedState.tripPoints,
+    tripSegments: prunedState.tripSegments,
+    waypoints: prunedState.waypoints,
   };
 }
 
@@ -591,7 +607,7 @@ export function applyBatchAutoTransitionIfNeeded(
     batchSamples.length < 2 ||
     !recordingSession.activeSegmentId
   ) {
-    return { changed: false, session: recordingSession, tripSegments, waypoints };
+    return { changed: false, session: recordingSession, tripPoints, tripSegments, waypoints };
   }
 
   const sortedSamples = [...batchSamples].sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
@@ -599,14 +615,14 @@ export function applyBatchAutoTransitionIfNeeded(
   const lastRecordedAt = sortedSamples[sortedSamples.length - 1]?.recordedAt;
 
   if (!firstRecordedAt || !lastRecordedAt) {
-    return { changed: false, session: recordingSession, tripSegments, waypoints };
+    return { changed: false, session: recordingSession, tripPoints, tripSegments, waypoints };
   }
 
   const firstMs = new Date(firstRecordedAt).getTime();
   const lastMs = new Date(lastRecordedAt).getTime();
 
   if (Number.isNaN(firstMs) || Number.isNaN(lastMs)) {
-    return { changed: false, session: recordingSession, tripSegments, waypoints };
+    return { changed: false, session: recordingSession, tripPoints, tripSegments, waypoints };
   }
 
   const batchSpanMs = lastMs - firstMs;
@@ -618,11 +634,11 @@ export function applyBatchAutoTransitionIfNeeded(
   const currentProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
 
   if (!inferredProfile || inferredProfile === currentProfile || !activeSegment) {
-    return { changed: false, session: recordingSession, tripSegments, waypoints };
+    return { changed: false, session: recordingSession, tripPoints, tripSegments, waypoints };
   }
 
   if (batchSpanMs < getAutoStabilityThresholdMs(inferredProfile)) {
-    return { changed: false, session: recordingSession, tripSegments, waypoints };
+    return { changed: false, session: recordingSession, tripPoints, tripSegments, waypoints };
   }
 
   // Clamp transition time: GPS timestamps can precede the segment start by a
@@ -646,11 +662,20 @@ export function applyBatchAutoTransitionIfNeeded(
     trip.localId,
     transitionAt,
   );
+  const prunedState = removeInitialAutoBootstrapWalkSegment(
+    normalizedState.tripSegments,
+    normalizedState.tripPoints,
+    normalizedState.waypoints,
+    trip.localId,
+    nextSegment.localId,
+    transitionAt,
+  );
 
   return {
     changed: true,
     session: updateRecordingSegment(recordingSession, nextSegment.localId, inferredProfile),
-    tripSegments: normalizedState.tripSegments,
-    waypoints: normalizedState.waypoints,
+    tripPoints: prunedState.tripPoints,
+    tripSegments: prunedState.tripSegments,
+    waypoints: prunedState.waypoints,
   };
 }

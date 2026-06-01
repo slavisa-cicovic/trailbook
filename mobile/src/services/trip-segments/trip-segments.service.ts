@@ -44,6 +44,7 @@ export interface UpdateTripSegmentModeResult {
 
 const AUTO_MIN_PLANE_SEGMENT_MS = 30 * 60 * 1000;
 const AUTO_MIN_DRIVE_SEGMENT_MS = 5 * 60 * 1000;
+const AUTO_BOOTSTRAP_WALK_MAX_DISTANCE_METERS = 5;
 
 function getNextSyncStatus(currentStatus: TripSegment["syncStatus"]): TripSegment["syncStatus"] {
   return currentStatus === "local-only" ? "local-only" : "pending-sync";
@@ -667,5 +668,87 @@ export function normalizeAutoClosedTripSegment(
     tripSegments,
     tripPoints,
     waypoints,
+  };
+}
+
+export function removeInitialAutoBootstrapWalkSegment(
+  tripSegments: TripSegment[],
+  tripPoints: TripPoint[],
+  waypoints: Waypoint[],
+  tripLocalId: string,
+  nextSegmentLocalId: string,
+  updatedAt: string,
+): UpdateTripSegmentModeResult {
+  const orderedSegments = getVisibleTripSegmentsForTrip(tripSegments, tripLocalId);
+  const firstSegment = orderedSegments[0] ?? null;
+  const nextSegment = orderedSegments.find((segment) => segment.localId === nextSegmentLocalId) ?? null;
+
+  if (
+    !firstSegment ||
+    !nextSegment ||
+    firstSegment.localId === nextSegment.localId ||
+    firstSegment.recordingProfile !== "walk" ||
+    nextSegment.recordingProfile === "walk" ||
+    firstSegment.endedAt === null
+  ) {
+    return {
+      tripSegments,
+      tripPoints,
+      waypoints,
+    };
+  }
+
+  const firstSegmentPoints = getVisibleTripPointsForTrip(tripPoints, tripLocalId).filter(
+    (tripPoint) => tripPoint.segmentLocalId === firstSegment.localId,
+  );
+  const firstSegmentDistanceMeters =
+    firstSegmentPoints.length > 1
+      ? calculateTripDistanceMeters(firstSegmentPoints)
+      : firstSegment.distanceMeters ?? 0;
+
+  if (firstSegmentDistanceMeters > AUTO_BOOTSTRAP_WALK_MAX_DISTANCE_METERS) {
+    return {
+      tripSegments,
+      tripPoints,
+      waypoints,
+    };
+  }
+
+  const nextTripSegments = tripSegments
+    .filter((segment) => segment.localId !== firstSegment.localId)
+    .map((segment) =>
+      segment.localId === nextSegment.localId
+        ? {
+            ...segment,
+            startedAt: firstSegment.startedAt,
+            updatedAt,
+            syncStatus: getNextSyncStatus(segment.syncStatus),
+          }
+        : segment,
+    );
+  const nextTripPoints = tripPoints.map((tripPoint) =>
+    tripPoint.tripLocalId === tripLocalId && tripPoint.segmentLocalId === firstSegment.localId
+      ? {
+          ...tripPoint,
+          segmentLocalId: nextSegment.localId,
+          syncStatus: getNextEntitySyncStatus(tripPoint),
+        }
+      : tripPoint,
+  );
+  const nextWaypoints = waypoints.map((waypoint) =>
+    waypoint.tripLocalId === tripLocalId && waypoint.segmentLocalId === firstSegment.localId
+      ? {
+          ...waypoint,
+          segmentLocalId: nextSegment.localId,
+          updatedAt,
+          syncStatus: getNextEntitySyncStatus(waypoint),
+        }
+      : waypoint,
+  );
+
+  return {
+    tripSegments: nextTripSegments,
+    tripPoints: nextTripPoints,
+    waypoints: nextWaypoints,
   };
 }

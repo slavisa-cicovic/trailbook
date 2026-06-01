@@ -56,10 +56,11 @@ function moveCoordinate(
 }
 
 // BATCH_DETECTION_LAG_MS = 2 * 60 * 1000 in the pipeline.
-// Transition scenarios must start just under 2 min ago so isBatch=false and
-// recordAutoRecordingSample accumulates incrementally (not all upfront), letting
-// the per-point AUTO detection window see only the samples gathered so far.
-// Sleep scenarios start far enough in the past to trigger isBatch=true.
+// Transition scenarios are injected by the simulation runner in chunks smaller
+// than the batch threshold, so they can use historical timestamps without being
+// treated as a sleep-recovery batch.
+// Sleep scenarios are injected as one large batch and intentionally trigger
+// batch processing.
 export type ScenarioTimestampStrategy = "transition" | "sleep";
 
 export function generateScenarioLocations(
@@ -69,10 +70,7 @@ export function generateScenarioLocations(
   strategy: ScenarioTimestampStrategy = "sleep",
 ): LocationObject[] {
   const totalMs = segments.reduce((sum, s) => sum + s.durationMs, 0);
-  const startTs =
-    strategy === "transition"
-      ? Date.now() - 90_000 // 90s in the past: below 2-min batch threshold → isBatch=false
-      : Date.now() - totalMs - 15_000; // far in the past → isBatch=true
+  const startTs = Date.now() - totalMs - 15_000;
 
   const locations: LocationObject[] = [];
   let lat = startLat;
