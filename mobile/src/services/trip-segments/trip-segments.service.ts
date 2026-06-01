@@ -43,7 +43,7 @@ export interface UpdateTripSegmentModeResult {
 }
 
 const AUTO_MIN_PLANE_SEGMENT_MS = 30 * 60 * 1000;
-const AUTO_MIN_DRIVE_SEGMENT_MS = 10 * 60 * 1000;
+const AUTO_MIN_DRIVE_SEGMENT_MS = 5 * 60 * 1000;
 
 function getNextSyncStatus(currentStatus: TripSegment["syncStatus"]): TripSegment["syncStatus"] {
   return currentStatus === "local-only" ? "local-only" : "pending-sync";
@@ -255,7 +255,7 @@ export function buildTripSegmentsSummary(
     const durationMs =
       segmentStats && segment.endedAt
         ? segmentStats.duration_ms
-        : segment.durationMs !== null && segment.endedAt
+        : segment.durationMs !== null && segment.durationMs > 0 && segment.endedAt
           ? segment.durationMs
           : getSegmentDurationMs(segment);
 

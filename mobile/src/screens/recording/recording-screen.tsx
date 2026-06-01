@@ -98,7 +98,7 @@ import {
   markWaypointAttachmentDeleted,
   markWaypointDeleted,
 } from "../../services/trips/trips-management.service";
-import { loadTripPointsForTrip, replaceTripPointsForTrip } from "../../storage/trip-points-storage";
+import { loadTripPointsForTrip, refreshTripStatsForTripLocalId, replaceTripPointsForTrip } from "../../storage/trip-points-storage";
 import {
   createAttachmentTimestamp,
   createPhotoAttachmentForWaypoint,
@@ -628,6 +628,7 @@ export default function RecordingScreen() {
       await replaceTripPointsForTrip(activeTrip.localId, normalizedState.tripPoints);
     }
     await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt, batterySnapshot));
+    await refreshTripStatsForTripLocalId(recordingSession.activeTripId);
     await setRecordingSession(stopRecordingSession(recordingSession));
     clearAutoRecordingSamples(recordingSession.activeTripId);
     flushTripPointDiagnostics(recordingSession.activeTripId);

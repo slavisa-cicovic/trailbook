@@ -42,7 +42,7 @@ const STATIONARY_MAX_KMH = 2;
 const AUTO_RAW_SAMPLE_MAX_AGE_MS = 15 * 60 * 1000;
 const AUTO_RAW_SAMPLE_MAX_COUNT = 240;
 
-const WALK_STABILITY_MS = 5 * 60 * 1000;
+const WALK_STABILITY_MS = 60_000;
 // Short inference window for current-activity detection so stale samples
 // from a preceding different-mode segment don't suppress the new mode.
 // Both walk and drive use this window so drive→walk and walk→drive
