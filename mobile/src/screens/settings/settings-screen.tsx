@@ -564,6 +564,19 @@ export default function SettingsScreen() {
         ) : null}
 
         {testSettingsEnabled ? (
+          <SettingsSection theme={theme} title="Simulation">
+            <SettingsRow
+              description="Inject synthetic GPS scenarios into the active recording pipeline to test AUTO mode transitions, batch processing and Android sleep recovery."
+              iconName="science"
+              onPress={() => router.push("/simulation")}
+              theme={theme}
+              title="GPS Simulation"
+              value="Open"
+            />
+          </SettingsSection>
+        ) : null}
+
+        {testSettingsEnabled ? (
           <SettingsSection theme={theme} title="Debug">
             <SettingsRow
               description="Temporary helper that clears local SQLite trip data before restoring from server. Does not delete auth or photo files."

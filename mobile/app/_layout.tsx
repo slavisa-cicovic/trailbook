@@ -139,6 +139,7 @@ export default function RootLayout() {
             <Stack.Screen name="settings/about" options={{ animation: "none" }} />
             <Stack.Screen name="settings/recording-config" options={{ animation: "none" }} />
             <Stack.Screen name="settings/recording-config/[target]" options={{ animation: "none" }} />
+            <Stack.Screen name="simulation" options={{ animation: "none" }} />
           </Stack>
           {isBatchProcessing && recordingStatus === "recording" && (
             <View style={[styles.batchOverlay, { backgroundColor: theme.background }]} pointerEvents="box-only">

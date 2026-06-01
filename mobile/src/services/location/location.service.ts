@@ -264,10 +264,15 @@ export async function restartBackgroundLocationTracking(
     await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
   }
 
-  await Location.startLocationUpdatesAsync(
-    BACKGROUND_RECORDING_LOCATION_TASK_NAME,
-    buildBackgroundTrackingOptions(profile),
-  );
+  try {
+    await Location.startLocationUpdatesAsync(
+      BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+      buildBackgroundTrackingOptions(profile),
+    );
+  } catch (error) {
+    // GPS restart failed (e.g. permission lost, Expo Go). Recording continues without GPS restart.
+    console.warn("[Trailbook][location] restartBackgroundLocationTracking failed", error);
+  }
 }
 
 export async function syncBackgroundLocationTracking(
