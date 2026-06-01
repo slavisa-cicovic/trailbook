@@ -261,7 +261,7 @@ function inferLocationOnlyAutoRecordingProfile(tripPoints: AutoLocationPoint[]):
   }
 
   const walkWindow = getMovingStableWindow(speedSamples, ACTIVITY_INFERENCE_WINDOW_MS);
-  const bikeWindow = getMovingStableWindow(speedSamples, 10 * 60 * 1000);
+  const bikeWindow = getMovingStableWindow(speedSamples, ACTIVITY_INFERENCE_WINDOW_MS);
   const driveWindow = getMovingStableWindow(speedSamples, ACTIVITY_INFERENCE_WINDOW_MS);
   const planeWindow = getMovingStableWindow(speedSamples, 6 * 60 * 1000);
 
