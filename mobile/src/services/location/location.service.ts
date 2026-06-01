@@ -91,8 +91,8 @@ function getFallbackTrackingOptionsForProfile(profile: RecordingProfile): Tracki
     case "drive":
       return {
         accuracy: Location.Accuracy.High,
-        distanceInterval: 50,
-        timeInterval: 30 * 1000,
+        distanceInterval: 30,
+        timeInterval: 15 * 1000,
       };
     case "boat":
       return {
@@ -260,18 +260,28 @@ export async function restartBackgroundLocationTracking(
 
   const started = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
 
-  if (started) {
-    await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
-  }
-
   try {
+    // Stop before starting so the OS registers the new config (distanceInterval, activityType, etc.).
+    // Both operations are inside one try so that a failed start doesn't leave GPS stopped.
+    if (started) {
+      await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
+    }
     await Location.startLocationUpdatesAsync(
       BACKGROUND_RECORDING_LOCATION_TASK_NAME,
       buildBackgroundTrackingOptions(profile),
     );
   } catch (error) {
-    // GPS restart failed (e.g. permission lost, Expo Go). Recording continues without GPS restart.
-    console.warn("[Trailbook][location] restartBackgroundLocationTracking failed", error);
+    // Restart failed (e.g. Expo Go, permission lost, OS background restriction).
+    // GPS may have been stopped above — attempt to restart so recording doesn't go silent.
+    console.warn("[Trailbook][location] restartBackgroundLocationTracking failed, attempting restore", error);
+    try {
+      await Location.startLocationUpdatesAsync(
+        BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+        buildBackgroundTrackingOptions(profile),
+      );
+    } catch {
+      // Restore also failed — GPS is unavailable, recording continues without position updates.
+    }
   }
 }
 
