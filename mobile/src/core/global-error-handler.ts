@@ -22,9 +22,9 @@ export function setupGlobalErrorHandler(): void {
     });
   }
 
-  const previousRejectionHandler = global.onunhandledrejection;
+  const previousRejectionHandler = globalThis.onunhandledrejection?.bind(globalThis as unknown as Window);
 
-  global.onunhandledrejection = (event: PromiseRejectionEvent) => {
+  globalThis.onunhandledrejection = (event: PromiseRejectionEvent) => {
     const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
     logError(error, "unhandled-rejection");
     previousRejectionHandler?.(event);

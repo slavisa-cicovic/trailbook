@@ -4,7 +4,9 @@ import { MaterialIcons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -934,87 +936,101 @@ export default function TripsScreen() {
         transparent
         visible={groupModalVisible}
       >
-        <View style={styles.groupModalBackdrop}>
-          <View style={styles.groupModalCard}>
-            <Text style={styles.groupModalTitle}>Add to group</Text>
-            <Text style={styles.groupModalDescription}>
-              {selectedGroupTripIds.length} selected trip{selectedGroupTripIds.length === 1 ? "" : "s"}
-            </Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+          style={styles.groupModalKeyboard}
+        >
+          <View style={styles.groupModalBackdrop}>
+            <ScrollView
+              contentContainerStyle={styles.groupModalScrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.groupModalCard}>
+                <Text style={styles.groupModalTitle}>Add to group</Text>
+                <Text style={styles.groupModalDescription}>
+                  {selectedGroupTripIds.length} selected trip{selectedGroupTripIds.length === 1 ? "" : "s"}
+                </Text>
 
-            {visibleTripGroups.length > 0 ? (
-              <View style={styles.existingGroupsBlock}>
-                <Text style={styles.groupModalLabel}>Existing groups</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.existingGroupsRow}>
-                    {visibleTripGroups.map((group) => {
-                      const selected = selectedExistingGroupId === group.localId;
+                {visibleTripGroups.length > 0 ? (
+                  <View style={styles.existingGroupsBlock}>
+                    <Text style={styles.groupModalLabel}>Existing groups</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={styles.existingGroupsRow}>
+                        {visibleTripGroups.map((group) => {
+                          const selected = selectedExistingGroupId === group.localId;
 
-                      return (
-                        <Pressable
-                          key={group.localId}
-                          onPress={() => setSelectedExistingGroupId(selected ? null : group.localId)}
-                          style={[
-                            styles.existingGroupChip,
-                            selected && styles.existingGroupChipSelected,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.existingGroupChipText,
-                              selected && styles.existingGroupChipTextSelected,
-                            ]}
-                          >
-                            {group.title}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
+                          return (
+                            <Pressable
+                              key={group.localId}
+                              onPress={() => setSelectedExistingGroupId(selected ? null : group.localId)}
+                              style={[
+                                styles.existingGroupChip,
+                                selected && styles.existingGroupChipSelected,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.existingGroupChipText,
+                                  selected && styles.existingGroupChipTextSelected,
+                                ]}
+                              >
+                                {group.title}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </ScrollView>
                   </View>
-                </ScrollView>
+                ) : null}
+
+                <View style={styles.newGroupBlock}>
+                  <Text style={styles.groupModalLabel}>New group</Text>
+                  <TextInput
+                    editable={!selectedExistingGroupId}
+                    onChangeText={(title) => setGroupDraft((current) => ({ ...current, title }))}
+                    placeholder="Title"
+                    placeholderTextColor="#8a9784"
+                    style={[styles.groupInput, selectedExistingGroupId && styles.groupInputDisabled]}
+                    value={groupDraft.title}
+                  />
+                  <TextInput
+                    editable={!selectedExistingGroupId}
+                    multiline
+                    onChangeText={(description) =>
+                      setGroupDraft((current) => ({ ...current, description }))
+                    }
+                    placeholder="Description"
+                    placeholderTextColor="#8a9784"
+                    style={[
+                      styles.groupInput,
+                      styles.groupDescriptionInput,
+                      selectedExistingGroupId && styles.groupInputDisabled,
+                    ]}
+                    value={groupDraft.description}
+                  />
+                </View>
+
+                <View style={styles.groupModalActions}>
+                  <Pressable
+                    onPress={() => setGroupModalVisible(false)}
+                    style={styles.groupModalSecondaryButton}
+                  >
+                    <Text style={styles.groupModalSecondaryText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={syncingGroups}
+                    onPress={() => void handleSaveGroupSelection()}
+                    style={[styles.groupModalPrimaryButton, syncingGroups && styles.groupModalButtonDisabled]}
+                  >
+                    <Text style={styles.groupModalPrimaryText}>{syncingGroups ? "Saving..." : "Save"}</Text>
+                  </Pressable>
+                </View>
               </View>
-            ) : null}
-
-            <View style={styles.newGroupBlock}>
-              <Text style={styles.groupModalLabel}>New group</Text>
-              <TextInput
-                editable={!selectedExistingGroupId}
-                onChangeText={(title) => setGroupDraft((current) => ({ ...current, title }))}
-                placeholder="Title"
-                placeholderTextColor="#8a9784"
-                style={[styles.groupInput, selectedExistingGroupId && styles.groupInputDisabled]}
-                value={groupDraft.title}
-              />
-              <TextInput
-                editable={!selectedExistingGroupId}
-                multiline
-                onChangeText={(description) =>
-                  setGroupDraft((current) => ({ ...current, description }))
-                }
-                placeholder="Description"
-                placeholderTextColor="#8a9784"
-                style={[
-                  styles.groupInput,
-                  styles.groupDescriptionInput,
-                  selectedExistingGroupId && styles.groupInputDisabled,
-                ]}
-                value={groupDraft.description}
-              />
-            </View>
-
-            <View style={styles.groupModalActions}>
-              <Pressable onPress={() => setGroupModalVisible(false)} style={styles.groupModalSecondaryButton}>
-                <Text style={styles.groupModalSecondaryText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                disabled={syncingGroups}
-                onPress={() => void handleSaveGroupSelection()}
-                style={[styles.groupModalPrimaryButton, syncingGroups && styles.groupModalButtonDisabled]}
-              >
-                <Text style={styles.groupModalPrimaryText}>{syncingGroups ? "Saving..." : "Save"}</Text>
-              </Pressable>
-            </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -1023,50 +1039,61 @@ export default function TripsScreen() {
         transparent
         visible={groupEditModalVisible}
       >
-        <View style={styles.groupModalBackdrop}>
-          <View style={styles.groupModalCard}>
-            <Text style={styles.groupModalTitle}>Edit group</Text>
-            <View style={styles.newGroupBlock}>
-              <Text style={styles.groupModalLabel}>Group details</Text>
-              <TextInput
-                onChangeText={(title) => setGroupEditDraft((current) => ({ ...current, title }))}
-                placeholder="Title"
-                placeholderTextColor="#8a9784"
-                style={styles.groupInput}
-                value={groupEditDraft.title}
-              />
-              <TextInput
-                multiline
-                onChangeText={(description) =>
-                  setGroupEditDraft((current) => ({ ...current, description }))
-                }
-                placeholder="Description"
-                placeholderTextColor="#8a9784"
-                style={[styles.groupInput, styles.groupDescriptionInput]}
-                value={groupEditDraft.description}
-              />
-            </View>
-            <View style={styles.groupModalActions}>
-              <Pressable
-                onPress={() => setGroupEditModalVisible(false)}
-                style={styles.groupModalSecondaryButton}
-              >
-                <Text style={styles.groupModalSecondaryText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                disabled={syncingGroups || groupEditDraft.title.trim().length === 0}
-                onPress={() => void handleSaveGroupEdit()}
-                style={[
-                  styles.groupModalPrimaryButton,
-                  (syncingGroups || groupEditDraft.title.trim().length === 0) &&
-                    styles.groupModalButtonDisabled,
-                ]}
-              >
-                <Text style={styles.groupModalPrimaryText}>{syncingGroups ? "Saving..." : "Save"}</Text>
-              </Pressable>
-            </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+          style={styles.groupModalKeyboard}
+        >
+          <View style={styles.groupModalBackdrop}>
+            <ScrollView
+              contentContainerStyle={styles.groupModalScrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.groupModalCard}>
+                <Text style={styles.groupModalTitle}>Edit group</Text>
+                <View style={styles.newGroupBlock}>
+                  <Text style={styles.groupModalLabel}>Group details</Text>
+                  <TextInput
+                    onChangeText={(title) => setGroupEditDraft((current) => ({ ...current, title }))}
+                    placeholder="Title"
+                    placeholderTextColor="#8a9784"
+                    style={styles.groupInput}
+                    value={groupEditDraft.title}
+                  />
+                  <TextInput
+                    multiline
+                    onChangeText={(description) =>
+                      setGroupEditDraft((current) => ({ ...current, description }))
+                    }
+                    placeholder="Description"
+                    placeholderTextColor="#8a9784"
+                    style={[styles.groupInput, styles.groupDescriptionInput]}
+                    value={groupEditDraft.description}
+                  />
+                </View>
+                <View style={styles.groupModalActions}>
+                  <Pressable
+                    onPress={() => setGroupEditModalVisible(false)}
+                    style={styles.groupModalSecondaryButton}
+                  >
+                    <Text style={styles.groupModalSecondaryText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={syncingGroups || groupEditDraft.title.trim().length === 0}
+                    onPress={() => void handleSaveGroupEdit()}
+                    style={[
+                      styles.groupModalPrimaryButton,
+                      (syncingGroups || groupEditDraft.title.trim().length === 0) &&
+                        styles.groupModalButtonDisabled,
+                    ]}
+                  >
+                    <Text style={styles.groupModalPrimaryText}>{syncingGroups ? "Saving..." : "Save"}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <View style={styles.tripsRoot}>
@@ -1691,6 +1718,12 @@ const styles = StyleSheet.create({
   groupModalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(20, 28, 20, 0.36)",
+  },
+  groupModalKeyboard: {
+    flex: 1,
+  },
+  groupModalScrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
     padding: 24,
   },

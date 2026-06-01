@@ -17,6 +17,7 @@ function makeSession(overrides?: Partial<AuthenticatedDeviceSession>): Authentic
     userEmail: "test@example.com",
     displayName: "Test User",
     deviceId: "device-1",
+    signedInAt: "2024-01-01T00:00:00.000Z",
     sessionToken: "token",
     sessionExpiresAt: null,
     refreshToken: null,
