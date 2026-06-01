@@ -1,6 +1,9 @@
 import type { LocationObject } from "expo-location";
 
-import { persistBackgroundRecordedLocations } from "../recording/recording-pipeline.service";
+import {
+  persistBackgroundRecordedLocations,
+  setSimulationLocationInjectionActive,
+} from "../recording/recording-pipeline.service";
 import {
   getCurrentForegroundLocation,
   stopBackgroundLocationTracking,
@@ -240,7 +243,7 @@ async function persistScenarioLocations(
   onProgress: (processed: number, total: number) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const persistOptions = { restartTrackingOnAutoTransition: false };
+  const persistOptions = { origin: "simulation" as const, restartTrackingOnAutoTransition: false };
 
   if (scenario.strategy === "sleep") {
     await persistBackgroundRecordedLocations(locations, persistOptions);
@@ -277,6 +280,8 @@ export async function runScenario(
   }
 
   const { activeTripId } = recording.session;
+
+  setSimulationLocationInjectionActive(activeTripId, true);
 
   // Stop background GPS so real-device timestamps don't race against simulated ones.
   await stopBackgroundLocationTracking().catch(() => undefined);
@@ -341,6 +346,7 @@ export async function startSimulationRecording(): Promise<void> {
   await setTrips([...trips, nextTrip]);
   await setTripSegments([...tripSegments, nextSegment]);
   await setRecordingSession(nextSession);
+  setSimulationLocationInjectionActive(nextTrip.localId, true);
 }
 
 export async function stopSimulationRecording(): Promise<void> {
@@ -365,4 +371,5 @@ export async function stopSimulationRecording(): Promise<void> {
   await setRecordingSession(stopRecordingSession(recording.session));
   clearAutoRecordingSamples(activeTripId);
   resetPendingTripPointContinuity(activeTripId);
+  setSimulationLocationInjectionActive(activeTripId, false);
 }

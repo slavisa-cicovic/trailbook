@@ -18,6 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   applyBatchAutoTransitionIfNeeded,
+  buildAutoBatchProfileSections,
   inferAutoRecordingProfile,
   type AutoLocationPoint,
 } from "../../services/recording/auto-recording.service";
@@ -69,6 +70,14 @@ vi.mock("../../services/trip-segments/trip-segments.service", () => ({
   ),
   normalizeAutoClosedTripSegment: vi.fn(
     (segments: TripSegment[], _tripPoints: unknown, waypoints: unknown) => ({
+      tripPoints: _tripPoints,
+      tripSegments: segments,
+      waypoints,
+    }),
+  ),
+  removeInitialAutoBootstrapWalkSegment: vi.fn(
+    (segments: TripSegment[], points: unknown, waypoints: unknown) => ({
+      tripPoints: points,
       tripSegments: segments,
       waypoints,
     }),
@@ -313,6 +322,41 @@ describe("applyBatchAutoTransitionIfNeeded", () => {
     );
 
     expect(result.changed).toBe(false);
+  });
+});
+
+describe("buildAutoBatchProfileSections", () => {
+  function makeTimelineSample(offsetSeconds: number, speedMs: number): AutoLocationPoint {
+    return {
+      accuracy: 5,
+      latitude: 45.014 + offsetSeconds * 0.00001,
+      longitude: 19.811,
+      recordedAt: iso(offsetSeconds),
+      speed: speedMs,
+    };
+  }
+
+  it("splits one offline batch into chronological profile sections", () => {
+    const walkOut = Array.from({ length: 5 }, (_, index) => makeTimelineSample(index * 30, 1.4));
+    const drive = Array.from({ length: 6 }, (_, index) => makeTimelineSample(150 + index * 30, 13.9));
+    const walkBack = Array.from({ length: 4 }, (_, index) => makeTimelineSample(330 + index * 30, 1.3));
+
+    const sections = buildAutoBatchProfileSections([...walkOut, ...drive, ...walkBack], "walk");
+
+    expect(sections.map((section) => section.profile)).toEqual(["walk", "drive", "walk"]);
+    expect(sections.map((section) => section.samples.length)).toEqual([5, 6, 4]);
+    expect(sections[1]?.startedAt).toBe(drive[0]?.recordedAt);
+    expect(sections[2]?.startedAt).toBe(walkBack[0]?.recordedAt);
+  });
+
+  it("keeps fallback profile when the batch has no stable movement run", () => {
+    const stationary = Array.from({ length: 8 }, (_, index) => makeTimelineSample(index * 30, 0));
+
+    const sections = buildAutoBatchProfileSections(stationary, "walk");
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.profile).toBe("walk");
+    expect(sections[0]?.samples).toHaveLength(stationary.length);
   });
 });
 

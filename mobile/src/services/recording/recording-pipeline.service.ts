@@ -9,7 +9,13 @@ import {
   recordTripPointDiagnostic,
 } from "../trip-points/trip-points.service";
 import type { LocationCallbackSource } from "../trip-points/trip-point-diagnostics.service";
-import { getOpenTripSegmentForTrip } from "../trip-segments/trip-segments.service";
+import {
+  closeActiveTripSegment,
+  getOpenTripSegmentForTrip,
+  normalizeAutoClosedTripSegment,
+  removeInitialAutoBootstrapWalkSegment,
+  startNextTripSegment,
+} from "../trip-segments/trip-segments.service";
 import { setRecordingSession } from "../../state/recording-store";
 import { setTripSegments } from "../../state/trip-segments-store";
 import { mergeTripPoints } from "../../state/trip-points-store";
@@ -21,10 +27,11 @@ import { loadTrips } from "../../storage/trips-storage";
 import { loadWaypoints } from "../../storage/waypoints-storage";
 import {
   applyAutoRecordingTransition,
-  applyBatchAutoTransitionIfNeeded,
+  buildAutoBatchProfileSections,
   recordAutoRecordingSample,
+  type AutoBatchProfileSection,
 } from "./auto-recording.service";
-import { updateRecordingLastPoint, updateRecordingMotionActivity } from "./recording.service";
+import { updateRecordingLastPoint, updateRecordingMotionActivity, updateRecordingSegment } from "./recording.service";
 import { setBatchProcessing } from "../../state/batch-processing-store";
 
 const AUTO_REJECTED_RECOVERY_MAX_AGE_MS = 10 * 60 * 1000;
@@ -32,10 +39,28 @@ const AUTO_REJECTED_RECOVERY_MAX_COUNT = 120;
 const BATCH_DETECTION_MIN_SNAPSHOT_COUNT = 5;
 const BATCH_DETECTION_LAG_MS = 2 * 60 * 1000;
 const rejectedAutoSnapshotsByTripLocalId = new Map<string, CurrentLocationSnapshot[]>();
+const simulationLocationInjectionTripIds = new Set<string>();
 let recordingPipelineWriteQueue = Promise.resolve();
 
 interface PersistRecordedLocationOptions {
+  origin?: "device" | "simulation";
   restartTrackingOnAutoTransition?: boolean;
+}
+
+export function setSimulationLocationInjectionActive(tripLocalId: string, active: boolean) {
+  if (active) {
+    simulationLocationInjectionTripIds.add(tripLocalId);
+  } else {
+    simulationLocationInjectionTripIds.delete(tripLocalId);
+  }
+}
+
+function getOldestRecordedAtMs(snapshots: CurrentLocationSnapshot[]): number {
+  const recordedAtTimes = snapshots
+    .map((snapshot) => new Date(snapshot.recordedAt).getTime())
+    .filter(Number.isFinite);
+
+  return recordedAtTimes.length === 0 ? NaN : Math.min(...recordedAtTimes);
 }
 
 function getRejectedAutoRecoverySnapshots(tripLocalId: string, recordedAt: string): CurrentLocationSnapshot[] {
@@ -90,11 +115,11 @@ async function persistRecordedLocationSnapshots(
 ): Promise<void> {
   // Detect batch synchronously BEFORE the first await so the UI overlay
   // is guaranteed to appear before any user interaction can happen.
-  const firstRecordedAtMs = snapshots.length > 0 ? new Date(snapshots[0].recordedAt).getTime() : NaN;
+  const oldestRecordedAtMs = getOldestRecordedAtMs(snapshots);
   const isBatch =
     snapshots.length >= BATCH_DETECTION_MIN_SNAPSHOT_COUNT &&
-    Number.isFinite(firstRecordedAtMs) &&
-    Date.now() - firstRecordedAtMs >= BATCH_DETECTION_LAG_MS;
+    Number.isFinite(oldestRecordedAtMs) &&
+    Date.now() - oldestRecordedAtMs >= BATCH_DETECTION_LAG_MS;
 
   if (isBatch) {
     setBatchProcessing(true);
@@ -108,6 +133,16 @@ async function persistRecordedLocationSnapshots(
     !recordingSession ||
     recordingSession.status !== "recording" ||
     !recordingSession.activeTripId
+  ) {
+    return;
+  }
+
+  const initialRecordingSession = recordingSession;
+  const locationOrigin = options.origin ?? "device";
+
+  if (
+    locationOrigin === "device" &&
+    simulationLocationInjectionTripIds.has(recordingSession.activeTripId)
   ) {
     return;
   }
@@ -165,49 +200,184 @@ async function persistRecordedLocationSnapshots(
     return pointsWereAppended;
   }
 
-  if (
-    nextRecordingSession.recordingMode === "auto" &&
-    snapshots.length >= BATCH_DETECTION_MIN_SNAPSHOT_COUNT
-  ) {
-    const firstRecordedAtMs = new Date(snapshots[0].recordedAt).getTime();
-    const receivedLagMs = Date.now() - firstRecordedAtMs;
+  function appendBatchSnapshotIfUseful(
+    snapshot: CurrentLocationSnapshot,
+    recordingProfile: AutoBatchProfileSection["profile"],
+    segmentLocalId: string | null,
+  ): boolean {
+    const candidateTripPoint = createTripPointForLocation(recordingTrip, segmentLocalId, snapshot);
+    const appendedTripPoints = appendTripPointIfUseful(
+      nextTripPoints,
+      candidateTripPoint,
+      recordingProfile,
+      callbackSource,
+      {
+        sessionStartedAt: nextRecordingSession.startedAt,
+        tripStartedAt: recordingTrip.startedAt,
+        lastSequentialTripPoint,
+      },
+    );
+    const pointsWereAppended = appendedTripPoints !== nextTripPoints;
 
-    if (Number.isFinite(firstRecordedAtMs) && receivedLagMs >= BATCH_DETECTION_LAG_MS) {
-      let batchRawSamples = recordAutoRecordingSample(recordingTrip.localId, snapshots[0]);
+    lastSequentialTripPoint = candidateTripPoint;
 
-      for (const snapshot of snapshots.slice(1)) {
-        batchRawSamples = recordAutoRecordingSample(recordingTrip.localId, snapshot);
-      }
+    if (pointsWereAppended) {
+      nextTripPoints = appendedTripPoints;
+      pointsChanged = true;
+      nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, snapshot.recordedAt);
+    }
 
-      const batchMotionActivity = await getLatestMotionActivityAsync(
-        snapshots[snapshots.length - 1].recordedAt,
-      );
-      nextRecordingSession = updateRecordingMotionActivity(nextRecordingSession, batchMotionActivity);
+    return pointsWereAppended;
+  }
 
-      const batchTransition = applyBatchAutoTransitionIfNeeded(
-        nextRecordingSession,
-        recordingTrip,
-        nextTripSegments,
-        nextTripPoints,
-        nextWaypoints,
-        batchRawSamples,
-        batchMotionActivity,
-      );
+  function getClampedTransitionAt(activeSegmentStartedAt: string, requestedTransitionAt: string): string {
+    const activeSegmentStartedAtMs = new Date(activeSegmentStartedAt).getTime();
+    const requestedTransitionAtMs = new Date(requestedTransitionAt).getTime();
 
-      if (batchTransition.changed) {
-        nextRecordingSession = batchTransition.session;
-        if (batchTransition.tripPoints !== nextTripPoints) {
-          nextTripPoints = batchTransition.tripPoints;
-          pointsChanged = true;
+    if (
+      Number.isFinite(activeSegmentStartedAtMs) &&
+      Number.isFinite(requestedTransitionAtMs) &&
+      requestedTransitionAtMs < activeSegmentStartedAtMs
+    ) {
+      return activeSegmentStartedAt;
+    }
+
+    return requestedTransitionAt;
+  }
+
+  function ensureBatchSectionSegment(section: AutoBatchProfileSection): string | null {
+    const activeSegment =
+      nextTripSegments.find((segment) => segment.localId === nextRecordingSession.activeSegmentId) ??
+      getOpenTripSegmentForTrip(nextTripSegments, recordingTrip.localId);
+
+    if (!activeSegment) {
+      return null;
+    }
+
+    if (activeSegment.recordingProfile === section.profile) {
+      return activeSegment.localId;
+    }
+
+    const transitionAt = getClampedTransitionAt(activeSegment.startedAt, section.startedAt);
+    const closedSegments = closeActiveTripSegment(nextTripSegments, activeSegment.localId, transitionAt);
+    const { nextSegment, tripSegments: stagedTripSegments } = startNextTripSegment(
+      recordingTrip,
+      closedSegments,
+      section.profile,
+      transitionAt,
+    );
+    const normalizedState = normalizeAutoClosedTripSegment(
+      stagedTripSegments,
+      nextTripPoints,
+      nextWaypoints,
+      recordingTrip.localId,
+      transitionAt,
+    );
+    const prunedState = removeInitialAutoBootstrapWalkSegment(
+      normalizedState.tripSegments,
+      normalizedState.tripPoints,
+      normalizedState.waypoints,
+      recordingTrip.localId,
+      nextSegment.localId,
+      transitionAt,
+    );
+
+    if (prunedState.tripPoints !== nextTripPoints) {
+      nextTripPoints = prunedState.tripPoints;
+      pointsChanged = true;
+    }
+
+    nextTripSegments = prunedState.tripSegments;
+    nextWaypoints = prunedState.waypoints;
+    nextRecordingSession = updateRecordingSegment(nextRecordingSession, nextSegment.localId, section.profile);
+
+    return nextSegment.localId;
+  }
+
+  async function processAutoBatchSnapshots(): Promise<boolean> {
+    if (nextRecordingSession.recordingMode !== "auto" || !isBatch) {
+      return false;
+    }
+
+    const sortedSnapshots = [...snapshots].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+    const lastSnapshot = sortedSnapshots[sortedSnapshots.length - 1] ?? null;
+
+    if (!lastSnapshot) {
+      return false;
+    }
+
+    for (const snapshot of sortedSnapshots) {
+      recordAutoRecordingSample(recordingTrip.localId, snapshot);
+    }
+
+    const batchMotionActivity = await getLatestMotionActivityAsync(lastSnapshot.recordedAt);
+    nextRecordingSession = updateRecordingMotionActivity(nextRecordingSession, batchMotionActivity);
+
+    const sections = buildAutoBatchProfileSections(sortedSnapshots, nextRecordingSession.recordingProfile);
+
+    if (sections.length === 0) {
+      return false;
+    }
+
+    for (const section of sections) {
+      const segmentLocalId = ensureBatchSectionSegment(section);
+
+      for (const snapshot of section.samples) {
+        recordLocationCallback(recordingTrip.localId, section.profile, callbackSource, snapshot);
+
+        if (lastRecordedAt === snapshot.recordedAt) {
+          recordTripPointDiagnostic(recordingTrip.localId, section.profile, "session-duplicate-recorded-at", {
+            recordedAt: snapshot.recordedAt,
+            source: callbackSource,
+          });
+          continue;
         }
-        nextTripSegments = batchTransition.tripSegments;
-        nextWaypoints = batchTransition.waypoints;
-        // Do not restart background location tracking here. We are inside a
-        // background location callback and the batch data is already historical.
-        // syncBackgroundLocationTracking will apply the correct profile next time
-        // the app comes to foreground.
+
+        appendBatchSnapshotIfUseful(snapshot, section.profile, segmentLocalId);
+        lastRecordedAt = snapshot.recordedAt;
       }
     }
+
+    return true;
+  }
+
+  async function writePendingChanges(): Promise<void> {
+    const writes: Promise<void>[] = [];
+
+    if (pointsChanged) {
+      writes.push(mergeTripPoints(nextTripPoints));
+    }
+
+    if (nextTripSegments !== tripSegments) {
+      writes.push(setTripSegments(nextTripSegments));
+    }
+
+    if (nextWaypoints !== waypoints) {
+      writes.push(setWaypoints(nextWaypoints));
+    }
+
+    if (
+      (lastRecordedAt && lastRecordedAt !== initialRecordingSession.lastPointRecordedAt) ||
+      nextRecordingSession.activeSegmentId !== initialRecordingSession.activeSegmentId ||
+      nextRecordingSession.autoCandidateProfile !== initialRecordingSession.autoCandidateProfile ||
+      nextRecordingSession.autoCandidateSince !== initialRecordingSession.autoCandidateSince ||
+      nextRecordingSession.recordingProfile !== initialRecordingSession.recordingProfile ||
+      nextRecordingSession.motionActivityType !== initialRecordingSession.motionActivityType ||
+      nextRecordingSession.motionActivityConfidence !== initialRecordingSession.motionActivityConfidence ||
+      nextRecordingSession.motionActivityRecordedAt !== initialRecordingSession.motionActivityRecordedAt ||
+      nextRecordingSession.motionActivitySourcePlatform !== initialRecordingSession.motionActivitySourcePlatform
+    ) {
+      writes.push(setRecordingSession(nextRecordingSession));
+    }
+
+    if (writes.length > 0) {
+      await Promise.all(writes);
+    }
+  }
+
+  if (await processAutoBatchSnapshots()) {
+    await writePendingChanges();
+    return;
   }
 
   for (const snapshot of snapshots) {
@@ -287,37 +457,7 @@ async function persistRecordedLocationSnapshots(
     lastRecordedAt = snapshot.recordedAt;
   }
 
-  const writes: Promise<void>[] = [];
-
-  if (pointsChanged) {
-    writes.push(mergeTripPoints(nextTripPoints));
-  }
-
-  if (nextTripSegments !== tripSegments) {
-    writes.push(setTripSegments(nextTripSegments));
-  }
-
-  if (nextWaypoints !== waypoints) {
-    writes.push(setWaypoints(nextWaypoints));
-  }
-
-  if (
-    (lastRecordedAt && lastRecordedAt !== recordingSession.lastPointRecordedAt) ||
-    nextRecordingSession.activeSegmentId !== recordingSession.activeSegmentId ||
-    nextRecordingSession.autoCandidateProfile !== recordingSession.autoCandidateProfile ||
-    nextRecordingSession.autoCandidateSince !== recordingSession.autoCandidateSince ||
-    nextRecordingSession.recordingProfile !== recordingSession.recordingProfile ||
-    nextRecordingSession.motionActivityType !== recordingSession.motionActivityType ||
-    nextRecordingSession.motionActivityConfidence !== recordingSession.motionActivityConfidence ||
-    nextRecordingSession.motionActivityRecordedAt !== recordingSession.motionActivityRecordedAt ||
-    nextRecordingSession.motionActivitySourcePlatform !== recordingSession.motionActivitySourcePlatform
-  ) {
-    writes.push(setRecordingSession(nextRecordingSession));
-  }
-
-  if (writes.length > 0) {
-    await Promise.all(writes);
-  }
+  await writePendingChanges();
   } finally {
     if (isBatch) {
       setBatchProcessing(false);
