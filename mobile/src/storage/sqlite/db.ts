@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 import * as FileSystem from "expo-file-system/legacy";
 
 const DATABASE_NAME = "trailbook.db";
-const DATABASE_VERSION = 8;
+const DATABASE_VERSION = 9;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let databaseWriteQueue: Promise<void> = Promise.resolve();
@@ -389,6 +389,41 @@ async function migrateDatabaseIfNeeded(database: SQLite.SQLiteDatabase) {
       PRAGMA user_version = 8;
     `);
   }
+
+  if (currentVersion < 9) {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS raw_location_events (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        trip_local_id TEXT NOT NULL,
+        session_started_at TEXT,
+        active_segment_local_id TEXT,
+        batch_id TEXT NOT NULL,
+        batch_index INTEGER NOT NULL,
+        callback_source TEXT NOT NULL,
+        origin TEXT NOT NULL,
+        received_at TEXT NOT NULL,
+        recorded_at TEXT NOT NULL,
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        accuracy REAL,
+        altitude REAL,
+        speed REAL,
+        processing_status TEXT NOT NULL,
+        processing_decision TEXT,
+        processed_at TEXT,
+        accepted_trip_point_local_id TEXT,
+        segment_local_id TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_raw_location_events_trip_recorded_at
+        ON raw_location_events(trip_local_id, recorded_at, batch_index);
+      CREATE INDEX IF NOT EXISTS idx_raw_location_events_trip_status_recorded_at
+        ON raw_location_events(trip_local_id, processing_status, recorded_at);
+      CREATE INDEX IF NOT EXISTS idx_raw_location_events_batch_id
+        ON raw_location_events(batch_id, batch_index);
+
+      PRAGMA user_version = 9;
+    `);
+  }
 }
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -445,6 +480,7 @@ export async function exportDatabaseSnapshot(): Promise<string> {
 
 export async function clearLocalTripData(): Promise<void> {
   await runExclusiveDatabaseWrite(async (database) => {
+    await database.runAsync("DELETE FROM raw_location_events");
     await database.runAsync("DELETE FROM trip_group_members");
     await database.runAsync("DELETE FROM trip_groups");
     await database.runAsync("DELETE FROM waypoint_attachments");

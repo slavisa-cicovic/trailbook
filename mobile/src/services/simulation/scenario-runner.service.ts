@@ -1,9 +1,7 @@
 import type { LocationObject } from "expo-location";
 
-import {
-  persistBackgroundRecordedLocations,
-  setSimulationLocationInjectionActive,
-} from "../recording/recording-pipeline.service";
+import { persistBackgroundRecordedLocations } from "../recording/recording-engine.service";
+import { setSimulationLocationInjectionActive } from "../recording/recording-pipeline.service";
 import {
   getCurrentForegroundLocation,
   stopBackgroundLocationTracking,

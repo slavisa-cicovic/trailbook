@@ -42,7 +42,7 @@ const rejectedAutoSnapshotsByTripLocalId = new Map<string, CurrentLocationSnapsh
 const simulationLocationInjectionTripIds = new Set<string>();
 let recordingPipelineWriteQueue = Promise.resolve();
 
-interface PersistRecordedLocationOptions {
+export interface PersistRecordedLocationOptions {
   origin?: "device" | "simulation";
   restartTrackingOnAutoTransition?: boolean;
 }
@@ -465,7 +465,7 @@ async function persistRecordedLocationSnapshots(
   }
 }
 
-function enqueueRecordedLocationSnapshots(
+export function processRecordedLocationSnapshots(
   snapshots: CurrentLocationSnapshot[],
   callbackSource: LocationCallbackSource,
   options: PersistRecordedLocationOptions = {},
@@ -481,5 +481,5 @@ export function persistBackgroundRecordedLocations(
   locations: Location.LocationObject[],
   options: PersistRecordedLocationOptions = {},
 ): Promise<void> {
-  return enqueueRecordedLocationSnapshots(locations.map(toSnapshot), "background", options);
+  return processRecordedLocationSnapshots(locations.map(toSnapshot), "background", options);
 }

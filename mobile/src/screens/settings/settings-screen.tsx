@@ -601,6 +601,15 @@ export default function SettingsScreen() {
               title="Export database"
               value={exportDatabaseBusy ? "Exporting..." : "Export"}
             />
+            <SettingsDivider theme={theme} />
+            <SettingsRow
+              description="Debug helper that previews and applies route rebuilds from locally stored raw location events."
+              iconName="replay"
+              onPress={() => router.push("/settings/raw-reprocessing")}
+              theme={theme}
+              title="Reprocess raw route"
+              value="Open"
+            />
           </SettingsSection>
         ) : null}
 
