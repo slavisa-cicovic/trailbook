@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 import * as FileSystem from "expo-file-system/legacy";
 
 const DATABASE_NAME = "trailbook.db";
-const DATABASE_VERSION = 12;
+const DATABASE_VERSION = 13;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let databaseWriteQueue: Promise<void> = Promise.resolve();
@@ -487,6 +487,25 @@ async function migrateDatabaseIfNeeded(database: SQLite.SQLiteDatabase) {
       PRAGMA user_version = 12;
     `);
   }
+
+  if (currentVersion < 13) {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS recording_native_events (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        trip_local_id TEXT,
+        event_type TEXT NOT NULL,
+        recorded_at TEXT NOT NULL,
+        payload_json TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_recording_native_events_trip_recorded_at
+        ON recording_native_events(trip_local_id, recorded_at);
+      CREATE INDEX IF NOT EXISTS idx_recording_native_events_type_recorded_at
+        ON recording_native_events(event_type, recorded_at);
+
+      PRAGMA user_version = 13;
+    `);
+  }
 }
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -544,6 +563,7 @@ export async function exportDatabaseSnapshot(): Promise<string> {
 export async function clearLocalTripData(): Promise<void> {
   await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM sync_outbox");
+    await database.runAsync("DELETE FROM recording_native_events");
     await database.runAsync("DELETE FROM trip_route_variants");
     await database.runAsync("DELETE FROM raw_location_events");
     await database.runAsync("DELETE FROM trip_group_members");

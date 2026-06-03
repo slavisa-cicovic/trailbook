@@ -2,6 +2,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "../location/background-location.constants";
+import { recordRecordingNativeEvent } from "./recording-native-events.service";
 import { persistBackgroundRecordedLocations } from "./recording-engine.service";
 
 interface BackgroundLocationTaskData {
@@ -12,7 +13,17 @@ if (!TaskManager.isTaskDefined(BACKGROUND_RECORDING_LOCATION_TASK_NAME)) {
   TaskManager.defineTask<BackgroundLocationTaskData>(
     BACKGROUND_RECORDING_LOCATION_TASK_NAME,
     async ({ data, error }) => {
-      if (error || !data?.locations?.length) {
+      if (error) {
+        void recordRecordingNativeEvent({
+          eventType: "background_task_error",
+          payload: {
+            error: error.message,
+          },
+        });
+        return;
+      }
+
+      if (!data?.locations?.length) {
         return;
       }
 

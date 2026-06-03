@@ -31,6 +31,7 @@ import {
   type RecordingDraftInput,
 } from "../../services/recording/recording.service";
 import { clearAutoRecordingSamples } from "../../services/recording/auto-recording.service";
+import { recordRecordingNativeEvent } from "../../services/recording/recording-native-events.service";
 import {
   closeActiveTripSegment,
   createInitialTripSegment,
@@ -170,6 +171,12 @@ export async function startRecordingFromScreenController(
     logStep("blocked-permissions", {
       missingRequired: input.missingRequired ?? null,
     });
+    void recordRecordingNativeEvent({
+      eventType: "permission_missing",
+      payload: {
+        missingRequired: input.missingRequired ?? null,
+      },
+    });
     return { ok: false, reason: "missing_permissions" };
   }
 
@@ -216,7 +223,7 @@ export async function startRecordingFromScreenController(
           attempt,
           error: getErrorMessage(error),
         });
-      });
+      }, nextTrip.localId);
       logStep("background-started", {
         backgroundTrackingProfile,
         concreteRecordingProfile,
@@ -260,7 +267,7 @@ export async function pauseRecordingFromScreenController(
   const pausedAt = new Date().toISOString();
 
   if (input.backgroundRecordingSupported !== false) {
-    await stopBackgroundLocationTracking();
+    await stopBackgroundLocationTracking(input.activeTrip.localId);
   }
   await stopMotionActivityUpdates();
   resetPendingTripPointContinuity(input.activeTrip.localId);
@@ -312,7 +319,7 @@ export async function stopRecordingFromScreenController(
   const batterySnapshot = await getBatterySnapshot();
 
   if (input.backgroundRecordingSupported !== false) {
-    await stopBackgroundLocationTracking();
+    await stopBackgroundLocationTracking(input.recordingSession.activeTripId);
   }
   await stopMotionActivityUpdates();
   resetPendingTripPointContinuity(input.recordingSession.activeTripId);
@@ -401,6 +408,7 @@ export async function resumePausedTripFromScreenController(
         nextState.session.recordingMode,
         nextState.session.recordingProfile,
       ),
+      tripToResume.localId,
     );
   }
 
@@ -424,6 +432,7 @@ export async function continueInterruptedRecordingFromScreenController(
           nextSession.recordingMode,
           nextSession.recordingProfile,
         ),
+        nextSession.activeTripId,
       );
     }
     if (nextSession.recordingMode === "auto") {

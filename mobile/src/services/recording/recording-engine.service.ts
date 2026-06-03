@@ -24,6 +24,7 @@ import {
   type PersistRecordedLocationOptions,
 } from "./recording-pipeline.service";
 import { buildRawLocationEventProcessingResults } from "./raw-location-event-processing.service";
+import { recordRecordingNativeEvent } from "./recording-native-events.service";
 
 function formatRawLocationCoordinate(value: number): string {
   return value.toFixed(7);
@@ -142,6 +143,19 @@ export async function recordLocationSnapshots(
       receivedAt,
       sessionStartedAt: recordingSession?.startedAt ?? null,
       snapshots,
+      tripLocalId: activeTripId,
+    });
+    void recordRecordingNativeEvent({
+      eventType: snapshots.length > 1 ? "native_location_batch" : "native_location_callback",
+      payload: {
+        activeSegmentLocalId: recordingSession?.activeSegmentId ?? null,
+        batchId,
+        callbackSource,
+        firstRecordedAt: snapshots[0]?.recordedAt ?? null,
+        lastRecordedAt: snapshots[snapshots.length - 1]?.recordedAt ?? null,
+        locationCount: snapshots.length,
+        origin,
+      },
       tripLocalId: activeTripId,
     });
 

@@ -2,9 +2,11 @@ package expo.modules.trailbookmotionactivity
 
 import android.Manifest
 import android.app.PendingIntent
+import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.PowerManager
 import android.os.Build
 import android.provider.Settings
@@ -53,6 +55,30 @@ class TrailbookMotionActivityModule : Module() {
       null
     }
 
+    AsyncFunction("getAndroidRecordingEnvironmentAsync") {
+      mapOf(
+        "activityRecognitionPermissionGranted" to hasPermissionIfRequired(
+          Manifest.permission.ACTIVITY_RECOGNITION,
+          Build.VERSION_CODES.Q,
+        ),
+        "backgroundLocationPermissionGranted" to hasPermissionIfRequired(
+          Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+          Build.VERSION_CODES.Q,
+        ),
+        "batteryOptimizationIgnored" to isIgnoringBatteryOptimizations(),
+        "coarseLocationPermissionGranted" to hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION),
+        "fineLocationPermissionGranted" to hasPermission(Manifest.permission.ACCESS_FINE_LOCATION),
+        "foregroundServiceLocationPermissionGranted" to hasForegroundServiceLocationPermission(),
+        "locationEnabled" to isLocationEnabled(),
+        "notificationPermissionGranted" to hasPermissionIfRequired(
+          Manifest.permission.POST_NOTIFICATIONS,
+          Build.VERSION_CODES.TIRAMISU,
+        ),
+        "packageName" to context.packageName,
+        "standbyBucket" to getStandbyBucketName(),
+      )
+    }
+
     AsyncFunction("getLatestActivityAsync") {
       TrailbookMotionActivityStorage.load(context)
     }
@@ -97,6 +123,59 @@ class TrailbookMotionActivityModule : Module() {
 
     if (status != PackageManager.PERMISSION_GRANTED) {
       throw IllegalStateException("ACTIVITY_RECOGNITION permission is required.")
+    }
+  }
+
+  private fun hasPermission(permission: String): Boolean {
+    return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+  }
+
+  private fun hasPermissionIfRequired(permission: String, minSdk: Int): Boolean {
+    return Build.VERSION.SDK_INT < minSdk || hasPermission(permission)
+  }
+
+  private fun hasForegroundServiceLocationPermission(): Boolean {
+    return if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      true
+    } else {
+      hasPermission(Manifest.permission.FOREGROUND_SERVICE_LOCATION)
+    }
+  }
+
+  private fun isIgnoringBatteryOptimizations(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+      return true
+    }
+
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+  }
+
+  private fun isLocationEnabled(): Boolean {
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      locationManager.isLocationEnabled
+    } else {
+      locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+        locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }
+  }
+
+  private fun getStandbyBucketName(): String? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+      return null
+    }
+
+    val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+
+    return when (usageStatsManager.appStandbyBucket) {
+      UsageStatsManager.STANDBY_BUCKET_ACTIVE -> "active"
+      UsageStatsManager.STANDBY_BUCKET_WORKING_SET -> "working_set"
+      UsageStatsManager.STANDBY_BUCKET_FREQUENT -> "frequent"
+      UsageStatsManager.STANDBY_BUCKET_RARE -> "rare"
+      UsageStatsManager.STANDBY_BUCKET_RESTRICTED -> "restricted"
+      else -> "unknown"
     }
   }
 

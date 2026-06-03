@@ -42,6 +42,10 @@ vi.mock("../../services/recording/recording-pipeline.service", () => ({
   processRecordedLocationSnapshots: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../../services/recording/recording-native-events.service", () => ({
+  recordRecordingNativeEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
 const acceptedTripPoint: TripPoint = {
   accuracy: 6,
   altitude: null,

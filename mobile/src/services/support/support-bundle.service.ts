@@ -3,8 +3,13 @@ import { Platform } from "react-native";
 
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import { getApiBaseUrl } from "../api/mobile-api.service";
+import { getAndroidRecordingEnvironmentStatusAsync } from "../device/android-power-management.service";
 import { getTrailbookPermissionStatus } from "../permissions/permission-manager.service";
 import { loadRecordingSession } from "../../storage/recording-storage";
+import {
+  loadRecentRecordingNativeEvents,
+  loadRecordingNativeEventSummary,
+} from "../../storage/recording-native-events-storage";
 import { loadRawLocationEventTripSummaries } from "../../storage/raw-location-events-storage";
 import { loadSyncOutboxSummary } from "../../storage/sync-outbox-storage";
 import { loadTripDiagnostics } from "../../storage/trip-diagnostics-storage";
@@ -17,6 +22,7 @@ export interface TrailbookSupportBundle {
     runtime: string;
     version: string;
   };
+  androidRecordingEnvironment: Awaited<ReturnType<typeof getAndroidRecordingEnvironmentStatusAsync>>;
   generatedAt: string;
   permissionStatus: Awaited<ReturnType<typeof getTrailbookPermissionStatus>>;
   platform: {
@@ -47,6 +53,8 @@ export interface TrailbookSupportBundle {
     updatedAt: string;
   }>;
   recordingSession: Awaited<ReturnType<typeof loadRecordingSession>>;
+  recentRecordingNativeEvents: Awaited<ReturnType<typeof loadRecentRecordingNativeEvents>>;
+  recordingNativeEventSummary: Awaited<ReturnType<typeof loadRecordingNativeEventSummary>>;
   syncOutbox: Awaited<ReturnType<typeof loadSyncOutboxSummary>>;
   user: {
     deviceId: string | null;
@@ -65,9 +73,21 @@ export async function buildTrailbookSupportBundle(input: {
   deviceId: string | null;
   identitySession: AuthenticatedDeviceSession | null;
 }): Promise<TrailbookSupportBundle> {
-  const [permissionStatus, recordingSession, rawLocationEventTrips, syncOutbox, diagnostics] =
+  const [
+    androidRecordingEnvironment,
+    permissionStatus,
+    recordingNativeEventSummary,
+    recentRecordingNativeEvents,
+    recordingSession,
+    rawLocationEventTrips,
+    syncOutbox,
+    diagnostics,
+  ] =
     await Promise.all([
+      getAndroidRecordingEnvironmentStatusAsync(),
       getTrailbookPermissionStatus(),
+      loadRecordingNativeEventSummary(),
+      loadRecentRecordingNativeEvents(50),
       loadRecordingSession(),
       loadRawLocationEventTripSummaries(),
       loadSyncOutboxSummary(),
@@ -82,6 +102,7 @@ export async function buildTrailbookSupportBundle(input: {
       runtime: getRuntimeLabel(),
       version: Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "1.0.0",
     },
+    androidRecordingEnvironment,
     generatedAt: new Date().toISOString(),
     permissionStatus,
     platform: {
@@ -103,8 +124,10 @@ export async function buildTrailbookSupportBundle(input: {
         silentGapCount: entry.silentGapCount,
         tripLocalId: entry.tripLocalId,
         updatedAt: entry.updatedAt,
-      })),
+    })),
     recordingSession,
+    recentRecordingNativeEvents,
+    recordingNativeEventSummary,
     syncOutbox,
     user: {
       deviceId: input.deviceId,

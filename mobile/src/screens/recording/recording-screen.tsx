@@ -65,6 +65,7 @@ import {
   getLocationCallbackDiagnosticState,
   recordLocationSilentGap,
 } from "../../services/trip-points/trip-points.service";
+import { recordRecordingNativeEvent } from "../../services/recording/recording-native-events.service";
 import {
   markWaypointAttachmentDeleted,
   markWaypointDeleted,
@@ -349,6 +350,22 @@ export default function RecordingScreen() {
       }
 
       lastSilentGapBucketRef.current = gapBucket;
+      void recordRecordingNativeEvent({
+        eventType: "native_watchdog_stale",
+        payload: {
+          batteryOptimizationIgnored:
+            batteryOptimizationSupported === true ? batteryOptimizationIgnored : null,
+          gapMs: Math.trunc(gapMs),
+          lastCallbackReceivedAt:
+            diagnosticState.lastCallbackReceivedAtMs === null
+              ? null
+              : new Date(diagnosticState.lastCallbackReceivedAtMs).toISOString(),
+          profile: activeRecordingProfile,
+          recordingMode: recordingSession.recordingMode,
+        },
+        recordedAt: new Date(observedAtMs).toISOString(),
+        tripLocalId,
+      });
       recordLocationSilentGap(tripLocalId, recordingSession.recordingMode, {
         batteryOptimizationIgnored:
           batteryOptimizationSupported === true ? batteryOptimizationIgnored : null,
@@ -379,6 +396,8 @@ export default function RecordingScreen() {
         });
         await restartBackgroundLocationTracking(
           getBackgroundTrackingProfile(recordingSession.recordingMode, activeRecordingProfile),
+          tripLocalId,
+          "silent-gap-watchdog",
         );
       } catch (error) {
         console.warn("[Trailbook][location-silent-gap-recovery]", {

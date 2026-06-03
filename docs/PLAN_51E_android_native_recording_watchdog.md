@@ -31,6 +31,30 @@ In scope:
 - Persist native watchdog events for diagnostics.
 - Expose watchdog status in support bundle/test-user diagnostics.
 
+## Implementation Status
+
+Completed in this slice:
+
+- Added local `recording_native_events` SQLite table and storage APIs for native/service recording diagnostics.
+- Instrumented Expo background location lifecycle with persistent start/stop/restart/stale/callback/batch events.
+- Added Android native recording environment status in the existing native module:
+  - location provider enabled
+  - fine/coarse/background location permission
+  - foreground service location permission
+  - notification permission
+  - activity recognition permission
+  - battery optimization state
+  - app standby bucket
+- Added native event summary and recent native events to the support bundle.
+- Kept iOS behavior unchanged and guarded Android-only native status behind native-build availability.
+
+Still remaining:
+
+- Dedicated native `FusedLocationProviderClient` foreground service.
+- True native stale-callback restart loop that runs without JS.
+- Native persistence from the Android service itself.
+- Field testing with screen-off routes after rebuilding the APK.
+
 Out of scope:
 
 - iOS native changes.

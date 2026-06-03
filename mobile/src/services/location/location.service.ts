@@ -6,6 +6,7 @@ import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
 import type { RecordingMode, RecordingProfile } from "../../domain/trips";
 import type { RecordingConfigAccuracy, TrackingProfileConfig } from "../../domain/recording-config";
 import { getRuntimeTrackingProfileConfig } from "../recording/recording-config.service";
+import { recordRecordingNativeEvent } from "../recording/recording-native-events.service";
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "./background-location.constants";
 
 export function getBackgroundTrackingProfile(
@@ -200,6 +201,7 @@ function wait(delayMs: number): Promise<void> {
 
 export async function startBackgroundLocationTracking(
   profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
+  tripLocalId: string | null = null,
 ): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
@@ -209,11 +211,17 @@ export async function startBackgroundLocationTracking(
     BACKGROUND_RECORDING_LOCATION_TASK_NAME,
     buildBackgroundTrackingOptions(profile),
   );
+  void recordRecordingNativeEvent({
+    eventType: "native_service_started",
+    payload: { profile },
+    tripLocalId,
+  });
 }
 
 export async function startBackgroundLocationTrackingWithRetry(
   profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
   onAttemptFailure?: (attempt: number, error: unknown) => void,
+  tripLocalId: string | null = null,
 ): Promise<void> {
   const retryDelaysMs = [0, 750, 1500, 3000, 5000, 8000];
   let lastError: unknown = null;
@@ -226,18 +234,28 @@ export async function startBackgroundLocationTrackingWithRetry(
     }
 
     try {
-      await startBackgroundLocationTracking(profile);
+      await startBackgroundLocationTracking(profile, tripLocalId);
       return;
     } catch (error) {
       lastError = error;
       onAttemptFailure?.(index + 1, error);
+      void recordRecordingNativeEvent({
+        eventType: "background_tracking_restart_failed",
+        payload: {
+          attempt: index + 1,
+          error: error instanceof Error ? error.message : String(error),
+          profile,
+          reason: "start-retry-failed",
+        },
+        tripLocalId,
+      });
     }
   }
 
   throw lastError;
 }
 
-export async function stopBackgroundLocationTracking(): Promise<void> {
+export async function stopBackgroundLocationTracking(tripLocalId: string | null = null): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
   }
@@ -249,10 +267,16 @@ export async function stopBackgroundLocationTracking(): Promise<void> {
   }
 
   await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
+  void recordRecordingNativeEvent({
+    eventType: "native_service_stopped",
+    tripLocalId,
+  });
 }
 
 export async function restartBackgroundLocationTracking(
   profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
+  tripLocalId: string | null = null,
+  reason = "manual",
 ): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
@@ -261,6 +285,11 @@ export async function restartBackgroundLocationTracking(
   const started = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
 
   try {
+    void recordRecordingNativeEvent({
+      eventType: "native_location_restart_requested",
+      payload: { profile, reason, started },
+      tripLocalId,
+    });
     // Stop before starting so the OS registers the new config (distanceInterval, activityType, etc.).
     // Both operations are inside one try so that a failed start doesn't leave GPS stopped.
     if (started) {
@@ -270,10 +299,25 @@ export async function restartBackgroundLocationTracking(
       BACKGROUND_RECORDING_LOCATION_TASK_NAME,
       buildBackgroundTrackingOptions(profile),
     );
+    void recordRecordingNativeEvent({
+      eventType: "native_location_restart_succeeded",
+      payload: { profile, previouslyStarted: started, reason },
+      tripLocalId,
+    });
   } catch (error) {
     // Restart failed (e.g. Expo Go, permission lost, OS background restriction).
     // GPS may have been stopped above — attempt to restart so recording doesn't go silent.
     console.warn("[Trailbook][location] restartBackgroundLocationTracking failed, attempting restore", error);
+    void recordRecordingNativeEvent({
+      eventType: "native_location_restart_failed",
+      payload: {
+        error: error instanceof Error ? error.message : String(error),
+        profile,
+        previouslyStarted: started,
+        reason,
+      },
+      tripLocalId,
+    });
     try {
       await Location.startLocationUpdatesAsync(
         BACKGROUND_RECORDING_LOCATION_TASK_NAME,
@@ -300,6 +344,11 @@ export async function syncBackgroundLocationTracking(
     if (started) {
       console.warn("[Trailbook][background-sync] stopping", { status, activeTripId });
       await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
+      void recordRecordingNativeEvent({
+        eventType: "native_service_stopped",
+        payload: { reason: "sync-status", status },
+        tripLocalId: activeTripId,
+      });
     }
     return;
   }
@@ -308,7 +357,7 @@ export async function syncBackgroundLocationTracking(
 
   if (!started) {
     console.warn("[Trailbook][background-sync] starting", { activeTripId, profile });
-    await startBackgroundLocationTrackingWithRetry(profile);
+    await startBackgroundLocationTrackingWithRetry(profile, undefined, activeTripId);
     return;
   }
 
@@ -320,7 +369,12 @@ export async function syncBackgroundLocationTracking(
   if (!backgroundTrackingOptionsMatch(currentOptions, nextOptions)) {
     console.warn("[Trailbook][background-sync] restarting-options", { activeTripId, profile });
     await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
-    await startBackgroundLocationTrackingWithRetry(profile);
+    void recordRecordingNativeEvent({
+      eventType: "background_tracking_restart_requested",
+      payload: { profile, reason: "options-changed" },
+      tripLocalId: activeTripId,
+    });
+    await startBackgroundLocationTrackingWithRetry(profile, undefined, activeTripId);
   }
 }
 
