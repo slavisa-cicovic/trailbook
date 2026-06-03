@@ -66,6 +66,7 @@ import { useSharedTripsList } from "../../hooks/queries/use-shared-trips-list";
 import { drainSyncOutbox, enqueueTripGroupsSync, enqueueTripSync } from "../../services/sync/sync-worker.service";
 import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
 import { listTripSummaryStats, type TripSummaryStats } from "../../repositories/trip-repository";
+import { useTripsScreenHydration } from "../../core/hooks/use-trips-screen-hydration";
 import TripEditModal from "./components/trip-edit-modal";
 
 interface PendingUndoState {
@@ -92,6 +93,7 @@ const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> 
 export default function TripsScreen() {
   const router = useRouter();
   const suppressTapUntilRef = useRef(0);
+  useTripsScreenHydration();
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
   const trips = useTripsStore((state) => state.trips);

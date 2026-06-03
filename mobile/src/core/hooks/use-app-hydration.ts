@@ -7,24 +7,36 @@ import {
 } from "../../state/recording-store";
 import { hydrateSessionStore, useSessionStore } from "../../state/session-store";
 import { hydrateThemeStore, useThemeStore } from "../../state/theme-store";
-import { hydrateTripGroupMembersStore, useTripGroupMembersStore } from "../../state/trip-group-members-store";
-import { hydrateTripGroupsStore, useTripGroupsStore } from "../../state/trip-groups-store";
-import { hydrateTripPausesStore, useTripPausesStore } from "../../state/trip-pauses-store";
+import { hydrateTripPausesStore } from "../../state/trip-pauses-store";
 import {
   getTripSegmentsStateSnapshot,
   hydrateTripSegmentsStore,
   useTripSegmentsStore,
 } from "../../state/trip-segments-store";
 import { getTripsStateSnapshot, hydrateTripsStore, useTripsStore } from "../../state/trips-store";
-import { hydrateWaypointAttachmentsStore, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
-import { hydrateWaypointsStore, useWaypointsStore } from "../../state/waypoints-store";
+import { hydrateWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
+import { hydrateWaypointsStore } from "../../state/waypoints-store";
 
 export interface AppHydrationResult {
-  appHydrated: boolean;
+  coreHydrated: boolean;
   recordingHydrated: boolean;
   sessionHydrated: boolean;
   tripSegmentsHydrated: boolean;
   tripsHydrated: boolean;
+}
+
+async function hydrateBackground() {
+  await Promise.all([
+    hydrateTripsStore(),
+    hydrateTripSegmentsStore(),
+    hydrateTripPausesStore(),
+    hydrateWaypointsStore(),
+    hydrateWaypointAttachmentsStore(),
+  ]);
+  await reconcileHydratedRecordingState(
+    getTripsStateSnapshot().trips,
+    getTripSegmentsStateSnapshot().tripSegments,
+  );
 }
 
 export function useAppHydration(): AppHydrationResult {
@@ -33,49 +45,26 @@ export function useAppHydration(): AppHydrationResult {
   const recordingHydrated = useRecordingStore((s) => s.hydrated);
   const tripsHydrated = useTripsStore((s) => s.hydrated);
   const tripSegmentsHydrated = useTripSegmentsStore((s) => s.hydrated);
-  const tripGroupsHydrated = useTripGroupsStore((s) => s.hydrated);
-  const tripGroupMembersHydrated = useTripGroupMembersStore((s) => s.hydrated);
-  const tripPausesHydrated = useTripPausesStore((s) => s.hydrated);
-  const waypointsHydrated = useWaypointsStore((s) => s.hydrated);
-  const waypointAttachmentsHydrated = useWaypointAttachmentsStore((s) => s.hydrated);
 
+  // Phase 1: session + theme + recording (AsyncStorage/SecureStore — fast)
+  // Phase 2: everything else (SQLite — starts after phase 1, runs in background)
   useEffect(() => {
-    async function hydrateAppState() {
+    async function hydrate() {
       await Promise.all([
-        hydrateThemeStore(),
         hydrateSessionStore(),
+        hydrateThemeStore(),
         hydrateRecordingStore(),
-        hydrateTripsStore(),
-        hydrateTripPausesStore(),
-        hydrateTripSegmentsStore(),
-        hydrateTripGroupsStore(),
-        hydrateTripGroupMembersStore(),
-        hydrateWaypointsStore(),
-        hydrateWaypointAttachmentsStore(),
       ]);
-      await reconcileHydratedRecordingState(
-        getTripsStateSnapshot().trips,
-        getTripSegmentsStateSnapshot().tripSegments,
-      );
+      void hydrateBackground();
     }
 
-    void hydrateAppState();
+    void hydrate();
   }, []);
 
-  const appHydrated =
-    sessionHydrated &&
-    themeHydrated &&
-    recordingHydrated &&
-    tripsHydrated &&
-    tripSegmentsHydrated &&
-    tripGroupsHydrated &&
-    tripGroupMembersHydrated &&
-    tripPausesHydrated &&
-    waypointsHydrated &&
-    waypointAttachmentsHydrated;
+  const coreHydrated = sessionHydrated && themeHydrated && recordingHydrated;
 
   return {
-    appHydrated,
+    coreHydrated,
     recordingHydrated,
     sessionHydrated,
     tripSegmentsHydrated,

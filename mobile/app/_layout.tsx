@@ -20,7 +20,7 @@ import { useSessionStore } from "../src/state/session-store";
 import { useThemeStore } from "../src/state/theme-store";
 
 export default function RootLayout() {
-  const { appHydrated, sessionHydrated, recordingHydrated, tripsHydrated, tripSegmentsHydrated } =
+  const { coreHydrated, sessionHydrated, recordingHydrated, tripsHydrated, tripSegmentsHydrated } =
     useAppHydration();
 
   const identitySession = useSessionStore((state) => state.identitySession);
@@ -124,7 +124,7 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
     <ErrorBoundary>
-      {!appHydrated ? (
+      {!coreHydrated ? (
         <View style={[styles.loadingScreen, { backgroundColor: theme.background }]}>
           <ActivityIndicator size="large" color={theme.accent} />
         </View>
