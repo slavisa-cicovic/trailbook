@@ -105,7 +105,7 @@ const LOCATION_SILENT_GAP_WATCHDOG_INTERVAL_MS = 30 * 1000;
 
 export default function RecordingScreen() {
   const { width: screenWidth } = useWindowDimensions();
-  const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
+  const mapTypeOptions: { label: string; value: TrailbookMapType }[] = [
     { label: "Map", value: "standard" },
     { label: "Satellite", value: "satellite" },
     { label: "Hybrid", value: "hybrid" },

@@ -15,15 +15,15 @@ interface RouteWaypointMarker {
 }
 
 interface TripRouteMapProps {
-  coordinates: Array<{ latitude: number; longitude: number }>;
+  coordinates: { latitude: number; longitude: number }[];
   mapType: TrailbookMapType;
   onSelectWaypoint: (waypoint: Waypoint) => void;
   region: Region | null;
-  segmentPolylines: Array<{
+  segmentPolylines: {
     color: string;
-    coordinates: Array<{ latitude: number; longitude: number }>;
+    coordinates: { latitude: number; longitude: number }[];
     segmentLocalId: string;
-  }>;
+  }[];
   waypointMarkers: RouteWaypointMarker[];
 }
 

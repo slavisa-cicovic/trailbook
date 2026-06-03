@@ -89,10 +89,8 @@ async function loadLegacyWaypointAttachmentsFromAsyncStorage(): Promise<Waypoint
   }
 
   return (
-    JSON.parse(rawValue) as Array<
-      Partial<WaypointAttachment> &
-        Pick<WaypointAttachment, "localId" | "waypointLocalId" | "deviceId" | "userId" | "localUri">
-    >
+    JSON.parse(rawValue) as (Partial<WaypointAttachment> &
+        Pick<WaypointAttachment, "localId" | "waypointLocalId" | "deviceId" | "userId" | "localUri">)[]
   ).map(normalizeWaypointAttachment);
 }
 

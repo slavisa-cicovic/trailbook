@@ -234,7 +234,7 @@ export default function SimulationScreen() {
 
             {isRecording && !isAutoMode && (
               <Text style={[styles.errorText, { color: theme.danger }]}>
-                Not in AUTO mode — profile transitions won't be detected.
+                Not in AUTO mode — profile transitions won&apos;t be detected.
               </Text>
             )}
           </View>

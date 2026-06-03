@@ -15,18 +15,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 interface TripShareModalProps {
   busy?: boolean;
   errorMessage?: string | null;
-  existingShares?: Array<{
+  existingShares?: {
     createdAt: string;
     id: string;
     recipient: { displayName: string; email: string; id: string };
     revokedAt: string | null;
     status: "active" | "revoked";
-  }>;
+  }[];
   onChangeRecipientEmail: (value: string) => void;
   onClose: () => void;
   onShare: () => void;
   recipientEmail: string;
-  recipientSuggestions?: Array<{ displayName: string; email: string; id: string }>;
+  recipientSuggestions?: { displayName: string; email: string; id: string }[];
   successMessage?: string | null;
   visible: boolean;
 }

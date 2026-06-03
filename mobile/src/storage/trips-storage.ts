@@ -127,7 +127,7 @@ async function loadLegacyTripsFromAsyncStorage(): Promise<Trip[]> {
     return [];
   }
 
-  return (JSON.parse(rawValue) as Array<Partial<Trip> & Pick<Trip, "localId" | "deviceId" | "userId">>).map(
+  return (JSON.parse(rawValue) as (Partial<Trip> & Pick<Trip, "localId" | "deviceId" | "userId">)[]).map(
     normalizeTrip,
   );
 }

@@ -32,7 +32,7 @@ function getSegmentDurationMs(segment: TripSegment): number {
 
 export interface SegmentPolyline {
   color: string;
-  coordinates: Array<{ latitude: number; longitude: number }>;
+  coordinates: { latitude: number; longitude: number }[];
   segmentLocalId: string;
 }
 

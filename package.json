@@ -9,5 +9,9 @@
   "scripts": {
     "typecheck": "npm run typecheck --workspace mobile && npm run typecheck --workspace web && npm run typecheck --workspace server",
     "lint": "npm run lint --workspace mobile && npm run lint --workspace web && npm run lint --workspace server"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.4",
+    "eslint-config-expo": "^56.0.4"
   }
 }

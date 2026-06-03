@@ -46,7 +46,7 @@ export interface SupportBundleV1 {
     os: string;
     version: string;
   };
-  rawLocationEventTrips: Array<{
+  rawLocationEventTrips: {
     acceptedCount: number;
     duplicateCount: number;
     firstRecordedAt: string | null;
@@ -56,8 +56,8 @@ export interface SupportBundleV1 {
     rawEventCount: number;
     rejectedCount: number;
     tripLocalId: string;
-  }>;
-  recentDiagnostics: Array<{
+  }[];
+  recentDiagnostics: {
     accepted: number;
     callbackCount: number;
     maxCallbackGapMs: number;
@@ -68,7 +68,7 @@ export interface SupportBundleV1 {
     silentGapCount: number;
     tripLocalId: string;
     updatedAt: string;
-  }>;
+  }[];
   recentDiagnosticEvents: Awaited<ReturnType<typeof loadRecentDiagnosticEvents>>;
   recordingSession: Awaited<ReturnType<typeof loadRecordingSession>>;
   recentRecordingNativeEvents: Awaited<ReturnType<typeof loadRecentRecordingNativeEvents>>;

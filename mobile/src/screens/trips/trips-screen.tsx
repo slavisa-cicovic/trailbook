@@ -79,7 +79,7 @@ interface GroupDraft {
   title: string;
 }
 
-const TRIP_DATE_FILTER_OPTIONS: Array<{ label: string; value: TripDateFilter }> = [
+const TRIP_DATE_FILTER_OPTIONS: { label: string; value: TripDateFilter }[] = [
   { value: "all", label: "All" },
   { value: "today", label: "Today" },
   { value: "yesterday", label: "Yesterday" },

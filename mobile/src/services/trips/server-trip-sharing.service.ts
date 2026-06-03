@@ -461,8 +461,8 @@ export async function syncTripGroupsToServer(
   },
 ) {
   return request<{
-    groups: Array<{ groupId: string; localId: string }>;
-    members: Array<{ localId: string; memberId: string }>;
+    groups: { groupId: string; localId: string }[];
+    members: { localId: string; memberId: string }[];
     syncedAt: string;
   }>(API_ROUTES.trips.groupsSync, sessionToken, {
     method: "POST",
@@ -492,7 +492,7 @@ export async function syncTripGroupsToServer(
 
 export async function listTripGroupsFromServer(sessionToken: string) {
   return request<{
-    groups: Array<{
+    groups: {
       createdAt: string;
       deletedAt: string | null;
       description: string | null;
@@ -500,8 +500,8 @@ export async function listTripGroupsFromServer(sessionToken: string) {
       localId: string;
       title: string;
       updatedAt: string;
-    }>;
-    members: Array<{
+    }[];
+    members: {
       createdAt: string;
       deletedAt: string | null;
       groupId: string;
@@ -512,7 +512,7 @@ export async function listTripGroupsFromServer(sessionToken: string) {
       tripId: string;
       tripLocalId: string;
       updatedAt: string;
-    }>;
+    }[];
   }>(API_ROUTES.trips.groups, sessionToken, {
     method: "GET",
   });
@@ -536,23 +536,23 @@ export async function shareTripWithRecipient(sessionToken: string, tripId: strin
 
 export async function listTripShares(sessionToken: string, tripId: string) {
   return request<{
-    shares: Array<{
+    shares: {
       createdAt: string;
       id: string;
       recipient: { displayName: string; email: string; id: string };
       revokedAt: string | null;
       status: "active" | "revoked";
-    }>;
+    }[];
   }>(API_ROUTES.trips.shares(tripId), sessionToken, { method: "GET" });
 }
 
 export async function listShareRecipients(sessionToken: string) {
   return request<{
-    recipients: Array<{
+    recipients: {
       displayName: string;
       email: string;
       id: string;
-    }>;
+    }[];
   }>(API_ROUTES.trips.sharesRecipients, sessionToken, { method: "GET" });
 }
 

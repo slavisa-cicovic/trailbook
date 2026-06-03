@@ -46,15 +46,11 @@ export default function TripWaypointPhotoScreen() {
         ? "slide_from_right"
         : "default";
 
-  if (!identitySession) {
-    return <Redirect href="/login" />;
-  }
-
-  const currentUserTrips = trips.filter((trip) => trip.userId === identitySession.userId);
-  const currentUserWaypoints = waypoints.filter((waypoint) => waypoint.userId === identitySession.userId);
-  const currentUserWaypointAttachments = waypointAttachments.filter(
-    (attachment) => attachment.userId === identitySession.userId,
-  );
+  const currentUserTrips = identitySession ? trips.filter((trip) => trip.userId === identitySession.userId) : [];
+  const currentUserWaypoints = identitySession ? waypoints.filter((waypoint) => waypoint.userId === identitySession.userId) : [];
+  const currentUserWaypointAttachments = identitySession
+    ? waypointAttachments.filter((attachment) => attachment.userId === identitySession.userId)
+    : [];
   const selectedTrip = getVisibleTrips(currentUserTrips).find((trip) => trip.localId === resolvedTripId) ?? null;
   const tripWaypoints = selectedTrip ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTrip.localId) : [];
   const selectedWaypoint =
@@ -100,6 +96,10 @@ export default function TripWaypointPhotoScreen() {
       cancelled = true;
     };
   }, [selectedTrip?.localId]);
+
+  if (!identitySession) {
+    return <Redirect href="/login" />;
+  }
 
   if (!selectedTrip || !selectedWaypoint || attachments.length === 0) {
     return <Redirect href={`/trips/${resolvedTripId}/waypoints/${resolvedWaypointId}`} />;

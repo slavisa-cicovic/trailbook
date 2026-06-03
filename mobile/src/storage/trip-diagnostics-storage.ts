@@ -202,7 +202,7 @@ async function loadLegacyTripDiagnosticsFromAsyncStorage(): Promise<TripDiagnost
     return [];
   }
 
-  return (JSON.parse(rawValue) as Array<Partial<TripDiagnostics> & Pick<TripDiagnostics, "tripLocalId">>).map(
+  return (JSON.parse(rawValue) as (Partial<TripDiagnostics> & Pick<TripDiagnostics, "tripLocalId">)[]).map(
     normalizeTripDiagnostics,
   );
 }

@@ -63,7 +63,7 @@ import TripEditModal from "./components/trip-edit-modal";
 import TripShareModal from "./components/trip-share-modal";
 import TripRouteMap, { type TrailbookMapType } from "./components/trip-route-map";
 
-const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
+const mapTypeOptions: { label: string; value: TrailbookMapType }[] = [
   { label: "Map", value: "standard" },
   { label: "Satellite", value: "satellite" },
   { label: "Hybrid", value: "hybrid" },
@@ -72,7 +72,7 @@ const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
 const editableModeOptions = ["walk", "bike", "drive", "boat", "plane"] as const;
 
 function buildTripMapRegion(
-  coordinates: Array<{ latitude: number; longitude: number }>,
+  coordinates: { latitude: number; longitude: number }[],
 ): { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | null {
   if (coordinates.length === 0) {
     return null;

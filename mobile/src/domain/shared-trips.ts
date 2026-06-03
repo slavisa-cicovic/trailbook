@@ -35,7 +35,7 @@ export interface SharedTripDetail {
     pointCount: number | null;
     distanceMeters: number | null;
     statsUpdatedAt: string | null;
-    points: Array<{
+    points: {
       accuracy: number | null;
       altitude: number | null;
       id: string;
@@ -44,9 +44,9 @@ export interface SharedTripDetail {
       recordedAt: string;
       segmentId: string | null;
       speed: number | null;
-    }>;
+    }[];
     recordingProfile: RecordingProfile;
-    segments: Array<{
+    segments: {
       createdAt: string;
       endedAt: string | null;
       id: string;
@@ -57,19 +57,19 @@ export interface SharedTripDetail {
       recordingProfile: RecordingProfile;
       startedAt: string;
       updatedAt: string;
-    }>;
+    }[];
     startedAt: string;
     title: string;
     updatedAt: string;
-    attachments: Array<{
+    attachments: {
       createdAt: string;
       fileSizeBytes: number | null;
       id: string;
       mimeType: string | null;
       updatedAt: string;
       waypointId: string;
-    }>;
-    waypoints: Array<{
+    }[];
+    waypoints: {
       category: WaypointCategory;
       createdAt: string;
       id: string;
@@ -79,6 +79,6 @@ export interface SharedTripDetail {
       segmentId: string | null;
       title: string;
       updatedAt: string;
-    }>;
+    }[];
   };
 }

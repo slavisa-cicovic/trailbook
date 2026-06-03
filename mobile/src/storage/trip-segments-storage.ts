@@ -97,9 +97,7 @@ async function loadLegacyTripSegmentsFromAsyncStorage(): Promise<TripSegment[]> 
   }
 
   return (
-    JSON.parse(rawValue) as Array<
-      Partial<TripSegment> & Pick<TripSegment, "localId" | "tripLocalId" | "deviceId" | "userId">
-    >
+    JSON.parse(rawValue) as (Partial<TripSegment> & Pick<TripSegment, "localId" | "tripLocalId" | "deviceId" | "userId">)[]
   ).map(normalizeTripSegment);
 }
 

@@ -422,9 +422,7 @@ async function loadLegacyTripPointsFromAsyncStorage(): Promise<TripPoint[]> {
   }
 
   return (
-    JSON.parse(rawValue) as Array<
-      Partial<TripPoint> & Pick<TripPoint, "localId" | "tripLocalId" | "deviceId" | "userId">
-    >
+    JSON.parse(rawValue) as (Partial<TripPoint> & Pick<TripPoint, "localId" | "tripLocalId" | "deviceId" | "userId">)[]
   ).map(normalizeTripPoint);
 }
 

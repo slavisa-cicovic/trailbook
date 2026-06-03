@@ -96,9 +96,7 @@ async function loadLegacyWaypointsFromAsyncStorage(): Promise<Waypoint[]> {
   }
 
   return (
-    JSON.parse(rawValue) as Array<
-      Partial<Waypoint> & Pick<Waypoint, "localId" | "tripLocalId" | "deviceId" | "userId">
-    >
+    JSON.parse(rawValue) as (Partial<Waypoint> & Pick<Waypoint, "localId" | "tripLocalId" | "deviceId" | "userId">)[]
   ).map(normalizeWaypoint);
 }
 

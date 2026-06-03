@@ -4,10 +4,10 @@ export type TripRouteVariantProvider = "trailbook" | "valhalla" | "graphhopper" 
 export interface TripRouteVariant {
   createdAt: string;
   deletedAt: string | null;
-  geometry: Array<{
+  geometry: {
     latitude: number;
     longitude: number;
-  }>;
+  }[];
   localId: string;
   provider: TripRouteVariantProvider;
   serverId: string | null;

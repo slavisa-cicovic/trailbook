@@ -18,7 +18,7 @@ export interface OwnedServerTripSummary {
 }
 
 export interface OwnedServerTripDetail {
-  attachments: Array<{
+  attachments: {
     createdAt: string;
     fileSizeBytes: number | null;
     id: string;
@@ -27,7 +27,7 @@ export interface OwnedServerTripDetail {
     updatedAt: string;
     waypointId: string;
     waypointLocalId: string;
-  }>;
+  }[];
   createdAt: string;
   deletedAt: string | null;
   description: string | null;
@@ -38,7 +38,7 @@ export interface OwnedServerTripDetail {
   pointCount: number | null;
   distanceMeters: number | null;
   statsUpdatedAt: string | null;
-  points: Array<{
+  points: {
     accuracy: number | null;
     altitude: number | null;
     id: string;
@@ -48,15 +48,15 @@ export interface OwnedServerTripDetail {
     recordedAt: string;
     segmentId: string | null;
     speed: number | null;
-  }>;
+  }[];
   recordingConfig: MobileRecordingConfig | null;
   recordingProfile: RecordingProfile;
-  rawEvents?: Array<RawLocationEvent & { id: string }>;
+  rawEvents?: (RawLocationEvent & { id: string })[];
   batteryStartLevelPercent: number | null;
   batteryStartState: string | null;
   batteryEndLevelPercent: number | null;
   batteryEndState: string | null;
-  segments: Array<{
+  segments: {
     createdAt: string;
     endedAt: string | null;
     id: string;
@@ -68,11 +68,11 @@ export interface OwnedServerTripDetail {
     recordingProfile: RecordingProfile;
     startedAt: string;
     updatedAt: string;
-  }>;
+  }[];
   startedAt: string;
   title: string;
   updatedAt: string;
-  waypoints: Array<{
+  waypoints: {
     category: WaypointCategory;
     createdAt: string;
     id: string;
@@ -83,5 +83,5 @@ export interface OwnedServerTripDetail {
     segmentId: string | null;
     title: string;
     updatedAt: string;
-  }>;
+  }[];
 }

@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../services/trip-points/trip-points.service", () => ({
-  calculateTripDistanceMeters: () => 0,
-  getVisibleTripPointsForTrip: () => [],
-  groupVisibleTripPointsByTripId: () => new Map(),
-}));
-
 import type { Trip } from "../../domain/trips";
 import {
   filterTripsByDate,
   getVisibleTrips,
 } from "../../services/trips/trips-management.service";
+
+vi.mock("../../services/trip-points/trip-points.service", () => ({
+  calculateTripDistanceMeters: () => 0,
+  getVisibleTripPointsForTrip: () => [],
+  groupVisibleTripPointsByTripId: () => new Map(),
+}));
 
 function makeTrip(overrides: Partial<Trip> & Pick<Trip, "localId" | "startedAt">): Trip {
   return {

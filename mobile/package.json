@@ -13,7 +13,8 @@
     "eas:build:android:production": "eas build --platform android --profile production",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "echo \"Lint is not configured yet for mobile.\""
+    "lint": "eslint src/ app/ --ext .ts,.tsx",
+    "lint:fix": "eslint src/ app/ --ext .ts,.tsx --fix"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -44,6 +45,8 @@
   "devDependencies": {
     "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.1",
+    "eslint": "^9.39.4",
+    "eslint-config-expo": "^56.0.4",
     "typescript": "~5.9.2",
     "vitest": "^4.1.7"
   }

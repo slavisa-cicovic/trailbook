@@ -75,9 +75,7 @@ async function loadLegacyTripPausesFromAsyncStorage(): Promise<TripPause[]> {
   }
 
   return (
-    JSON.parse(rawValue) as Array<
-      Partial<TripPause> & Pick<TripPause, "localId" | "tripLocalId" | "deviceId" | "userId">
-    >
+    JSON.parse(rawValue) as (Partial<TripPause> & Pick<TripPause, "localId" | "tripLocalId" | "deviceId" | "userId">)[]
   ).map(normalizeTripPause);
 }
 
