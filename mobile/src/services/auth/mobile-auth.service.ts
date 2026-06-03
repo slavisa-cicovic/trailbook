@@ -4,6 +4,11 @@ import * as WebBrowser from "expo-web-browser";
 import type { AuthenticatedUserSummary, AuthProvider } from "../../domain/identity";
 import { API_ROUTES } from "../../constants/api-routes";
 import { getApiBaseUrl, requestFromBackend } from "../api/mobile-api.service";
+import {
+  AuthenticatedUserSummarySchema,
+  GetCurrentUserResponseSchema,
+  MobileAuthResultSchema,
+} from "../api/schemas/auth.schemas";
 
 export interface MobileAuthResult {
   sessionToken: string;
@@ -34,17 +39,17 @@ export async function registerWithBackend(input: {
 }
 
 export async function loginWithBackend(input: { email: string; password: string }) {
-  return requestFromBackend<MobileAuthResult>(API_ROUTES.auth.login, {
+  return requestFromBackend(API_ROUTES.auth.login, {
     method: "POST",
     body: JSON.stringify(input),
-  });
+  }, undefined, MobileAuthResultSchema);
 }
 
 export async function refreshMobileSessionWithBackend(refreshToken: string) {
-  return requestFromBackend<MobileAuthResult>(API_ROUTES.auth.refresh, {
+  return requestFromBackend(API_ROUTES.auth.refresh, {
     method: "POST",
     body: JSON.stringify({ refreshToken }),
-  });
+  }, undefined, MobileAuthResultSchema);
 }
 
 export async function logoutFromBackend(sessionToken: string) {
@@ -59,10 +64,11 @@ export async function logoutFromBackend(sessionToken: string) {
 }
 
 export async function getCurrentBackendUser(sessionToken: string) {
-  return requestFromBackend<{ user: AuthenticatedUserSummary | null }>(
+  return requestFromBackend(
     API_ROUTES.auth.me,
     { method: "GET" },
     sessionToken,
+    GetCurrentUserResponseSchema,
   );
 }
 

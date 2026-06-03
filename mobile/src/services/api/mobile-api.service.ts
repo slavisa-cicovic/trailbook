@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export class BackendRequestError extends Error {
   constructor(
     message: string,
@@ -19,7 +21,12 @@ export function getApiBaseUrl() {
   return "http://localhost:3001/api";
 }
 
-export async function requestFromBackend<T>(path: string, init?: RequestInit, sessionToken?: string) {
+export async function requestFromBackend<T>(
+  path: string,
+  init?: RequestInit,
+  sessionToken?: string,
+  schema?: z.ZodType<T>,
+) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
   let response: Response;
@@ -55,6 +62,17 @@ export async function requestFromBackend<T>(path: string, init?: RequestInit, se
   if (!response.ok) {
     const message = Array.isArray(payload?.message) ? payload.message.join(", ") : payload?.message;
     throw new BackendRequestError(message || `Request failed with status ${response.status}`, response.status);
+  }
+
+  if (schema) {
+    const result = schema.safeParse(payload);
+    if (!result.success) {
+      if (__DEV__) {
+        console.warn("[API] Response validation failed", path, result.error.flatten());
+      }
+      throw new BackendRequestError(`Unexpected response format from server`, response.status);
+    }
+    return result.data;
   }
 
   return (payload || {}) as T;

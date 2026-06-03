@@ -10,7 +10,9 @@ import type {
   Waypoint,
   WaypointAttachment,
 } from "../../domain/trips";
+import { z } from "zod";
 import { API_ROUTES } from "../../constants/api-routes";
+import { ListSharedTripsResponseSchema, SharedTripDetailSchema } from "../api/schemas/shared-trips.schemas";
 import { BackendRequestError, getApiBaseUrl } from "../api/mobile-api.service";
 import { getSessionStateSnapshot, refreshActiveIdentitySessionIfPossible } from "../../state/session-store";
 import { getTripDiagnosticsForSync, isTripDiagnosticsEnabled } from "../trip-points/trip-points.service";
@@ -27,9 +29,9 @@ import {
 
 const TRIP_POINTS_SYNC_BATCH_SIZE = 500;
 
-async function request<T>(path: string, sessionToken: string, init?: RequestInit) {
+async function request<T>(path: string, sessionToken: string, init?: RequestInit, schema?: z.ZodType<T>) {
   try {
-    return await requestWithToken<T>(path, sessionToken, init);
+    return await requestWithToken<T>(path, sessionToken, init, schema);
   } catch (error) {
     if (!(error instanceof BackendRequestError) || (error.status !== 401 && error.status !== 403)) {
       throw error;
@@ -42,7 +44,7 @@ async function request<T>(path: string, sessionToken: string, init?: RequestInit
       throw error;
     }
 
-    return requestWithToken<T>(path, latestToken, init);
+    return requestWithToken<T>(path, latestToken, init, schema);
   }
 }
 
@@ -69,7 +71,7 @@ async function requestFormData<T>(
   }
 }
 
-async function requestWithToken<T>(path: string, sessionToken: string, init?: RequestInit) {
+async function requestWithToken<T>(path: string, sessionToken: string, init?: RequestInit, schema?: z.ZodType<T>) {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers: {
@@ -84,6 +86,17 @@ async function requestWithToken<T>(path: string, sessionToken: string, init?: Re
   if (!response.ok) {
     const message = Array.isArray(payload?.message) ? payload.message.join(", ") : payload?.message;
     throw new BackendRequestError(message || `Request failed with status ${response.status}`, response.status);
+  }
+
+  if (schema) {
+    const result = schema.safeParse(payload);
+    if (!result.success) {
+      if (__DEV__) {
+        console.warn("[API] Response validation failed", path, result.error.flatten());
+      }
+      throw new BackendRequestError(`Unexpected response format from server`, response.status);
+    }
+    return result.data;
   }
 
   return (payload || {}) as T;
@@ -544,13 +557,9 @@ export async function listShareRecipients(sessionToken: string) {
 }
 
 export async function listSharedTrips(sessionToken: string) {
-  return request<{ sharedTrips: SharedTripSummary[] }>(API_ROUTES.trips.sharedList, sessionToken, {
-    method: "GET",
-  });
+  return request(API_ROUTES.trips.sharedList, sessionToken, { method: "GET" }, ListSharedTripsResponseSchema);
 }
 
 export async function getSharedTrip(sessionToken: string, shareId: string) {
-  return request<SharedTripDetail>(API_ROUTES.trips.shared(shareId), sessionToken, {
-    method: "GET",
-  });
+  return request(API_ROUTES.trips.shared(shareId), sessionToken, { method: "GET" }, SharedTripDetailSchema);
 }
