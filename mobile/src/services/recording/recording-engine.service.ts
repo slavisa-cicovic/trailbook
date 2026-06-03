@@ -23,6 +23,7 @@ import {
   processRecordedLocationSnapshots,
   type PersistRecordedLocationOptions,
 } from "./recording-pipeline.service";
+import { buildRawLocationEventProcessingResults } from "./raw-location-event-processing.service";
 
 function formatRawLocationCoordinate(value: number): string {
   return value.toFixed(7);
@@ -43,26 +44,6 @@ function getRawLocationEventLocalId(input: {
   ]
     .map(encodeURIComponent)
     .join("-");
-}
-
-function groupTripPointsByRecordedAt(tripPoints: TripPoint[]): Map<string, TripPoint[]> {
-  const groupedTripPoints = new Map<string, TripPoint[]>();
-
-  for (const tripPoint of tripPoints) {
-    const existingTripPoints = groupedTripPoints.get(tripPoint.recordedAt);
-
-    if (existingTripPoints) {
-      existingTripPoints.push(tripPoint);
-    } else {
-      groupedTripPoints.set(tripPoint.recordedAt, [tripPoint]);
-    }
-  }
-
-  for (const groupedPoints of groupedTripPoints.values()) {
-    groupedPoints.sort((left, right) => left.localId.localeCompare(right.localId));
-  }
-
-  return groupedTripPoints;
 }
 
 function buildRawLocationEvents(input: {
@@ -115,61 +96,6 @@ function buildRawLocationEvents(input: {
   });
 
   return rawEvents;
-}
-
-function buildRawLocationEventProcessingResults(
-  rawEvents: RawLocationEvent[],
-  beforeTripPoints: TripPoint[],
-  afterTripPoints: TripPoint[],
-): RawLocationEventProcessingResult[] {
-  const beforeTripPointIds = new Set(beforeTripPoints.map((tripPoint) => tripPoint.localId));
-  const addedTripPointsByRecordedAt = groupTripPointsByRecordedAt(
-    afterTripPoints.filter((tripPoint) => !beforeTripPointIds.has(tripPoint.localId)),
-  );
-  const afterTripPointsByRecordedAt = groupTripPointsByRecordedAt(afterTripPoints);
-  const processedAt = new Date().toISOString();
-  const seenRecordedAt = new Set<string>();
-
-  return rawEvents.map((event) => {
-    const addedTripPoints = addedTripPointsByRecordedAt.get(event.recordedAt) ?? [];
-    const acceptedTripPoint = addedTripPoints.shift() ?? null;
-
-    if (acceptedTripPoint) {
-      return {
-        acceptedTripPointLocalId: acceptedTripPoint.localId,
-        localId: event.localId,
-        processedAt,
-        processingDecision: "accepted-by-recording-pipeline",
-        processingStatus: "accepted",
-        segmentLocalId: acceptedTripPoint.segmentLocalId,
-      };
-    }
-
-    const hasAcceptedPointForRecordedAt = afterTripPointsByRecordedAt.has(event.recordedAt);
-    const isDuplicateRawTimestamp = seenRecordedAt.has(event.recordedAt);
-
-    seenRecordedAt.add(event.recordedAt);
-
-    if (hasAcceptedPointForRecordedAt || isDuplicateRawTimestamp) {
-      return {
-        acceptedTripPointLocalId: null,
-        localId: event.localId,
-        processedAt,
-        processingDecision: "duplicate-recorded-at",
-        processingStatus: "duplicate",
-        segmentLocalId: null,
-      };
-    }
-
-    return {
-      acceptedTripPointLocalId: null,
-      localId: event.localId,
-      processedAt,
-      processingDecision: "filtered-by-recording-pipeline",
-      processingStatus: "rejected",
-      segmentLocalId: null,
-    };
-  });
 }
 
 async function refreshAcceptedTripStats(
@@ -238,11 +164,13 @@ export async function recordLocationSnapshots(
   }
 
   const afterTripPoints = await loadTripPointsForTrip(activeTripId).catch(() => beforeTripPoints);
-  const processingResults = buildRawLocationEventProcessingResults(
-    rawEvents,
-    beforeTripPoints,
+  const processingResults = buildRawLocationEventProcessingResults({
+    acceptedDecision: "accepted-by-recording-pipeline",
     afterTripPoints,
-  );
+    beforeTripPoints,
+    rawEvents,
+    rejectedDecision: "filtered-by-recording-pipeline",
+  });
 
   await updateRawLocationEventProcessingResults(processingResults).catch((error) => {
     console.warn("[Trailbook][recording-engine]", {

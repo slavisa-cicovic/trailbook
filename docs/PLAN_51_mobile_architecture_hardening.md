@@ -34,12 +34,34 @@ Completed in this hardening pass:
 
 Still intentionally deferred:
 
+- Deterministic recording processor and unit-of-work cleanup.
 - Native Android foreground-service watchdog for real OS sleep gaps.
 - Full migration of every sync mutation to outbox operations.
 - Full screen-by-screen view-model replacement.
+- Observability/crash-reporting/release hardening.
 - Actual Valhalla/GraphHopper map matching implementation.
 - Offline map cache implementation.
 - SQLite encryption decision and migration.
+
+## Subplans
+
+Use these subplans instead of trying to execute this roadmap as one large refactor:
+
+- `PLAN_51A_recording_engine_raw_event_buffer.md`: persist raw location events and make raw data available for diagnostics/replay.
+- `PLAN_51A2_raw_event_reprocessing.md`: reprocess existing trips from raw events after processor fixes.
+- `PLAN_51B_deterministic_recording_processor.md`: make live recording, Android batches, simulation and replay use one deterministic processor.
+- `PLAN_51C_recording_screen_controller_view_model.md`: split `RecordingScreen` into controller, view-model and renderer.
+- `PLAN_51D_sync_outbox_full_migration.md`: route all mobile-to-server mutations through durable outbox operations.
+- `PLAN_51E_android_native_recording_watchdog.md`: add native Android monitoring/foreground-service strategy for real OS sleep gaps.
+- `PLAN_51F_observability_and_release_hardening.md`: standardize diagnostics, support bundle, crash-reporting decision and release readiness.
+
+Suggested execution order after current state:
+
+1. `PLAN_51B`: stabilize the recording processor boundary before more Android tuning.
+2. `PLAN_51C`: reduce `RecordingScreen` coupling and large render-state subscriptions.
+3. `PLAN_51D`: make sync/restore/offline mutations durable and inspectable.
+4. `PLAN_51E`: handle Android native delivery gaps if processor-level fixes are not enough.
+5. `PLAN_51F`: harden support/debug/release workflow before wider testing.
 
 ## Current Pain Points
 

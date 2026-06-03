@@ -1,32 +1,21 @@
-import type { RawLocationEvent, RawLocationEventProcessingResult } from "../../domain/raw-location-event";
-import type { RecordingProfile, Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
+import type { RawLocationEvent } from "../../domain/raw-location-event";
+import type { Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
 import { loadRecordingSession } from "../../storage/recording-storage";
+import { loadRawLocationEventsForTrip } from "../../storage/raw-location-events-storage";
+import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
+import { loadTripSegments } from "../../storage/trip-segments-storage";
+import { loadTrips } from "../../storage/trips-storage";
+import { loadWaypoints } from "../../storage/waypoints-storage";
 import {
-  loadRawLocationEventsForTrip,
-  updateRawLocationEventProcessingResults,
-} from "../../storage/raw-location-events-storage";
-import { loadTripPointsForTrip, replaceTripPointsForTrip } from "../../storage/trip-points-storage";
-import { loadTripSegments, saveTripSegments } from "../../storage/trip-segments-storage";
-import { loadTrips, saveTrips } from "../../storage/trips-storage";
-import { loadWaypoints, saveWaypoints } from "../../storage/waypoints-storage";
-import { buildAutoBatchProfileSections } from "./auto-recording.service";
-import {
-  appendTripPointIfUseful,
-  calculateTripDistanceMeters,
-  createTripPointForLocation,
-  resetPendingTripPointContinuity,
-} from "../trip-points/trip-points.service";
-import type { CurrentLocationSnapshot } from "../location/location.service";
+  buildSegmentSummaries,
+  getTripDistanceMeters,
+  processRawLocationEventsForTrip,
+  sortRawLocationEvents,
+  type RecordingProcessorSegmentSummary,
+} from "./recording-processor.service";
+import { applyRawEventReprocessingUnitOfWork } from "./recording-unit-of-work.service";
 
-export interface ReprocessedSegmentSummary {
-  distanceMeters: number;
-  durationMs: number;
-  endedAt: string | null;
-  pointCount: number;
-  profile: RecordingProfile;
-  segmentLocalId: string;
-  startedAt: string;
-}
+export type ReprocessedSegmentSummary = RecordingProcessorSegmentSummary;
 
 export interface ReprocessingPreview {
   duplicateRawEventCount: number;
@@ -50,20 +39,10 @@ export interface ReprocessingPreview {
   warnings: string[];
 }
 
-interface ReplayResult {
-  duplicateRawEventCount: number;
-  firstRawRecordedAt: string | null;
-  lastRawRecordedAt: string | null;
-  maxRawGapMs: number;
-  processingResults: RawLocationEventProcessingResult[];
-  rejectedRawEventCount: number;
-  tripPoints: TripPoint[];
-  tripSegments: TripSegment[];
-}
-
 interface ReprocessingBuildResult {
   nextWaypoints: Waypoint[];
   preview: ReprocessingPreview;
+  processingResults: ReturnType<typeof processRawLocationEventsForTrip>["processingResults"];
   trip: Trip;
   tripPoints: TripPoint[];
   tripSegments: TripSegment[];
@@ -73,162 +52,6 @@ function getNextSyncStatus<T extends { syncStatus: "local-only" | "pending-sync"
   entity: T,
 ): T["syncStatus"] {
   return entity.syncStatus === "local-only" ? "local-only" : "pending-sync";
-}
-
-function toSnapshot(rawEvent: RawLocationEvent): CurrentLocationSnapshot {
-  return {
-    accuracy: rawEvent.accuracy,
-    altitude: rawEvent.altitude,
-    latitude: rawEvent.latitude,
-    longitude: rawEvent.longitude,
-    recordedAt: rawEvent.recordedAt,
-    speed: rawEvent.speed,
-  };
-}
-
-function getSegmentLocalId(tripLocalId: string, index: number) {
-  return `reprocessed-segment-${tripLocalId}-${index + 1}`;
-}
-
-function getElapsedMs(startedAt: string, endedAt: string | null): number {
-  if (!endedAt) {
-    return 0;
-  }
-
-  const startedAtMs = new Date(startedAt).getTime();
-  const endedAtMs = new Date(endedAt).getTime();
-
-  if (Number.isNaN(startedAtMs) || Number.isNaN(endedAtMs) || endedAtMs < startedAtMs) {
-    return 0;
-  }
-
-  return endedAtMs - startedAtMs;
-}
-
-function getMaxGapMs(recordedAtValues: string[]): number {
-  const orderedTimes = recordedAtValues
-    .map((recordedAt) => new Date(recordedAt).getTime())
-    .filter(Number.isFinite)
-    .sort((left, right) => left - right);
-  let maxGapMs = 0;
-
-  for (let index = 1; index < orderedTimes.length; index += 1) {
-    maxGapMs = Math.max(maxGapMs, orderedTimes[index] - orderedTimes[index - 1]);
-  }
-
-  return maxGapMs;
-}
-
-function getTripDistanceMeters(tripPoints: TripPoint[], tripSegments: TripSegment[], tripLocalId: string): number {
-  const orderedSegments = tripSegments
-    .filter((segment) => segment.tripLocalId === tripLocalId)
-    .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
-
-  if (orderedSegments.length === 0) {
-    return calculateTripDistanceMeters(
-      tripPoints
-        .filter((tripPoint) => tripPoint.tripLocalId === tripLocalId)
-        .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt)),
-    );
-  }
-
-  return orderedSegments.reduce((distanceMeters, segment) => {
-    const segmentPoints = tripPoints
-      .filter((tripPoint) => tripPoint.segmentLocalId === segment.localId)
-      .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
-
-    return distanceMeters + calculateTripDistanceMeters(segmentPoints);
-  }, 0);
-}
-
-function buildSegmentSummaries(
-  tripSegments: TripSegment[],
-  tripPoints: TripPoint[],
-  tripLocalId: string,
-): ReprocessedSegmentSummary[] {
-  return tripSegments
-    .filter((segment) => segment.tripLocalId === tripLocalId)
-    .sort((left, right) => left.startedAt.localeCompare(right.startedAt))
-    .map((segment) => {
-      const segmentPoints = tripPoints
-        .filter((tripPoint) => tripPoint.segmentLocalId === segment.localId)
-        .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
-      const distanceMeters = calculateTripDistanceMeters(segmentPoints);
-      const durationMs = getElapsedMs(segment.startedAt, segment.endedAt);
-
-      return {
-        distanceMeters,
-        durationMs,
-        endedAt: segment.endedAt,
-        pointCount: segmentPoints.length,
-        profile: segment.recordingProfile,
-        segmentLocalId: segment.localId,
-        startedAt: segment.startedAt,
-      };
-    });
-}
-
-function withSegmentStats(segment: TripSegment, tripPoints: TripPoint[]): TripSegment {
-  const segmentPoints = tripPoints
-    .filter((tripPoint) => tripPoint.segmentLocalId === segment.localId)
-    .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
-  const statsUpdatedAt = new Date().toISOString();
-
-  return {
-    ...segment,
-    distanceMeters: calculateTripDistanceMeters(segmentPoints),
-    durationMs: getElapsedMs(segment.startedAt, segment.endedAt),
-    pointCount: segmentPoints.length,
-    statsUpdatedAt,
-  };
-}
-
-function buildRawProcessingResults(
-  rawEvents: RawLocationEvent[],
-  tripPoints: TripPoint[],
-): RawLocationEventProcessingResult[] {
-  const acceptedPointsByRecordedAt = new Map<string, TripPoint[]>();
-  const processedAt = new Date().toISOString();
-  const seenRawRecordedAt = new Set<string>();
-
-  for (const tripPoint of tripPoints) {
-    const existingPoints = acceptedPointsByRecordedAt.get(tripPoint.recordedAt);
-
-    if (existingPoints) {
-      existingPoints.push(tripPoint);
-    } else {
-      acceptedPointsByRecordedAt.set(tripPoint.recordedAt, [tripPoint]);
-    }
-  }
-
-  return rawEvents.map((event) => {
-    const acceptedPoints = acceptedPointsByRecordedAt.get(event.recordedAt) ?? [];
-    const acceptedPoint = acceptedPoints.shift() ?? null;
-
-    if (acceptedPoint) {
-      seenRawRecordedAt.add(event.recordedAt);
-      return {
-        acceptedTripPointLocalId: acceptedPoint.localId,
-        localId: event.localId,
-        processedAt,
-        processingDecision: "accepted-by-raw-reprocessing",
-        processingStatus: "accepted",
-        segmentLocalId: acceptedPoint.segmentLocalId,
-      };
-    }
-
-    const duplicate = seenRawRecordedAt.has(event.recordedAt);
-    seenRawRecordedAt.add(event.recordedAt);
-
-    return {
-      acceptedTripPointLocalId: null,
-      localId: event.localId,
-      processedAt,
-      processingDecision: duplicate ? "duplicate-recorded-at" : "filtered-by-raw-reprocessing",
-      processingStatus: duplicate ? "duplicate" : "rejected",
-      segmentLocalId: null,
-    };
-  });
 }
 
 function remapWaypointSegment(waypoint: Waypoint, tripSegments: TripSegment[]): string | null {
@@ -289,88 +112,6 @@ function remapWaypoints(
       updatedAt,
     };
   });
-}
-
-function replayRawEvents(trip: Trip, rawEvents: RawLocationEvent[]): ReplayResult {
-  const sortedRawEvents = [...rawEvents].sort((left, right) => {
-    const recordedAtCompare = left.recordedAt.localeCompare(right.recordedAt);
-
-    if (recordedAtCompare !== 0) {
-      return recordedAtCompare;
-    }
-
-    return left.batchIndex - right.batchIndex;
-  });
-  const snapshots = sortedRawEvents.map(toSnapshot);
-  const firstRawRecordedAt = sortedRawEvents[0]?.recordedAt ?? null;
-  const lastRawRecordedAt = sortedRawEvents[sortedRawEvents.length - 1]?.recordedAt ?? null;
-  const sections = buildAutoBatchProfileSections(snapshots, trip.recordingProfile);
-  let nextTripPoints: TripPoint[] = [];
-  let lastSequentialTripPoint: TripPoint | null = null;
-  const nextTripSegments: TripSegment[] = [];
-
-  resetPendingTripPointContinuity(trip.localId);
-
-  try {
-    sections.forEach((section, index) => {
-      const segment: TripSegment = {
-        createdAt: section.startedAt,
-        deviceId: trip.deviceId,
-        distanceMeters: 0,
-        durationMs: 0,
-        endedAt: index === sections.length - 1 ? trip.endedAt ?? section.endedAt : section.endedAt,
-        localId: getSegmentLocalId(trip.localId, index),
-        pointCount: 0,
-        recordingProfile: section.profile,
-        serverId: null,
-        startedAt: index === 0 ? firstRawRecordedAt ?? section.startedAt : section.startedAt,
-        statsUpdatedAt: section.startedAt,
-        syncStatus: "pending-sync",
-        tripLocalId: trip.localId,
-        updatedAt: section.endedAt,
-        userId: trip.userId,
-      };
-
-      nextTripSegments.push(segment);
-
-      for (const snapshot of section.samples) {
-        const candidateTripPoint = createTripPointForLocation(trip, segment.localId, snapshot);
-        const appendedTripPoints = appendTripPointIfUseful(
-          nextTripPoints,
-          {
-            ...candidateTripPoint,
-            syncStatus: "pending-sync",
-          },
-          section.profile,
-          "background",
-          {
-            lastSequentialTripPoint,
-            sessionStartedAt: trip.startedAt,
-            tripStartedAt: trip.startedAt,
-          },
-        );
-
-        lastSequentialTripPoint = candidateTripPoint;
-        nextTripPoints = appendedTripPoints;
-      }
-    });
-  } finally {
-    resetPendingTripPointContinuity(trip.localId);
-  }
-
-  const segmentsWithStats = nextTripSegments.map((segment) => withSegmentStats(segment, nextTripPoints));
-  const processingResults = buildRawProcessingResults(sortedRawEvents, nextTripPoints);
-
-  return {
-    duplicateRawEventCount: processingResults.filter((result) => result.processingStatus === "duplicate").length,
-    firstRawRecordedAt,
-    lastRawRecordedAt,
-    maxRawGapMs: getMaxGapMs(sortedRawEvents.map((event) => event.recordedAt)),
-    processingResults,
-    rejectedRawEventCount: processingResults.filter((result) => result.processingStatus === "rejected").length,
-    tripPoints: nextTripPoints,
-    tripSegments: segmentsWithStats,
-  };
 }
 
 function buildWarnings(input: {
@@ -437,9 +178,12 @@ async function buildReprocessingResult(tripLocalId: string): Promise<Reprocessin
     throw new Error("This trip has no local raw location events.");
   }
 
-  const sortedRawEvents = [...rawEvents].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  const sortedRawEvents = sortRawLocationEvents(rawEvents);
   const oldTripSegments = allTripSegments.filter((segment) => segment.tripLocalId === tripLocalId);
-  const replay = replayRawEvents(trip, sortedRawEvents);
+  const replay = processRawLocationEventsForTrip({
+    rawEvents: sortedRawEvents,
+    trip,
+  });
   const oldDistanceMeters = trip.distanceMeters ?? getTripDistanceMeters(oldTripPoints, oldTripSegments, tripLocalId);
   const newDistanceMeters = getTripDistanceMeters(replay.tripPoints, replay.tripSegments, tripLocalId);
   const firstAcceptedRecordedAt = replay.tripPoints[0]?.recordedAt ?? null;
@@ -467,7 +211,7 @@ async function buildReprocessingResult(tripLocalId: string): Promise<Reprocessin
       firstRawRecordedAt: replay.firstRawRecordedAt,
       lastAcceptedRecordedAt,
       lastRawRecordedAt: replay.lastRawRecordedAt,
-      maxAcceptedGapMs: getMaxGapMs(replay.tripPoints.map((tripPoint) => tripPoint.recordedAt)),
+      maxAcceptedGapMs: replay.maxAcceptedGapMs,
       maxRawGapMs: replay.maxRawGapMs,
       newDistanceMeters,
       newPointCount: replay.tripPoints.length,
@@ -482,6 +226,7 @@ async function buildReprocessingResult(tripLocalId: string): Promise<Reprocessin
       tripLocalId,
       warnings,
     },
+    processingResults: replay.processingResults,
     trip,
     tripPoints: replay.tripPoints,
     tripSegments: replay.tripSegments,
@@ -499,38 +244,16 @@ export async function applyRawEventReprocessing(tripLocalId: string): Promise<Re
     throw new Error("Reprocessing produced zero accepted points.");
   }
 
-  const [trips, allTripSegments, allWaypoints, rawEvents] = await Promise.all([
-    loadTrips(),
-    loadTripSegments(),
-    loadWaypoints(),
-    loadRawLocationEventsForTrip(tripLocalId),
-  ]);
-  const updatedAt = new Date().toISOString();
-  const nextTrip = {
-    ...result.trip,
+  await applyRawEventReprocessingUnitOfWork({
     distanceMeters: result.preview.newDistanceMeters,
     pointCount: result.preview.newPointCount,
-    statsUpdatedAt: updatedAt,
-    syncStatus: getNextSyncStatus(result.trip),
-    updatedAt,
-  };
-
-  await saveTrips(trips.map((trip) => (trip.localId === tripLocalId ? nextTrip : trip)));
-  await saveTripSegments(
-    [
-      ...allTripSegments.filter((segment) => segment.tripLocalId !== tripLocalId),
-      ...result.tripSegments,
-    ],
-    allTripSegments,
-  );
-  await replaceTripPointsForTrip(tripLocalId, result.tripPoints);
-  await saveWaypoints(result.nextWaypoints, allWaypoints);
-  await updateRawLocationEventProcessingResults(
-    buildRawProcessingResults(
-      rawEvents.sort((left, right) => left.recordedAt.localeCompare(right.recordedAt)),
-      result.tripPoints,
-    ),
-  );
+    processingResults: result.processingResults,
+    trip: result.trip,
+    tripLocalId,
+    tripPoints: result.tripPoints,
+    tripSegments: result.tripSegments,
+    waypoints: result.nextWaypoints,
+  });
 
   return result.preview;
 }
