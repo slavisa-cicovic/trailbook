@@ -31,8 +31,8 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { clearLocalTripData, exportDatabaseSnapshot } from "../../storage/sqlite/db";
-import { replaceRawLocationEventsForTrip } from "../../storage/raw-location-events-storage";
-import { loadTripPoints, loadTripPointsForTrip, replaceTripPointsForTrip, saveTripPoints } from "../../storage/trip-points-storage";
+import { replaceRawLocationEventsForTrip } from "../../repositories/raw-location-events-repository";
+import { loadTripPoints, loadTripPointsForTrip, replaceTripPointsForTrip, saveTripPoints } from "../../repositories/trip-points-repository";
 
 type SettingsIconName = keyof typeof MaterialIcons.glyphMap;
 

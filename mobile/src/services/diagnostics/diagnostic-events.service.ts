@@ -6,7 +6,7 @@ import type {
 import {
   appendDiagnosticEvent,
   loadRecentDiagnosticEvents,
-} from "../../storage/diagnostic-events-storage";
+} from "../../repositories/diagnostic-events-repository";
 import { scrubSupportBundleValue } from "../support/support-bundle-scrubber.service";
 
 interface RecordDiagnosticEventInput {

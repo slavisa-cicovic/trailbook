@@ -12,7 +12,7 @@ import { STATIC_FLAGS } from "../../constants/feature-flags";
 import {
   loadTripDiagnostics as loadPersistedTripDiagnostics,
   saveTripDiagnostics,
-} from "../../storage/trip-diagnostics-storage";
+} from "../../repositories/trip-diagnostics-repository";
 
 export type LocationCallbackSource = "foreground" | "background";
 

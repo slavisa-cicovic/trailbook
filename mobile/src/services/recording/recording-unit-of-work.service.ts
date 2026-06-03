@@ -1,10 +1,10 @@
 import type { RawLocationEventProcessingResult } from "../../domain/raw-location-event";
 import type { Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
-import { updateRawLocationEventProcessingResults } from "../../storage/raw-location-events-storage";
-import { replaceTripPointsForTrip } from "../../storage/trip-points-storage";
-import { loadTripSegments, saveTripSegments } from "../../storage/trip-segments-storage";
-import { loadTrips, saveTrips } from "../../storage/trips-storage";
-import { loadWaypoints, saveWaypoints } from "../../storage/waypoints-storage";
+import { updateRawLocationEventProcessingResults } from "../../repositories/raw-location-events-repository";
+import { replaceTripPointsForTrip } from "../../repositories/trip-points-repository";
+import { loadTripSegments, saveTripSegments } from "../../repositories/trip-segments-repository";
+import { loadTrips, saveTrips } from "../../repositories/trips-repository";
+import { loadWaypoints, saveWaypoints } from "../../repositories/waypoints-repository";
 
 export interface RawEventReprocessingUnitOfWorkInput {
   distanceMeters: number;

@@ -19,8 +19,8 @@ import { getTripDiagnosticsForSync, isTripDiagnosticsEnabled } from "../trip-poi
 import {
   loadTripSegmentStatsByTripLocalIds,
   loadTripStatsByTripLocalIds,
-} from "../../storage/trip-points-storage";
-import { loadRawLocationEventsForTrip } from "../../storage/raw-location-events-storage";
+} from "../../repositories/trip-points-repository";
+import { loadRawLocationEventsForTrip } from "../../repositories/raw-location-events-repository";
 import {
   assignMissingTripPointSegments,
   finalizeEndedTripSegments,

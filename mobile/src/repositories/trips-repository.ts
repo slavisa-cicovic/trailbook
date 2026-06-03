@@ -1,8 +1,9 @@
 import type { TripPoint } from "../domain/trips";
 import {
-  loadTripPointsForTrip,
   loadTripStatsByTripLocalIds,
+  loadTripPointsForTrip,
 } from "../storage/trip-points-storage";
+export { loadTrips, saveTrips } from "../storage/trips-storage";
 
 export interface TripSummaryStats {
   distanceMeters: number;

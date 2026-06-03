@@ -4,9 +4,9 @@ import { Platform } from "react-native";
 import { resolveSessionFlags } from "../../constants/feature-flags";
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import type { WaypointAttachment } from "../../domain/trips";
-import { loadRecentDiagnosticEvents } from "../../storage/diagnostic-events-storage";
-import { loadTripRouteVariantSummary } from "../../storage/trip-route-variants-storage";
-import { loadWaypointAttachments } from "../../storage/waypoint-attachments-storage";
+import { loadRecentDiagnosticEvents } from "../../repositories/diagnostic-events-repository";
+import { loadTripRouteVariantSummary } from "../../repositories/trip-route-variants-repository";
+import { loadWaypointAttachments } from "../../repositories/waypoint-attachments-repository";
 import { getApiBaseUrl } from "../api/mobile-api.service";
 import { getAndroidRecordingEnvironmentStatusAsync } from "../device/android-power-management.service";
 import { getTrailbookPermissionStatus } from "../permissions/permission-manager.service";
@@ -14,10 +14,10 @@ import { loadRecordingSession } from "../../storage/recording-storage";
 import {
   loadRecentRecordingNativeEvents,
   loadRecordingNativeEventSummary,
-} from "../../storage/recording-native-events-storage";
-import { loadRawLocationEventTripSummaries } from "../../storage/raw-location-events-storage";
-import { loadSyncOutboxSummary } from "../../storage/sync-outbox-storage";
-import { loadTripDiagnostics } from "../../storage/trip-diagnostics-storage";
+} from "../../repositories/recording-native-events-repository";
+import { loadRawLocationEventTripSummaries } from "../../repositories/raw-location-events-repository";
+import { loadSyncOutboxSummary } from "../../repositories/sync-outbox-repository";
+import { loadTripDiagnostics } from "../../repositories/trip-diagnostics-repository";
 import { scrubSupportBundleValue } from "./support-bundle-scrubber.service";
 
 export interface SupportBundleV1 {

@@ -21,10 +21,10 @@ import { setTripSegments } from "../../state/trip-segments-store";
 import { mergeTripPoints } from "../../state/trip-points-store";
 import { setWaypoints } from "../../state/waypoints-store";
 import { loadRecordingSession } from "../../storage/recording-storage";
-import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
-import { loadTripSegments } from "../../storage/trip-segments-storage";
-import { loadTrips } from "../../storage/trips-storage";
-import { loadWaypoints } from "../../storage/waypoints-storage";
+import { loadTripPointsForTrip } from "../../repositories/trip-points-repository";
+import { loadTripSegments } from "../../repositories/trip-segments-repository";
+import { loadTrips } from "../../repositories/trips-repository";
+import { loadWaypoints } from "../../repositories/waypoints-repository";
 import {
   applyAutoRecordingTransition,
   buildAutoBatchProfileSections,

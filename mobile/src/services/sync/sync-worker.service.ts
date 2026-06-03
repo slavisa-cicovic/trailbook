@@ -1,10 +1,10 @@
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import type { Trip, TripGroup, TripGroupMember, WaypointAttachment } from "../../domain/trips";
-import { loadTripGroupMembers, saveTripGroupMembers } from "../../storage/trip-group-members-storage";
-import { loadTripGroups, saveTripGroups } from "../../storage/trip-groups-storage";
-import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
-import { loadTripSegments } from "../../storage/trip-segments-storage";
-import { loadTrips, saveTrips } from "../../storage/trips-storage";
+import { loadTripGroupMembers, saveTripGroupMembers } from "../../repositories/trip-group-members-repository";
+import { loadTripGroups, saveTripGroups } from "../../repositories/trip-groups-repository";
+import { loadTripPointsForTrip } from "../../repositories/trip-points-repository";
+import { loadTripSegments } from "../../repositories/trip-segments-repository";
+import { loadTrips, saveTrips } from "../../repositories/trips-repository";
 import {
   enqueueSyncOutboxItem,
   loadPendingSyncOutboxItems,
@@ -12,9 +12,9 @@ import {
   markSyncOutboxItemRunning,
   markSyncOutboxItemSucceeded,
   type SyncOutboxItem,
-} from "../../storage/sync-outbox-storage";
-import { loadWaypointAttachments, saveWaypointAttachments } from "../../storage/waypoint-attachments-storage";
-import { loadWaypoints } from "../../storage/waypoints-storage";
+} from "../../repositories/sync-outbox-repository";
+import { loadWaypointAttachments, saveWaypointAttachments } from "../../repositories/waypoint-attachments-repository";
+import { loadWaypoints } from "../../repositories/waypoints-repository";
 import {
   syncTripGroupsToServer,
   syncTripToServer,

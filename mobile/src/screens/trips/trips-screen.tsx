@@ -63,7 +63,7 @@ import {
   enqueueAndDrainTripGroupsSync,
   enqueueAndDrainTripSync,
 } from "../../services/sync/sync-actions.service";
-import { listTripSummaryStats, type TripSummaryStats } from "../../repositories/trip-repository";
+import { listTripSummaryStats, type TripSummaryStats } from "../../repositories/trips-repository";
 import { useTripsScreenHydration } from "../../core/hooks/use-trips-screen-hydration";
 import TripEditModal from "./components/trip-edit-modal";
 

@@ -11,12 +11,12 @@ import { loadRecordingSession } from "../../storage/recording-storage";
 import {
   insertRawLocationEvents,
   updateRawLocationEventProcessingResults,
-} from "../../storage/raw-location-events-storage";
+} from "../../repositories/raw-location-events-repository";
 import {
   loadTripPointsForTrip,
   refreshTripSegmentStatsForTripLocalId,
   refreshTripStatsForTripLocalId,
-} from "../../storage/trip-points-storage";
+} from "../../repositories/trip-points-repository";
 import { toSnapshot, type CurrentLocationSnapshot } from "../location/location.service";
 import type { LocationCallbackSource } from "../trip-points/trip-point-diagnostics.service";
 import {

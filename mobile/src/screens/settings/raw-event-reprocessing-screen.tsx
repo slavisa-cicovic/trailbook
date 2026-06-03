@@ -23,10 +23,10 @@ import { setWaypoints } from "../../state/waypoints-store";
 import {
   loadRawLocationEventTripSummaries,
   type RawLocationEventTripSummary,
-} from "../../storage/raw-location-events-storage";
-import { loadTripSegments } from "../../storage/trip-segments-storage";
-import { loadTrips } from "../../storage/trips-storage";
-import { loadWaypoints } from "../../storage/waypoints-storage";
+} from "../../repositories/raw-location-events-repository";
+import { loadTripSegments } from "../../repositories/trip-segments-repository";
+import { loadTrips } from "../../repositories/trips-repository";
+import { loadWaypoints } from "../../repositories/waypoints-repository";
 
 interface CandidateRow {
   summary: RawLocationEventTripSummary;

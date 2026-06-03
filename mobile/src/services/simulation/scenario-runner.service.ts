@@ -6,7 +6,7 @@ import {
   getCurrentForegroundLocation,
   stopBackgroundLocationTracking,
 } from "../location/location.service";
-import { loadTripPointsForTrip, refreshTripStatsForTripLocalId } from "../../storage/trip-points-storage";
+import { loadTripPointsForTrip, refreshTripStatsForTripLocalId } from "../../repositories/trip-points-repository";
 import {
   closeActiveTrip,
   createRecordingSession,

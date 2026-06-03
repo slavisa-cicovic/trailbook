@@ -70,7 +70,7 @@ import {
   markWaypointAttachmentDeleted,
   markWaypointDeleted,
 } from "../../services/trips/trips-management.service";
-import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
+import { loadTripPointsForTrip } from "../../repositories/trip-points-repository";
 import {
   createAttachmentTimestamp,
   createPhotoAttachmentForWaypoint,

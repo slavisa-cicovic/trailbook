@@ -1,11 +1,11 @@
 import type { RawLocationEvent } from "../../domain/raw-location-event";
 import type { Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
 import { loadRecordingSession } from "../../storage/recording-storage";
-import { loadRawLocationEventsForTrip } from "../../storage/raw-location-events-storage";
-import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
-import { loadTripSegments } from "../../storage/trip-segments-storage";
-import { loadTrips } from "../../storage/trips-storage";
-import { loadWaypoints } from "../../storage/waypoints-storage";
+import { loadRawLocationEventsForTrip } from "../../repositories/raw-location-events-repository";
+import { loadTripPointsForTrip } from "../../repositories/trip-points-repository";
+import { loadTripSegments } from "../../repositories/trip-segments-repository";
+import { loadTrips } from "../../repositories/trips-repository";
+import { loadWaypoints } from "../../repositories/waypoints-repository";
 import {
   buildSegmentSummaries,
   getTripDistanceMeters,

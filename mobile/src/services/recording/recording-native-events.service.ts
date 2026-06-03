@@ -1,5 +1,5 @@
 import type { RecordingNativeEventType } from "../../domain/recording-native-event";
-import { appendRecordingNativeEvent } from "../../storage/recording-native-events-storage";
+import { appendRecordingNativeEvent } from "../../repositories/recording-native-events-repository";
 
 function normalizePayload(payload: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
   if (!payload) {

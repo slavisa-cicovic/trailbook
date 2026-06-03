@@ -2,7 +2,7 @@ import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 
 import type { TripPoint, Waypoint, WaypointAttachment } from "../../domain/trips";
-import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
+import { loadTripPointsForTrip } from "../../repositories/trip-points-repository";
 import {
   getVisibleAttachmentsForWaypoints,
   getVisibleTrips,

@@ -43,7 +43,7 @@ import {
   resetPendingTripPointContinuity,
   resetTripPointDiagnostics,
 } from "../../services/trip-points/trip-points.service";
-import { loadTripPointsForTrip, refreshTripStatsForTripLocalId, replaceTripPointsForTrip } from "../../storage/trip-points-storage";
+import { loadTripPointsForTrip, refreshTripStatsForTripLocalId, replaceTripPointsForTrip } from "../../repositories/trip-points-repository";
 import { setRecordingSession } from "../../state/recording-store";
 import { setTripPauses } from "../../state/trip-pauses-store";
 import { setTripPointsInMemory } from "../../state/trip-points-store";
