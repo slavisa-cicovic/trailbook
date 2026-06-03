@@ -28,7 +28,7 @@ vi.mock("../../storage/recording-storage", () => ({
 }));
 
 vi.mock("../../storage/raw-location-events-storage", () => ({
-  insertRawLocationEvents: vi.fn().mockResolvedValue(undefined),
+  insertRawLocationEvents: vi.fn(async (events) => events),
   updateRawLocationEventProcessingResults: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -66,7 +66,7 @@ describe("recording engine", () => {
       .mockResolvedValueOnce([acceptedTripPoint]);
   });
 
-  it("stores raw events before pipeline processing and records processing results", async () => {
+  it("stores deduped raw events before pipeline processing and records processing results", async () => {
     await recordLocationSnapshots(
       [
         {
@@ -106,21 +106,26 @@ describe("recording engine", () => {
 
     const rawEvents = vi.mocked(insertRawLocationEvents).mock.calls[0]?.[0] ?? [];
 
-    expect(rawEvents).toHaveLength(3);
+    expect(rawEvents).toHaveLength(2);
     expect(rawEvents[0]).toMatchObject({
       activeSegmentLocalId: "segment-1",
       batchId: "batch-1",
+      batchIndex: 0,
       callbackSource: "background",
-      localId: "raw-location-batch-1-0",
+      localId: "raw-location-trip-1-device-2026-06-02T09%3A01%3A00.000Z-45.0000000-19.0000000",
       origin: "device",
       processingStatus: "pending",
       tripLocalId: "trip-1",
+    });
+    expect(rawEvents[1]).toMatchObject({
+      batchIndex: 2,
+      localId: "raw-location-trip-1-device-2026-06-02T09%3A02%3A00.000Z-45.1000000-19.1000000",
     });
 
     expect(vi.mocked(updateRawLocationEventProcessingResults).mock.calls[0]?.[0]).toEqual([
       {
         acceptedTripPointLocalId: "point-1",
-        localId: "raw-location-batch-1-0",
+        localId: "raw-location-trip-1-device-2026-06-02T09%3A01%3A00.000Z-45.0000000-19.0000000",
         processedAt: expect.any(String),
         processingDecision: "accepted-by-recording-pipeline",
         processingStatus: "accepted",
@@ -128,15 +133,7 @@ describe("recording engine", () => {
       },
       {
         acceptedTripPointLocalId: null,
-        localId: "raw-location-batch-1-1",
-        processedAt: expect.any(String),
-        processingDecision: "duplicate-recorded-at",
-        processingStatus: "duplicate",
-        segmentLocalId: null,
-      },
-      {
-        acceptedTripPointLocalId: null,
-        localId: "raw-location-batch-1-2",
+        localId: "raw-location-trip-1-device-2026-06-02T09%3A02%3A00.000Z-45.1000000-19.1000000",
         processedAt: expect.any(String),
         processingDecision: "filtered-by-recording-pipeline",
         processingStatus: "rejected",
@@ -145,5 +142,30 @@ describe("recording engine", () => {
     ]);
     expect(refreshTripSegmentStatsForTripLocalId).toHaveBeenCalledWith("trip-1");
     expect(refreshTripStatsForTripLocalId).toHaveBeenCalledWith("trip-1");
+  });
+
+  it("does not update raw processing status for storage-ignored duplicate raw events", async () => {
+    vi.mocked(insertRawLocationEvents).mockResolvedValueOnce([]);
+    vi.mocked(loadTripPointsForTrip).mockReset();
+    vi.mocked(loadTripPointsForTrip).mockResolvedValue([acceptedTripPoint]);
+
+    await recordLocationSnapshots(
+      [
+        {
+          accuracy: 6,
+          altitude: null,
+          latitude: 45,
+          longitude: 19,
+          recordedAt: "2026-06-02T09:01:00.000Z",
+          speed: 3,
+        },
+      ],
+      "background",
+    );
+
+    expect(processRecordedLocationSnapshots).toHaveBeenCalledTimes(1);
+    expect(updateRawLocationEventProcessingResults).not.toHaveBeenCalled();
+    expect(refreshTripSegmentStatsForTripLocalId).not.toHaveBeenCalled();
+    expect(refreshTripStatsForTripLocalId).not.toHaveBeenCalled();
   });
 });

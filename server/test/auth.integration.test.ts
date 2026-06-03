@@ -232,8 +232,10 @@ describe("auth integration", () => {
 
     assert.equal(configResponse.status, 200);
     assert.equal(configResponse.body.version, 1);
-    assert.equal(configResponse.body.profiles.ios.auto.distanceInterval, 12);
-    assert.equal(configResponse.body.profiles.android.auto.distanceInterval, 25);
+    assert.equal(configResponse.body.profiles.ios.auto, undefined);
+    assert.equal(configResponse.body.profiles.android.auto, undefined);
+    assert.equal(configResponse.body.profiles.ios.walk.distanceInterval, 12);
+    assert.equal(configResponse.body.profiles.android.walk.distanceInterval, 5);
     assert.equal(configResponse.body.profiles.ios.drive.timeIntervalMs, 30000);
   });
 

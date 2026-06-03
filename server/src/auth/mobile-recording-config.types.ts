@@ -1,6 +1,6 @@
 import type { UserRole } from "../users/user.types";
 
-export type RecordingModeConfigName = "auto" | "walk" | "bike" | "drive" | "boat" | "plane";
+export type RecordingProfileConfigName = "walk" | "bike" | "drive" | "boat" | "plane";
 export type RecordingConfigAccuracy =
   | "lowest"
   | "low"
@@ -23,10 +23,10 @@ export interface PointFilterProfileConfigResponse {
 }
 
 export type PlatformTrackingProfilesResponse = Partial<
-  Record<RecordingModeConfigName, TrackingProfileConfigResponse>
+  Record<RecordingProfileConfigName, TrackingProfileConfigResponse>
 >;
 export type PlatformPointFilterProfilesResponse = Partial<
-  Record<RecordingModeConfigName, PointFilterProfileConfigResponse>
+  Record<RecordingProfileConfigName, PointFilterProfileConfigResponse>
 >;
 
 export interface MobileRecordingConfigResponse {
@@ -47,10 +47,10 @@ export interface MobileRecordingConfigResponse {
 type PartialTrackingProfileConfig = Partial<TrackingProfileConfigResponse>;
 type PartialPointFilterProfileConfig = Partial<PointFilterProfileConfigResponse>;
 export type PartialPlatformTrackingProfiles = Partial<
-  Record<RecordingModeConfigName, PartialTrackingProfileConfig>
+  Record<RecordingProfileConfigName, PartialTrackingProfileConfig>
 >;
 export type PartialPlatformPointFilterProfiles = Partial<
-  Record<RecordingModeConfigName, PartialPointFilterProfileConfig>
+  Record<RecordingProfileConfigName, PartialPointFilterProfileConfig>
 >;
 
 export interface MobileRecordingConfigOverrides {

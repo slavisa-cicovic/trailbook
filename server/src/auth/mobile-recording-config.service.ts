@@ -11,15 +11,17 @@ import type {
   PlatformPointFilterProfilesResponse,
   PlatformTrackingProfilesResponse,
   PointFilterProfileConfigResponse,
+  RecordingProfileConfigName,
   TrackingProfileConfigResponse,
 } from "./mobile-recording-config.types";
 
+const RECORDING_CONFIG_PROFILE_KEYS: RecordingProfileConfigName[] = ["walk", "bike", "drive", "boat", "plane"];
+
 const BUILT_IN_RECORDING_CONFIG: MobileRecordingConfigResponse = {
-  version: 2,
-  updatedAt: "2026-04-26T00:00:00.000Z",
+  version: 3,
+  updatedAt: "2026-06-03T00:00:00.000Z",
   profiles: {
     ios: {
-      auto: { accuracy: "high", distanceInterval: 12, timeIntervalMs: 12_000 },
       walk: { accuracy: "high", distanceInterval: 12, timeIntervalMs: 15_000 },
       bike: { accuracy: "high", distanceInterval: 15, timeIntervalMs: 15_000 },
       drive: { accuracy: "high", distanceInterval: 10, timeIntervalMs: 5_000 },
@@ -27,7 +29,6 @@ const BUILT_IN_RECORDING_CONFIG: MobileRecordingConfigResponse = {
       plane: { accuracy: "low", distanceInterval: 1000, timeIntervalMs: 600_000 },
     },
     android: {
-      auto: { accuracy: "balanced", distanceInterval: 25, timeIntervalMs: 20_000 },
       walk: { accuracy: "high", distanceInterval: 5, timeIntervalMs: 5_000 },
       bike: { accuracy: "bestForNavigation", distanceInterval: 10, timeIntervalMs: 5_000 },
       drive: { accuracy: "bestForNavigation", distanceInterval: 10, timeIntervalMs: 5_000 },
@@ -37,7 +38,6 @@ const BUILT_IN_RECORDING_CONFIG: MobileRecordingConfigResponse = {
   },
   pointFilters: {
     ios: {
-      auto: { maxAccuracyMeters: 45, maxJumpDistanceMeters: 180, maxImpliedSpeedKmh: 70, minMovementMeters: 10 },
       walk: { maxAccuracyMeters: 35, maxJumpDistanceMeters: 120, maxImpliedSpeedKmh: 12, minMovementMeters: 8 },
       bike: { maxAccuracyMeters: 30, maxJumpDistanceMeters: 400, maxImpliedSpeedKmh: 55, minMovementMeters: 25 },
       drive: { maxAccuracyMeters: 80, maxJumpDistanceMeters: 2500, maxImpliedSpeedKmh: 180, minMovementMeters: 30 },
@@ -50,7 +50,6 @@ const BUILT_IN_RECORDING_CONFIG: MobileRecordingConfigResponse = {
       },
     },
     android: {
-      auto: { maxAccuracyMeters: 45, maxJumpDistanceMeters: 180, maxImpliedSpeedKmh: 70, minMovementMeters: 10 },
       walk: { maxAccuracyMeters: 50, maxJumpDistanceMeters: 120, maxImpliedSpeedKmh: 12, minMovementMeters: 4 },
       bike: { maxAccuracyMeters: 80, maxJumpDistanceMeters: 400, maxImpliedSpeedKmh: 55, minMovementMeters: 25 },
       drive: { maxAccuracyMeters: 80, maxJumpDistanceMeters: 2500, maxImpliedSpeedKmh: 180, minMovementMeters: 30 },
@@ -212,7 +211,11 @@ export class MobileRecordingConfigService {
     }
 
     return Object.fromEntries(
-      Object.entries(profiles).map(([mode, config]) => [mode, { ...config }]),
+      RECORDING_CONFIG_PROFILE_KEYS.flatMap((mode) => {
+        const config = profiles[mode];
+
+        return config ? [[mode, { ...config }]] : [];
+      }),
     ) as PlatformTrackingProfilesResponse;
   }
 
@@ -224,16 +227,18 @@ export class MobileRecordingConfigService {
       return baseProfiles;
     }
 
-    for (const [mode, override] of Object.entries(overrides)) {
+    for (const mode of RECORDING_CONFIG_PROFILE_KEYS) {
+      const override = overrides[mode];
+
       if (!override) {
         continue;
       }
 
-      const existing = baseProfiles[mode as keyof PlatformTrackingProfilesResponse];
+      const existing = baseProfiles[mode];
       const normalized = this.normalizeTrackingProfile(override as Partial<TrackingProfileConfigResponse>, existing);
 
       if (normalized) {
-        baseProfiles[mode as keyof PlatformTrackingProfilesResponse] = normalized;
+        baseProfiles[mode] = normalized;
       }
     }
 
@@ -248,7 +253,11 @@ export class MobileRecordingConfigService {
     }
 
     return Object.fromEntries(
-      Object.entries(pointFilters).map(([mode, config]) => [mode, { ...config }]),
+      RECORDING_CONFIG_PROFILE_KEYS.flatMap((mode) => {
+        const config = pointFilters[mode];
+
+        return config ? [[mode, { ...config }]] : [];
+      }),
     ) as PlatformPointFilterProfilesResponse;
   }
 
@@ -260,19 +269,21 @@ export class MobileRecordingConfigService {
       return basePointFilters;
     }
 
-    for (const [mode, override] of Object.entries(overrides)) {
+    for (const mode of RECORDING_CONFIG_PROFILE_KEYS) {
+      const override = overrides[mode];
+
       if (!override) {
         continue;
       }
 
-      const existing = basePointFilters[mode as keyof PlatformPointFilterProfilesResponse];
+      const existing = basePointFilters[mode];
       const normalized = this.normalizePointFilterProfile(
         override as Partial<PointFilterProfileConfigResponse>,
         existing,
       );
 
       if (normalized) {
-        basePointFilters[mode as keyof PlatformPointFilterProfilesResponse] = normalized;
+        basePointFilters[mode] = normalized;
       }
     }
 

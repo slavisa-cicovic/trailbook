@@ -5,9 +5,12 @@ import { Alert, Platform, Pressable, StyleSheet, Text, View, useColorScheme } fr
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
-import { RECORDING_PROFILE_OPTIONS } from "../../constants/recording-profiles";
+import {
+  CONFIGURABLE_RECORDING_PROFILE_OPTIONS,
+  RECORDING_PROFILE_OPTIONS,
+} from "../../constants/recording-profiles";
 import type { CachedMobileRecordingConfig, MobileRecordingConfig, RecordingConfigPlatform } from "../../domain/recording-config";
-import type { RecordingMode } from "../../domain/trips";
+import type { RecordingProfile } from "../../domain/trips";
 import { syncBackgroundLocationTracking } from "../../services/location/location.service";
 import {
   loadEditableRecordingConfig,
@@ -18,9 +21,9 @@ import { useSessionStore } from "../../state/session-store";
 import { useThemeStore } from "../../state/theme-store";
 
 const EDITABLE_PLATFORM: Exclude<RecordingConfigPlatform, "default"> = Platform.OS === "ios" ? "ios" : "android";
-const EDITABLE_MODES: RecordingMode[] = RECORDING_PROFILE_OPTIONS.map((option) => option.value);
+const EDITABLE_MODES: RecordingProfile[] = CONFIGURABLE_RECORDING_PROFILE_OPTIONS.map((option) => option.value);
 
-function formatMode(mode: RecordingMode) {
+function formatMode(mode: RecordingProfile) {
   return RECORDING_PROFILE_OPTIONS.find((option) => option.value === mode)?.label ?? mode;
 }
 
@@ -28,7 +31,7 @@ function formatPlatform(platform: Exclude<RecordingConfigPlatform, "default">) {
   return platform === "ios" ? "iOS" : "Android";
 }
 
-function describeProfile(config: MobileRecordingConfig, platform: Exclude<RecordingConfigPlatform, "default">, mode: RecordingMode) {
+function describeProfile(config: MobileRecordingConfig, platform: Exclude<RecordingConfigPlatform, "default">, mode: RecordingProfile) {
   const profile = config.profiles[platform]?.[mode] ?? config.profiles.default?.[mode];
 
   if (!profile) {

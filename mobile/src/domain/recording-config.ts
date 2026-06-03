@@ -1,4 +1,4 @@
-import type { RecordingMode } from "./trips";
+import type { RecordingProfile } from "./trips";
 
 export type RecordingConfigAccuracy =
   | "lowest"
@@ -21,8 +21,8 @@ export interface PointFilterProfileConfig {
   minMovementMeters: number;
 }
 
-export type PlatformTrackingProfiles = Partial<Record<RecordingMode, TrackingProfileConfig>>;
-export type PlatformPointFilterProfiles = Partial<Record<RecordingMode, PointFilterProfileConfig>>;
+export type PlatformTrackingProfiles = Partial<Record<RecordingProfile, TrackingProfileConfig>>;
+export type PlatformPointFilterProfiles = Partial<Record<RecordingProfile, PointFilterProfileConfig>>;
 export type RecordingConfigPlatform = "ios" | "android" | "default";
 
 export interface MobileRecordingConfig {

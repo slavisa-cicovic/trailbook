@@ -34,6 +34,28 @@ export interface SyncTripPointDto {
   speed: number | null;
 }
 
+export interface SyncRawLocationEventDto {
+  acceptedTripPointLocalId: string | null;
+  accuracy: number | null;
+  activeSegmentLocalId: string | null;
+  altitude: number | null;
+  batchId: string;
+  batchIndex: number;
+  callbackSource: "foreground" | "background";
+  latitude: number;
+  localId: string;
+  longitude: number;
+  origin: "device" | "simulation";
+  processedAt: string | null;
+  processingDecision: string | null;
+  processingStatus: "pending" | "accepted" | "rejected" | "duplicate";
+  receivedAt: string;
+  recordedAt: string;
+  segmentLocalId: string | null;
+  sessionStartedAt: string | null;
+  speed: number | null;
+}
+
 export interface SyncWaypointDto {
   category:
     | "generic"
@@ -121,6 +143,7 @@ export interface SyncTripDiagnosticsDto {
   foregroundRejected: number;
   maxCallbackGapMs: number;
   maxRecordedGapMs: number;
+  maxSilentGapMs?: number;
   platform: "android" | "ios" | "web" | "unknown";
   recentEvents: SyncTripDiagnosticsRecentEventDto[];
   recordingMode: "walk" | "bike" | "drive" | "boat" | "plane" | "auto";
@@ -129,6 +152,7 @@ export interface SyncTripDiagnosticsDto {
   rejectedByJumpDistance: number;
   rejectedByMinMovement: number;
   sessionDuplicateRecordedAt: number;
+  silentGapCount?: number;
   updatedAt: string;
 }
 
@@ -147,6 +171,7 @@ export interface SyncTripDto {
   batteryStartState?: string | null;
   batteryEndLevelPercent?: number | null;
   batteryEndState?: string | null;
+  rawEvents?: SyncRawLocationEventDto[];
   segments: SyncTripSegmentDto[];
   startedAt: string;
   title: string;

@@ -1,4 +1,5 @@
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
+import type { RawLocationEvent } from "../../domain/raw-location-event";
 import type { OwnedServerTripDetail } from "../../domain/server-trips";
 import type {
   Trip,
@@ -23,6 +24,7 @@ export interface RestoreTripsResult {
   nextTripGroupMembers: TripGroupMember[];
   nextTripGroups: TripGroup[];
   nextTripPoints: TripPoint[];
+  restoredRawLocationEvents: RawLocationEvent[];
   nextTripSegments: TripSegment[];
   nextTrips: Trip[];
   nextWaypoints: Waypoint[];
@@ -36,6 +38,7 @@ async function importTripDetail(
   attachments: WaypointAttachment[];
   trip: Trip;
   tripPoints: TripPoint[];
+  rawLocationEvents: RawLocationEvent[];
   tripSegments: TripSegment[];
   waypoints: Waypoint[];
 }> {
@@ -101,6 +104,11 @@ async function importTripDetail(
     syncStatus: "synced",
   }));
 
+  const rawLocationEvents: RawLocationEvent[] = (detail.rawEvents ?? []).map(({ id: _id, ...event }) => ({
+    ...event,
+    tripLocalId: detail.localId,
+  }));
+
   const waypoints: Waypoint[] = detail.waypoints.map((waypoint) => ({
     localId: waypoint.localId,
     serverId: waypoint.id,
@@ -155,6 +163,7 @@ async function importTripDetail(
     trip,
     tripSegments,
     tripPoints,
+    rawLocationEvents,
     waypoints,
     attachments,
   };
@@ -186,6 +195,7 @@ export async function restoreOwnedTripsFromServer(
   let nextTrips = currentState.trips;
   let nextTripSegments = currentState.tripSegments;
   let nextTripPoints = currentState.tripPoints;
+  let restoredRawLocationEvents: RawLocationEvent[] = [];
   let nextWaypoints = currentState.waypoints;
   let nextAttachments = currentState.attachments;
   let nextTripGroups = currentState.tripGroups;
@@ -205,6 +215,7 @@ export async function restoreOwnedTripsFromServer(
     nextTrips = [...nextTrips, imported.trip];
     nextTripSegments = [...nextTripSegments, ...imported.tripSegments];
     nextTripPoints = [...nextTripPoints, ...imported.tripPoints];
+    restoredRawLocationEvents = [...restoredRawLocationEvents, ...imported.rawLocationEvents];
     nextWaypoints = [...nextWaypoints, ...imported.waypoints];
     nextAttachments = [...nextAttachments, ...imported.attachments];
     existingServerTripIds.add(ownedTrip.id);
@@ -271,6 +282,7 @@ export async function restoreOwnedTripsFromServer(
     nextTrips,
     nextTripSegments,
     nextTripPoints,
+    restoredRawLocationEvents,
     nextTripGroups,
     nextTripGroupMembers,
     nextWaypoints,

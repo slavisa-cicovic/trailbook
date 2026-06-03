@@ -34,14 +34,21 @@ import {
 } from "../../services/trips/trips-management.service";
 import {
   formatDistanceKm,
-  smoothTripRoutePoints,
 } from "../../services/trip-points/trip-points.service";
+import {
+  applyRawEventReprocessing,
+  previewRawEventReprocessing,
+  type ReprocessingPreview,
+} from "../../services/recording/raw-event-reprocessing.service";
 import {
   loadTripPointsForTrip,
   loadTripSegmentStatsByTripLocalIds,
   replaceTripPointsForTrip,
   type TripSegmentStatsRow,
 } from "../../storage/trip-points-storage";
+import { loadTripSegments } from "../../storage/trip-segments-storage";
+import { loadTrips } from "../../storage/trips-storage";
+import { loadWaypoints } from "../../storage/waypoints-storage";
 import { useSessionStore } from "../../state/session-store";
 import { useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
@@ -138,6 +145,21 @@ function formatBatteryConsumption(startLevelPercent: number | null, endLevelPerc
   return `${consumed}%`;
 }
 
+function formatRawReprocessingPreview(preview: ReprocessingPreview): string {
+  const warnings = preview.warnings.length > 0
+    ? `\n\nWarnings:\n${preview.warnings.map((warning) => `- ${warning}`).join("\n")}`
+    : "";
+
+  return [
+    `Raw events: ${preview.rawEventCount}`,
+    `Old: ${preview.oldPointCount} points, ${formatDistanceKm(preview.oldDistanceMeters)}, ${preview.oldSegmentCount} segments`,
+    `New: ${preview.newPointCount} points, ${formatDistanceKm(preview.newDistanceMeters)}, ${preview.newSegmentCount} segments`,
+    `Rejected raw: ${preview.rejectedRawEventCount}`,
+    `Duplicate raw: ${preview.duplicateRawEventCount}`,
+    warnings,
+  ].join("\n");
+}
+
 function getDisplayTripSegments(tripSegments: TripSegment[], selectedTrip: Trip | null): TripSegment[] {
   if (!selectedTrip?.endedAt) {
     return tripSegments;
@@ -186,7 +208,7 @@ export default function TripRouteScreen() {
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const syncIconRotation = useRef(new Animated.Value(0)).current;
-  const [smoothBusy, setSmoothBusy] = useState(false);
+  const [rawReprocessBusy, setRawReprocessBusy] = useState(false);
   const [segmentEditSegmentId, setSegmentEditSegmentId] = useState<string | null>(null);
   const [tripSegmentStatsBySegmentId, setTripSegmentStatsBySegmentId] = useState<
     Map<string, TripSegmentStatsRow>
@@ -194,11 +216,6 @@ export default function TripRouteScreen() {
   const [selectedTripPoints, setSelectedTripPoints] = useState<TripPoint[]>([]);
   const [selectedTripPointsTripId, setSelectedTripPointsTripId] = useState<string | null>(null);
   const [routePointsLoading, setRoutePointsLoading] = useState(false);
-  const [routeSmoothingUndo, setRouteSmoothingUndo] = useState<{
-    previousTrip: Trip;
-    previousTripPoints: TripPoint[];
-    removedPointCount: number;
-  } | null>(null);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
@@ -658,76 +675,74 @@ export default function TripRouteScreen() {
     }
   }
 
-  async function handleSmoothRoute() {
+  async function handleApplyRawReprocessing() {
     if (!selectedTrip || !currentUserId || selectedTrip.status !== "ended") {
       return;
     }
 
-    const nextSyncStatus: Trip["syncStatus"] =
-      selectedTrip.syncStatus === "local-only" ? "local-only" : "pending-sync";
-    const selectedTripPointsForEdit = await loadSelectedTripPointsForEdit();
-    const nextTripPointsState = smoothTripRoutePoints(
-      selectedTripPointsForEdit,
-      selectedTrip.localId,
-      selectedTrip.recordingProfile,
-      nextSyncStatus,
-    );
-
-    if (nextTripPointsState.removedPointCount === 0) {
-      Alert.alert("No changes", "This route does not currently need smoothing.");
-      return;
-    }
-
-    setSmoothBusy(true);
+    setRawReprocessBusy(true);
 
     try {
-      const updatedAt = new Date().toISOString();
-      const nextTrips = trips.map((trip) =>
-        trip.localId === selectedTrip.localId
-          ? {
-              ...trip,
-              updatedAt,
-              syncStatus: nextSyncStatus,
-            }
-          : trip,
-      );
+      const result = await applyRawEventReprocessing(selectedTrip.localId);
+      const [nextTrips, nextTripSegments, nextWaypoints, nextTripPoints] = await Promise.all([
+        loadTrips(),
+        loadTripSegments(),
+        loadWaypoints(),
+        loadTripPointsForTrip(selectedTrip.localId),
+      ]);
 
-      setRouteSmoothingUndo({
-        previousTrip: selectedTrip,
-        previousTripPoints: selectedTripPointsForEdit,
-        removedPointCount: nextTripPointsState.removedPointCount,
-      });
-
-      await replaceTripPointsForTrip(selectedTrip.localId, nextTripPointsState.tripPoints);
-      setSelectedTripPoints(nextTripPointsState.tripPoints);
+      await setTrips(nextTrips);
+      await setTripSegments(nextTripSegments);
+      await setWaypoints(nextWaypoints);
+      setSelectedTripPoints(nextTripPoints);
       setSelectedTripPointsTripId(selectedTrip.localId);
       await refreshSelectedTripSegmentStats(selectedTrip.localId);
-      await setTrips(nextTrips);
+      Alert.alert(
+        "Route reprocessed",
+        `Rebuilt route from raw events: ${result.newPointCount} points, ${formatDistanceKm(result.newDistanceMeters)}.`,
+      );
+    } catch (error) {
+      Alert.alert(
+        "Raw reprocessing failed",
+        error instanceof Error ? error.message : "Unable to reprocess this route from raw events.",
+      );
     } finally {
-      setSmoothBusy(false);
+      setRawReprocessBusy(false);
     }
   }
 
-  async function handleUndoSmoothRoute() {
-    if (
-      !selectedTrip ||
-      !currentUserId ||
-      !routeSmoothingUndo ||
-      routeSmoothingUndo.previousTrip.localId !== selectedTrip.localId
-    ) {
+  async function handlePreviewRawReprocessing() {
+    if (!selectedTrip || !currentUserId || selectedTrip.status !== "ended") {
       return;
     }
 
-    const restoredTrips = trips.map((trip) =>
-      trip.localId === selectedTrip.localId ? routeSmoothingUndo.previousTrip : trip,
-    );
+    setRawReprocessBusy(true);
 
-    await replaceTripPointsForTrip(selectedTrip.localId, routeSmoothingUndo.previousTripPoints);
-    setSelectedTripPoints(routeSmoothingUndo.previousTripPoints);
-    setSelectedTripPointsTripId(selectedTrip.localId);
-    await refreshSelectedTripSegmentStats(selectedTrip.localId);
-    await setTrips(restoredTrips);
-    setRouteSmoothingUndo(null);
+    try {
+      const preview = await previewRawEventReprocessing(selectedTrip.localId);
+
+      Alert.alert(
+        "Reprocess route from raw GPS",
+        formatRawReprocessingPreview(preview),
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Apply",
+            style: "destructive",
+            onPress: () => {
+              void handleApplyRawReprocessing();
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      Alert.alert(
+        "Raw reprocessing unavailable",
+        error instanceof Error ? error.message : "Unable to preview raw reprocessing for this route.",
+      );
+    } finally {
+      setRawReprocessBusy(false);
+    }
   }
 
   function handleSelectWaypoint(waypoint: Waypoint) {
@@ -874,13 +889,16 @@ export default function TripRouteScreen() {
               >
                 <MaterialIcons color="#243224" name="edit" size={18} />
               </Pressable>
-              {selectedTrip.status === "ended" ? (
+              {selectedTrip.status === "ended" &&
+              identitySession.mode === "authenticated" &&
+              identitySession.role === "test_user" ? (
                 <Pressable
-                  accessibilityLabel={smoothBusy ? "Smoothing route" : "Smooth route"}
-                  onPress={() => void handleSmoothRoute()}
-                  style={[styles.headerIconButton, styles.smoothButton]}
+                  accessibilityLabel={rawReprocessBusy ? "Reprocessing route" : "Reprocess route"}
+                  disabled={rawReprocessBusy}
+                  onPress={() => void handlePreviewRawReprocessing()}
+                  style={[styles.headerIconButton, styles.reprocessButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
                 >
-                  <MaterialIcons color={smoothBusy ? "#6b7280" : "#243224"} name="auto-fix-high" size={18} />
+                  <MaterialIcons color={rawReprocessBusy ? "#6b7280" : "#243224"} name="replay" size={18} />
                 </Pressable>
               ) : null}
               {identitySession.mode === "authenticated" ? (
@@ -912,16 +930,6 @@ export default function TripRouteScreen() {
             ) : null}
             {identitySession.mode !== "authenticated" ? (
               <Text style={styles.demoHint}>Demo trips stay local-only and cannot be shared.</Text>
-            ) : null}
-            {routeSmoothingUndo && routeSmoothingUndo.previousTrip.localId === selectedTrip.localId ? (
-              <View style={styles.smoothingNoticeCard}>
-                <Text style={styles.smoothingNoticeText}>
-                  Route smoothing removed {String(routeSmoothingUndo.removedPointCount)} noisy points.
-                </Text>
-                <Pressable onPress={() => void handleUndoSmoothRoute()} style={styles.smoothingUndoButton}>
-                  <Text style={styles.smoothingUndoButtonText}>Undo</Text>
-                </Pressable>
-              </View>
             ) : null}
             {shareSuccess ? <Text style={styles.shareSuccessText}>{shareSuccess}</Text> : null}
             <View style={styles.summaryGrid}>
@@ -1139,7 +1147,7 @@ const styles = StyleSheet.create({
   shareButton: {
     backgroundColor: "#dfead9",
   },
-  smoothButton: {
+  reprocessButton: {
     backgroundColor: "#e8edf5",
   },
   demoHint: {
@@ -1151,35 +1159,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#2f6c42",
-  },
-  smoothingNoticeCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    borderRadius: 14,
-    backgroundColor: "#eef4ea",
-    borderWidth: 1,
-    borderColor: "#dbe7d5",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  smoothingNoticeText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#355035",
-  },
-  smoothingUndoButton: {
-    borderRadius: 999,
-    backgroundColor: "#243224",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  smoothingUndoButtonText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#fffdf8",
   },
   mapTypeChip: {
     borderRadius: 999,

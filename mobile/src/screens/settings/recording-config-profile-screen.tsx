@@ -4,7 +4,10 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View, useColorScheme } f
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
-import { RECORDING_PROFILE_OPTIONS } from "../../constants/recording-profiles";
+import {
+  CONFIGURABLE_RECORDING_PROFILE_OPTIONS,
+  RECORDING_PROFILE_OPTIONS,
+} from "../../constants/recording-profiles";
 import type {
   MobileRecordingConfig,
   PointFilterProfileConfig,
@@ -12,7 +15,7 @@ import type {
   RecordingConfigPlatform,
   TrackingProfileConfig,
 } from "../../domain/recording-config";
-import type { RecordingMode } from "../../domain/trips";
+import type { RecordingProfile } from "../../domain/trips";
 import { syncBackgroundLocationTracking } from "../../services/location/location.service";
 import {
   loadEditableRecordingConfig,
@@ -45,7 +48,7 @@ const EMPTY_POINT_FILTER_PROFILE: PointFilterProfileConfig = {
 };
 
 interface ParsedTarget {
-  mode: RecordingMode;
+  mode: RecordingProfile;
   platform: Exclude<RecordingConfigPlatform, "default">;
 }
 
@@ -62,18 +65,18 @@ function parseTarget(target: string | string[] | undefined): ParsedTarget | null
 
   const [platform, mode] = value.split("-");
 
-  if ((platform !== "ios" && platform !== "android") || !isRecordingMode(mode)) {
+  if ((platform !== "ios" && platform !== "android") || !isConfigurableRecordingProfile(mode)) {
     return null;
   }
 
   return { platform, mode };
 }
 
-function isRecordingMode(value: string | undefined): value is RecordingMode {
-  return RECORDING_PROFILE_OPTIONS.some((option) => option.value === value);
+function isConfigurableRecordingProfile(value: string | undefined): value is RecordingProfile {
+  return CONFIGURABLE_RECORDING_PROFILE_OPTIONS.some((option) => option.value === value);
 }
 
-function getModeLabel(mode: RecordingMode) {
+function getModeLabel(mode: RecordingProfile) {
   return RECORDING_PROFILE_OPTIONS.find((option) => option.value === mode)?.label ?? mode;
 }
 

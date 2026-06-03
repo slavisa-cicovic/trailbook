@@ -31,6 +31,7 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { clearLocalTripData, exportDatabaseSnapshot } from "../../storage/sqlite/db";
+import { replaceRawLocationEventsForTrip } from "../../storage/raw-location-events-storage";
 import { loadTripPoints, loadTripPointsForTrip, replaceTripPointsForTrip, saveTripPoints } from "../../storage/trip-points-storage";
 
 type SettingsIconName = keyof typeof MaterialIcons.glyphMap;
@@ -234,6 +235,19 @@ export default function SettingsScreen() {
       await setTripGroups(result.nextTripGroups);
       await setTripGroupMembers(result.nextTripGroupMembers);
       await saveTripPoints(result.nextTripPoints);
+      const rawEventsByTripId = new Map<string, typeof result.restoredRawLocationEvents>();
+
+      for (const rawEvent of result.restoredRawLocationEvents) {
+        rawEventsByTripId.set(rawEvent.tripLocalId, [
+          ...(rawEventsByTripId.get(rawEvent.tripLocalId) ?? []),
+          rawEvent,
+        ]);
+      }
+
+      for (const [tripLocalId, rawEvents] of rawEventsByTripId) {
+        await replaceRawLocationEventsForTrip(tripLocalId, rawEvents);
+      }
+
       setTripPointsInMemory([]);
       await setWaypoints(result.nextWaypoints);
       await setWaypointAttachments(result.nextAttachments);

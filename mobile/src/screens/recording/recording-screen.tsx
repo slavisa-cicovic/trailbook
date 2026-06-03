@@ -90,7 +90,9 @@ import {
 import {
   createTripPointForLocation,
   flushTripPointDiagnostics,
+  getLocationCallbackDiagnosticState,
   getVisibleTripPointsForTrip,
+  recordLocationSilentGap,
   resetPendingTripPointContinuity,
   resetTripPointDiagnostics,
 } from "../../services/trip-points/trip-points.service";
@@ -125,6 +127,8 @@ import {
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 
+const LOCATION_SILENT_GAP_WARNING_MS = 2 * 60 * 1000;
+const LOCATION_SILENT_GAP_WATCHDOG_INTERVAL_MS = 30 * 1000;
 
 export default function RecordingScreen() {
   const { width: screenWidth } = useWindowDimensions();
@@ -145,6 +149,8 @@ export default function RecordingScreen() {
   const {
     backgroundLocationPermissionGranted,
     backgroundRecordingSupported,
+    batteryOptimizationIgnored,
+    batteryOptimizationSupported,
     locationPermissionGranted,
     missingPermissionsText,
     missingRequired,
@@ -162,6 +168,7 @@ export default function RecordingScreen() {
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
   const recordingTitleInputRef = useRef<TextInput | null>(null);
   const recordingDescriptionInputRef = useRef<TextInput | null>(null);
+  const lastSilentGapBucketRef = useRef<string | null>(null);
 
   function logRecordingStartStep(step: string, details?: Record<string, unknown>) {
     console.warn("[Trailbook][recording-start]", details ? { step, ...details } : { step });
@@ -406,6 +413,61 @@ export default function RecordingScreen() {
       active = false;
     };
   }, [recordingSession.recordingMode, recordingSession.status]);
+
+  useEffect(() => {
+    if (recordingSession.status !== "recording" || !recordingSession.activeTripId) {
+      lastSilentGapBucketRef.current = null;
+      return;
+    }
+
+    const tripLocalId = recordingSession.activeTripId;
+
+    function checkLocationSilentGap() {
+      const observedAtMs = Date.now();
+      const diagnosticState = getLocationCallbackDiagnosticState(tripLocalId);
+      const sessionStartedAtMs = recordingSession.startedAt
+        ? new Date(recordingSession.startedAt).getTime()
+        : Number.NaN;
+      const lastCallbackReceivedAtMs =
+        diagnosticState.lastCallbackReceivedAtMs ??
+        (Number.isFinite(sessionStartedAtMs) ? sessionStartedAtMs : observedAtMs);
+      const gapMs = observedAtMs - lastCallbackReceivedAtMs;
+
+      if (gapMs < LOCATION_SILENT_GAP_WARNING_MS) {
+        return;
+      }
+
+      const gapBucket = `${tripLocalId}:${Math.floor(gapMs / LOCATION_SILENT_GAP_WARNING_MS)}`;
+
+      if (lastSilentGapBucketRef.current === gapBucket) {
+        return;
+      }
+
+      lastSilentGapBucketRef.current = gapBucket;
+      recordLocationSilentGap(tripLocalId, recordingSession.recordingMode, {
+        batteryOptimizationIgnored:
+          batteryOptimizationSupported === true ? batteryOptimizationIgnored : null,
+        gapMs,
+        lastCallbackReceivedAt:
+          diagnosticState.lastCallbackReceivedAtMs === null
+            ? null
+            : new Date(diagnosticState.lastCallbackReceivedAtMs).toISOString(),
+        observedAt: new Date(observedAtMs).toISOString(),
+      });
+    }
+
+    checkLocationSilentGap();
+    const intervalId = setInterval(checkLocationSilentGap, LOCATION_SILENT_GAP_WATCHDOG_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [
+    batteryOptimizationIgnored,
+    batteryOptimizationSupported,
+    recordingSession.activeTripId,
+    recordingSession.recordingMode,
+    recordingSession.startedAt,
+    recordingSession.status,
+  ]);
 
   useEffect(() => {
     if (locationPermissionGranted !== true || currentLocation) {

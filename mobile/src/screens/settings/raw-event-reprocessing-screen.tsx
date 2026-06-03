@@ -178,7 +178,7 @@ export default function RawEventReprocessingScreen() {
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Text style={[styles.title, { color: theme.primaryText }]}>Rebuild route from raw GPS callbacks</Text>
           <Text style={[styles.description, { color: theme.mutedText }]}>
-            Debug-only tool. Preview compares current route output with replayed raw events. Apply replaces points and segments for the selected ended trip.
+            Debug-only tool. Preview compares current route output with replayed raw events restored from the backend. Apply replaces points and segments for the selected ended trip.
           </Text>
         </View>
 
@@ -200,10 +200,8 @@ export default function RawEventReprocessingScreen() {
             const canReprocess = trip.status === "ended" && trip.endedAt !== null;
 
             return (
-              <Pressable
-                disabled={busy || !canReprocess}
+              <View
                 key={trip.localId}
-                onPress={() => void handlePreview(trip)}
                 style={[
                   styles.row,
                   { backgroundColor: theme.card, borderColor: theme.border },
@@ -221,11 +219,25 @@ export default function RawEventReprocessingScreen() {
                   <Text style={[styles.rowDescription, { color: theme.mutedText }]}>
                     {formatDate(summary.firstRecordedAt)} → {formatDate(summary.lastRecordedAt)}
                   </Text>
+                  <View style={styles.rowActions}>
+                    <Pressable
+                      disabled={busy || !canReprocess}
+                      onPress={() => void handlePreview(trip)}
+                      style={({ pressed }) => [
+                        styles.secondaryButton,
+                        { borderColor: theme.border },
+                        pressed && styles.buttonPressed,
+                        (busy || !canReprocess) && styles.disabled,
+                      ]}
+                    >
+                      <MaterialIcons color={theme.accent} name="visibility" size={16} />
+                      <Text style={[styles.secondaryButtonText, { color: theme.primaryText }]}>
+                        {busy ? "Working..." : canReprocess ? "Preview" : "Active"}
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
-                <Text style={[styles.rowValue, { color: theme.mutedText }]}>
-                  {busy ? "Working..." : canReprocess ? "Preview" : "Active"}
-                </Text>
-              </Pressable>
+              </View>
             );
           })}
         </View>
@@ -260,7 +272,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   row: {
-    alignItems: "center",
+    alignItems: "flex-start",
     borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
@@ -289,8 +301,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
-  rowValue: {
+  rowActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingTop: 7,
+  },
+  secondaryButton: {
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 34,
+    paddingHorizontal: 11,
+  },
+  secondaryButtonText: {
     fontSize: 12,
     fontWeight: "800",
+  },
+  buttonPressed: {
+    opacity: 0.72,
   },
 });

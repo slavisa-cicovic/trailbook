@@ -257,6 +257,36 @@ CREATE TABLE IF NOT EXISTS trip_points (
 CREATE INDEX IF NOT EXISTS trip_points_trip_id_idx ON trip_points(trip_id);
 CREATE INDEX IF NOT EXISTS trip_points_segment_id_idx ON trip_points(segment_id);
 
+CREATE TABLE IF NOT EXISTS raw_location_events (
+  id TEXT PRIMARY KEY,
+  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  local_source_id TEXT NOT NULL,
+  session_started_at TIMESTAMPTZ,
+  active_segment_local_source_id TEXT,
+  batch_id TEXT NOT NULL,
+  batch_index INTEGER NOT NULL,
+  callback_source TEXT NOT NULL,
+  origin TEXT NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL,
+  recorded_at TIMESTAMPTZ NOT NULL,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  accuracy DOUBLE PRECISION,
+  altitude DOUBLE PRECISION,
+  speed DOUBLE PRECISION,
+  processing_status TEXT NOT NULL,
+  processing_decision TEXT,
+  processed_at TIMESTAMPTZ,
+  accepted_trip_point_local_source_id TEXT,
+  segment_local_source_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(trip_id, local_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS raw_location_events_trip_id_idx ON raw_location_events(trip_id);
+CREATE INDEX IF NOT EXISTS raw_location_events_trip_id_recorded_at_idx ON raw_location_events(trip_id, recorded_at);
+
 CREATE TABLE IF NOT EXISTS trip_diagnostics (
   id TEXT PRIMARY KEY,
   trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
@@ -282,6 +312,8 @@ CREATE TABLE IF NOT EXISTS trip_diagnostics (
   rejected_by_implied_speed INTEGER NOT NULL,
   max_callback_gap_ms INTEGER NOT NULL,
   max_recorded_gap_ms INTEGER NOT NULL,
+  max_silent_gap_ms INTEGER NOT NULL DEFAULT 0,
+  silent_gap_count INTEGER NOT NULL DEFAULT 0,
   recent_events_json JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -290,6 +322,8 @@ CREATE TABLE IF NOT EXISTS trip_diagnostics (
 
 CREATE INDEX IF NOT EXISTS trip_diagnostics_trip_id_idx ON trip_diagnostics(trip_id);
 ALTER TABLE trip_diagnostics ADD COLUMN IF NOT EXISTS accepted_after_long_gap INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE trip_diagnostics ADD COLUMN IF NOT EXISTS max_silent_gap_ms INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE trip_diagnostics ADD COLUMN IF NOT EXISTS silent_gap_count INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS waypoints (
   id TEXT PRIMARY KEY,

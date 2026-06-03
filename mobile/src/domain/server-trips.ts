@@ -1,4 +1,5 @@
 import type { MobileRecordingConfig } from "./recording-config";
+import type { RawLocationEvent } from "./raw-location-event";
 import type { RecordingProfile, WaypointCategory } from "./trips";
 
 export interface OwnedServerTripSummary {
@@ -50,6 +51,7 @@ export interface OwnedServerTripDetail {
   }>;
   recordingConfig: MobileRecordingConfig | null;
   recordingProfile: RecordingProfile;
+  rawEvents?: Array<RawLocationEvent & { id: string }>;
   batteryStartLevelPercent: number | null;
   batteryStartState: string | null;
   batteryEndLevelPercent: number | null;

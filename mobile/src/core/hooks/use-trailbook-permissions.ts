@@ -12,6 +12,8 @@ import { useSessionStore } from "../../state/session-store";
 export interface TrailbookPermissionsResult {
   backgroundLocationPermissionGranted: boolean | null;
   backgroundRecordingSupported: boolean | null;
+  batteryOptimizationIgnored: boolean | null;
+  batteryOptimizationSupported: boolean | null;
   locationPermissionGranted: boolean | null;
   missingPermissionsText: string;
   missingRequired: TrailbookPermissionKey[] | null;
@@ -112,6 +114,8 @@ export function useTrailbookPermissions(): TrailbookPermissionsResult {
   return {
     backgroundLocationPermissionGranted: status?.backgroundLocationGranted ?? null,
     backgroundRecordingSupported: status?.backgroundLocationSupported ?? null,
+    batteryOptimizationIgnored: status?.batteryOptimizationIgnored ?? null,
+    batteryOptimizationSupported: status?.batteryOptimizationSupported ?? null,
     locationPermissionGranted: status?.foregroundLocationGranted ?? null,
     missingPermissionsText: formatMissingTrailbookPermissions(status),
     missingRequired: status?.missingRequired ?? null,

@@ -35,10 +35,17 @@ vi.mock("../../services/motion/motion-activity.service", () => ({
   isMotionActivityAvailableAsync: vi.fn().mockResolvedValue(false),
 }));
 
+vi.mock("../../services/device/android-power-management.service", () => ({
+  isAndroidBatteryOptimizationIgnoredAsync: vi.fn().mockResolvedValue(true),
+  isAndroidBatteryOptimizationStatusSupported: vi.fn().mockReturnValue(false),
+  openAndroidBatteryOptimizationSettingsAsync: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe("getTrailbookPermissionLabel", () => {
   it.each([
     ["foregroundLocation", "Location: While using the app"],
     ["backgroundLocation", "Location: Allow all the time"],
+    ["batteryOptimization", "Battery: Unrestricted"],
     ["motionActivity", "Physical activity"],
     ["notifications", "Notifications"],
     ["camera", "Camera"],
@@ -60,6 +67,8 @@ describe("formatMissingTrailbookPermissions", () => {
         missingRequired: [],
         backgroundLocationGranted: true,
         backgroundLocationSupported: true,
+        batteryOptimizationIgnored: true,
+        batteryOptimizationSupported: false,
         cameraGranted: true,
         foregroundLocationGranted: true,
         mediaLibraryGranted: true,
@@ -76,6 +85,8 @@ describe("formatMissingTrailbookPermissions", () => {
         missingRequired: ["foregroundLocation"],
         backgroundLocationGranted: false,
         backgroundLocationSupported: true,
+        batteryOptimizationIgnored: true,
+        batteryOptimizationSupported: false,
         cameraGranted: true,
         foregroundLocationGranted: false,
         mediaLibraryGranted: true,
@@ -91,6 +102,8 @@ describe("formatMissingTrailbookPermissions", () => {
       missingRequired: ["foregroundLocation", "camera"],
       backgroundLocationGranted: true,
       backgroundLocationSupported: true,
+      batteryOptimizationIgnored: true,
+      batteryOptimizationSupported: false,
       cameraGranted: false,
       foregroundLocationGranted: false,
       mediaLibraryGranted: true,

@@ -56,6 +56,12 @@ export const RECORDING_PROFILE_OPTIONS: RecordingProfileOption[] = [
   },
 ];
 
+export const CONFIGURABLE_RECORDING_PROFILE_OPTIONS: Array<
+  RecordingProfileOption & { value: RecordingProfile }
+> = RECORDING_PROFILE_OPTIONS.filter(
+  (option): option is RecordingProfileOption & { value: RecordingProfile } => option.value !== "auto",
+);
+
 export function normalizeRecordingProfile(
   profile: RecordingProfile | LegacyRecordingProfile | null | undefined,
 ): RecordingProfile {

@@ -195,6 +195,28 @@ export class TripsService {
         speed: number | null;
         segmentId: string | null;
       }>;
+      rawLocationEvents: Array<{
+        acceptedTripPointLocalSourceId: string | null;
+        accuracy: number | null;
+        activeSegmentLocalSourceId: string | null;
+        altitude: number | null;
+        batchId: string;
+        batchIndex: number;
+        callbackSource: string;
+        id: string;
+        latitude: number;
+        localSourceId: string;
+        longitude: number;
+        origin: string;
+        processedAt: Date | null;
+        processingDecision: string | null;
+        processingStatus: string;
+        receivedAt: Date;
+        recordedAt: Date;
+        segmentLocalSourceId: string | null;
+        sessionStartedAt: Date | null;
+        speed: number | null;
+      }>;
       segments: Array<{
         id: string;
         localSourceId: string;
@@ -278,6 +300,29 @@ export class TripsService {
           segmentId: point.segmentId,
           speed: point.speed,
         })),
+        rawEvents: trip.rawLocationEvents.map((event) => ({
+          acceptedTripPointLocalId: event.acceptedTripPointLocalSourceId,
+          accuracy: event.accuracy,
+          activeSegmentLocalId: event.activeSegmentLocalSourceId,
+          altitude: event.altitude,
+          batchId: event.batchId,
+          batchIndex: event.batchIndex,
+          callbackSource: event.callbackSource,
+          id: event.id,
+          latitude: event.latitude,
+          localId: event.localSourceId,
+          longitude: event.longitude,
+          origin: event.origin,
+          processedAt: event.processedAt ? event.processedAt.toISOString() : null,
+          processingDecision: event.processingDecision,
+          processingStatus: event.processingStatus,
+          receivedAt: event.receivedAt.toISOString(),
+          recordedAt: event.recordedAt.toISOString(),
+          segmentLocalId: event.segmentLocalSourceId,
+          sessionStartedAt: event.sessionStartedAt ? event.sessionStartedAt.toISOString() : null,
+          speed: event.speed,
+          tripLocalId: trip.localSourceId,
+        })),
         segments: trip.segments.map((segment) => ({
           createdAt: segment.createdAt.toISOString(),
           endedAt: segment.endedAt ? segment.endedAt.toISOString() : null,
@@ -312,6 +357,8 @@ export class TripsService {
   async syncTrip(ownerUserId: string, payload: SyncTripDto) {
     const dedupedSegments = this.dedupeByLocalId(payload.segments);
     const dedupedPoints = this.dedupeByLocalId(payload.points ?? []);
+    const shouldSyncRawEvents = Array.isArray(payload.rawEvents);
+    const dedupedRawEvents = this.dedupeByLocalId(payload.rawEvents ?? []);
     const dedupedWaypoints = this.dedupeByLocalId(payload.waypoints);
     const dedupedAttachments = this.dedupeByLocalId(payload.attachments);
 
@@ -364,6 +411,9 @@ export class TripsService {
       });
 
       await tx.tripPoint.deleteMany({ where: { tripId: upsertedTrip.id } });
+      if (shouldSyncRawEvents) {
+        await tx.rawLocationEvent.deleteMany({ where: { tripId: upsertedTrip.id } });
+      }
       await tx.waypoint.deleteMany({ where: { tripId: upsertedTrip.id } });
       await tx.tripSegment.deleteMany({ where: { tripId: upsertedTrip.id } });
 
@@ -400,6 +450,35 @@ export class TripsService {
             speed: point.speed,
           },
         });
+      }
+
+      if (shouldSyncRawEvents) {
+        for (const rawEvent of dedupedRawEvents) {
+          await tx.rawLocationEvent.create({
+            data: {
+              tripId: upsertedTrip.id,
+              localSourceId: rawEvent.localId,
+              sessionStartedAt: rawEvent.sessionStartedAt ? new Date(rawEvent.sessionStartedAt) : null,
+              activeSegmentLocalSourceId: rawEvent.activeSegmentLocalId,
+              batchId: rawEvent.batchId,
+              batchIndex: rawEvent.batchIndex,
+              callbackSource: rawEvent.callbackSource,
+              origin: rawEvent.origin,
+              receivedAt: new Date(rawEvent.receivedAt),
+              recordedAt: new Date(rawEvent.recordedAt),
+              latitude: rawEvent.latitude,
+              longitude: rawEvent.longitude,
+              accuracy: rawEvent.accuracy,
+              altitude: rawEvent.altitude,
+              speed: rawEvent.speed,
+              processingStatus: rawEvent.processingStatus,
+              processingDecision: rawEvent.processingDecision,
+              processedAt: rawEvent.processedAt ? new Date(rawEvent.processedAt) : null,
+              acceptedTripPointLocalSourceId: rawEvent.acceptedTripPointLocalId,
+              segmentLocalSourceId: rawEvent.segmentLocalId,
+            },
+          });
+        }
       }
 
       for (const waypoint of dedupedWaypoints) {
@@ -516,6 +595,8 @@ export class TripsService {
             rejectedByImpliedSpeed: payload.diagnostics.rejectedByImpliedSpeed,
             maxCallbackGapMs: payload.diagnostics.maxCallbackGapMs,
             maxRecordedGapMs: payload.diagnostics.maxRecordedGapMs,
+            maxSilentGapMs: payload.diagnostics.maxSilentGapMs ?? 0,
+            silentGapCount: payload.diagnostics.silentGapCount ?? 0,
             accuracyHistogramJson: payload.diagnostics.accuracyHistogram as unknown as Prisma.InputJsonValue,
             recentEventsJson: payload.diagnostics.recentEvents as unknown as Prisma.InputJsonValue,
           },
@@ -541,6 +622,8 @@ export class TripsService {
             rejectedByImpliedSpeed: payload.diagnostics.rejectedByImpliedSpeed,
             maxCallbackGapMs: payload.diagnostics.maxCallbackGapMs,
             maxRecordedGapMs: payload.diagnostics.maxRecordedGapMs,
+            maxSilentGapMs: payload.diagnostics.maxSilentGapMs ?? 0,
+            silentGapCount: payload.diagnostics.silentGapCount ?? 0,
             accuracyHistogramJson: payload.diagnostics.accuracyHistogram as unknown as Prisma.InputJsonValue,
             recentEventsJson: payload.diagnostics.recentEvents as unknown as Prisma.InputJsonValue,
           },
@@ -1033,6 +1116,13 @@ export class TripsService {
         },
         points: {
           orderBy: { recordedAt: "asc" },
+        },
+        rawLocationEvents: {
+          orderBy: [
+            { recordedAt: "asc" },
+            { batchId: "asc" },
+            { batchIndex: "asc" },
+          ],
         },
         segments: {
           orderBy: { startedAt: "asc" },

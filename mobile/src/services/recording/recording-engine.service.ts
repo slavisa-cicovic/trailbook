@@ -24,8 +24,25 @@ import {
   type PersistRecordedLocationOptions,
 } from "./recording-pipeline.service";
 
-function getRawLocationEventLocalId(batchId: string, batchIndex: number) {
-  return `raw-location-${batchId}-${batchIndex}`;
+function formatRawLocationCoordinate(value: number): string {
+  return value.toFixed(7);
+}
+
+function getRawLocationEventLocalId(input: {
+  origin: RawLocationEventOrigin;
+  snapshot: CurrentLocationSnapshot;
+  tripLocalId: string;
+}) {
+  return [
+    "raw-location",
+    input.tripLocalId,
+    input.origin,
+    input.snapshot.recordedAt,
+    formatRawLocationCoordinate(input.snapshot.latitude),
+    formatRawLocationCoordinate(input.snapshot.longitude),
+  ]
+    .map(encodeURIComponent)
+    .join("-");
 }
 
 function groupTripPointsByRecordedAt(tripPoints: TripPoint[]): Map<string, TripPoint[]> {
@@ -58,28 +75,46 @@ function buildRawLocationEvents(input: {
   snapshots: CurrentLocationSnapshot[];
   tripLocalId: string;
 }): RawLocationEvent[] {
-  return input.snapshots.map((snapshot, index) => ({
-    acceptedTripPointLocalId: null,
-    accuracy: snapshot.accuracy,
-    activeSegmentLocalId: input.activeSegmentLocalId,
-    altitude: snapshot.altitude,
-    batchId: input.batchId,
-    batchIndex: index,
-    callbackSource: input.callbackSource,
-    latitude: snapshot.latitude,
-    localId: getRawLocationEventLocalId(input.batchId, index),
-    longitude: snapshot.longitude,
-    origin: input.origin,
-    processedAt: null,
-    processingDecision: null,
-    processingStatus: "pending",
-    receivedAt: input.receivedAt,
-    recordedAt: snapshot.recordedAt,
-    segmentLocalId: null,
-    sessionStartedAt: input.sessionStartedAt,
-    speed: snapshot.speed,
-    tripLocalId: input.tripLocalId,
-  }));
+  const rawEvents: RawLocationEvent[] = [];
+  const seenLocalIds = new Set<string>();
+
+  input.snapshots.forEach((snapshot, index) => {
+    const localId = getRawLocationEventLocalId({
+      origin: input.origin,
+      snapshot,
+      tripLocalId: input.tripLocalId,
+    });
+
+    if (seenLocalIds.has(localId)) {
+      return;
+    }
+
+    seenLocalIds.add(localId);
+    rawEvents.push({
+      acceptedTripPointLocalId: null,
+      accuracy: snapshot.accuracy,
+      activeSegmentLocalId: input.activeSegmentLocalId,
+      altitude: snapshot.altitude,
+      batchId: input.batchId,
+      batchIndex: index,
+      callbackSource: input.callbackSource,
+      latitude: snapshot.latitude,
+      localId,
+      longitude: snapshot.longitude,
+      origin: input.origin,
+      processedAt: null,
+      processingDecision: null,
+      processingStatus: "pending",
+      receivedAt: input.receivedAt,
+      recordedAt: snapshot.recordedAt,
+      segmentLocalId: null,
+      sessionStartedAt: input.sessionStartedAt,
+      speed: snapshot.speed,
+      tripLocalId: input.tripLocalId,
+    });
+  });
+
+  return rawEvents;
 }
 
 function buildRawLocationEventProcessingResults(
@@ -186,13 +221,13 @@ export async function recordLocationSnapshots(
 
     beforeTripPoints = await loadTripPointsForTrip(activeTripId).catch(() => []);
 
-    await insertRawLocationEvents(rawEvents).catch((error) => {
+    rawEvents = await insertRawLocationEvents(rawEvents).catch((error) => {
       console.warn("[Trailbook][recording-engine]", {
         error: error instanceof Error ? error.message : String(error),
         step: "raw-insert-failed",
         tripLocalId: activeTripId,
       });
-      rawEvents = [];
+      return [];
     });
   }
 

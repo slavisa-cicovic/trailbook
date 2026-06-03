@@ -11,7 +11,7 @@ import type {
   RecordingConfigPlatform,
   TrackingProfileConfig,
 } from "../../domain/recording-config";
-import type { RecordingMode } from "../../domain/trips";
+import type { RecordingProfile } from "../../domain/trips";
 import { API_ROUTES } from "../../constants/api-routes";
 import { requestFromBackend } from "../api/mobile-api.service";
 import { refreshActiveIdentitySessionIfPossible } from "../../state/session-store";
@@ -23,12 +23,72 @@ const MIN_TIME_INTERVAL_MS = 0;
 const MAX_TIME_INTERVAL_MS = 60 * 60 * 1000;
 const MIN_POINT_FILTER_VALUE = 0;
 const MAX_POINT_FILTER_VALUE = 1_000_000;
+const RECORDING_CONFIG_PROFILE_KEYS: RecordingProfile[] = ["walk", "bike", "drive", "boat", "plane"];
 
 let activeRecordingConfig: MobileRecordingConfig | null = null;
 let activeRecordingConfigUserId: string | null = null;
 
 function cloneRecordingConfig(config: MobileRecordingConfig): MobileRecordingConfig {
   return JSON.parse(JSON.stringify(config)) as MobileRecordingConfig;
+}
+
+function sanitizeTrackingProfiles(profiles: PlatformTrackingProfiles | undefined): PlatformTrackingProfiles | undefined {
+  if (!profiles) {
+    return undefined;
+  }
+
+  const sanitizedProfiles: PlatformTrackingProfiles = {};
+
+  for (const profile of RECORDING_CONFIG_PROFILE_KEYS) {
+    const config = profiles[profile];
+
+    if (config) {
+      sanitizedProfiles[profile] = { ...config };
+    }
+  }
+
+  return sanitizedProfiles;
+}
+
+function sanitizePointFilterProfiles(
+  profiles: PlatformPointFilterProfiles | undefined,
+): PlatformPointFilterProfiles | undefined {
+  if (!profiles) {
+    return undefined;
+  }
+
+  const sanitizedProfiles: PlatformPointFilterProfiles = {};
+
+  for (const profile of RECORDING_CONFIG_PROFILE_KEYS) {
+    const config = profiles[profile];
+
+    if (config) {
+      sanitizedProfiles[profile] = { ...config };
+    }
+  }
+
+  return sanitizedProfiles;
+}
+
+function sanitizeMobileRecordingConfig(config: MobileRecordingConfig): MobileRecordingConfig {
+  const sanitizedPointFilters = config.pointFilters
+    ? {
+        ios: sanitizePointFilterProfiles(config.pointFilters.ios),
+        android: sanitizePointFilterProfiles(config.pointFilters.android),
+        default: sanitizePointFilterProfiles(config.pointFilters.default),
+      }
+    : undefined;
+
+  return {
+    version: config.version,
+    updatedAt: config.updatedAt,
+    profiles: {
+      ios: sanitizeTrackingProfiles(config.profiles.ios),
+      android: sanitizeTrackingProfiles(config.profiles.android),
+      default: sanitizeTrackingProfiles(config.profiles.default),
+    },
+    ...(sanitizedPointFilters ? { pointFilters: sanitizedPointFilters } : {}),
+  };
 }
 
 function getEffectiveConfig(record: CachedMobileRecordingConfig): MobileRecordingConfig {
@@ -43,8 +103,10 @@ function normalizeCachedRecord(
     return null;
   }
 
-  const remoteConfig = record.remoteConfig ?? record.config;
-  const localOverrideConfig = record.localOverrideConfig ?? null;
+  const remoteConfig = sanitizeMobileRecordingConfig(record.remoteConfig ?? record.config);
+  const localOverrideConfig = record.localOverrideConfig
+    ? sanitizeMobileRecordingConfig(record.localOverrideConfig)
+    : null;
 
   if (!isValidMobileRecordingConfig(remoteConfig)) {
     return null;
@@ -63,11 +125,11 @@ function normalizeCachedRecord(
 }
 
 export function getActiveRecordingConfigSnapshot(): MobileRecordingConfig | null {
-  return activeRecordingConfig ? cloneRecordingConfig(activeRecordingConfig) : null;
+  return activeRecordingConfig ? sanitizeMobileRecordingConfig(activeRecordingConfig) : null;
 }
 
 export function getRuntimeTrackingProfileConfig(
-  profile: RecordingMode,
+  profile: RecordingProfile,
   platform: RecordingConfigPlatform = Platform.OS === "ios" ? "ios" : "android",
 ): TrackingProfileConfig | null {
   if (!activeRecordingConfig) {
@@ -81,7 +143,7 @@ export function getRuntimeTrackingProfileConfig(
 }
 
 export function getRuntimePointFilterProfileConfig(
-  profile: RecordingMode,
+  profile: RecordingProfile,
   platform: RecordingConfigPlatform = Platform.OS === "ios" ? "ios" : "android",
 ): PointFilterProfileConfig | null {
   if (!activeRecordingConfig?.pointFilters) {
@@ -106,7 +168,7 @@ export async function syncResolvedRecordingConfig(
     normalizeCachedRecord(cachedRecord, authenticatedSession.userId)
   ) {
     const normalizedRecord = normalizeCachedRecord(cachedRecord, authenticatedSession.userId);
-    activeRecordingConfig = normalizedRecord ? getEffectiveConfig(normalizedRecord) : null;
+    activeRecordingConfig = normalizedRecord ? sanitizeMobileRecordingConfig(getEffectiveConfig(normalizedRecord)) : null;
     activeRecordingConfigUserId = normalizedRecord?.resolvedForUserId ?? null;
   } else {
     activeRecordingConfig = null;
@@ -134,15 +196,17 @@ export async function syncResolvedRecordingConfig(
       return;
     }
 
+    const sanitizedRemoteConfig = sanitizeMobileRecordingConfig(remoteConfig);
+
     const normalizedCachedRecord = normalizeCachedRecord(cachedRecord, authenticatedSession.userId);
     const record: CachedMobileRecordingConfig = {
       resolvedForUserId: authenticatedSession.userId,
-      remoteConfig,
+      remoteConfig: sanitizedRemoteConfig,
       localOverrideConfig: normalizedCachedRecord?.localOverrideConfig ?? null,
-      config: normalizedCachedRecord?.localOverrideConfig ?? remoteConfig,
+      config: normalizedCachedRecord?.localOverrideConfig ?? sanitizedRemoteConfig,
     };
 
-    activeRecordingConfig = getEffectiveConfig(record);
+    activeRecordingConfig = sanitizeMobileRecordingConfig(getEffectiveConfig(record));
     activeRecordingConfigUserId = authenticatedSession.userId;
     await saveRecordingConfig(record);
   } catch {
@@ -190,7 +254,7 @@ export async function saveLocalRecordingConfigOverride(
   const cachedRecord = await loadEditableRecordingConfig(identitySession);
   const remoteConfig = cachedRecord?.remoteConfig ?? cachedRecord?.config ?? config;
   const updatedConfig = {
-    ...cloneRecordingConfig(config),
+    ...sanitizeMobileRecordingConfig(cloneRecordingConfig(config)),
     updatedAt: new Date().toISOString(),
     version: Math.max(1, Math.trunc(config.version || 1)),
   };
@@ -219,18 +283,20 @@ export async function resetRecordingConfigToServerDefaults(
     throw new Error("Server recording config is invalid.");
   }
 
+  const sanitizedRemoteConfig = sanitizeMobileRecordingConfig(remoteConfig);
+
   const record: CachedMobileRecordingConfig = {
     resolvedForUserId: identitySession.userId,
-    remoteConfig,
+    remoteConfig: sanitizedRemoteConfig,
     localOverrideConfig: null,
-    config: remoteConfig,
+    config: sanitizedRemoteConfig,
   };
 
-  activeRecordingConfig = remoteConfig;
+  activeRecordingConfig = sanitizedRemoteConfig;
   activeRecordingConfigUserId = identitySession.userId;
   await saveRecordingConfig(record);
 
-  return remoteConfig;
+  return sanitizedRemoteConfig;
 }
 
 export function isValidMobileRecordingConfig(config: unknown): config is MobileRecordingConfig {

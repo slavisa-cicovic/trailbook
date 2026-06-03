@@ -19,6 +19,14 @@ public final class TrailbookMotionActivityModule: Module {
       CMMotionActivityManager.isActivityAvailable()
     }
 
+    AsyncFunction("isIgnoringBatteryOptimizationsAsync") {
+      true
+    }
+
+    AsyncFunction("openBatteryOptimizationSettingsAsync") {
+      return
+    }
+
     AsyncFunction("getLatestActivityAsync") {
       return UserDefaults.standard.dictionary(forKey: userDefaultsKey)
     }

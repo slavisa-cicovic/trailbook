@@ -4,7 +4,9 @@ import type { MotionActivity } from "../../domain/motion-activity";
 
 export interface TrailbookMotionActivityModuleType {
   getLatestActivityAsync(): Promise<MotionActivity | null>;
+  isIgnoringBatteryOptimizationsAsync?(): Promise<boolean>;
   isAvailableAsync(): Promise<boolean>;
+  openBatteryOptimizationSettingsAsync?(): Promise<void>;
   startUpdatesAsync(): Promise<void>;
   stopUpdatesAsync(): Promise<void>;
 }

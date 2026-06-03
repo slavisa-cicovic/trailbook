@@ -26,6 +26,8 @@ function makeStatus(overrides?: Partial<{
   allRequiredGranted: boolean;
   backgroundLocationGranted: boolean;
   backgroundLocationSupported: boolean;
+  batteryOptimizationIgnored: boolean;
+  batteryOptimizationSupported: boolean;
   cameraGranted: boolean;
   foregroundLocationGranted: boolean;
   mediaLibraryGranted: boolean;
@@ -37,6 +39,8 @@ function makeStatus(overrides?: Partial<{
     allRequiredGranted: true,
     backgroundLocationGranted: true,
     backgroundLocationSupported: true,
+    batteryOptimizationIgnored: true,
+    batteryOptimizationSupported: false,
     cameraGranted: true,
     foregroundLocationGranted: true,
     mediaLibraryGranted: true,
@@ -85,6 +89,8 @@ describe("useTrailbookPermissions", () => {
     await act(async () => {});
 
     expect(result.current.locationPermissionGranted).toBe(false);
+    expect(result.current.batteryOptimizationIgnored).toBe(true);
+    expect(result.current.batteryOptimizationSupported).toBe(false);
     expect(result.current.permissionsReady).toBe(false);
   });
 

@@ -86,6 +86,7 @@ function normalizeTripDiagnostics(
     foregroundRejected: value.foregroundRejected ?? 0,
     maxCallbackGapMs: value.maxCallbackGapMs ?? 0,
     maxRecordedGapMs: value.maxRecordedGapMs ?? 0,
+    maxSilentGapMs: value.maxSilentGapMs ?? 0,
     platform: normalizePlatform(value.platform),
     recentEvents: Array.isArray(value.recentEvents) ? value.recentEvents.map(normalizeRecentEvent) : [],
     recordingMode: normalizeRecordingMode(value.recordingMode),
@@ -94,6 +95,7 @@ function normalizeTripDiagnostics(
     rejectedByJumpDistance: value.rejectedByJumpDistance ?? 0,
     rejectedByMinMovement: value.rejectedByMinMovement ?? 0,
     sessionDuplicateRecordedAt: value.sessionDuplicateRecordedAt ?? 0,
+    silentGapCount: value.silentGapCount ?? 0,
     tripLocalId: value.tripLocalId,
     updatedAt: value.updatedAt ?? new Date(0).toISOString(),
   };
@@ -115,6 +117,7 @@ interface TripDiagnosticsRow {
   foreground_rejected: number;
   max_callback_gap_ms: number;
   max_recorded_gap_ms: number;
+  max_silent_gap_ms: number;
   platform: TripDiagnosticsPlatform;
   recent_events_json: string;
   recording_mode: RecordingMode;
@@ -123,6 +126,7 @@ interface TripDiagnosticsRow {
   rejected_by_jump_distance: number;
   rejected_by_min_movement: number;
   session_duplicate_recorded_at: number;
+  silent_gap_count: number;
   trip_local_id: string;
   updated_at: string;
 }
@@ -144,6 +148,7 @@ function toTripDiagnosticsRow(tripDiagnostics: TripDiagnostics): TripDiagnostics
     foreground_rejected: tripDiagnostics.foregroundRejected,
     max_callback_gap_ms: tripDiagnostics.maxCallbackGapMs,
     max_recorded_gap_ms: tripDiagnostics.maxRecordedGapMs,
+    max_silent_gap_ms: tripDiagnostics.maxSilentGapMs,
     platform: tripDiagnostics.platform,
     recent_events_json: JSON.stringify(tripDiagnostics.recentEvents),
     recording_mode: tripDiagnostics.recordingMode,
@@ -152,6 +157,7 @@ function toTripDiagnosticsRow(tripDiagnostics: TripDiagnostics): TripDiagnostics
     rejected_by_jump_distance: tripDiagnostics.rejectedByJumpDistance,
     rejected_by_min_movement: tripDiagnostics.rejectedByMinMovement,
     session_duplicate_recorded_at: tripDiagnostics.sessionDuplicateRecordedAt,
+    silent_gap_count: tripDiagnostics.silentGapCount,
     trip_local_id: tripDiagnostics.tripLocalId,
     updated_at: tripDiagnostics.updatedAt,
   };
@@ -174,6 +180,7 @@ function toTripDiagnosticsFromRow(row: TripDiagnosticsRow): TripDiagnostics {
     foregroundRejected: row.foreground_rejected,
     maxCallbackGapMs: row.max_callback_gap_ms,
     maxRecordedGapMs: row.max_recorded_gap_ms,
+    maxSilentGapMs: row.max_silent_gap_ms,
     platform: row.platform,
     recentEvents: JSON.parse(row.recent_events_json) as TripDiagnosticsRecentEvent[],
     recordingMode: row.recording_mode,
@@ -182,6 +189,7 @@ function toTripDiagnosticsFromRow(row: TripDiagnosticsRow): TripDiagnostics {
     rejectedByJumpDistance: row.rejected_by_jump_distance,
     rejectedByMinMovement: row.rejected_by_min_movement,
     sessionDuplicateRecordedAt: row.session_duplicate_recorded_at,
+    silentGapCount: row.silent_gap_count,
     tripLocalId: row.trip_local_id,
     updatedAt: row.updated_at,
   });
@@ -237,6 +245,7 @@ async function ensureTripDiagnosticsMigrated(): Promise<void> {
             foreground_rejected,
             max_callback_gap_ms,
             max_recorded_gap_ms,
+            max_silent_gap_ms,
             platform,
             recent_events_json,
             recording_mode,
@@ -245,8 +254,9 @@ async function ensureTripDiagnosticsMigrated(): Promise<void> {
             rejected_by_jump_distance,
             rejected_by_min_movement,
             session_duplicate_recorded_at,
+            silent_gap_count,
             updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           row.trip_local_id,
           row.accepted,
           row.accepted_after_long_gap,
@@ -263,6 +273,7 @@ async function ensureTripDiagnosticsMigrated(): Promise<void> {
           row.foreground_rejected,
           row.max_callback_gap_ms,
           row.max_recorded_gap_ms,
+          row.max_silent_gap_ms,
           row.platform,
           row.recent_events_json,
           row.recording_mode,
@@ -271,6 +282,7 @@ async function ensureTripDiagnosticsMigrated(): Promise<void> {
           row.rejected_by_jump_distance,
           row.rejected_by_min_movement,
           row.session_duplicate_recorded_at,
+          row.silent_gap_count,
           row.updated_at,
         );
       }
@@ -317,6 +329,7 @@ export async function saveTripDiagnostics(tripDiagnostics: TripDiagnostics[]): P
           foreground_rejected,
           max_callback_gap_ms,
           max_recorded_gap_ms,
+          max_silent_gap_ms,
           platform,
           recent_events_json,
           recording_mode,
@@ -325,8 +338,9 @@ export async function saveTripDiagnostics(tripDiagnostics: TripDiagnostics[]): P
           rejected_by_jump_distance,
           rejected_by_min_movement,
           session_duplicate_recorded_at,
+          silent_gap_count,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.trip_local_id,
         row.accepted,
         row.accepted_after_long_gap,
@@ -343,6 +357,7 @@ export async function saveTripDiagnostics(tripDiagnostics: TripDiagnostics[]): P
         row.foreground_rejected,
         row.max_callback_gap_ms,
         row.max_recorded_gap_ms,
+        row.max_silent_gap_ms,
         row.platform,
         row.recent_events_json,
         row.recording_mode,
@@ -351,6 +366,7 @@ export async function saveTripDiagnostics(tripDiagnostics: TripDiagnostics[]): P
         row.rejected_by_jump_distance,
         row.rejected_by_min_movement,
         row.session_duplicate_recorded_at,
+        row.silent_gap_count,
         row.updated_at,
       );
     }

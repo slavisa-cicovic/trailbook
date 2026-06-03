@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 import * as FileSystem from "expo-file-system/legacy";
 
 const DATABASE_NAME = "trailbook.db";
-const DATABASE_VERSION = 9;
+const DATABASE_VERSION = 10;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let databaseWriteQueue: Promise<void> = Promise.resolve();
@@ -131,6 +131,7 @@ async function migrateDatabaseIfNeeded(database: SQLite.SQLiteDatabase) {
         foreground_rejected INTEGER NOT NULL,
         max_callback_gap_ms INTEGER NOT NULL,
         max_recorded_gap_ms INTEGER NOT NULL,
+        max_silent_gap_ms INTEGER NOT NULL DEFAULT 0,
         platform TEXT NOT NULL,
         recent_events_json TEXT NOT NULL,
         recording_mode TEXT NOT NULL,
@@ -139,6 +140,7 @@ async function migrateDatabaseIfNeeded(database: SQLite.SQLiteDatabase) {
         rejected_by_jump_distance INTEGER NOT NULL,
         rejected_by_min_movement INTEGER NOT NULL,
         session_duplicate_recorded_at INTEGER NOT NULL,
+        silent_gap_count INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT NOT NULL
       );
 
@@ -423,6 +425,23 @@ async function migrateDatabaseIfNeeded(database: SQLite.SQLiteDatabase) {
 
       PRAGMA user_version = 9;
     `);
+  }
+
+  if (currentVersion < 10) {
+    const columns = [
+      "max_silent_gap_ms INTEGER NOT NULL DEFAULT 0",
+      "silent_gap_count INTEGER NOT NULL DEFAULT 0",
+    ];
+
+    for (const columnDefinition of columns) {
+      await database.execAsync(`ALTER TABLE trip_diagnostics ADD COLUMN ${columnDefinition};`).catch(async (error) => {
+        if (!(error instanceof Error) || !error.message.includes("duplicate column name")) {
+          throw error;
+        }
+      });
+    }
+
+    await database.execAsync("PRAGMA user_version = 10;");
   }
 }
 

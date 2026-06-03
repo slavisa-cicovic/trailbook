@@ -32,7 +32,7 @@ export async function createApp(): Promise<INestApplication> {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   const databaseService = app.get(DatabaseService);
   const allowedOrigins = getAllowedOrigins();
-  const bodyLimit = process.env.SERVER_BODY_LIMIT || "1mb";
+  const bodyLimit = process.env.SERVER_BODY_LIMIT || "10mb";
 
   app.use(json({ limit: bodyLimit }));
   app.use(urlencoded({ extended: true, limit: bodyLimit }));

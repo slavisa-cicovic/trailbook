@@ -18,6 +18,7 @@ import {
   loadTripSegmentStatsByTripLocalIds,
   loadTripStatsByTripLocalIds,
 } from "../../storage/trip-points-storage";
+import { loadRawLocationEventsForTrip } from "../../storage/raw-location-events-storage";
 import {
   assignMissingTripPointSegments,
   finalizeEndedTripSegments,
@@ -257,6 +258,7 @@ export async function syncTripToServer(
     foregroundRejected: TripDiagnostics["foregroundRejected"];
     maxCallbackGapMs: TripDiagnostics["maxCallbackGapMs"];
     maxRecordedGapMs: TripDiagnostics["maxRecordedGapMs"];
+    maxSilentGapMs: TripDiagnostics["maxSilentGapMs"];
     platform: TripDiagnostics["platform"];
     recentEvents: TripDiagnostics["recentEvents"];
     recordingMode: TripDiagnostics["recordingMode"];
@@ -265,6 +267,7 @@ export async function syncTripToServer(
     rejectedByJumpDistance: TripDiagnostics["rejectedByJumpDistance"];
     rejectedByMinMovement: TripDiagnostics["rejectedByMinMovement"];
     sessionDuplicateRecordedAt: TripDiagnostics["sessionDuplicateRecordedAt"];
+    silentGapCount: TripDiagnostics["silentGapCount"];
     updatedAt: TripDiagnostics["updatedAt"];
   } | null = diagnostics
       ? {
@@ -283,6 +286,7 @@ export async function syncTripToServer(
         foregroundRejected: diagnostics.foregroundRejected,
         maxCallbackGapMs: diagnostics.maxCallbackGapMs,
         maxRecordedGapMs: diagnostics.maxRecordedGapMs,
+        maxSilentGapMs: diagnostics.maxSilentGapMs,
         platform: diagnostics.platform,
         recentEvents: diagnostics.recentEvents,
         recordingMode: diagnostics.recordingMode,
@@ -291,6 +295,7 @@ export async function syncTripToServer(
         rejectedByJumpDistance: diagnostics.rejectedByJumpDistance,
         rejectedByMinMovement: diagnostics.rejectedByMinMovement,
         sessionDuplicateRecordedAt: diagnostics.sessionDuplicateRecordedAt,
+        silentGapCount: diagnostics.silentGapCount,
         updatedAt: diagnostics.updatedAt,
       }
     : null;
@@ -314,6 +319,27 @@ export async function syncTripToServer(
       updatedAt: input.trip.updatedAt,
       deletedAt: input.trip.deletedAt,
       diagnostics: diagnosticsPayload,
+      rawEvents: (await loadRawLocationEventsForTrip(input.trip.localId)).map((event) => ({
+        acceptedTripPointLocalId: event.acceptedTripPointLocalId,
+        accuracy: event.accuracy,
+        activeSegmentLocalId: event.activeSegmentLocalId,
+        altitude: event.altitude,
+        batchId: event.batchId,
+        batchIndex: event.batchIndex,
+        callbackSource: event.callbackSource,
+        latitude: event.latitude,
+        localId: event.localId,
+        longitude: event.longitude,
+        origin: event.origin,
+        processedAt: event.processedAt,
+        processingDecision: event.processingDecision,
+        processingStatus: event.processingStatus,
+        receivedAt: event.receivedAt,
+        recordedAt: event.recordedAt,
+        segmentLocalId: event.segmentLocalId,
+        sessionStartedAt: event.sessionStartedAt,
+        speed: event.speed,
+      })),
       attachments: input.attachments.map((attachment) => ({
         localId: attachment.localId,
         waypointLocalId: attachment.waypointLocalId,

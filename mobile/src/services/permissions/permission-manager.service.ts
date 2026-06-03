@@ -4,11 +4,17 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { PermissionsAndroid, Platform } from "react-native";
 
+import {
+  isAndroidBatteryOptimizationIgnoredAsync,
+  isAndroidBatteryOptimizationStatusSupported,
+  openAndroidBatteryOptimizationSettingsAsync,
+} from "../device/android-power-management.service";
 import { isMotionActivityAvailableAsync } from "../motion/motion-activity.service";
 
 export type TrailbookPermissionKey =
   | "foregroundLocation"
   | "backgroundLocation"
+  | "batteryOptimization"
   | "motionActivity"
   | "notifications"
   | "camera"
@@ -18,6 +24,8 @@ export interface TrailbookPermissionStatus {
   allRequiredGranted: boolean;
   backgroundLocationGranted: boolean;
   backgroundLocationSupported: boolean;
+  batteryOptimizationIgnored: boolean;
+  batteryOptimizationSupported: boolean;
   cameraGranted: boolean;
   foregroundLocationGranted: boolean;
   mediaLibraryGranted: boolean;
@@ -30,6 +38,7 @@ const RUNS_IN_EXPO_GO = Constants.executionEnvironment === "storeClient";
 
 const permissionLabels: Record<TrailbookPermissionKey, string> = {
   backgroundLocation: "Location: Allow all the time",
+  batteryOptimization: "Battery: Unrestricted",
   camera: "Camera",
   foregroundLocation: "Location: While using the app",
   mediaLibrary: "Photos",
@@ -60,6 +69,15 @@ function buildStatus(input: Omit<TrailbookPermissionStatus, "allRequiredGranted"
 
   if (!RUNS_IN_EXPO_GO && (!input.backgroundLocationSupported || !input.backgroundLocationGranted)) {
     missingRequired.push("backgroundLocation");
+  }
+
+  if (
+    Platform.OS === "android" &&
+    !RUNS_IN_EXPO_GO &&
+    input.batteryOptimizationSupported &&
+    !input.batteryOptimizationIgnored
+  ) {
+    missingRequired.push("batteryOptimization");
   }
 
   if (!input.motionActivityGranted) {
@@ -142,6 +160,33 @@ async function requestBackgroundLocationPermission(input: {
   }
 
   return backgroundLocationGranted;
+}
+
+async function getBatteryOptimizationIgnored() {
+  return isAndroidBatteryOptimizationIgnoredAsync();
+}
+
+function getBatteryOptimizationSupport() {
+  return isAndroidBatteryOptimizationStatusSupported();
+}
+
+async function requestBatteryOptimizationIgnored() {
+  const batteryOptimizationSupported = getBatteryOptimizationSupport();
+
+  if (!batteryOptimizationSupported) {
+    return true;
+  }
+
+  if (await getBatteryOptimizationIgnored()) {
+    return true;
+  }
+
+  await openAndroidBatteryOptimizationSettingsAsync().catch((error) => {
+    logPermissionSetupStep("battery-optimization-settings-failed", { error: String(error) });
+  });
+
+  await wait(1000);
+  return getBatteryOptimizationIgnored();
 }
 
 async function getBackgroundLocationSupport() {
@@ -293,15 +338,18 @@ export function formatMissingTrailbookPermissions(status: TrailbookPermissionSta
 
 export async function getTrailbookPermissionStatus(): Promise<TrailbookPermissionStatus> {
   const backgroundLocationSupported = await getBackgroundLocationSupport();
+  const batteryOptimizationSupported = getBatteryOptimizationSupport();
   const foregroundLocationGranted = await getForegroundLocationPermission();
   const [
     backgroundLocationGranted,
+    batteryOptimizationIgnored,
     motionActivityGranted,
     notificationsGranted,
     cameraGranted,
     mediaLibraryGranted,
   ] = await Promise.all([
     getBackgroundLocationPermission(backgroundLocationSupported),
+    getBatteryOptimizationIgnored(),
     getMotionActivityPermission(),
     getNotificationPermission(),
     getCameraPermission(),
@@ -311,6 +359,8 @@ export async function getTrailbookPermissionStatus(): Promise<TrailbookPermissio
   return buildStatus({
     backgroundLocationGranted,
     backgroundLocationSupported,
+    batteryOptimizationIgnored,
+    batteryOptimizationSupported,
     cameraGranted,
     foregroundLocationGranted,
     mediaLibraryGranted,
@@ -333,6 +383,13 @@ export async function requestTrailbookPermissions(): Promise<TrailbookPermission
     foregroundLocationGranted,
   });
   logPermissionSetupStep("background-location", { granted: backgroundLocationGranted });
+
+  const batteryOptimizationSupported = getBatteryOptimizationSupport();
+  const batteryOptimizationIgnored = await requestBatteryOptimizationIgnored();
+  logPermissionSetupStep("battery-optimization", {
+    ignored: batteryOptimizationIgnored,
+    supported: batteryOptimizationSupported,
+  });
 
   if (Platform.OS === "android") {
     await wait(350);
@@ -361,6 +418,8 @@ export async function requestTrailbookPermissions(): Promise<TrailbookPermission
   const status = buildStatus({
     backgroundLocationGranted,
     backgroundLocationSupported,
+    batteryOptimizationIgnored,
+    batteryOptimizationSupported,
     cameraGranted,
     foregroundLocationGranted,
     mediaLibraryGranted,

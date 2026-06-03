@@ -92,16 +92,18 @@ function fromRow(row: RawLocationEventRow): RawLocationEvent {
   };
 }
 
-export async function insertRawLocationEvents(events: RawLocationEvent[]): Promise<void> {
+export async function insertRawLocationEvents(events: RawLocationEvent[]): Promise<RawLocationEvent[]> {
   if (events.length === 0) {
-    return;
+    return [];
   }
+
+  const insertedEvents: RawLocationEvent[] = [];
 
   await runExclusiveDatabaseWrite(async (database) => {
     for (const event of events) {
       const row = toRow(event);
 
-      await database.runAsync(
+      const result = await database.runAsync(
         `INSERT OR IGNORE INTO raw_location_events (
           local_id,
           trip_local_id,
@@ -145,8 +147,14 @@ export async function insertRawLocationEvents(events: RawLocationEvent[]): Promi
         row.accepted_trip_point_local_id,
         row.segment_local_id,
       );
+
+      if (result.changes > 0) {
+        insertedEvents.push(event);
+      }
     }
   });
+
+  return insertedEvents;
 }
 
 export async function updateRawLocationEventProcessingResults(
@@ -200,6 +208,83 @@ export async function loadPendingRawLocationEventsForTrip(tripLocalId: string): 
   );
 
   return rows.map(fromRow);
+}
+
+export async function replaceRawLocationEventsForTrip(
+  tripLocalId: string,
+  events: RawLocationEvent[],
+): Promise<void> {
+  const rows = events
+    .filter((event) => event.tripLocalId === tripLocalId)
+    .sort((left, right) => {
+      const recordedAtCompare = left.recordedAt.localeCompare(right.recordedAt);
+
+      if (recordedAtCompare !== 0) {
+        return recordedAtCompare;
+      }
+
+      if (left.batchId !== right.batchId) {
+        return left.batchId.localeCompare(right.batchId);
+      }
+
+      return left.batchIndex - right.batchIndex;
+    })
+    .map(toRow);
+
+  if (rows.length !== events.length) {
+    throw new Error("Cannot replace raw events with events from another trip.");
+  }
+
+  await runExclusiveDatabaseWrite(async (database) => {
+    await database.runAsync("DELETE FROM raw_location_events WHERE trip_local_id = ?", tripLocalId);
+
+    for (const row of rows) {
+      await database.runAsync(
+        `INSERT OR REPLACE INTO raw_location_events (
+          local_id,
+          trip_local_id,
+          session_started_at,
+          active_segment_local_id,
+          batch_id,
+          batch_index,
+          callback_source,
+          origin,
+          received_at,
+          recorded_at,
+          latitude,
+          longitude,
+          accuracy,
+          altitude,
+          speed,
+          processing_status,
+          processing_decision,
+          processed_at,
+          accepted_trip_point_local_id,
+          segment_local_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        row.local_id,
+        row.trip_local_id,
+        row.session_started_at,
+        row.active_segment_local_id,
+        row.batch_id,
+        row.batch_index,
+        row.callback_source,
+        row.origin,
+        row.received_at,
+        row.recorded_at,
+        row.latitude,
+        row.longitude,
+        row.accuracy,
+        row.altitude,
+        row.speed,
+        row.processing_status,
+        row.processing_decision,
+        row.processed_at,
+        row.accepted_trip_point_local_id,
+        row.segment_local_id,
+      );
+    }
+  });
 }
 
 export async function loadRawLocationEventTripSummaries(): Promise<RawLocationEventTripSummary[]> {

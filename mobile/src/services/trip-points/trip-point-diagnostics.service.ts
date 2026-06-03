@@ -48,9 +48,11 @@ interface MutableTripPointDiagnostics {
   foregroundRejected: number;
   lastCallbackReceivedAtMs: number | null;
   lastLoggedAtCallbackCount: number;
+  lastSilentGapLoggedAtMs: number | null;
   lastRecordedAtMs: number | null;
   maxCallbackGapMs: number;
   maxRecordedGapMs: number;
+  maxSilentGapMs: number;
   recentEvents: TripDiagnosticsRecentEvent[];
   recordingMode: RecordingMode;
   rejectedByAccuracy: number;
@@ -58,6 +60,7 @@ interface MutableTripPointDiagnostics {
   rejectedByJumpDistance: number;
   rejectedByMinMovement: number;
   sessionDuplicateRecordedAt: number;
+  silentGapCount: number;
   tripLocalId: string;
   updatedAt: string;
 }
@@ -117,9 +120,11 @@ function createEmptyDiagnostics(
     foregroundRejected: 0,
     lastCallbackReceivedAtMs: null,
     lastLoggedAtCallbackCount: 0,
+    lastSilentGapLoggedAtMs: null,
     lastRecordedAtMs: null,
     maxCallbackGapMs: 0,
     maxRecordedGapMs: 0,
+    maxSilentGapMs: 0,
     recentEvents: [],
     recordingMode,
     rejectedByAccuracy: 0,
@@ -127,6 +132,7 @@ function createEmptyDiagnostics(
     rejectedByJumpDistance: 0,
     rejectedByMinMovement: 0,
     sessionDuplicateRecordedAt: 0,
+    silentGapCount: 0,
     tripLocalId,
     updatedAt: new Date().toISOString(),
   };
@@ -220,6 +226,7 @@ function mergeDiagnostics(
   target.foregroundRejected += source.foregroundRejected;
   target.maxCallbackGapMs = Math.max(target.maxCallbackGapMs, source.maxCallbackGapMs);
   target.maxRecordedGapMs = Math.max(target.maxRecordedGapMs, source.maxRecordedGapMs);
+  target.maxSilentGapMs = Math.max(target.maxSilentGapMs, source.maxSilentGapMs ?? 0);
   target.recentEvents = [...source.recentEvents.map(cloneRecentEvent), ...target.recentEvents].slice(
     -MAX_IN_MEMORY_RECENT_EVENTS,
   );
@@ -229,6 +236,7 @@ function mergeDiagnostics(
   target.rejectedByJumpDistance += source.rejectedByJumpDistance;
   target.rejectedByMinMovement += source.rejectedByMinMovement;
   target.sessionDuplicateRecordedAt += source.sessionDuplicateRecordedAt;
+  target.silentGapCount += source.silentGapCount ?? 0;
   target.updatedAt =
     new Date(source.updatedAt).getTime() > new Date(target.updatedAt).getTime()
       ? source.updatedAt
@@ -294,6 +302,7 @@ function toTripDiagnosticsSummary(diagnostics: MutableTripPointDiagnostics): Tri
     foregroundRejected: diagnostics.foregroundRejected,
     maxCallbackGapMs: diagnostics.maxCallbackGapMs,
     maxRecordedGapMs: diagnostics.maxRecordedGapMs,
+    maxSilentGapMs: diagnostics.maxSilentGapMs,
     platform: getPlatform(),
     recentEvents: diagnostics.recentEvents.slice(-MAX_PERSISTED_RECENT_EVENTS).map(cloneRecentEvent),
     recordingMode: diagnostics.recordingMode,
@@ -302,6 +311,7 @@ function toTripDiagnosticsSummary(diagnostics: MutableTripPointDiagnostics): Tri
     rejectedByJumpDistance: diagnostics.rejectedByJumpDistance,
     rejectedByMinMovement: diagnostics.rejectedByMinMovement,
     sessionDuplicateRecordedAt: diagnostics.sessionDuplicateRecordedAt,
+    silentGapCount: diagnostics.silentGapCount,
     tripLocalId: diagnostics.tripLocalId,
     updatedAt: diagnostics.updatedAt,
   };
@@ -558,6 +568,62 @@ export function recordTripPointDiagnostic(
   );
 
   maybeLogDiagnostics(diagnostics);
+  queueDiagnosticsPersist();
+}
+
+export function getLocationCallbackDiagnosticState(tripLocalId: string): {
+  lastCallbackReceivedAtMs: number | null;
+} {
+  const diagnostics = diagnosticsByTripLocalId.get(tripLocalId);
+
+  return {
+    lastCallbackReceivedAtMs: diagnostics?.lastCallbackReceivedAtMs ?? null,
+  };
+}
+
+export function recordLocationSilentGap(
+  tripLocalId: string,
+  recordingMode: RecordingMode,
+  input: {
+    batteryOptimizationIgnored: boolean | null;
+    gapMs: number;
+    lastCallbackReceivedAt: string | null;
+    observedAt: string;
+  },
+) {
+  const diagnostics = getDiagnostics(tripLocalId, recordingMode);
+
+  if (!diagnostics) {
+    return;
+  }
+
+  const observedAtMs = new Date(input.observedAt).getTime();
+
+  if (
+    diagnostics.lastSilentGapLoggedAtMs !== null &&
+    Number.isFinite(observedAtMs) &&
+    observedAtMs - diagnostics.lastSilentGapLoggedAtMs < input.gapMs
+  ) {
+    return;
+  }
+
+  diagnostics.silentGapCount += 1;
+  diagnostics.maxSilentGapMs = Math.max(diagnostics.maxSilentGapMs, Math.trunc(input.gapMs));
+  diagnostics.lastSilentGapLoggedAtMs = Number.isFinite(observedAtMs) ? observedAtMs : Date.now();
+  diagnostics.updatedAt = input.observedAt;
+
+  console.info(
+    "[Trailbook][location-silent-gap]",
+    JSON.stringify({
+      batteryOptimizationIgnored: input.batteryOptimizationIgnored,
+      gapMs: Math.trunc(input.gapMs),
+      lastCallbackReceivedAt: input.lastCallbackReceivedAt,
+      observedAt: input.observedAt,
+      recordingMode,
+      tripLocalId,
+    }),
+  );
+
   queueDiagnosticsPersist();
 }
 

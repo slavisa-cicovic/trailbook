@@ -5,7 +5,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.PowerManager
 import android.os.Build
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -30,6 +32,25 @@ class TrailbookMotionActivityModule : Module() {
 
     AsyncFunction("isAvailableAsync") {
       GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
+    }
+
+    AsyncFunction("isIgnoringBatteryOptimizationsAsync") {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+        true
+      } else {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        powerManager.isIgnoringBatteryOptimizations(context.packageName)
+      }
+    }
+
+    AsyncFunction("openBatteryOptimizationSettingsAsync") {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+      }
+      null
     }
 
     AsyncFunction("getLatestActivityAsync") {

@@ -57,6 +57,7 @@ export interface TripDiagnostics {
   foregroundRejected: number;
   maxCallbackGapMs: number;
   maxRecordedGapMs: number;
+  maxSilentGapMs: number;
   platform: TripDiagnosticsPlatform;
   recentEvents: TripDiagnosticsRecentEvent[];
   recordingMode: RecordingMode;
@@ -65,6 +66,7 @@ export interface TripDiagnostics {
   rejectedByJumpDistance: number;
   rejectedByMinMovement: number;
   sessionDuplicateRecordedAt: number;
+  silentGapCount: number;
   tripLocalId: string;
   updatedAt: string;
 }
