@@ -57,12 +57,11 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import {
-  listShareRecipients,
-  listTripShares,
-  shareTripWithRecipient,
   syncTripToServer,
   uploadTripAttachmentToServer,
 } from "../../services/trips/server-trip-sharing.service";
+import { useTripShares, useShareRecipients } from "../../hooks/queries/use-trip-shares";
+import { useShareTripMutation } from "../../hooks/mutations/use-share-trip-mutation";
 import TripEditModal from "./components/trip-edit-modal";
 import TripShareModal from "./components/trip-share-modal";
 import TripRouteMap, { type TrailbookMapType } from "./components/trip-route-map";
@@ -193,21 +192,9 @@ export default function TripRouteScreen() {
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
   const [shareRecipientEmail, setShareRecipientEmail] = useState("");
-  const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
-  const [shareList, setShareList] = useState<
-    Array<{
-      createdAt: string;
-      id: string;
-      recipient: { displayName: string; email: string; id: string };
-      revokedAt: string | null;
-      status: "active" | "revoked";
-    }>
-  >([]);
-  const [shareRecipientSuggestions, setShareRecipientSuggestions] = useState<
-    Array<{ displayName: string; email: string; id: string }>
-  >([]);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
+  const [resolvedShareTripId, setResolvedShareTripId] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const syncIconRotation = useRef(new Animated.Value(0)).current;
   const [rawReprocessBusy, setRawReprocessBusy] = useState(false);
@@ -222,6 +209,10 @@ export default function TripRouteScreen() {
     title: "",
     description: "",
   });
+
+  const sharesQuery = useTripShares(resolvedShareTripId, tripShareVisible);
+  const recipientsQuery = useShareRecipients(tripShareVisible);
+  const shareMutation = useShareTripMutation(resolvedShareTripId);
 
   const resolvedTripId = Array.isArray(tripId) ? tripId[0] : tripId;
   const currentUserTrips = identitySession
@@ -542,30 +533,18 @@ export default function TripRouteScreen() {
   }
 
   async function handleShareTrip() {
-    if (!selectedTrip || !identitySession?.sessionToken) {
+    if (!resolvedShareTripId || !shareRecipientEmail.trim()) {
       return;
     }
 
-    setShareBusy(true);
-    setShareError(null);
     setShareSuccess(null);
 
     try {
-      const tripId = selectedTrip.serverId ?? (await syncSelectedTripIfNeeded());
-      const response = await shareTripWithRecipient(
-        identitySession.sessionToken,
-        tripId,
-        shareRecipientEmail.trim(),
-      );
-
+      const response = await shareMutation.mutateAsync(shareRecipientEmail.trim());
       setShareSuccess(`Shared with ${response.recipient.email}`);
       setShareRecipientEmail("");
-      const nextShares = await listTripShares(identitySession.sessionToken, tripId);
-      setShareList(nextShares.shares);
-    } catch (error) {
-      setShareError(error instanceof Error ? error.message : "Unable to share this trip.");
-    } finally {
-      setShareBusy(false);
+    } catch {
+      // error is surfaced via shareMutation.error
     }
   }
 
@@ -574,24 +553,16 @@ export default function TripRouteScreen() {
       return;
     }
 
-    setShareBusy(true);
     setShareError(null);
     setShareSuccess(null);
 
     try {
       const tripId = selectedTrip.serverId ?? (await syncSelectedTripIfNeeded());
-      const [sharesResponse, recipientsResponse] = await Promise.all([
-        listTripShares(identitySession.sessionToken, tripId),
-        listShareRecipients(identitySession.sessionToken),
-      ]);
-      setShareList(sharesResponse.shares);
-      setShareRecipientSuggestions(recipientsResponse.recipients);
+      setResolvedShareTripId(tripId);
       setTripShareVisible(true);
     } catch (error) {
       setShareError(error instanceof Error ? error.message : "Unable to load trip shares.");
       setTripShareVisible(true);
-    } finally {
-      setShareBusy(false);
     }
   }
 
@@ -847,9 +818,9 @@ export default function TripRouteScreen() {
         visible={tripEditVisible}
       />
       <TripShareModal
-        busy={shareBusy}
-        errorMessage={shareError}
-        existingShares={shareList}
+        busy={shareMutation.isPending || sharesQuery.isFetching}
+        errorMessage={shareMutation.error instanceof Error ? shareMutation.error.message : shareError}
+        existingShares={sharesQuery.data?.shares ?? []}
         onChangeRecipientEmail={setShareRecipientEmail}
         onClose={() => {
           setTripShareVisible(false);
@@ -859,7 +830,7 @@ export default function TripRouteScreen() {
         }}
         onShare={() => void handleShareTrip()}
         recipientEmail={shareRecipientEmail}
-        recipientSuggestions={shareRecipientSuggestions}
+        recipientSuggestions={recipientsQuery.data?.recipients ?? []}
         successMessage={shareSuccess}
         visible={tripShareVisible}
       />

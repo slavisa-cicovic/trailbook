@@ -59,10 +59,10 @@ import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
 import {
-  listSharedTrips,
   syncTripGroupsToServer,
   syncTripToServer,
 } from "../../services/trips/server-trip-sharing.service";
+import { useSharedTripsList } from "../../hooks/queries/use-shared-trips-list";
 import { drainSyncOutbox, enqueueTripGroupsSync, enqueueTripSync } from "../../services/sync/sync-worker.service";
 import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
 import { listTripSummaryStats, type TripSummaryStats } from "../../repositories/trip-repository";
@@ -108,9 +108,14 @@ export default function TripsScreen() {
   const [dateFilter, setDateFilter] = useState<TripDateFilter>("all");
   const [listMode, setListMode] = useState<TripListMode>("owned");
   const [summaryExpanded, setSummaryExpanded] = useState(false);
-  const [sharedTrips, setSharedTrips] = useState<SharedTripSummary[]>([]);
-  const [sharedTripsLoading, setSharedTripsLoading] = useState(false);
-  const [sharedTripsError, setSharedTripsError] = useState<string | null>(null);
+  const {
+    data: sharedTripsData,
+    isFetching: sharedTripsLoading,
+    error: sharedTripsQueryError,
+    refetch: refetchSharedTrips,
+  } = useSharedTripsList();
+  const sharedTrips = sharedTripsData?.sharedTrips ?? [];
+  const sharedTripsError = sharedTripsQueryError instanceof Error ? sharedTripsQueryError.message : null;
   const [syncingTripId, setSyncingTripId] = useState<string | null>(null);
   const [syncingGroups, setSyncingGroups] = useState(false);
   const [tripStatsByTripId, setTripStatsByTripId] = useState<Map<string, TripSummaryStats>>(new Map());
@@ -298,14 +303,6 @@ export default function TripsScreen() {
   );
 
   useEffect(() => {
-    if (listMode !== "shared" || identitySession?.mode !== "authenticated" || !identitySession.sessionToken) {
-      return;
-    }
-
-    void refreshSharedTrips();
-  }, [identitySession?.mode, identitySession?.sessionToken, listMode]);
-
-  useEffect(() => {
     if (listMode !== "owned" && selectedGroupTripIds.length > 0) {
       setSelectedGroupTripIds([]);
     }
@@ -320,24 +317,6 @@ export default function TripsScreen() {
       setSelectedGroupId(null);
     }
   }, [selectedGroupId, visibleTripGroupIdsKey]);
-
-  async function refreshSharedTrips() {
-    if (!identitySession?.sessionToken) {
-      return;
-    }
-
-    setSharedTripsLoading(true);
-    setSharedTripsError(null);
-
-    try {
-      const response = await listSharedTrips(identitySession.sessionToken);
-      setSharedTrips(response.sharedTrips);
-    } catch (error) {
-      setSharedTripsError(error instanceof Error ? error.message : "Unable to load shared trips.");
-    } finally {
-      setSharedTripsLoading(false);
-    }
-  }
 
   async function syncTripMutationToServer(
     tripLocalId: string,
@@ -1548,7 +1527,7 @@ export default function TripsScreen() {
         ) : (
           <>
             <View style={styles.sharedHeaderRow}>
-              <Pressable onPress={() => void refreshSharedTrips()} style={styles.sharedRefreshButton}>
+              <Pressable onPress={() => void refetchSharedTrips()} style={styles.sharedRefreshButton}>
                 <Text style={styles.sharedRefreshButtonText}>
                   {sharedTripsLoading ? "Refreshing..." : "Refresh"}
                 </Text>

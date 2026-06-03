@@ -1,13 +1,10 @@
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type { WaypointAttachment } from "../../domain/trips";
-import type { SharedTripDetail } from "../../domain/shared-trips";
-import {
-  buildTripAttachmentContentUrl,
-  getSharedTrip,
-} from "../../services/trips/server-trip-sharing.service";
+import { buildTripAttachmentContentUrl } from "../../services/trips/server-trip-sharing.service";
 import { useSessionStore } from "../../state/session-store";
+import { useSharedTrip } from "../../hooks/queries/use-shared-trip";
 import WaypointPhotoViewerScreen from "./components/waypoint-photo-viewer-screen";
 
 export default function SharedTripWaypointPhotoScreen() {
@@ -21,29 +18,8 @@ export default function SharedTripWaypointPhotoScreen() {
   const resolvedAttachmentId = Array.isArray(params.attachmentId) ? params.attachmentId[0] : params.attachmentId;
   const resolvedShareId = Array.isArray(params.shareId) ? params.shareId[0] : params.shareId;
   const resolvedWaypointId = Array.isArray(params.waypointId) ? params.waypointId[0] : params.waypointId;
-  const [sharedTrip, setSharedTrip] = useState<SharedTripDetail | null>(null);
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadSharedTrip() {
-      if (!identitySession?.sessionToken || !resolvedShareId) {
-        return;
-      }
-
-      const nextSharedTrip = await getSharedTrip(identitySession.sessionToken, resolvedShareId);
-
-      if (active) {
-        setSharedTrip(nextSharedTrip);
-      }
-    }
-
-    void loadSharedTrip();
-
-    return () => {
-      active = false;
-    };
-  }, [identitySession?.sessionToken, resolvedShareId]);
+  const { data: sharedTrip } = useSharedTrip(resolvedShareId);
 
   const attachments = useMemo(() => {
     const sessionToken = identitySession?.sessionToken;

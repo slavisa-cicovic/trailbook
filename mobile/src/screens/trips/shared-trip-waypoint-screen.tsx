@@ -1,17 +1,14 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getWaypointCategoryOption } from "../../constants/waypoint-categories";
 import type { WaypointAttachment } from "../../domain/trips";
-import type { SharedTripDetail } from "../../domain/shared-trips";
-import {
-  buildTripAttachmentContentUrl,
-  getSharedTrip,
-} from "../../services/trips/server-trip-sharing.service";
+import { buildTripAttachmentContentUrl } from "../../services/trips/server-trip-sharing.service";
 import { useSessionStore } from "../../state/session-store";
+import { useSharedTrip } from "../../hooks/queries/use-shared-trip";
 
 export default function SharedTripWaypointScreen() {
   const router = useRouter();
@@ -20,44 +17,9 @@ export default function SharedTripWaypointScreen() {
   const { shareId, waypointId } = useLocalSearchParams<{ shareId?: string | string[]; waypointId?: string | string[] }>();
   const resolvedShareId = Array.isArray(shareId) ? shareId[0] : shareId;
   const resolvedWaypointId = Array.isArray(waypointId) ? waypointId[0] : waypointId;
-  const [sharedTrip, setSharedTrip] = useState<SharedTripDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadSharedTrip() {
-      if (!identitySession?.sessionToken || !resolvedShareId) {
-        return;
-      }
-
-      setLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const nextSharedTrip = await getSharedTrip(identitySession.sessionToken, resolvedShareId);
-
-        if (active) {
-          setSharedTrip(nextSharedTrip);
-        }
-      } catch (error) {
-        if (active) {
-          setErrorMessage(error instanceof Error ? error.message : "Unable to load shared waypoint.");
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadSharedTrip();
-
-    return () => {
-      active = false;
-    };
-  }, [identitySession?.sessionToken, resolvedShareId]);
+  const { data: sharedTrip, isLoading: loading, error } = useSharedTrip(resolvedShareId);
+  const errorMessage = error instanceof Error ? error.message : error ? "Unable to load shared waypoint." : null;
 
   const selectedWaypoint = useMemo(
     () => sharedTrip?.trip.waypoints.find((waypoint) => waypoint.id === resolvedWaypointId) ?? null,

@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileColor, getRecordingProfileLabel } from "../../constants/recording-profiles";
-import type { SharedTripDetail } from "../../domain/shared-trips";
 import type { Waypoint } from "../../domain/trips";
-import { getSharedTrip } from "../../services/trips/server-trip-sharing.service";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
 import { useSessionStore } from "../../state/session-store";
+import { useSharedTrip } from "../../hooks/queries/use-shared-trip";
 import TripRouteMap, { type TrailbookMapType } from "./components/trip-route-map";
 
 const mapTypeOptions: Array<{ label: string; value: TrailbookMapType }> = [
@@ -78,33 +77,11 @@ export default function SharedTripScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const { shareId } = useLocalSearchParams<{ shareId?: string | string[] }>();
   const resolvedShareId = Array.isArray(shareId) ? shareId[0] : shareId;
-  const [sharedTrip, setSharedTrip] = useState<SharedTripDetail | null>(null);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  async function refreshSharedTrip() {
-    if (!identitySession?.sessionToken || !resolvedShareId) {
-      return;
-    }
-
-    setLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const nextSharedTrip = await getSharedTrip(identitySession.sessionToken, resolvedShareId);
-      setSharedTrip(nextSharedTrip);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to load shared trip.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void refreshSharedTrip();
-  }, [identitySession?.sessionToken, resolvedShareId]);
+  const { data: sharedTrip, isLoading: loading, error, refetch } = useSharedTrip(resolvedShareId);
+  const errorMessage = error instanceof Error ? error.message : error ? "Unable to load shared trip." : null;
 
   function handleSelectWaypoint(waypoint: Waypoint) {
     if (!resolvedShareId) {
@@ -205,7 +182,7 @@ export default function SharedTripScreen() {
                 {sharedTrip.trip.title}
               </Text>
               <View style={styles.detailsAccordionActions}>
-                <Pressable onPress={() => void refreshSharedTrip()} style={styles.refreshButton}>
+                <Pressable onPress={() => void refetch()} style={styles.refreshButton}>
                   <Text style={styles.refreshButtonText}>{loading ? "Refreshing..." : "Refresh"}</Text>
                 </Pressable>
                 <MaterialIcons

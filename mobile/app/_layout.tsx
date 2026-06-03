@@ -1,9 +1,11 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View, useColorScheme } from "react-native";
 import { useBatchProcessing } from "../src/state/batch-processing-store";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { queryClient } from "../src/lib/query-client";
 
 import "../src/services/recording/background-recording-task";
 import { getAppTheme, resolveAppThemeMode } from "../src/constants/app-theme";
@@ -90,6 +92,12 @@ export default function RootLayout() {
   ]);
 
   useEffect(() => {
+    if (sessionHydrated && !identitySession) {
+      queryClient.clear();
+    }
+  }, [sessionHydrated, identitySession]);
+
+  useEffect(() => {
     if (!sessionHydrated) {
       return;
     }
@@ -114,6 +122,7 @@ export default function RootLayout() {
   ]);
 
   return (
+    <QueryClientProvider client={queryClient}>
     <ErrorBoundary>
       {!appHydrated ? (
         <View style={[styles.loadingScreen, { backgroundColor: theme.background }]}>
@@ -150,6 +159,7 @@ export default function RootLayout() {
         </GestureHandlerRootView>
       )}
     </ErrorBoundary>
+    </QueryClientProvider>
   );
 }
 
