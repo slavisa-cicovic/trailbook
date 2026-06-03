@@ -58,13 +58,11 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
-import {
-  syncTripGroupsToServer,
-  syncTripToServer,
-} from "../../services/trips/server-trip-sharing.service";
 import { useSharedTripsList } from "../../hooks/queries/use-shared-trips-list";
-import { drainSyncOutbox, enqueueTripGroupsSync, enqueueTripSync } from "../../services/sync/sync-worker.service";
-import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
+import {
+  enqueueAndDrainTripGroupsSync,
+  enqueueAndDrainTripSync,
+} from "../../services/sync/sync-actions.service";
 import { listTripSummaryStats, type TripSummaryStats } from "../../repositories/trip-repository";
 import { useTripsScreenHydration } from "../../core/hooks/use-trips-screen-hydration";
 import TripEditModal from "./components/trip-edit-modal";
@@ -320,34 +318,14 @@ export default function TripsScreen() {
     }
   }, [selectedGroupId, visibleTripGroupIdsKey]);
 
-  async function syncTripMutationToServer(
-    tripLocalId: string,
-    nextTrips: Trip[],
-    nextWaypoints = waypoints,
-    nextAttachments = waypointAttachments,
-  ) {
+  async function syncTripMutationViaOutbox(tripLocalId: string) {
     if (identitySession?.mode !== "authenticated" || !identitySession.sessionToken) {
       return;
     }
 
-    const trip = nextTrips.find((candidate) => candidate.localId === tripLocalId);
-
-    if (!trip) {
-      return;
-    }
-
-    const tripWaypoints = nextWaypoints.filter((waypoint) => waypoint.tripLocalId === tripLocalId);
-    const tripWaypointIds = new Set(tripWaypoints.map((waypoint) => waypoint.localId));
-    const tripAttachments = nextAttachments.filter((attachment) =>
-      tripWaypointIds.has(attachment.waypointLocalId),
-    );
-
-    await syncTripToServer(identitySession.sessionToken, {
-      attachments: tripAttachments,
-      trip,
-      tripPoints: await loadTripPointsForTrip(tripLocalId),
-      tripSegments: currentUserTripSegments.filter((segment) => segment.tripLocalId === tripLocalId),
-      waypoints: tripWaypoints,
+    await enqueueAndDrainTripSync({
+      identitySession,
+      tripLocalId,
     });
   }
 
@@ -375,35 +353,18 @@ export default function TripsScreen() {
       );
 
       await setTrips(pendingTrips);
-      await enqueueTripSync(trip.localId);
+      const drainResult = await enqueueAndDrainTripSync({
+        enqueueTripGroupsForUserId: tripGroupMembers.some(
+          (member) => member.tripLocalId === trip.localId && member.deletedAt === null,
+        )
+          ? identitySession.userId
+          : null,
+        identitySession,
+        tripLocalId: trip.localId,
+      });
 
-      if (tripGroupMembers.some((member) => member.tripLocalId === trip.localId && member.deletedAt === null)) {
-        await enqueueTripGroupsSync(identitySession.userId);
-      }
-
-      const drainResult = await drainSyncOutbox(identitySession);
-
-      if (drainResult.trips) {
-        tripSyncSucceeded =
-          drainResult.trips.find((candidate) => candidate.localId === trip.localId)?.syncStatus === "synced";
-        await setTrips(drainResult.trips);
-      }
-
-      if (drainResult.waypointAttachments) {
-        await setWaypointAttachments(drainResult.waypointAttachments);
-      }
-
-      if (drainResult.tripGroups) {
-        await setTripGroups(drainResult.tripGroups);
-      }
-
-      if (drainResult.tripGroupMembers) {
-        await setTripGroupMembers(drainResult.tripGroupMembers);
-      }
-
-      if (drainResult.failed > 0) {
-        throw new Error("One or more queued sync operations failed.");
-      }
+      tripSyncSucceeded =
+        drainResult.trips?.find((candidate) => candidate.localId === trip.localId)?.syncStatus === "synced";
     } catch (error) {
       if (!tripSyncSucceeded) {
         await setTrips(
@@ -424,46 +385,9 @@ export default function TripsScreen() {
     }
   }
 
-  function applyTripGroupSyncResponse(
-    nextGroups: TripGroup[],
-    nextMembers: TripGroupMember[],
-    response: {
-      groups: Array<{ groupId: string; localId: string }>;
-      members: Array<{ localId: string; memberId: string }>;
-      syncedAt: string;
-    },
-  ) {
-    const groupIdByLocalId = new Map(response.groups.map((group) => [group.localId, group.groupId]));
-    const memberIdByLocalId = new Map(response.members.map((member) => [member.localId, member.memberId]));
-
-    return {
-      groups: nextGroups.map((group) =>
-        group.userId === identitySession?.userId && groupIdByLocalId.has(group.localId)
-          ? {
-              ...group,
-              serverId: groupIdByLocalId.get(group.localId) ?? group.serverId,
-              syncStatus: "synced" as const,
-              updatedAt: response.syncedAt,
-            }
-          : group,
-      ),
-      members: nextMembers.map((member) =>
-        member.userId === identitySession?.userId && memberIdByLocalId.has(member.localId)
-          ? {
-              ...member,
-              serverId: memberIdByLocalId.get(member.localId) ?? member.serverId,
-              syncStatus: "synced" as const,
-              updatedAt: response.syncedAt,
-            }
-          : member,
-      ),
-    };
-  }
-
   async function syncTripGroupsMutation(
     nextGroups: TripGroup[],
     nextMembers: TripGroupMember[],
-    options: { syncableTripLocalIds?: Set<string> } = {},
   ) {
     if (identitySession?.mode !== "authenticated" || !identitySession.sessionToken || syncingGroups) {
       return;
@@ -472,25 +396,10 @@ export default function TripsScreen() {
     setSyncingGroups(true);
 
     try {
-      const syncableTripLocalIds =
-        options.syncableTripLocalIds ??
-        new Set(
-          trips
-            .filter((trip) => trip.userId === identitySession.userId && trip.serverId)
-            .map((trip) => trip.localId),
-        );
-      const groupsToSync = nextGroups.filter((group) => group.userId === identitySession.userId);
-      const membersToSync = nextMembers.filter(
-        (member) => member.userId === identitySession.userId && syncableTripLocalIds.has(member.tripLocalId),
-      );
-      const response = await syncTripGroupsToServer(identitySession.sessionToken, {
-        groups: groupsToSync,
-        members: membersToSync,
+      await enqueueAndDrainTripGroupsSync({
+        identitySession,
+        userId: identitySession.userId,
       });
-      const syncedState = applyTripGroupSyncResponse(nextGroups, nextMembers, response);
-
-      await setTripGroups(syncedState.groups);
-      await setTripGroupMembers(syncedState.members);
     } catch (error) {
       const failedAt = new Date().toISOString();
 
@@ -714,7 +623,7 @@ export default function TripsScreen() {
     }
 
     try {
-      await syncTripMutationToServer(trip.localId, nextState.trips, nextState.waypoints, nextState.attachments);
+      await syncTripMutationViaOutbox(trip.localId);
     } catch (error) {
       Alert.alert(
         "Delete sync failed",
@@ -751,12 +660,7 @@ export default function TripsScreen() {
     await setWaypointAttachments(nextState.attachments);
 
     try {
-      await syncTripMutationToServer(
-        pendingUndo.tripLocalId,
-        nextState.trips,
-        nextState.waypoints,
-        nextState.attachments,
-      );
+      await syncTripMutationViaOutbox(pendingUndo.tripLocalId);
     } catch (error) {
       Alert.alert(
         "Restore sync failed",
@@ -783,6 +687,14 @@ export default function TripsScreen() {
 
     await setTrips(updateTripMetadata(trips, selectedTrip.localId, tripDraft, new Date().toISOString()));
     setTripEditVisible(false);
+
+    if (selectedTrip.status === "ended") {
+      try {
+        await syncTripMutationViaOutbox(selectedTrip.localId);
+      } catch (error) {
+        Alert.alert("Edit sync failed", error instanceof Error ? error.message : "Trip edit could not be synced.");
+      }
+    }
   }
 
   async function handleResumeTrip(trip: Trip) {

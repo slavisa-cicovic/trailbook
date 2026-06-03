@@ -23,6 +23,22 @@ Still incomplete:
 - outbox status is not fully surfaced in UI
 - retry/backoff is minimal
 
+## Implementation Status
+
+Completed in this slice:
+
+- Added a screen-facing sync action layer that enqueues outbox work, drains the worker, and applies synced entities back into local stores.
+- Migrated trip delete, restore, edit, manual sync, and share-prep sync from direct server calls to outbox enqueue + drain.
+- Migrated trip group create/edit/delete/member changes from direct server calls to outbox enqueue + drain.
+- Removed direct trip/group/attachment server sync imports from trip screens; server sync calls now remain behind the sync worker.
+
+Still remaining:
+
+- Split attachment uploads into independently retryable outbox operations.
+- Split group sync into finer-grained group/member operations.
+- Add raw-event sync visibility and retry UI.
+- Add explicit retry/backoff policy and outbox status presentation.
+
 ## Scope
 
 In scope:

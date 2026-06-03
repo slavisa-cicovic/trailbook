@@ -53,13 +53,10 @@ import { loadWaypoints } from "../../storage/waypoints-storage";
 import { useSessionStore } from "../../state/session-store";
 import { useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
-import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
+import { useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
-import {
-  syncTripToServer,
-  uploadTripAttachmentToServer,
-} from "../../services/trips/server-trip-sharing.service";
+import { enqueueAndDrainTripSync } from "../../services/sync/sync-actions.service";
 import { useTripShares, useShareRecipients } from "../../hooks/queries/use-trip-shares";
 import { useShareTripMutation } from "../../hooks/mutations/use-share-trip-mutation";
 import TripEditModal from "./components/trip-edit-modal";
@@ -436,77 +433,18 @@ export default function TripRouteScreen() {
     setSyncBusy(true);
 
     try {
-      const tripPointsForSync =
-        selectedTripPointsTripId === selectedTrip.localId
-          ? loadedSelectedTripPoints
-          : await loadTripPointsForTrip(selectedTrip.localId);
-
-      if (selectedTripPointsTripId !== selectedTrip.localId) {
-        setSelectedTripPoints(tripPointsForSync);
-        setSelectedTripPointsTripId(selectedTrip.localId);
-      }
-
-      const response = await syncTripToServer(identitySession.sessionToken, {
-        attachments: selectedTripAttachments,
-        trip: selectedTrip,
-        tripSegments: currentUserTripSegments.filter((segment) => segment.tripLocalId === selectedTrip.localId),
-        tripPoints: tripPointsForSync,
-        waypoints: currentUserWaypoints.filter((waypoint) => waypoint.tripLocalId === selectedTrip.localId),
+      const drainResult = await enqueueAndDrainTripSync({
+        identitySession,
+        tripLocalId: selectedTrip.localId,
       });
+      const syncedTrip = drainResult.trips?.find((trip) => trip.localId === selectedTrip.localId);
+      const serverId = syncedTrip?.serverId ?? selectedTrip.serverId;
 
-      const syncedAt = response.syncedAt;
-      const uploadedAttachments = [];
-      const attachmentsToUpload = selectedTripAttachments.filter(
-        (attachment) =>
-          attachment.deletedAt === null &&
-          (!attachment.serverId ||
-            attachment.syncStatus !== "synced" ||
-            !attachment.localUri.startsWith("http")),
-      );
-
-      for (const attachment of attachmentsToUpload) {
-        const uploadedAttachment = await uploadTripAttachmentToServer(identitySession.sessionToken, response.tripId, {
-          attachmentLocalId: attachment.localId,
-          localUri: attachment.localUri,
-          mimeType: attachment.mimeType,
-        });
-
-        uploadedAttachments.push(uploadedAttachment);
+      if (!serverId) {
+        throw new Error("Trip sync did not return a server id.");
       }
 
-      await setTrips(
-        trips.map((trip) =>
-          trip.localId === selectedTrip.localId
-            ? {
-                ...trip,
-                serverId: response.tripId,
-                syncStatus: "synced",
-                updatedAt: syncedAt,
-              }
-            : trip,
-        ),
-      );
-
-      if (uploadedAttachments.length > 0) {
-        const uploadedAttachmentIds = new Map(
-          uploadedAttachments.map((attachment) => [attachment.attachmentLocalId, attachment.attachmentId]),
-        );
-
-        await setWaypointAttachments(
-          waypointAttachments.map((attachment) =>
-            uploadedAttachmentIds.has(attachment.localId)
-              ? {
-                  ...attachment,
-                  serverId: uploadedAttachmentIds.get(attachment.localId) ?? attachment.serverId,
-                  syncStatus: "synced",
-                  updatedAt: syncedAt,
-                }
-              : attachment,
-          ),
-        );
-      }
-
-      return response.tripId;
+      return serverId;
     } finally {
       setSyncBusy(false);
     }
@@ -581,6 +519,18 @@ export default function TripRouteScreen() {
 
     await setTrips(updateTripMetadata(trips, selectedTrip.localId, tripDraft, new Date().toISOString()));
     setTripEditVisible(false);
+
+    if (
+      identitySession?.mode === "authenticated" &&
+      identitySession.sessionToken &&
+      selectedTrip.status === "ended"
+    ) {
+      try {
+        await syncSelectedTripIfNeeded();
+      } catch (error) {
+        Alert.alert("Edit sync failed", error instanceof Error ? error.message : "Trip edit could not be synced.");
+      }
+    }
   }
 
   async function handleUpdateSegmentMode(nextMode: (typeof editableModeOptions)[number]) {
