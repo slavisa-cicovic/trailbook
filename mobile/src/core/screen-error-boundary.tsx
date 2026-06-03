@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { recordDiagnosticEvent } from "../services/diagnostics/diagnostic-events.service";
 import { captureError } from "./sentry";
 
 interface Props {
@@ -14,6 +15,16 @@ export function ScreenErrorBoundary({ error, retry }: Props) {
 
   useEffect(() => {
     captureError(error, { context: "screen-error-boundary" });
+    void recordDiagnosticEvent({
+      category: "app",
+      name: "screen_render_error",
+      payload: {
+        context: "screen-error-boundary",
+        message: error.message,
+        name: error.name,
+      },
+      severity: "error",
+    });
   }, [error]);
 
   return (

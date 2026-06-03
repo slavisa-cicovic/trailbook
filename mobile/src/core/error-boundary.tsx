@@ -1,6 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { recordDiagnosticEvent } from "../services/diagnostics/diagnostic-events.service";
 import { captureError } from "./sentry";
 
 interface Props {
@@ -21,6 +22,16 @@ export class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error("[Trailbook] Uncaught render error", error, info.componentStack);
     captureError(error, { componentStack: info.componentStack ?? undefined });
+    void recordDiagnosticEvent({
+      category: "app",
+      name: "render_error",
+      payload: {
+        componentStack: info.componentStack ?? null,
+        message: error.message,
+        name: error.name,
+      },
+      severity: "error",
+    });
   }
 
   handleRetry = () => {

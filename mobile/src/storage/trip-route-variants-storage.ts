@@ -13,6 +13,14 @@ interface TripRouteVariantRow {
   variant_type: TripRouteVariant["variantType"];
 }
 
+export interface TripRouteVariantSummary {
+  activeCount: number;
+  deletedCount: number;
+  providerCounts: Record<string, number>;
+  tripCount: number;
+  variantTypeCounts: Record<string, number>;
+}
+
 function toTripRouteVariantRow(variant: TripRouteVariant): TripRouteVariantRow {
   return {
     created_at: variant.createdAt,
@@ -52,6 +60,36 @@ export async function loadTripRouteVariantsForTrip(tripLocalId: string): Promise
   );
 
   return rows.map(toTripRouteVariantFromRow);
+}
+
+export async function loadTripRouteVariantSummary(): Promise<TripRouteVariantSummary> {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{
+    deleted_at: string | null;
+    provider: string;
+    trip_local_id: string;
+    variant_type: string;
+  }>(
+    `SELECT trip_local_id, variant_type, provider, deleted_at
+     FROM trip_route_variants`,
+  );
+
+  const activeRows = rows.filter((row) => row.deleted_at === null);
+  const providerCounts: Record<string, number> = {};
+  const variantTypeCounts: Record<string, number> = {};
+
+  for (const row of activeRows) {
+    providerCounts[row.provider] = (providerCounts[row.provider] ?? 0) + 1;
+    variantTypeCounts[row.variant_type] = (variantTypeCounts[row.variant_type] ?? 0) + 1;
+  }
+
+  return {
+    activeCount: activeRows.length,
+    deletedCount: rows.length - activeRows.length,
+    providerCounts,
+    tripCount: new Set(activeRows.map((row) => row.trip_local_id)).size,
+    variantTypeCounts,
+  };
 }
 
 export async function saveTripRouteVariants(variants: TripRouteVariant[]): Promise<void> {

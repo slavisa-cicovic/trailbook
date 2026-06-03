@@ -224,3 +224,21 @@ Release tests:
 - Release readiness checklist is actionable, not just notes.
 - Normal users never see test/debug tools.
 - Field reports can distinguish app processing bugs from OS/native delivery gaps.
+
+## Implementation Status
+
+Status: implemented first production-hardening slice.
+
+Implemented:
+
+- Added `SupportBundleV1` with `schemaVersion`, bundle id, feature flag snapshot, media summary and route variant summary.
+- Support bundle serialization now scrubs token/password/secret/cookie/authorization fields and sensitive URL query values.
+- Added local normalized `diagnostic_events` storage and writer API.
+- Error boundaries now record local diagnostic events in addition to existing crash-reporting scaffold.
+- Support bundle includes recent normalized diagnostic events.
+- `docs/RELEASE_READINESS.md` is now a status-based release checklist with explicit Sentry deferral.
+
+Remaining release work:
+
+- Sentry is still deferred while Trailbook is internal/test-only.
+- Privacy policy, account deletion policy, production API/maps key verification and SQLite encryption decision remain release blockers.
