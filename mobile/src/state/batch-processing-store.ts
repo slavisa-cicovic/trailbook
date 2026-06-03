@@ -1,28 +1,13 @@
-import { useSyncExternalStore } from "react";
+import { create } from "zustand";
 
-type Listener = () => void;
-
-const listeners = new Set<Listener>();
-let processing = false;
-
-function subscribe(listener: Listener): () => void {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-}
-
-function notify(): void {
-  for (const listener of listeners) {
-    listener();
-  }
-}
+const useBatchProcessingStore = create<{ processing: boolean }>(() => ({ processing: false }));
 
 export function setBatchProcessing(value: boolean): void {
-  if (processing !== value) {
-    processing = value;
-    notify();
+  if (useBatchProcessingStore.getState().processing !== value) {
+    useBatchProcessingStore.setState({ processing: value });
   }
 }
 
 export function useBatchProcessing(): boolean {
-  return useSyncExternalStore(subscribe, () => processing);
+  return useBatchProcessingStore((s) => s.processing);
 }

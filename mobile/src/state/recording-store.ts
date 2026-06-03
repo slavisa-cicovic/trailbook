@@ -1,10 +1,8 @@
-import { useSyncExternalStore } from "react";
+import { create } from "zustand";
 
 import { DEFAULT_RECORDING_PROFILE } from "../constants/recording-profiles";
 import type { RecordingSessionSummary, Trip, TripSegment } from "../domain/trips";
-import {
-  reconcileRecordingSessionWithTrips,
-} from "../services/recording/recording.service";
+import { reconcileRecordingSessionWithTrips } from "../services/recording/recording.service";
 import { loadRecordingSession, saveRecordingSession } from "../storage/recording-storage";
 
 export const initialRecordingSession: RecordingSessionSummary = {
@@ -32,56 +30,25 @@ interface RecordingState {
   session: RecordingSessionSummary;
 }
 
-type Listener = () => void;
-
-const listeners = new Set<Listener>();
-
-let state: RecordingState = {
+export const useRecordingStore = create<RecordingState>(() => ({
   hydrated: false,
   session: initialRecordingSession,
-};
-
-function emitChange() {
-  listeners.forEach((listener) => listener());
-}
-
-function setState(updater: RecordingState | ((currentState: RecordingState) => RecordingState)) {
-  state = typeof updater === "function" ? updater(state) : updater;
-  emitChange();
-}
-
-function subscribe(listener: Listener) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function getSnapshot() {
-  return state;
-}
+}));
 
 export function getRecordingStateSnapshot() {
-  return state;
-}
-
-export function useRecordingStore<T>(selector: (snapshot: RecordingState) => T): T {
-  return useSyncExternalStore(subscribe, () => selector(getSnapshot()), () => selector(getSnapshot()));
+  return useRecordingStore.getState();
 }
 
 export async function hydrateRecordingStore(): Promise<void> {
   const recordingSession = await loadRecordingSession();
-
-  setState({
+  useRecordingStore.setState({
     hydrated: true,
     session: recordingSession ?? initialRecordingSession,
   });
 }
 
 export async function setRecordingSession(session: RecordingSessionSummary): Promise<void> {
-  setState((currentState) => ({
-    ...currentState,
-    session,
-  }));
-
+  useRecordingStore.setState({ session });
   await saveRecordingSession(session);
 }
 
@@ -90,16 +57,11 @@ export async function reconcileHydratedRecordingState(
   tripSegments: TripSegment[],
 ): Promise<void> {
   const reconciledSession = reconcileRecordingSessionWithTrips(
-    state.session,
+    useRecordingStore.getState().session,
     trips,
     tripSegments,
     new Date().toISOString(),
   );
-
-  setState((currentState) => ({
-    ...currentState,
-    session: reconciledSession,
-  }));
-
+  useRecordingStore.setState({ session: reconciledSession });
   await saveRecordingSession(reconciledSession);
 }

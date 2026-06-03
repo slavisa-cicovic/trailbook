@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { create } from "zustand";
 
 import {
   type AuthenticatedUserSummary,
@@ -18,11 +18,7 @@ interface SessionState {
   identitySession: AuthenticatedDeviceSession | null;
 }
 
-type Listener = () => void;
-
-const listeners = new Set<Listener>();
-
-let state: SessionState = {
+export const useSessionStore = create<SessionState>(() => ({
   hydrated: false,
   credentials: {
     email: "",
@@ -30,36 +26,14 @@ let state: SessionState = {
   },
   deviceId: "ios-local-device-001",
   identitySession: null,
-};
+}));
+
+export function getSessionStateSnapshot(): SessionState {
+  return useSessionStore.getState();
+}
 
 let refreshInFlight: Promise<AuthenticatedDeviceSession | null> | null = null;
 let userRefreshInFlight: Promise<AuthenticatedDeviceSession | null> | null = null;
-
-function emitChange() {
-  listeners.forEach((listener) => listener());
-}
-
-function setState(updater: SessionState | ((currentState: SessionState) => SessionState)) {
-  state = typeof updater === "function" ? updater(state) : updater;
-  emitChange();
-}
-
-function subscribe(listener: Listener) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function getSnapshot() {
-  return state;
-}
-
-export function getSessionStateSnapshot(): SessionState {
-  return state;
-}
-
-export function useSessionStore<T>(selector: (snapshot: SessionState) => T): T {
-  return useSyncExternalStore(subscribe, () => selector(getSnapshot()), () => selector(getSnapshot()));
-}
 
 export async function hydrateSessionStore(): Promise<void> {
   const deviceId = await getOrCreateDeviceId();
@@ -87,8 +61,7 @@ export async function hydrateSessionStore(): Promise<void> {
     }
   }
 
-  setState((currentState) => ({
-    ...currentState,
+  useSessionStore.setState({
     hydrated: true,
     identitySession,
     credentials: {
@@ -96,7 +69,7 @@ export async function hydrateSessionStore(): Promise<void> {
       password: "",
     },
     deviceId: identitySession?.deviceId ?? deviceId,
-  }));
+  });
 }
 
 export async function refreshActiveIdentitySessionIfPossible(): Promise<AuthenticatedDeviceSession | null> {
@@ -104,7 +77,7 @@ export async function refreshActiveIdentitySessionIfPossible(): Promise<Authenti
     return refreshInFlight;
   }
 
-  const activeSession = state.identitySession;
+  const activeSession = useSessionStore.getState().identitySession;
 
   if (
     !activeSession ||
@@ -121,15 +94,14 @@ export async function refreshActiveIdentitySessionIfPossible(): Promise<Authenti
       const refreshedSession = await refreshMobileSessionWithBackend(refreshToken);
       const nextSession = mergeRefreshedIdentitySession(activeSession, refreshedSession);
 
-      setState((currentState) => ({
-        ...currentState,
+      useSessionStore.setState({
         identitySession: nextSession,
         credentials: {
           email: nextSession.userEmail,
           password: "",
         },
         deviceId: nextSession.deviceId,
-      }));
+      });
 
       await saveSession(nextSession);
       return nextSession;
@@ -144,14 +116,13 @@ export async function refreshActiveIdentitySessionIfPossible(): Promise<Authenti
       }
 
       if (error instanceof BackendRequestError && (error.status === 401 || error.status === 403)) {
-        setState((currentState) => ({
-          ...currentState,
+        useSessionStore.setState({
           identitySession: null,
           credentials: {
             email: "",
             password: "",
           },
-        }));
+        });
         await saveSession(null);
         return null;
       }
@@ -170,7 +141,7 @@ export async function refreshActiveIdentityUserFromBackend(): Promise<Authentica
     return userRefreshInFlight;
   }
 
-  const activeSession = state.identitySession;
+  const activeSession = useSessionStore.getState().identitySession;
 
   if (
     !activeSession ||
@@ -221,39 +192,33 @@ export async function refreshActiveIdentityUserFromBackend(): Promise<Authentica
 }
 
 export function updateSessionCredentials(partial: Partial<TemporaryUserCredentials>) {
-  setState((currentState) => ({
-    ...currentState,
-    credentials: {
-      ...currentState.credentials,
-      ...partial,
-    },
+  useSessionStore.setState((s) => ({
+    credentials: { ...s.credentials, ...partial },
   }));
 }
 
 export async function setActiveIdentitySession(
   identitySession: AuthenticatedDeviceSession | null,
 ): Promise<void> {
-  setState((currentState) => ({
-    ...currentState,
+  useSessionStore.setState((s) => ({
     identitySession,
     credentials: {
       email: identitySession?.userEmail ?? "",
       password: "",
     },
-    deviceId: identitySession?.deviceId ?? currentState.deviceId,
+    deviceId: identitySession?.deviceId ?? s.deviceId,
   }));
 
   await saveSession(identitySession);
 }
 
 export function clearSessionCredentials() {
-  setState((currentState) => ({
-    ...currentState,
+  useSessionStore.setState({
     credentials: {
       email: "",
       password: "",
     },
-  }));
+  });
 }
 
 function mergeRefreshedIdentitySession(
@@ -289,15 +254,14 @@ async function refreshIdentityUser(
 
   const nextSession = mergeUserIdentitySession(identitySession, user);
 
-  setState((currentState) => ({
-    ...currentState,
+  useSessionStore.setState({
     identitySession: nextSession,
     credentials: {
       email: nextSession.userEmail,
       password: "",
     },
     deviceId: nextSession.deviceId,
-  }));
+  });
 
   await saveSession(nextSession);
   return nextSession;

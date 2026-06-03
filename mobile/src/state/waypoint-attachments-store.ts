@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { create } from "zustand";
 
 import type { WaypointAttachment } from "../domain/trips";
 import {
@@ -11,61 +11,18 @@ interface WaypointAttachmentsState {
   attachments: WaypointAttachment[];
 }
 
-type Listener = () => void;
-
-const listeners = new Set<Listener>();
-
-let state: WaypointAttachmentsState = {
+export const useWaypointAttachmentsStore = create<WaypointAttachmentsState>(() => ({
   hydrated: false,
   attachments: [],
-};
-
-function emitChange() {
-  listeners.forEach((listener) => listener());
-}
-
-function setState(
-  updater:
-    | WaypointAttachmentsState
-    | ((currentState: WaypointAttachmentsState) => WaypointAttachmentsState),
-) {
-  state = typeof updater === "function" ? updater(state) : updater;
-  emitChange();
-}
-
-function subscribe(listener: Listener) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function getSnapshot() {
-  return state;
-}
-
-export function useWaypointAttachmentsStore<T>(
-  selector: (snapshot: WaypointAttachmentsState) => T,
-): T {
-  return useSyncExternalStore(subscribe, () => selector(getSnapshot()), () => selector(getSnapshot()));
-}
+}));
 
 export async function hydrateWaypointAttachmentsStore(): Promise<void> {
   const attachments = await loadWaypointAttachments();
-
-  setState({
-    hydrated: true,
-    attachments,
-  });
+  useWaypointAttachmentsStore.setState({ hydrated: true, attachments });
 }
 
-export async function setWaypointAttachments(
-  attachments: WaypointAttachment[],
-): Promise<void> {
-  const previousAttachments = state.attachments;
-
-  setState((currentState) => ({
-    ...currentState,
-    attachments,
-  }));
-
+export async function setWaypointAttachments(attachments: WaypointAttachment[]): Promise<void> {
+  const previousAttachments = useWaypointAttachmentsStore.getState().attachments;
+  useWaypointAttachmentsStore.setState({ attachments });
   await saveWaypointAttachments(attachments, previousAttachments);
 }
