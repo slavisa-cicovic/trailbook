@@ -38,6 +38,27 @@ Out of scope:
 - Native Android watchdog.
 - Deterministic processor internals.
 
+## Implementation Status
+
+Updated: 2026-06-03
+
+Completed in this pass:
+
+- Added `recording-screen.model.ts` with `useRecordingScreenModel`.
+- Moved store subscriptions and active-trip/segment/waypoint/photo derivation out of `recording-screen.tsx`.
+- Added `recording-screen.controller.ts`.
+- Moved start/pause/stop/resume/continue recording orchestration into controller functions.
+- Controller returns typed action results for user-visible failures; the screen still decides how to show alerts/modals.
+- `RecordingScreen` keeps UI-only state such as modals, drafts, selected photo and map type.
+
+Still pending:
+
+- Move recording profile/mode switching into the controller.
+- Move waypoint creation and photo attachment orchestration into the controller.
+- Introduce an active recording snapshot repository so the model no longer depends on global in-memory arrays.
+- Add direct controller unit tests with mocked stores/native adapters.
+- Split large render sections into smaller presentational components.
+
 ## Proposed Structure
 
 ```txt

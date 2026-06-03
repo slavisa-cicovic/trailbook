@@ -21,57 +21,33 @@ import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import RecordingControl from "../../components/recording/recording-control";
-import {
-  DEFAULT_RECORDING_PROFILE,
-  getRecordingProfileLabel,
-  RECORDING_PROFILE_OPTIONS,
-} from "../../constants/recording-profiles";
+import { RECORDING_PROFILE_OPTIONS } from "../../constants/recording-profiles";
 import {
   DEFAULT_WAYPOINT_CATEGORY,
   WAYPOINT_CATEGORY_OPTIONS,
-  getWaypointCategoryOption,
 } from "../../constants/waypoint-categories";
 import type { RecordingMode } from "../../domain/trips";
 import type { TrailbookMapType } from "../trips/components/trip-route-map";
 import {
   getCurrentForegroundLocation,
   restartBackgroundLocationTracking,
-  startBackgroundLocationTracking,
-  startBackgroundLocationTrackingWithRetry,
-  stopBackgroundLocationTracking,
   type CurrentLocationSnapshot,
   watchImmediateForegroundLocation,
   watchForegroundLocation,
   getBackgroundTrackingProfile,
 } from "../../services/location/location.service";
-import { getBatterySnapshot } from "../../services/device/battery.service";
 import {
   ensureMotionActivityUpdatesForAutoMode,
   isMotionActivityAvailableAsync,
   stopMotionActivityUpdates,
 } from "../../services/motion/motion-activity.service";
-import { useTrailbookPermissions } from "../../core/hooks/use-trailbook-permissions";
-import { clearAutoRecordingSamples } from "../../services/recording/auto-recording.service";
 import {
-  closeActiveTrip,
-  continueInterruptedRecording,
-  createRecordingSession,
-  createPausedRecordingState,
-  createResumedRecordingState,
-  createTripForRecording,
-  getConcreteRecordingProfileForMode,
-  pauseActiveTrip,
-  resumePausedTrip,
   type RecordingDraftInput,
-  stopRecordingSession,
   updateRecordingSegment,
 } from "../../services/recording/recording.service";
 import {
   closeActiveTripSegment,
-  createInitialTripSegment,
-  finalizeEndedTripSegments,
   getOpenTripSegmentForTrip,
-  normalizeAutoClosedTripSegment,
   startNextTripSegment,
 } from "../../services/trip-segments/trip-segments.service";
 import { getVisibleTripPausesForTrip } from "../../services/trip-pauses/trip-pauses.service";
@@ -81,26 +57,19 @@ import {
   pickPhotosFromLibrary,
 } from "../../services/media/photo-picker.service";
 import {
-  DEMO_MONTHLY_TRIP_LIMIT,
   DEMO_PHOTO_LIMIT_PER_TRIP,
   getRemainingDemoPhotoSlotsForTrip,
-  getRemainingDemoTripSlots,
   isDemoSession,
 } from "../../services/demo/demo-mode.service";
 import {
-  createTripPointForLocation,
-  flushTripPointDiagnostics,
   getLocationCallbackDiagnosticState,
-  getVisibleTripPointsForTrip,
   recordLocationSilentGap,
-  resetPendingTripPointContinuity,
-  resetTripPointDiagnostics,
 } from "../../services/trip-points/trip-points.service";
 import {
   markWaypointAttachmentDeleted,
   markWaypointDeleted,
 } from "../../services/trips/trips-management.service";
-import { loadTripPointsForTrip, refreshTripStatsForTripLocalId, replaceTripPointsForTrip } from "../../storage/trip-points-storage";
+import { loadTripPointsForTrip } from "../../storage/trip-points-storage";
 import {
   createAttachmentTimestamp,
   createPhotoAttachmentForWaypoint,
@@ -110,22 +79,25 @@ import {
 } from "../../services/waypoints/waypoints.service";
 import {
   setRecordingSession,
-  useRecordingStore,
 } from "../../state/recording-store";
-import { setActiveIdentitySession, useSessionStore } from "../../state/session-store";
-import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
-import { setTripPauses, useTripPausesStore } from "../../state/trip-pauses-store";
+import { setTripSegments } from "../../state/trip-segments-store";
 import {
   mergeTripPointsInMemory,
   setTripPointsInMemory,
-  useTripPointsStore,
 } from "../../state/trip-points-store";
 import {
   setWaypointAttachments,
-  useWaypointAttachmentsStore,
 } from "../../state/waypoint-attachments-store";
-import { setTrips, useTripsStore } from "../../state/trips-store";
-import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
+import { setWaypoints } from "../../state/waypoints-store";
+import { useRecordingScreenModel } from "./recording-screen.model";
+import {
+  getEmptyRecordingDraft,
+  continueInterruptedRecordingFromScreenController,
+  pauseRecordingFromScreenController,
+  resumePausedTripFromScreenController,
+  startRecordingFromScreenController,
+  stopRecordingFromScreenController,
+} from "./recording-screen.controller";
 
 const LOCATION_SILENT_GAP_WARNING_MS = 2 * 60 * 1000;
 const LOCATION_SILENT_GAP_WATCHDOG_INTERVAL_MS = 30 * 1000;
@@ -137,28 +109,6 @@ export default function RecordingScreen() {
     { label: "Satellite", value: "satellite" },
     { label: "Hybrid", value: "hybrid" },
   ];
-  const identitySession = useSessionStore((state) => state.identitySession);
-  const recordingSession = useRecordingStore((state) => state.session);
-  const trips = useTripsStore((state) => state.trips);
-  const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
-  const tripPauses = useTripPausesStore((state) => state.tripPauses);
-  const tripPoints = useTripPointsStore((state) => state.tripPoints);
-  const waypoints = useWaypointsStore((state) => state.waypoints);
-  const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
-
-  const {
-    backgroundLocationPermissionGranted,
-    backgroundRecordingSupported,
-    batteryOptimizationIgnored,
-    batteryOptimizationSupported,
-    locationPermissionGranted,
-    missingPermissionsText,
-    missingRequired,
-    permissionsReady,
-    refreshStatus,
-    requestPermissions,
-  } = useTrailbookPermissions();
-
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
   const [startModalVisible, setStartModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
@@ -171,116 +121,67 @@ export default function RecordingScreen() {
   const lastSilentGapBucketRef = useRef<string | null>(null);
   const lastSilentGapRecoveryBucketRef = useRef<string | null>(null);
   const silentGapRecoveryRunningRef = useRef(false);
-
-  function logRecordingStartStep(step: string, details?: Record<string, unknown>) {
-    console.warn("[Trailbook][recording-start]", details ? { step, ...details } : { step });
-  }
-
-  function getErrorMessage(error: unknown) {
-    return error instanceof Error ? error.message : String(error);
-  }
-
-  const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>({
-    title: "",
-    description: "",
-    recordingMode: DEFAULT_RECORDING_PROFILE,
-  });
+  const [recordingDraft, setRecordingDraft] = useState<RecordingDraftInput>(getEmptyRecordingDraft);
   const [waypointDraft, setWaypointDraft] = useState<WaypointDraftInput>({
     category: DEFAULT_WAYPOINT_CATEGORY,
     title: "",
     note: "",
     photos: [],
   });
+  const {
+    activeIdentitySession,
+    activeRecordingMode,
+    activeRecordingProfile,
+    activeRecordingProfileLabel,
+    activeSegment,
+    activeTrip,
+    activeTripCount,
+    activeTripPoints,
+    backgroundLocationPermissionGranted,
+    backgroundRecordingSupported,
+    batteryOptimizationIgnored,
+    batteryOptimizationSupported,
+    canChangeMode,
+    canSaveWaypoint,
+    canStartRecording,
+    currentUserTripPauses,
+    currentUserTrips,
+    currentUserWaypointAttachments,
+    currentUserWaypoints,
+    draftPhotoCardWidth,
+    hasNextPhoto,
+    hasPreviousPhoto,
+    lastPoint,
+    locationPermissionGranted,
+    missingPermissionsText,
+    missingRequired,
+    pausedTrips,
+    permissionsReady,
+    recentWaypointCards,
+    recentWaypoints,
+    recordingSession,
+    refreshStatus,
+    requestPermissions,
+    selectedPhotoAttachment,
+    selectedPhotoIndex,
+    selectedPhotoWaypointAttachments,
+    sessionTriggerLabel,
+    tripPauses,
+    tripPoints,
+    tripSegments,
+    trips,
+    waypointAttachments,
+    waypoints,
+  } = useRecordingScreenModel({
+    recordingDraft,
+    screenWidth,
+    selectedPhotoAttachmentId,
+    waypointDraft,
+  });
 
-  const activeIdentitySession = identitySession;
-  const currentUserTrips = activeIdentitySession
-    ? trips.filter((trip) => trip.userId === activeIdentitySession.userId)
-    : [];
-  const currentUserTripSegments = activeIdentitySession
-    ? tripSegments.filter((segment) => segment.userId === activeIdentitySession.userId)
-    : [];
-  const currentUserTripPauses = activeIdentitySession
-    ? tripPauses.filter((tripPause) => tripPause.userId === activeIdentitySession.userId)
-    : [];
-  const currentUserWaypoints = activeIdentitySession
-    ? waypoints.filter((waypoint) => waypoint.userId === activeIdentitySession.userId)
-    : [];
-  const currentUserWaypointAttachments = activeIdentitySession
-    ? waypointAttachments.filter((attachment) => attachment.userId === activeIdentitySession.userId)
-    : [];
-
-  const activeTrip =
-    currentUserTrips.find(
-      (trip) => trip.localId === recordingSession.activeTripId && trip.status === "active",
-    ) ?? null;
-  const pausedTrips = currentUserTrips.filter((trip) => trip.status === "paused");
-  const activeSegment = recordingSession.activeSegmentId
-    ? currentUserTripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ?? null
-    : activeTrip
-      ? getOpenTripSegmentForTrip(currentUserTripSegments, activeTrip.localId)
-      : null;
-  const activeRecordingMode = recordingSession.recordingMode;
-  const activeRecordingProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
-  const activeTripPoints = activeTrip ? getVisibleTripPointsForTrip(tripPoints, activeTrip.localId) : [];
-  const activeRecordingProfileLabel =
-    activeRecordingMode === "auto"
-      ? `Auto • ${getRecordingProfileLabel(activeRecordingProfile)}`
-      : getRecordingProfileLabel(activeRecordingProfile);
-  const lastPoint = recordingSession.lastPointRecordedAt ?? "n/a";
-  const activeTripCount = currentUserTrips.filter((trip) => trip.status === "active").length;
-  const recentWaypoints = activeTrip
-    ? currentUserWaypoints
-        .filter((waypoint) => waypoint.tripLocalId === activeTrip.localId && waypoint.deletedAt === null)
-        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-        .slice(0, 3)
-    : [];
-  const recentWaypointCards = recentWaypoints.map((waypoint) => ({
-    waypoint,
-    category: getWaypointCategoryOption(waypoint.category),
-    photos: currentUserWaypointAttachments.filter(
-      (attachment) =>
-        attachment.waypointLocalId === waypoint.localId &&
-        attachment.deletedAt === null &&
-        attachment.type === "photo",
-    ),
-  }));
-  const canChangeMode = recordingSession.activeTripId !== null;
-  const canStartRecording = recordingDraft.title.trim().length > 0 && permissionsReady;
-  const canSaveWaypoint = waypointDraft.title.trim().length > 0;
-  const draftPhotoCardWidth = Math.min(Math.max(screenWidth * 0.5, 170), 230);
-  const selectedPhotoAttachment =
-    selectedPhotoAttachmentId === null
-      ? null
-      : currentUserWaypointAttachments.find(
-          (attachment) =>
-            attachment.localId === selectedPhotoAttachmentId && attachment.deletedAt === null,
-        ) ?? null;
-  const selectedPhotoWaypointAttachments = selectedPhotoAttachment
-    ? currentUserWaypointAttachments
-        .filter(
-          (attachment) =>
-            attachment.waypointLocalId === selectedPhotoAttachment.waypointLocalId &&
-            attachment.deletedAt === null &&
-            attachment.type === "photo",
-        )
-        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-    : [];
-  const selectedPhotoIndex =
-    selectedPhotoAttachment === null
-      ? -1
-      : selectedPhotoWaypointAttachments.findIndex(
-          (attachment) => attachment.localId === selectedPhotoAttachment.localId,
-        );
-  const hasPreviousPhoto = selectedPhotoIndex > 0;
-  const hasNextPhoto =
-    selectedPhotoIndex !== -1 && selectedPhotoIndex < selectedPhotoWaypointAttachments.length - 1;
-  const sessionTriggerLabel = activeTrip
-    ? `${activeTrip.title} • ${activeRecordingProfileLabel}`
-    : pausedTrips.length > 0
-      ? `${pausedTrips.length} paused trip${pausedTrips.length === 1 ? "" : "s"}`
-    : recordingSession.status === "idle"
-      ? "No active route"
-      : "Session details";
+  function logRecordingStartStep(step: string, details?: Record<string, unknown>) {
+    console.warn("[Trailbook][recording-start]", details ? { step, ...details } : { step });
+  }
 
   function getDemoRemainingPhotoSlots(pendingDraftPhotoCount = 0) {
     if (!activeTrip) {
@@ -526,282 +427,108 @@ export default function RecordingScreen() {
   }, [currentLocation, locationPermissionGranted]);
 
   async function handleStartRecording() {
-    if (!activeIdentitySession) {
-      return;
-    }
-
-    logRecordingStartStep("pressed", {
+    const result = await startRecordingFromScreenController({
+      activeIdentitySession,
       backgroundLocationPermissionGranted,
       backgroundRecordingSupported,
-      recordingMode: recordingDraft.recordingMode,
+      currentUserTrips,
+      logStep: logRecordingStartStep,
+      missingRequired,
+      permissionsReady,
+      recordingDraft,
+      recordingSession,
+      refreshStatus,
+      tripSegments,
+      trips,
     });
 
-    if (isDemoSession(activeIdentitySession)) {
-      const remainingTripSlots = getRemainingDemoTripSlots(currentUserTrips, activeIdentitySession.userId);
-
-      if (remainingTripSlots <= 0) {
-        logRecordingStartStep("blocked-demo-limit", { remainingTripSlots });
-        Alert.alert(
-          "Demo limit reached",
-          `Demo mode allows up to ${DEMO_MONTHLY_TRIP_LIMIT} trips per calendar month.`,
-        );
-        return;
-      }
-    }
-
-    if (currentUserTrips.some((trip) => trip.deletedAt === null && trip.status === "active")) {
-      logRecordingStartStep("blocked-active-route");
-      Alert.alert("Active route", "Pause or stop the current active route before starting a new one.");
-      return;
-    }
-
-    if (!permissionsReady) {
-      logRecordingStartStep("blocked-permissions", {
-        missingRequired: missingRequired ?? null,
-      });
-      return;
-    }
-
-    const startedAt = new Date().toISOString();
-    const concreteRecordingProfile = getConcreteRecordingProfileForMode(recordingDraft.recordingMode);
-    const batterySnapshot = await getBatterySnapshot();
-    logRecordingStartStep("pre-create", { concreteRecordingProfile });
-    const nextTrip = createTripForRecording(activeIdentitySession, startedAt, recordingDraft, batterySnapshot);
-    resetPendingTripPointContinuity(nextTrip.localId);
-    resetTripPointDiagnostics(nextTrip.localId);
-    setTripPointsInMemory([]);
-    const nextSegment = createInitialTripSegment(nextTrip, startedAt);
-    const nextSession = createRecordingSession(
-      activeIdentitySession,
-      nextTrip.localId,
-      nextSegment.localId,
-      startedAt,
-      recordingDraft.recordingMode,
-      concreteRecordingProfile,
-    );
-
-    try {
-      await setTrips([...trips, nextTrip]);
-      logRecordingStartStep("trip-written", { tripLocalId: nextTrip.localId });
-      await setTripSegments([...tripSegments, nextSegment]);
-      logRecordingStartStep("segment-written", { segmentLocalId: nextSegment.localId });
-      await setRecordingSession(nextSession);
-      logRecordingStartStep("session-written", { status: nextSession.status });
-
-      try {
-        const backgroundTrackingProfile = getBackgroundTrackingProfile(
-          recordingDraft.recordingMode,
-          concreteRecordingProfile,
-        );
-
-        await startBackgroundLocationTrackingWithRetry(backgroundTrackingProfile, (attempt, error) => {
-          logRecordingStartStep("background-start-retry", {
-            attempt,
-            error: getErrorMessage(error),
-          });
-        });
-        logRecordingStartStep("background-started", {
-          concreteRecordingProfile,
-          backgroundTrackingProfile,
-        });
-      } catch (error) {
-        const refreshedPermissionStatus = await refreshStatus();
-        logRecordingStartStep("background-start-failed", {
-          refreshedBackgroundPermissionGranted: refreshedPermissionStatus.backgroundLocationGranted,
-          error: getErrorMessage(error),
-        });
-
-        throw error;
-      }
-
-      if (recordingDraft.recordingMode === "auto") {
-        void ensureMotionActivityUpdatesForAutoMode();
-      }
-
+    if (result.ok) {
       setStartModalVisible(false);
-      setRecordingDraft({
-        title: "",
-        description: "",
-        recordingMode: DEFAULT_RECORDING_PROFILE,
-      });
-      logRecordingStartStep("done", { tripLocalId: nextTrip.localId });
-    } catch {
-      logRecordingStartStep("failed");
-      await setTrips(trips);
-      await setTripSegments(tripSegments);
-      await setRecordingSession(recordingSession);
-      Alert.alert(
-        "Recording unavailable",
-        "Trailbook could not start background trip recording on this device.",
-      );
+      setRecordingDraft(getEmptyRecordingDraft());
+      return;
+    }
+
+    if (result.reason === "demo_limit") {
+      Alert.alert("Demo limit reached", result.message);
+      return;
+    }
+
+    if (result.reason === "active_route") {
+      Alert.alert("Active route", result.message);
+      return;
+    }
+
+    if (result.reason === "native_start_failed") {
+      Alert.alert("Recording unavailable", result.message);
     }
   }
 
   async function handlePauseRecording() {
-    if (!activeTrip || !recordingSession.activeSegmentId) {
-      return;
-    }
-
-    const pausedAt = new Date().toISOString();
-
-    if (backgroundRecordingSupported !== false) {
-      await stopBackgroundLocationTracking();
-    }
-    await stopMotionActivityUpdates();
-    resetPendingTripPointContinuity(activeTrip.localId);
-
-    const nextState = createPausedRecordingState(
+    const result = await pauseRecordingFromScreenController({
       activeTrip,
+      backgroundRecordingSupported,
       recordingSession,
-      tripSegments,
       tripPauses,
-      pausedAt,
-    );
-    const normalizedState =
-      recordingSession.recordingMode === "auto"
-        ? normalizeAutoClosedTripSegment(
-            nextState.tripSegments,
-            tripPoints,
-            waypoints,
-            activeTrip.localId,
-            pausedAt,
-          )
-        : {
-            tripSegments: nextState.tripSegments,
-            tripPoints,
-            waypoints,
-          };
+      tripPoints,
+      tripSegments,
+      trips,
+      waypoints,
+    });
 
-    await setTripSegments(normalizedState.tripSegments);
-    await setWaypoints(normalizedState.waypoints);
-    if (normalizedState.tripPoints !== tripPoints) {
-      setTripPointsInMemory(normalizedState.tripPoints);
-      await replaceTripPointsForTrip(activeTrip.localId, normalizedState.tripPoints);
+    if (result.ok) {
+      setSessionMenuVisible(false);
     }
-    await setTripPauses(nextState.tripPauses);
-    await setTrips(pauseActiveTrip(trips, activeTrip.localId, pausedAt));
-    await setRecordingSession(nextState.session);
-    flushTripPointDiagnostics(activeTrip.localId);
-    setSessionMenuVisible(false);
   }
 
   async function handleStopRecording() {
-    if (!recordingSession.activeTripId || !recordingSession.activeSegmentId) {
-      return;
-    }
-
-    const endedAt = new Date().toISOString();
-    const batterySnapshot = await getBatterySnapshot();
-
-    if (backgroundRecordingSupported !== false) {
-      await stopBackgroundLocationTracking();
-    }
-    await stopMotionActivityUpdates();
-    resetPendingTripPointContinuity(recordingSession.activeTripId);
-    const closedTripSegments = finalizeEndedTripSegments(
-      closeActiveTripSegment(tripSegments, recordingSession.activeSegmentId, endedAt),
+    await stopRecordingFromScreenController({
+      activeTrip,
+      backgroundRecordingSupported,
+      recordingSession,
       tripPoints,
-      recordingSession.activeTripId,
-      endedAt,
-    );
-    const normalizedState =
-      recordingSession.recordingMode === "auto" && activeTrip
-        ? normalizeAutoClosedTripSegment(
-            closedTripSegments,
-            tripPoints,
-            waypoints,
-            activeTrip.localId,
-            endedAt,
-          )
-        : {
-            tripSegments: closedTripSegments,
-            tripPoints,
-            waypoints,
-          };
-    await setTripSegments(normalizedState.tripSegments);
-    await setWaypoints(normalizedState.waypoints);
-    if (activeTrip && normalizedState.tripPoints !== tripPoints) {
-      setTripPointsInMemory(normalizedState.tripPoints);
-      await replaceTripPointsForTrip(activeTrip.localId, normalizedState.tripPoints);
-    }
-    await setTrips(closeActiveTrip(trips, recordingSession.activeTripId, endedAt, batterySnapshot));
-    await refreshTripStatsForTripLocalId(recordingSession.activeTripId);
-    await setRecordingSession(stopRecordingSession(recordingSession));
-    clearAutoRecordingSamples(recordingSession.activeTripId);
-    flushTripPointDiagnostics(recordingSession.activeTripId);
+      tripSegments,
+      trips,
+      waypoints,
+    });
   }
 
   async function handleResumePausedTrip(tripLocalId: string) {
-    if (!activeIdentitySession) {
-      return;
-    }
-
-    if (currentUserTrips.some((trip) => trip.deletedAt === null && trip.status === "active")) {
-      Alert.alert("Active route", "Stop or pause the current active route before resuming another one.");
-      return;
-    }
-
-    const tripToResume = currentUserTrips.find((trip) => trip.localId === tripLocalId && trip.status === "paused");
-
-    if (!tripToResume) {
-      Alert.alert("Paused route missing", "The selected paused route is no longer available.");
-      return;
-    }
-
-    const resumedAt = new Date().toISOString();
-    const nextState = createResumedRecordingState(
+    const result = await resumePausedTripFromScreenController({
       activeIdentitySession,
-      tripToResume,
-      tripSegments,
+      backgroundLocationPermissionGranted,
+      backgroundRecordingSupported,
+      currentUserTrips,
+      recordingSession,
+      tripLocalId,
       tripPauses,
-      resumedAt,
-      recordingSession.recordingMode === "auto" ? "auto" : undefined,
-    );
+      tripSegments,
+      trips,
+    });
 
-    await setTripSegments(nextState.tripSegments);
-    await setTripPauses(nextState.tripPauses);
-    setTripPointsInMemory(await loadTripPointsForTrip(tripToResume.localId));
-    await setTrips(resumePausedTrip(trips, tripToResume.localId, resumedAt));
-    await setRecordingSession(nextState.session);
-
-    if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
-      await startBackgroundLocationTracking(
-        getBackgroundTrackingProfile(
-          nextState.session.recordingMode,
-          nextState.session.recordingProfile,
-        ),
-      );
+    if (result.ok) {
+      setSessionMenuVisible(false);
+      return;
     }
 
-    if (nextState.session.recordingMode === "auto") {
-      await ensureMotionActivityUpdatesForAutoMode();
+    if (result.reason === "active_route") {
+      Alert.alert("Active route", result.message);
+      return;
     }
 
-    setSessionMenuVisible(false);
+    if (result.reason === "paused_route_missing") {
+      Alert.alert("Paused route missing", result.message);
+    }
   }
 
   async function handleContinueInterruptedRecording() {
-    const nextSession = continueInterruptedRecording(recordingSession);
+    const result = await continueInterruptedRecordingFromScreenController({
+      backgroundLocationPermissionGranted,
+      backgroundRecordingSupported,
+      recordingSession,
+    });
 
-    try {
-      await setRecordingSession(nextSession);
-      if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
-        await startBackgroundLocationTracking(
-          getBackgroundTrackingProfile(
-            nextSession.recordingMode,
-            nextSession.recordingProfile,
-          ),
-        );
-      }
-      if (nextSession.recordingMode === "auto") {
-        await ensureMotionActivityUpdatesForAutoMode();
-      }
-    } catch {
-      await setRecordingSession(recordingSession);
-      Alert.alert(
-        "Recording unavailable",
-        "Trailbook could not resume background trip recording on this device.",
-      );
+    if (!result.ok && result.reason === "native_start_failed") {
+      Alert.alert("Recording unavailable", result.message);
     }
   }
 
