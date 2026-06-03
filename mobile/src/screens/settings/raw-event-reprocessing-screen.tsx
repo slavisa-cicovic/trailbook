@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View, useColorScheme } from "react-
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
+import { useFeatureFlags } from "../../core/hooks/use-feature-flags";
 import type { Trip } from "../../domain/trips";
 import {
   applyRawEventReprocessing,
@@ -60,6 +61,7 @@ function formatPreview(preview: ReprocessingPreview) {
 export default function RawEventReprocessingScreen() {
   const router = useRouter();
   const identitySession = useSessionStore((state) => state.identitySession);
+  const featureFlags = useFeatureFlags();
   const themeMode = useThemeStore((state) => state.mode);
   const systemColorScheme = useColorScheme();
   const theme = getAppTheme(resolveAppThemeMode(themeMode, systemColorScheme));
@@ -163,7 +165,7 @@ export default function RawEventReprocessingScreen() {
     return <Redirect href="/login" />;
   }
 
-  if (identitySession.mode !== "authenticated" || identitySession.role !== "test_user") {
+  if (!featureFlags.rawEventReprocessingEnabled) {
     return <Redirect href="/settings" />;
   }
 

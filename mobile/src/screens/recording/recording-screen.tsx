@@ -169,6 +169,8 @@ export default function RecordingScreen() {
   const recordingTitleInputRef = useRef<TextInput | null>(null);
   const recordingDescriptionInputRef = useRef<TextInput | null>(null);
   const lastSilentGapBucketRef = useRef<string | null>(null);
+  const lastSilentGapRecoveryBucketRef = useRef<string | null>(null);
+  const silentGapRecoveryRunningRef = useRef(false);
 
   function logRecordingStartStep(step: string, details?: Record<string, unknown>) {
     console.warn("[Trailbook][recording-start]", details ? { step, ...details } : { step });
@@ -417,12 +419,14 @@ export default function RecordingScreen() {
   useEffect(() => {
     if (recordingSession.status !== "recording" || !recordingSession.activeTripId) {
       lastSilentGapBucketRef.current = null;
+      lastSilentGapRecoveryBucketRef.current = null;
+      silentGapRecoveryRunningRef.current = false;
       return;
     }
 
     const tripLocalId = recordingSession.activeTripId;
 
-    function checkLocationSilentGap() {
+    async function checkLocationSilentGap() {
       const observedAtMs = Date.now();
       const diagnosticState = getLocationCallbackDiagnosticState(tripLocalId);
       const sessionStartedAtMs = recordingSession.startedAt
@@ -454,13 +458,44 @@ export default function RecordingScreen() {
             : new Date(diagnosticState.lastCallbackReceivedAtMs).toISOString(),
         observedAt: new Date(observedAtMs).toISOString(),
       });
+
+      if (
+        Platform.OS !== "android" ||
+        lastSilentGapRecoveryBucketRef.current === gapBucket ||
+        silentGapRecoveryRunningRef.current
+      ) {
+        return;
+      }
+
+      lastSilentGapRecoveryBucketRef.current = gapBucket;
+      silentGapRecoveryRunningRef.current = true;
+
+      try {
+        console.warn("[Trailbook][location-silent-gap-recovery]", {
+          gapMs: Math.trunc(gapMs),
+          profile: activeRecordingProfile,
+          tripLocalId,
+        });
+        await restartBackgroundLocationTracking(
+          getBackgroundTrackingProfile(recordingSession.recordingMode, activeRecordingProfile),
+        );
+      } catch (error) {
+        console.warn("[Trailbook][location-silent-gap-recovery]", {
+          error: error instanceof Error ? error.message : String(error),
+          step: "failed",
+          tripLocalId,
+        });
+      } finally {
+        silentGapRecoveryRunningRef.current = false;
+      }
     }
 
-    checkLocationSilentGap();
-    const intervalId = setInterval(checkLocationSilentGap, LOCATION_SILENT_GAP_WATCHDOG_INTERVAL_MS);
+    void checkLocationSilentGap();
+    const intervalId = setInterval(() => void checkLocationSilentGap(), LOCATION_SILENT_GAP_WATCHDOG_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
   }, [
+    activeRecordingProfile,
     batteryOptimizationIgnored,
     batteryOptimizationSupported,
     recordingSession.activeTripId,

@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 import * as FileSystem from "expo-file-system/legacy";
 
 const DATABASE_NAME = "trailbook.db";
-const DATABASE_VERSION = 10;
+const DATABASE_VERSION = 12;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let databaseWriteQueue: Promise<void> = Promise.resolve();
@@ -443,6 +443,50 @@ async function migrateDatabaseIfNeeded(database: SQLite.SQLiteDatabase) {
 
     await database.execAsync("PRAGMA user_version = 10;");
   }
+
+  if (currentVersion < 11) {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS sync_outbox (
+        id TEXT PRIMARY KEY NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_local_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_sync_outbox_status_created_at
+        ON sync_outbox(status, created_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_outbox_pending_entity_operation
+        ON sync_outbox(entity_type, entity_local_id, operation)
+        WHERE status IN ('pending', 'running');
+
+      PRAGMA user_version = 11;
+    `);
+  }
+
+  if (currentVersion < 12) {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS trip_route_variants (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT,
+        trip_local_id TEXT NOT NULL,
+        variant_type TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        geometry_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_trip_route_variants_trip_type
+        ON trip_route_variants(trip_local_id, variant_type, deleted_at);
+
+      PRAGMA user_version = 12;
+    `);
+  }
 }
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -499,6 +543,8 @@ export async function exportDatabaseSnapshot(): Promise<string> {
 
 export async function clearLocalTripData(): Promise<void> {
   await runExclusiveDatabaseWrite(async (database) => {
+    await database.runAsync("DELETE FROM sync_outbox");
+    await database.runAsync("DELETE FROM trip_route_variants");
     await database.runAsync("DELETE FROM raw_location_events");
     await database.runAsync("DELETE FROM trip_group_members");
     await database.runAsync("DELETE FROM trip_groups");

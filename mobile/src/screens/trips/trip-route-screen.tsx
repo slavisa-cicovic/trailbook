@@ -16,6 +16,7 @@ import {
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
+import { useFeatureFlags } from "../../core/hooks/use-feature-flags";
 import type { Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
 import type { TripTimelineEntry } from "../../services/trip-pauses/trip-pauses.service";
 import {
@@ -179,6 +180,7 @@ export default function TripRouteScreen() {
   const router = useRouter();
   const { tripId } = useLocalSearchParams<{ tripId?: string | string[] }>();
   const identitySession = useSessionStore((state) => state.identitySession);
+  const featureFlags = useFeatureFlags();
   const trips = useTripsStore((state) => state.trips);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const tripPauses = useTripPausesStore((state) => state.tripPauses);
@@ -891,7 +893,7 @@ export default function TripRouteScreen() {
               </Pressable>
               {selectedTrip.status === "ended" &&
               identitySession.mode === "authenticated" &&
-              identitySession.role === "test_user" ? (
+              featureFlags.rawEventReprocessingEnabled ? (
                 <Pressable
                   accessibilityLabel={rawReprocessBusy ? "Reprocessing route" : "Reprocess route"}
                   disabled={rawReprocessBusy}

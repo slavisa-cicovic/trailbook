@@ -4,7 +4,12 @@ import { Image, Linking, Platform, Pressable, StyleSheet, Text, View, useColorSc
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import { getAppTheme, resolveAppThemeMode } from "../../constants/app-theme";
+import { useFeatureFlags } from "../../core/hooks/use-feature-flags";
 import { getApiBaseUrl } from "../../services/api/mobile-api.service";
+import {
+  buildTrailbookSupportBundle,
+  serializeTrailbookSupportBundle,
+} from "../../services/support/support-bundle.service";
 import { useSessionStore } from "../../state/session-store";
 import { useThemeStore } from "../../state/theme-store";
 
@@ -39,6 +44,7 @@ function formatPlatformVersion() {
 function buildSupportEmailUrl(context: {
   apiBaseUrl: string;
   deviceId: string | null;
+  supportBundle: string | null;
   role: string | null;
   sessionMode: string | null;
   userEmail: string | null;
@@ -59,7 +65,10 @@ function buildSupportEmailUrl(context: {
       `Mode: ${context.sessionMode ?? "n/a"}`,
       `Role: ${context.role ?? "n/a"}`,
       `Device ID: ${context.deviceId ?? "n/a"}`,
-    ].join("\n"),
+      context.supportBundle ? "" : null,
+      context.supportBundle ? "Support bundle:" : null,
+      context.supportBundle,
+    ].filter((line) => line !== null).join("\n"),
   );
 
   return `mailto:${AUTHOR_EMAIL}?subject=${subject}&body=${body}`;
@@ -70,17 +79,27 @@ export default function AboutScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const deviceId = useSessionStore((state) => state.deviceId);
   const themeMode = useThemeStore((state) => state.mode);
+  const featureFlags = useFeatureFlags();
   const systemColorScheme = useColorScheme();
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
   const theme = getAppTheme(resolvedThemeMode);
-  const isTestUser = identitySession?.mode === "authenticated" && identitySession.role === "test_user";
   const apiBaseUrl = getApiBaseUrl();
 
-  function handleContactSupport() {
+  async function handleContactSupport() {
+    const supportBundle = featureFlags.supportDebugInfoEnabled
+      ? serializeTrailbookSupportBundle(
+          await buildTrailbookSupportBundle({
+            deviceId,
+            identitySession,
+          }),
+        )
+      : null;
+
     void Linking.openURL(
       buildSupportEmailUrl({
         apiBaseUrl,
         deviceId,
+        supportBundle,
         role: identitySession?.role ?? null,
         sessionMode: identitySession?.mode ?? null,
         userEmail: identitySession?.userEmail ?? null,
@@ -117,7 +136,7 @@ export default function AboutScreen() {
           <Text style={[styles.infoLabel, { color: theme.mutedText }]}>Support</Text>
           <InfoRow label="Author" theme={theme} value={AUTHOR_EMAIL} />
           <Pressable
-            onPress={handleContactSupport}
+            onPress={() => void handleContactSupport()}
             style={({ pressed }) => [styles.emailButton, pressed && styles.emailButtonPressed]}
           >
             <Text style={[styles.emailText, { color: theme.accent }]}>Contact support</Text>
@@ -138,12 +157,12 @@ export default function AboutScreen() {
           <InfoRow label="Open-source licenses" theme={theme} value={LICENSES_STATUS} />
         </View>
 
-        {isTestUser ? (
+        {featureFlags.supportDebugInfoEnabled ? (
           <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Text style={[styles.infoLabel, { color: theme.mutedText }]}>Debug</Text>
             <InfoRow label="API base URL" theme={theme} value={apiBaseUrl} />
-            <InfoRow label="Account" theme={theme} value={identitySession.userEmail} />
-            <InfoRow label="Role" theme={theme} value={identitySession.role} />
+            <InfoRow label="Account" theme={theme} value={identitySession?.userEmail ?? "not signed in"} />
+            <InfoRow label="Role" theme={theme} value={identitySession?.role ?? "n/a"} />
             <InfoRow label="Device ID" theme={theme} value={deviceId} />
           </View>
         ) : null}

@@ -16,7 +16,12 @@ if (!TaskManager.isTaskDefined(BACKGROUND_RECORDING_LOCATION_TASK_NAME)) {
         return;
       }
 
-      await persistBackgroundRecordedLocations(data.locations);
+      await persistBackgroundRecordedLocations(data.locations, {
+        // AUTO profile changes update Trailbook segments/filtering only.
+        // Restarting Android background location updates while the app is asleep can leave
+        // FusedLocation silent until the app wakes up again.
+        restartTrackingOnAutoTransition: false,
+      });
     },
   );
 }

@@ -1,5 +1,3 @@
-import { PermissionsAndroid, Platform } from "react-native";
-
 import type { MotionActivity } from "../../domain/motion-activity";
 import { normalizeMotionActivity } from "../../domain/motion-activity";
 import TrailbookMotionActivity from "./trailbook-motion-activity.native";
@@ -9,28 +7,6 @@ const MOTION_ACTIVITY_FETCH_CACHE_TTL_MS = 5 * 1000;
 
 let cachedMotionActivity: MotionActivity | null = null;
 let motionActivityCacheTimestampMs = 0;
-
-export async function getMotionActivityAccess(): Promise<boolean> {
-  if (!(await isMotionActivityAvailableAsync())) {
-    return true;
-  }
-
-  if (Platform.OS !== "android") {
-    return true;
-  }
-
-  if (typeof Platform.Version === "number" && Platform.Version < 29) {
-    return true;
-  }
-
-  const permission = PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION;
-
-  if (!permission) {
-    return true;
-  }
-
-  return PermissionsAndroid.check(permission);
-}
 
 export async function isMotionActivityAvailableAsync(): Promise<boolean> {
   if (!TrailbookMotionActivity) {
@@ -46,10 +22,6 @@ export async function isMotionActivityAvailableAsync(): Promise<boolean> {
 
 export async function ensureMotionActivityUpdatesForAutoMode(): Promise<boolean> {
   if (!(await isMotionActivityAvailableAsync())) {
-    return false;
-  }
-
-  if (!(await getMotionActivityAccess())) {
     return false;
   }
 

@@ -231,12 +231,12 @@ describe("auth integration", () => {
       .set("Authorization", `Bearer ${loginResponse.body.sessionToken}`);
 
     assert.equal(configResponse.status, 200);
-    assert.equal(configResponse.body.version, 1);
+    assert.equal(configResponse.body.version, 3);
     assert.equal(configResponse.body.profiles.ios.auto, undefined);
     assert.equal(configResponse.body.profiles.android.auto, undefined);
     assert.equal(configResponse.body.profiles.ios.walk.distanceInterval, 12);
     assert.equal(configResponse.body.profiles.android.walk.distanceInterval, 5);
-    assert.equal(configResponse.body.profiles.ios.drive.timeIntervalMs, 30000);
+    assert.equal(configResponse.body.profiles.ios.drive.timeIntervalMs, 5000);
   });
 
   test("logout revokes the current session", async () => {

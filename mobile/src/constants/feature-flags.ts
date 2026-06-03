@@ -8,6 +8,9 @@ export function resolveSessionFlags(session: AuthenticatedDeviceSession | null) 
   const isTestUser = session?.mode === "authenticated" && session.role === "test_user";
 
   return {
+    diagnosticsEnabled: isTestUser,
+    rawEventReprocessingEnabled: isTestUser,
+    supportDebugInfoEnabled: isTestUser,
     testSettingsEnabled: isTestUser,
   };
 }

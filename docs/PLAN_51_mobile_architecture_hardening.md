@@ -15,6 +15,32 @@ The main direction:
 - debug/test tooling should be explicit and role-gated
 - privacy/release requirements should be treated as product features, not last-minute tasks
 
+## Implementation Status
+
+Updated: 2026-06-03
+
+Completed in this hardening pass:
+
+- Recording writes are routed through the recording engine/background pipeline; foreground location remains UI-only.
+- Raw location events are persisted and available for diagnostics/reprocessing/restore.
+- Trip stats are first-class snapshots on mobile and backend.
+- Manual trip sync now uses a local sync outbox worker.
+- Permission handling is centralized in `PermissionManager`; feature services only read capability status.
+- Test-user-only tools are gated through centralized feature flags.
+- Support email can include a diagnostics/support bundle without auth tokens.
+- Route post-processing has a storage/schema boundary through `trip_route_variants`.
+- Photo restore downloads waypoint photos for offline viewing through a media repository boundary.
+- Release-readiness requirements are captured in `docs/RELEASE_READINESS.md`.
+
+Still intentionally deferred:
+
+- Native Android foreground-service watchdog for real OS sleep gaps.
+- Full migration of every sync mutation to outbox operations.
+- Full screen-by-screen view-model replacement.
+- Actual Valhalla/GraphHopper map matching implementation.
+- Offline map cache implementation.
+- SQLite encryption decision and migration.
+
 ## Current Pain Points
 
 ### Recording Pipeline Complexity
@@ -644,4 +670,3 @@ This roadmap is complete when:
 - debug tools are role-gated
 - photos and route variants have clear storage ownership
 - release/legal/support basics are present
-

@@ -1,10 +1,12 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-    CREATE TYPE user_role AS ENUM ('user', 'admin');
+    CREATE TYPE user_role AS ENUM ('user', 'test_user', 'admin');
   END IF;
 END
 $$;
+
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'test_user';
 
 DO $$
 BEGIN
@@ -210,6 +212,9 @@ CREATE TABLE IF NOT EXISTS trips (
   battery_start_state TEXT,
   battery_end_level_percent DOUBLE PRECISION,
   battery_end_state TEXT,
+  point_count INTEGER,
+  distance_meters DOUBLE PRECISION,
+  stats_updated_at TIMESTAMPTZ,
   started_at TIMESTAMPTZ NOT NULL,
   ended_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL,
@@ -223,6 +228,9 @@ ALTER TABLE trips ADD COLUMN IF NOT EXISTS battery_start_level_percent DOUBLE PR
 ALTER TABLE trips ADD COLUMN IF NOT EXISTS battery_start_state TEXT;
 ALTER TABLE trips ADD COLUMN IF NOT EXISTS battery_end_level_percent DOUBLE PRECISION;
 ALTER TABLE trips ADD COLUMN IF NOT EXISTS battery_end_state TEXT;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS point_count INTEGER;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS distance_meters DOUBLE PRECISION;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS stats_updated_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS trips_owner_user_id_idx ON trips(owner_user_id);
 
@@ -231,6 +239,10 @@ CREATE TABLE IF NOT EXISTS trip_segments (
   trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
   local_source_id TEXT NOT NULL,
   recording_profile recording_profile NOT NULL,
+  point_count INTEGER,
+  distance_meters DOUBLE PRECISION,
+  duration_ms INTEGER,
+  stats_updated_at TIMESTAMPTZ,
   started_at TIMESTAMPTZ NOT NULL,
   ended_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL,
@@ -239,6 +251,10 @@ CREATE TABLE IF NOT EXISTS trip_segments (
 );
 
 CREATE INDEX IF NOT EXISTS trip_segments_trip_id_idx ON trip_segments(trip_id);
+ALTER TABLE trip_segments ADD COLUMN IF NOT EXISTS point_count INTEGER;
+ALTER TABLE trip_segments ADD COLUMN IF NOT EXISTS distance_meters DOUBLE PRECISION;
+ALTER TABLE trip_segments ADD COLUMN IF NOT EXISTS duration_ms INTEGER;
+ALTER TABLE trip_segments ADD COLUMN IF NOT EXISTS stats_updated_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS trip_points (
   id TEXT PRIMARY KEY,
@@ -287,6 +303,21 @@ CREATE TABLE IF NOT EXISTS raw_location_events (
 CREATE INDEX IF NOT EXISTS raw_location_events_trip_id_idx ON raw_location_events(trip_id);
 CREATE INDEX IF NOT EXISTS raw_location_events_trip_id_recorded_at_idx ON raw_location_events(trip_id, recorded_at);
 
+CREATE TABLE IF NOT EXISTS trip_route_variants (
+  id TEXT PRIMARY KEY,
+  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  local_source_id TEXT NOT NULL,
+  variant_type TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  geometry_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(trip_id, local_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS trip_route_variants_trip_id_idx ON trip_route_variants(trip_id);
+
 CREATE TABLE IF NOT EXISTS trip_diagnostics (
   id TEXT PRIMARY KEY,
   trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
@@ -314,6 +345,7 @@ CREATE TABLE IF NOT EXISTS trip_diagnostics (
   max_recorded_gap_ms INTEGER NOT NULL,
   max_silent_gap_ms INTEGER NOT NULL DEFAULT 0,
   silent_gap_count INTEGER NOT NULL DEFAULT 0,
+  accuracy_histogram_json JSONB,
   recent_events_json JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -324,6 +356,7 @@ CREATE INDEX IF NOT EXISTS trip_diagnostics_trip_id_idx ON trip_diagnostics(trip
 ALTER TABLE trip_diagnostics ADD COLUMN IF NOT EXISTS accepted_after_long_gap INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE trip_diagnostics ADD COLUMN IF NOT EXISTS max_silent_gap_ms INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE trip_diagnostics ADD COLUMN IF NOT EXISTS silent_gap_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE trip_diagnostics ADD COLUMN IF NOT EXISTS accuracy_histogram_json JSONB;
 
 CREATE TABLE IF NOT EXISTS waypoints (
   id TEXT PRIMARY KEY,
@@ -365,6 +398,39 @@ CREATE TABLE IF NOT EXISTS waypoint_attachments (
 CREATE INDEX IF NOT EXISTS waypoint_attachments_trip_id_idx ON waypoint_attachments(trip_id);
 CREATE INDEX IF NOT EXISTS waypoint_attachments_waypoint_id_idx ON waypoint_attachments(waypoint_id);
 CREATE INDEX IF NOT EXISTS waypoint_attachments_owner_user_id_idx ON waypoint_attachments(owner_user_id);
+
+CREATE TABLE IF NOT EXISTS trip_groups (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  local_source_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(owner_user_id, local_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS trip_groups_owner_user_id_idx ON trip_groups(owner_user_id);
+
+CREATE TABLE IF NOT EXISTS trip_group_members (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL REFERENCES trip_groups(id) ON DELETE CASCADE,
+  group_local_source_id TEXT NOT NULL,
+  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  trip_local_source_id TEXT NOT NULL,
+  local_source_id TEXT NOT NULL,
+  sort_order INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
+  deleted_at TIMESTAMPTZ,
+  UNIQUE(owner_user_id, local_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS trip_group_members_owner_user_id_idx ON trip_group_members(owner_user_id);
+CREATE INDEX IF NOT EXISTS trip_group_members_group_id_idx ON trip_group_members(group_id);
+CREATE INDEX IF NOT EXISTS trip_group_members_trip_id_idx ON trip_group_members(trip_id);
 
 CREATE TABLE IF NOT EXISTS trip_shares (
   id TEXT PRIMARY KEY,

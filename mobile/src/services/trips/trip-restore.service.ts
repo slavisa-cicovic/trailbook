@@ -10,7 +10,7 @@ import type {
   Waypoint,
   WaypointAttachment,
 } from "../../domain/trips";
-import { downloadPhotoToLocalStorage } from "../media/photo-picker.service";
+import { downloadWaypointPhoto } from "../../repositories/media-repository";
 import {
   buildTripAttachmentContentUrl,
   getOwnedTripFromServer,
@@ -136,7 +136,7 @@ async function importTripDetail(
       continue;
     }
 
-    const downloadedPhoto = await downloadPhotoToLocalStorage({
+    const downloadedPhoto = await downloadWaypointPhoto({
       fileNameSeed: `server-${attachment.id}`,
       mimeType: attachment.mimeType,
       sourceUrl: buildTripAttachmentContentUrl(identitySession.sessionToken ?? "", attachment.id),

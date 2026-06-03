@@ -1,11 +1,11 @@
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
-import { PermissionsAndroid, Platform } from "react-native";
 
 import {
   buildPhotoStorageUri,
   ensurePhotoStorageDirectory,
 } from "./photo-storage.service";
+import { getTrailbookPermissionStatus } from "../permissions/permission-manager.service";
 
 export interface PickedPhoto {
   fileSize: number | null;
@@ -27,27 +27,8 @@ export function isCameraPermissionDeniedError(error: unknown): error is CameraPe
   return error instanceof CameraPermissionDeniedError;
 }
 
-export async function getCameraAccess(): Promise<boolean> {
-  if (Platform.OS !== "android") {
-    const permission = await ImagePicker.getCameraPermissionsAsync();
-    return permission.granted;
-  }
-
-  return PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
-}
-
 async function getCameraCanAskAgain(): Promise<boolean> {
-  if (Platform.OS !== "android") {
-    const permission = await ImagePicker.getCameraPermissionsAsync();
-    return permission.canAskAgain;
-  }
-
   return true;
-}
-
-export async function getMediaLibraryAccess(): Promise<boolean> {
-  const permission = await ImagePicker.getMediaLibraryPermissionsAsync();
-  return permission.granted;
 }
 
 function resolvePhotoExtensionFromMimeType(mimeType: string | null) {
@@ -95,7 +76,7 @@ async function normalizePhotoAsset(asset: ImagePicker.ImagePickerAsset): Promise
 }
 
 export async function pickPhotoFromLibrary(): Promise<PickedPhoto | null> {
-  if (!(await getMediaLibraryAccess())) {
+  if (!(await getTrailbookPermissionStatus()).mediaLibraryGranted) {
     return null;
   }
 
@@ -114,7 +95,7 @@ export async function pickPhotoFromLibrary(): Promise<PickedPhoto | null> {
 }
 
 export async function pickPhotosFromLibrary(): Promise<PickedPhoto[]> {
-  if (!(await getMediaLibraryAccess())) {
+  if (!(await getTrailbookPermissionStatus()).mediaLibraryGranted) {
     return [];
   }
 
@@ -134,7 +115,7 @@ export async function pickPhotosFromLibrary(): Promise<PickedPhoto[]> {
 }
 
 export async function capturePhotoWithCamera(): Promise<PickedPhoto | null> {
-  if (!(await getCameraAccess())) {
+  if (!(await getTrailbookPermissionStatus()).cameraGranted) {
     throw new CameraPermissionDeniedError(await getCameraCanAskAgain());
   }
 
