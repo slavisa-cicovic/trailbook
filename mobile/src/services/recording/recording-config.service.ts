@@ -394,3 +394,8 @@ function isValidAccuracy(value: unknown): value is RecordingConfigAccuracy {
 function isFiniteInRange(value: unknown, min: number, max: number): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
 }
+
+export function clearRecordingConfigCache(): void {
+  activeRecordingConfig = null;
+  activeRecordingConfigUserId = null;
+}

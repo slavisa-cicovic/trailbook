@@ -863,3 +863,7 @@ export function applyBatchAutoTransitionIfNeeded(
     waypoints: prunedState.waypoints,
   };
 }
+
+export function clearAllAutoRecordingSamples(): void {
+  rawAutoSamplesByTripLocalId.clear();
+}

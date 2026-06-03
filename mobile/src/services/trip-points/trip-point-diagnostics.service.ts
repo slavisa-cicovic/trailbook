@@ -687,3 +687,8 @@ export async function getTripDiagnosticsForSync(tripLocalId: string): Promise<Tr
 
 void diagnosticsHydrationPromise;
 ensureDiagnosticsHydrated();
+
+export function clearAllTripPointDiagnostics(): void {
+  diagnosticsByTripLocalId.clear();
+  diagnosticsHydrationPromise = null;
+}

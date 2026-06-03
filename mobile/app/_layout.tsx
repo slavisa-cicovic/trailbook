@@ -6,6 +6,7 @@ import { ActivityIndicator, StyleSheet, View, useColorScheme } from "react-nativ
 import { useBatchProcessing } from "../src/state/batch-processing-store";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { queryClient } from "../src/lib/query-client";
+import { clearAllRecordingServiceState } from "../src/services/recording/recording-state-cleanup.service";
 
 import "../src/services/recording/background-recording-task";
 import { getAppTheme, resolveAppThemeMode } from "../src/constants/app-theme";
@@ -94,6 +95,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (sessionHydrated && !identitySession) {
       queryClient.clear();
+      clearAllRecordingServiceState();
     }
   }, [sessionHydrated, identitySession]);
 

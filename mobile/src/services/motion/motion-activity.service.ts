@@ -91,3 +91,8 @@ export async function getLatestMotionActivityAsync(
     return null;
   }
 }
+
+export function clearMotionActivityCache(): void {
+  cachedMotionActivity = null;
+  motionActivityCacheTimestampMs = 0;
+}

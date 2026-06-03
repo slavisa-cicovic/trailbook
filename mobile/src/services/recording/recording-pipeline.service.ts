@@ -483,3 +483,8 @@ export function persistBackgroundRecordedLocations(
 ): Promise<void> {
   return processRecordedLocationSnapshots(locations.map(toSnapshot), "background", options);
 }
+
+export function clearRecordingPipelineState(): void {
+  rejectedAutoSnapshotsByTripLocalId.clear();
+  simulationLocationInjectionTripIds.clear();
+}
