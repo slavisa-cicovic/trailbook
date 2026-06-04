@@ -178,6 +178,7 @@ export default function RecordingScreen() {
     selectedPhotoAttachmentId,
     waypointDraft,
   });
+  const activeTripLocalId = activeTrip?.localId ?? null;
 
   function logRecordingStartStep(step: string, details?: Record<string, unknown>) {
     console.warn("[Trailbook][recording-start]", details ? { step, ...details } : { step });
@@ -261,13 +262,13 @@ export default function RecordingScreen() {
     let cancelled = false;
 
     async function loadActiveTripPoints() {
-      if (!activeTrip) {
+      if (!activeTripLocalId) {
         setTripPointsInMemory([]);
         return;
       }
 
       setTripPointsInMemory([]);
-      const nextTripPoints = await loadTripPointsForTrip(activeTrip.localId);
+      const nextTripPoints = await loadTripPointsForTrip(activeTripLocalId);
 
       if (!cancelled) {
         mergeTripPointsInMemory(nextTripPoints);
@@ -279,7 +280,7 @@ export default function RecordingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeTrip?.localId]);
+  }, [activeTripLocalId]);
 
   useEffect(() => {
     let active = true;
