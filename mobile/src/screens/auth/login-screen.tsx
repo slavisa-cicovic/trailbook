@@ -5,7 +5,7 @@ import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import FormField from "../../components/ui/form-field";
-import PrimaryButton from "../../components/ui/primary-button";
+import LoadingButton from "../../components/ui/loading-button";
 import { DEMO_CREDENTIALS, createBackendAuthenticatedSession, type AuthProvider } from "../../domain/identity";
 import {
   forgotPasswordWithBackend,
@@ -44,7 +44,7 @@ export default function LoginScreen() {
   const deviceId = useSessionStore((state) => state.deviceId);
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
-  const [busyAction, setBusyAction] = useState<"login" | "demo" | "google" | "apple" | "facebook" | null>(null);
+  const [busyAction, setBusyAction] = useState<"login" | "demo" | "google" | "apple" | "facebook" | "forgot" | null>(null);
   const [socialProviders, setSocialProviders] = useState<SocialProviderAvailability>(emptyProviderAvailability);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -104,7 +104,7 @@ export default function LoginScreen() {
       return;
     }
 
-    setBusyAction("login");
+    setBusyAction("forgot");
     setErrorMessage(null);
     setInfoMessage(null);
 
@@ -266,12 +266,14 @@ export default function LoginScreen() {
         </Pressable>
       </View>
 
-      <PrimaryButton
+      <LoadingButton
         disabled={busyAction !== null || credentials.email.trim().length === 0 || credentials.password.length === 0}
+        loading={busyAction === "login"}
+        loadingLabel="Signing in..."
         onPress={() => void handleLogin()}
       >
-        {busyAction === "login" ? "Signing In..." : "Login"}
-      </PrimaryButton>
+        Login
+      </LoadingButton>
 
       {credentials.password.length > 0 && credentials.password.length < 8 ? (
         <Text style={styles.validationText}>Password must be at least 8 characters.</Text>
@@ -288,35 +290,40 @@ export default function LoginScreen() {
 
       <Text style={styles.orText}>or continue with</Text>
 
-      <PrimaryButton
+      <LoadingButton
         disabled={busyAction !== null || !socialProviders.google}
+        loading={busyAction === "google"}
         onPress={() => void handleSocialLogin("google")}
         variant="ghost"
       >
         Continue with Google
-      </PrimaryButton>
-      <PrimaryButton
+      </LoadingButton>
+      <LoadingButton
         disabled={busyAction !== null || !socialProviders.apple}
+        loading={busyAction === "apple"}
         onPress={() => void handleSocialLogin("apple")}
         variant="ghost"
       >
         Continue with Apple
-      </PrimaryButton>
-      <PrimaryButton
+      </LoadingButton>
+      <LoadingButton
         disabled={busyAction !== null || !socialProviders.facebook}
+        loading={busyAction === "facebook"}
         onPress={() => void handleSocialLogin("facebook")}
         variant="ghost"
       >
         Continue with Facebook
-      </PrimaryButton>
+      </LoadingButton>
 
-      <PrimaryButton
+      <LoadingButton
         disabled={busyAction !== null}
+        loading={busyAction === "demo"}
+        loadingLabel="Opening demo..."
         onPress={handlePromptEnterDemo}
         variant="secondary"
       >
-        {busyAction === "demo" ? "Opening Demo..." : "Enter Demo"}
-      </PrimaryButton>
+        Enter Demo
+      </LoadingButton>
 
       <Pressable disabled={busyAction !== null} onPress={() => void handleForgotPasswordInline()}>
         <Text style={styles.inlineHint}>Need a quick reset link? Send it to this email.</Text>

@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import FormField from "../../components/ui/form-field";
-import PrimaryButton from "../../components/ui/primary-button";
+import LoadingButton from "../../components/ui/loading-button";
 import { registerWithBackend } from "../../services/auth/mobile-auth.service";
 import { useSessionStore } from "../../state/session-store";
 
@@ -83,12 +83,14 @@ export default function RegisterScreen() {
         value={password}
       />
 
-      <PrimaryButton
+      <LoadingButton
         disabled={busy || displayName.trim().length < 2 || email.trim().length === 0 || password.length < 8}
+        loading={busy}
+        loadingLabel="Creating account..."
         onPress={() => void handleRegister()}
       >
-        {busy ? "Creating account..." : "Create account"}
-      </PrimaryButton>
+        Create account
+      </LoadingButton>
 
       <View style={styles.footerRow}>
         <Text style={styles.footerText}>Already have an account?</Text>

@@ -113,6 +113,7 @@ export default function RecordingScreen() {
   ];
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
   const [startModalVisible, setStartModalVisible] = useState(false);
+  const [startRecordingBusy, setStartRecordingBusy] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [waypointModalVisible, setWaypointModalVisible] = useState(false);
   const [sessionMenuVisible, setSessionMenuVisible] = useState(false);
@@ -435,39 +436,49 @@ export default function RecordingScreen() {
   }, [currentLocation, locationPermissionGranted]);
 
   async function handleStartRecording() {
-    const result = await startRecordingFromScreenController({
-      activeIdentitySession,
-      backgroundLocationPermissionGranted,
-      backgroundRecordingSupported,
-      currentUserTrips,
-      logStep: logRecordingStartStep,
-      missingRequired,
-      permissionsReady,
-      recordingDraft,
-      recordingSession,
-      refreshStatus,
-      tripSegments,
-      trips,
-    });
-
-    if (result.ok) {
-      setStartModalVisible(false);
-      setRecordingDraft(getEmptyRecordingDraft());
+    if (startRecordingBusy) {
       return;
     }
 
-    if (result.reason === "demo_limit") {
-      Alert.alert("Demo limit reached", result.message);
-      return;
-    }
+    setStartRecordingBusy(true);
 
-    if (result.reason === "active_route") {
-      Alert.alert("Active route", result.message);
-      return;
-    }
+    try {
+      const result = await startRecordingFromScreenController({
+        activeIdentitySession,
+        backgroundLocationPermissionGranted,
+        backgroundRecordingSupported,
+        currentUserTrips,
+        logStep: logRecordingStartStep,
+        missingRequired,
+        permissionsReady,
+        recordingDraft,
+        recordingSession,
+        refreshStatus,
+        tripSegments,
+        trips,
+      });
 
-    if (result.reason === "native_start_failed") {
-      Alert.alert("Recording unavailable", result.message);
+      if (result.ok) {
+        setStartModalVisible(false);
+        setRecordingDraft(getEmptyRecordingDraft());
+        return;
+      }
+
+      if (result.reason === "demo_limit") {
+        Alert.alert("Demo limit reached", result.message);
+        return;
+      }
+
+      if (result.reason === "active_route") {
+        Alert.alert("Active route", result.message);
+        return;
+      }
+
+      if (result.reason === "native_start_failed") {
+        Alert.alert("Recording unavailable", result.message);
+      }
+    } finally {
+      setStartRecordingBusy(false);
     }
   }
 
@@ -1125,6 +1136,7 @@ export default function RecordingScreen() {
       <RecordingStartModal
         canStart={canStartRecording}
         draft={recordingDraft}
+        starting={startRecordingBusy}
         visible={startModalVisible}
         onChangeDraftDescription={(description) => setRecordingDraft((current) => ({ ...current, description }))}
         onChangeDraftMode={(mode) => setRecordingDraft((current) => ({ ...current, recordingMode: mode }))}

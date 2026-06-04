@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import FormField from "../../components/ui/form-field";
-import PrimaryButton from "../../components/ui/primary-button";
+import LoadingButton from "../../components/ui/loading-button";
 import { forgotPasswordWithBackend } from "../../services/auth/mobile-auth.service";
 
 export default function ForgotPasswordScreen() {
@@ -46,9 +46,14 @@ export default function ForgotPasswordScreen() {
         value={email}
       />
 
-      <PrimaryButton disabled={busy || email.trim().length === 0} onPress={() => void handleSubmit()}>
-        {busy ? "Sending..." : "Send reset email"}
-      </PrimaryButton>
+      <LoadingButton
+        disabled={busy || email.trim().length === 0}
+        loading={busy}
+        loadingLabel="Sending..."
+        onPress={() => void handleSubmit()}
+      >
+        Send reset email
+      </LoadingButton>
 
       <View style={styles.footerRow}>
         <Text style={styles.footerText}>Remembered your password?</Text>

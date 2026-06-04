@@ -15,6 +15,7 @@ import {
 
 import { RECORDING_PROFILE_OPTIONS } from "../../../constants/recording-profiles";
 import type { RecordingMode } from "../../../domain/trips";
+import LoadingButton from "../../../components/ui/loading-button";
 
 interface RecordingDraft {
   description: string;
@@ -25,6 +26,7 @@ interface RecordingDraft {
 interface Props {
   canStart: boolean;
   draft: RecordingDraft;
+  starting?: boolean;
   visible: boolean;
   onChangeDraftDescription: (description: string) => void;
   onChangeDraftMode: (mode: RecordingMode) => void;
@@ -36,6 +38,7 @@ interface Props {
 export default function RecordingStartModal({
   canStart,
   draft,
+  starting = false,
   visible,
   onChangeDraftDescription,
   onChangeDraftMode,
@@ -131,16 +134,23 @@ export default function RecordingStartModal({
             </View>
 
             <View style={styles.actions}>
-              <Pressable onPress={onClose} style={[styles.button, styles.buttonSecondary]}>
+              <Pressable
+                disabled={starting}
+                onPress={onClose}
+                style={[styles.button, styles.buttonSecondary, starting && styles.buttonDisabled]}
+              >
                 <Text style={styles.buttonSecondaryText}>Cancel</Text>
               </Pressable>
-              <Pressable
+              <LoadingButton
                 disabled={!canStart}
+                loading={starting}
+                loadingLabel="Starting..."
                 onPress={onStart}
-                style={[styles.button, styles.buttonPrimary, !canStart && styles.buttonDisabled]}
+                style={styles.button}
+                variant="primary"
               >
-                <Text style={styles.buttonPrimaryText}>Start</Text>
-              </Pressable>
+                Start
+              </LoadingButton>
             </View>
           </View>
         </ScrollView>
@@ -170,9 +180,7 @@ const styles = StyleSheet.create({
   profileOptionHintSelected: { color: "#384738" },
   actions: { flexDirection: "row", gap: 10, marginTop: 8 },
   button: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 14, paddingVertical: 14 },
-  buttonPrimary: { backgroundColor: "#243224" },
   buttonSecondary: { backgroundColor: "#e6ece1" },
-  buttonPrimaryText: { fontSize: 16, fontWeight: "700", color: "#fffdf8" },
   buttonSecondaryText: { fontSize: 16, fontWeight: "700", color: "#243224" },
   buttonDisabled: { opacity: 0.45 },
 });
