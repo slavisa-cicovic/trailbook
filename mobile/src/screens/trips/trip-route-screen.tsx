@@ -61,6 +61,7 @@ import { useTripShares, useShareRecipients } from "../../hooks/queries/use-trip-
 import { useShareTripMutation } from "../../hooks/mutations/use-share-trip-mutation";
 import TripEditModal from "./components/trip-edit-modal";
 import TripShareModal from "./components/trip-share-modal";
+import SegmentEditModal from "./components/segment-edit-modal";
 import TripRouteMap, { type TrailbookMapType } from "./components/trip-route-map";
 
 const mapTypeOptions: { label: string; value: TrailbookMapType }[] = [
@@ -719,45 +720,11 @@ export default function TripRouteScreen() {
       showBottomNavigation
       title="Route"
     >
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setSegmentEditSegmentId(null)}
-        transparent
-        visible={segmentEditTarget !== null}
-      >
-        <View style={styles.segmentEditOverlay}>
-          <View style={styles.segmentEditCard}>
-            <Text style={styles.segmentEditTitle}>Change segment mode</Text>
-            {segmentEditTarget ? (
-              <Text style={styles.segmentEditSubtitle}>
-                Current: {getRecordingProfileLabel(segmentEditTarget.recordingProfile)}
-              </Text>
-            ) : null}
-            <View style={styles.segmentEditOptions}>
-              {editableModeOptions.map((option) => {
-                const selected = segmentEditTarget?.recordingProfile === option;
-
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => void handleUpdateSegmentMode(option)}
-                    style={[styles.segmentEditOption, selected && styles.segmentEditOptionSelected]}
-                  >
-                    <Text
-                      style={[styles.segmentEditOptionText, selected && styles.segmentEditOptionTextSelected]}
-                    >
-                      {getRecordingProfileLabel(option)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Pressable onPress={() => setSegmentEditSegmentId(null)} style={styles.segmentEditCancelButton}>
-              <Text style={styles.segmentEditCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      <SegmentEditModal
+        segment={segmentEditTarget}
+        onClose={() => setSegmentEditSegmentId(null)}
+        onSelectMode={(mode) => void handleUpdateSegmentMode(mode)}
+      />
 
       <TripEditModal
         draft={tripDraft}

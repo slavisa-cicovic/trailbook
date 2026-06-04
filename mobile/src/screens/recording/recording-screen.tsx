@@ -3,7 +3,6 @@ import {
   Alert,
   AppState,
   Image,
-  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -21,7 +20,6 @@ import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import RecordingControl from "../../components/recording/recording-control";
-import { RECORDING_PROFILE_OPTIONS } from "../../constants/recording-profiles";
 import {
   DEFAULT_WAYPOINT_CATEGORY,
   WAYPOINT_CATEGORY_OPTIONS,
@@ -99,6 +97,9 @@ import {
   startRecordingFromScreenController,
   stopRecordingFromScreenController,
 } from "./recording-screen.controller";
+import RecordingPhotoViewerModal from "./components/recording-photo-viewer-modal";
+import RecordingProfileModal from "./components/recording-profile-modal";
+import RecordingStartModal from "./components/recording-start-modal";
 
 const LOCATION_SILENT_GAP_WARNING_MS = 2 * 60 * 1000;
 const LOCATION_SILENT_GAP_WATCHDOG_INTERVAL_MS = 30 * 1000;
@@ -117,8 +118,6 @@ export default function RecordingScreen() {
   const [sessionMenuVisible, setSessionMenuVisible] = useState(false);
   const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
-  const recordingTitleInputRef = useRef<TextInput | null>(null);
-  const recordingDescriptionInputRef = useRef<TextInput | null>(null);
   const lastSilentGapBucketRef = useRef<string | null>(null);
   const lastSilentGapRecoveryBucketRef = useRef<string | null>(null);
   const silentGapRecoveryRunningRef = useRef(false);
@@ -224,17 +223,6 @@ export default function RecordingScreen() {
     setWaypointModalVisible(true);
   }
 
-  useEffect(() => {
-    if (!startModalVisible) {
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      recordingTitleInputRef.current?.focus();
-    }, 150);
-
-    return () => clearTimeout(timeoutId);
-  }, [startModalVisible]);
 
   useEffect(() => {
     let active = true;
@@ -1114,285 +1102,35 @@ export default function RecordingScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setSelectedPhotoAttachmentId(null)}
-        transparent
-        visible={selectedPhotoAttachment !== null}
-      >
-        <View style={styles.photoViewerBackdrop}>
-          <Pressable
-            onPress={() => setSelectedPhotoAttachmentId(null)}
-            style={styles.photoViewerBackdropPressable}
-          />
-          {selectedPhotoAttachment ? (
-            <View style={styles.photoViewerCard}>
-              <Image
-                resizeMode="contain"
-                source={{ uri: selectedPhotoAttachment.localUri }}
-                style={styles.photoViewerImage}
-              />
-              {selectedPhotoWaypointAttachments.length > 1 ? (
-                <View style={styles.photoViewerPager}>
-                  <Pressable
-                    disabled={!hasPreviousPhoto}
-                    onPress={handleShowPreviousPhoto}
-                    style={[
-                      styles.photoViewerNavButton,
-                      !hasPreviousPhoto && styles.photoViewerNavButtonDisabled,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.photoViewerNavText,
-                        !hasPreviousPhoto && styles.photoViewerNavTextDisabled,
-                      ]}
-                    >
-                      Previous
-                    </Text>
-                  </Pressable>
-                  <Text style={styles.photoViewerPagerText}>
-                    {selectedPhotoIndex + 1} / {selectedPhotoWaypointAttachments.length}
-                  </Text>
-                  <Pressable
-                    disabled={!hasNextPhoto}
-                    onPress={handleShowNextPhoto}
-                    style={[
-                      styles.photoViewerNavButton,
-                      !hasNextPhoto && styles.photoViewerNavButtonDisabled,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.photoViewerNavText,
-                        !hasNextPhoto && styles.photoViewerNavTextDisabled,
-                      ]}
-                    >
-                      Next
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-              <View style={styles.photoViewerActions}>
-                <Pressable
-                  onPress={() => setSelectedPhotoAttachmentId(null)}
-                  style={[styles.modalButton, styles.modalButtonSecondary]}
-                >
-                  <Text style={styles.modalButtonSecondaryText}>Close</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => void handleRemoveWaypointPhoto(selectedPhotoAttachment.localId)}
-                  style={[styles.modalButton, styles.photoViewerRemoveButton]}
-                >
-                  <Text style={styles.photoViewerRemoveText}>Remove photo</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-        </View>
-      </Modal>
+      <RecordingPhotoViewerModal
+        attachment={selectedPhotoAttachment}
+        hasNext={hasNextPhoto}
+        hasPrevious={hasPreviousPhoto}
+        index={selectedPhotoIndex}
+        totalCount={selectedPhotoWaypointAttachments.length}
+        onClose={() => setSelectedPhotoAttachmentId(null)}
+        onNext={handleShowNextPhoto}
+        onPrevious={handleShowPreviousPhoto}
+        onRemove={(localId) => void handleRemoveWaypointPhoto(localId)}
+      />
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setProfileModalVisible(false)}
-        transparent
+      <RecordingProfileModal
+        activeMode={activeRecordingMode}
         visible={profileModalVisible}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalBackdrop}
-        >
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Recording mode</Text>
-              <Text style={styles.modalSubtitle}>
-                Choose a fixed mode or let Trailbook infer segments automatically.
-              </Text>
+        onClose={() => setProfileModalVisible(false)}
+        onSelectMode={(mode) => void handleSelectRecordingProfile(mode)}
+      />
 
-              <View style={styles.profileList}>
-                {RECORDING_PROFILE_OPTIONS.map((option) => {
-                  const selected = option.value === activeRecordingMode;
-
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => void handleSelectRecordingProfile(option.value)}
-                      style={[styles.profileOption, selected && styles.profileOptionSelected]}
-                    >
-                      <View style={styles.profileOptionHeader}>
-                        <Text
-                          style={[
-                            styles.profileOptionLabel,
-                            selected && styles.profileOptionLabelSelected,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.profileOptionTag,
-                            selected && styles.profileOptionTagSelected,
-                          ]}
-                        >
-                          {option.description}
-                        </Text>
-                      </View>
-                      <Text
-                        style={[
-                          styles.profileOptionHint,
-                          selected && styles.profileOptionHintSelected,
-                        ]}
-                      >
-                        {option.hint}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <View style={styles.modalActions}>
-                <Pressable
-                  onPress={() => setProfileModalVisible(false)}
-                  style={[styles.modalButton, styles.modalButtonSecondary]}
-                >
-                  <Text style={styles.modalButtonSecondaryText}>Close</Text>
-                </Pressable>
-              </View>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setStartModalVisible(false)}
-        transparent
+      <RecordingStartModal
+        canStart={canStartRecording}
+        draft={recordingDraft}
         visible={startModalVisible}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalBackdrop}
-        >
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Start recording</Text>
-              <Text style={styles.modalSubtitle}>
-                Give this route a name and choose the recording mode before the trip starts.
-              </Text>
-
-              <Text style={styles.fieldLabel}>Route name</Text>
-              <TextInput
-                autoCapitalize="sentences"
-                autoCorrect
-                enablesReturnKeyAutomatically
-                enterKeyHint="next"
-                onSubmitEditing={() => recordingDescriptionInputRef.current?.focus()}
-                onChangeText={(title) => setRecordingDraft((current) => ({ ...current, title }))}
-                placeholder="e.g. Drive to Belgrade"
-                placeholderTextColor="#8c9a86"
-                ref={recordingTitleInputRef}
-                returnKeyType="next"
-                style={styles.fieldInput}
-                value={recordingDraft.title}
-              />
-
-              <Text style={styles.fieldLabel}>Description</Text>
-              <TextInput
-                autoCapitalize="sentences"
-                autoCorrect
-                enterKeyHint="done"
-                blurOnSubmit
-                multiline
-                numberOfLines={3}
-                onChangeText={(description) =>
-                  setRecordingDraft((current) => ({ ...current, description }))
-                }
-                onSubmitEditing={() => Keyboard.dismiss()}
-                placeholder="Optional notes. You can also dictate with the keyboard microphone."
-                placeholderTextColor="#8c9a86"
-                ref={recordingDescriptionInputRef}
-                returnKeyType="done"
-                style={[styles.fieldInput, styles.fieldTextarea]}
-                textAlignVertical="top"
-                value={recordingDraft.description}
-              />
-
-              <Text style={styles.fieldLabel}>Recording mode</Text>
-              <View style={styles.profileList}>
-                {RECORDING_PROFILE_OPTIONS.map((option) => {
-                  const selected = option.value === recordingDraft.recordingMode;
-
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() =>
-                        setRecordingDraft((current) => ({
-                          ...current,
-                          recordingMode: option.value,
-                        }))
-                      }
-                      style={[styles.profileOption, selected && styles.profileOptionSelected]}
-                    >
-                      <View style={styles.profileOptionHeader}>
-                        <Text
-                          style={[
-                            styles.profileOptionLabel,
-                            selected && styles.profileOptionLabelSelected,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.profileOptionTag,
-                            selected && styles.profileOptionTagSelected,
-                          ]}
-                        >
-                          {option.description}
-                        </Text>
-                      </View>
-                      <Text
-                        style={[
-                          styles.profileOptionHint,
-                          selected && styles.profileOptionHintSelected,
-                        ]}
-                      >
-                        {option.hint}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <View style={styles.modalActions}>
-                <Pressable
-                  onPress={() => setStartModalVisible(false)}
-                  style={[styles.modalButton, styles.modalButtonSecondary]}
-                >
-                  <Text style={styles.modalButtonSecondaryText}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  disabled={!canStartRecording}
-                  onPress={() => void handleStartRecording()}
-                  style={[
-                    styles.modalButton,
-                    styles.modalButtonPrimary,
-                    !canStartRecording && styles.modalButtonDisabled,
-                  ]}
-                >
-                  <Text style={styles.modalButtonPrimaryText}>Start</Text>
-                </Pressable>
-              </View>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
+        onChangeDraftDescription={(description) => setRecordingDraft((current) => ({ ...current, description }))}
+        onChangeDraftMode={(mode) => setRecordingDraft((current) => ({ ...current, recordingMode: mode }))}
+        onChangeDraftTitle={(title) => setRecordingDraft((current) => ({ ...current, title }))}
+        onClose={() => setStartModalVisible(false)}
+        onStart={() => void handleStartRecording()}
+      />
 
       <View style={styles.mapShell}>
         {mapRegion && currentLocation ? (

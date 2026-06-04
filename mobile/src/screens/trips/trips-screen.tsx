@@ -66,6 +66,9 @@ import {
 import { listTripSummaryStats, type TripSummaryStats } from "../../repositories/trips-repository";
 import { useTripsScreenHydration } from "../../core/hooks/use-trips-screen-hydration";
 import TripEditModal from "./components/trip-edit-modal";
+import TripGroupModal from "./components/trip-group-modal";
+import TripGroupEditModal from "./components/trip-group-edit-modal";
+import { TripCard } from "./components/trip-card";
 
 interface PendingUndoState {
   tripLocalId: string;
@@ -795,171 +798,29 @@ export default function TripsScreen() {
         visible={tripEditVisible}
       />
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setGroupModalVisible(false)}
-        transparent
+      <TripGroupModal
+        draft={groupDraft}
+        existingGroups={visibleTripGroups}
+        selectedExistingGroupId={selectedExistingGroupId}
+        selectedTripCount={selectedGroupTripIds.length}
+        syncingGroups={syncingGroups}
         visible={groupModalVisible}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
-          style={styles.groupModalKeyboard}
-        >
-          <View style={styles.groupModalBackdrop}>
-            <ScrollView
-              contentContainerStyle={styles.groupModalScrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.groupModalCard}>
-                <Text style={styles.groupModalTitle}>Add to group</Text>
-                <Text style={styles.groupModalDescription}>
-                  {selectedGroupTripIds.length} selected trip{selectedGroupTripIds.length === 1 ? "" : "s"}
-                </Text>
+        onChangeDraftDescription={(description) => setGroupDraft((current) => ({ ...current, description }))}
+        onChangeDraftTitle={(title) => setGroupDraft((current) => ({ ...current, title }))}
+        onClose={() => setGroupModalVisible(false)}
+        onSave={() => void handleSaveGroupSelection()}
+        onSelectExistingGroup={setSelectedExistingGroupId}
+      />
 
-                {visibleTripGroups.length > 0 ? (
-                  <View style={styles.existingGroupsBlock}>
-                    <Text style={styles.groupModalLabel}>Existing groups</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <View style={styles.existingGroupsRow}>
-                        {visibleTripGroups.map((group) => {
-                          const selected = selectedExistingGroupId === group.localId;
-
-                          return (
-                            <Pressable
-                              key={group.localId}
-                              onPress={() => setSelectedExistingGroupId(selected ? null : group.localId)}
-                              style={[
-                                styles.existingGroupChip,
-                                selected && styles.existingGroupChipSelected,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.existingGroupChipText,
-                                  selected && styles.existingGroupChipTextSelected,
-                                ]}
-                              >
-                                {group.title}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </ScrollView>
-                  </View>
-                ) : null}
-
-                <View style={styles.newGroupBlock}>
-                  <Text style={styles.groupModalLabel}>New group</Text>
-                  <TextInput
-                    editable={!selectedExistingGroupId}
-                    onChangeText={(title) => setGroupDraft((current) => ({ ...current, title }))}
-                    placeholder="Title"
-                    placeholderTextColor="#8a9784"
-                    style={[styles.groupInput, selectedExistingGroupId && styles.groupInputDisabled]}
-                    value={groupDraft.title}
-                  />
-                  <TextInput
-                    editable={!selectedExistingGroupId}
-                    multiline
-                    onChangeText={(description) =>
-                      setGroupDraft((current) => ({ ...current, description }))
-                    }
-                    placeholder="Description"
-                    placeholderTextColor="#8a9784"
-                    style={[
-                      styles.groupInput,
-                      styles.groupDescriptionInput,
-                      selectedExistingGroupId && styles.groupInputDisabled,
-                    ]}
-                    value={groupDraft.description}
-                  />
-                </View>
-
-                <View style={styles.groupModalActions}>
-                  <Pressable
-                    onPress={() => setGroupModalVisible(false)}
-                    style={styles.groupModalSecondaryButton}
-                  >
-                    <Text style={styles.groupModalSecondaryText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={syncingGroups}
-                    onPress={() => void handleSaveGroupSelection()}
-                    style={[styles.groupModalPrimaryButton, syncingGroups && styles.groupModalButtonDisabled]}
-                  >
-                    <Text style={styles.groupModalPrimaryText}>{syncingGroups ? "Saving..." : "Save"}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setGroupEditModalVisible(false)}
-        transparent
+      <TripGroupEditModal
+        draft={groupEditDraft}
+        syncingGroups={syncingGroups}
         visible={groupEditModalVisible}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
-          style={styles.groupModalKeyboard}
-        >
-          <View style={styles.groupModalBackdrop}>
-            <ScrollView
-              contentContainerStyle={styles.groupModalScrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.groupModalCard}>
-                <Text style={styles.groupModalTitle}>Edit group</Text>
-                <View style={styles.newGroupBlock}>
-                  <Text style={styles.groupModalLabel}>Group details</Text>
-                  <TextInput
-                    onChangeText={(title) => setGroupEditDraft((current) => ({ ...current, title }))}
-                    placeholder="Title"
-                    placeholderTextColor="#8a9784"
-                    style={styles.groupInput}
-                    value={groupEditDraft.title}
-                  />
-                  <TextInput
-                    multiline
-                    onChangeText={(description) =>
-                      setGroupEditDraft((current) => ({ ...current, description }))
-                    }
-                    placeholder="Description"
-                    placeholderTextColor="#8a9784"
-                    style={[styles.groupInput, styles.groupDescriptionInput]}
-                    value={groupEditDraft.description}
-                  />
-                </View>
-                <View style={styles.groupModalActions}>
-                  <Pressable
-                    onPress={() => setGroupEditModalVisible(false)}
-                    style={styles.groupModalSecondaryButton}
-                  >
-                    <Text style={styles.groupModalSecondaryText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={syncingGroups || groupEditDraft.title.trim().length === 0}
-                    onPress={() => void handleSaveGroupEdit()}
-                    style={[
-                      styles.groupModalPrimaryButton,
-                      (syncingGroups || groupEditDraft.title.trim().length === 0) &&
-                        styles.groupModalButtonDisabled,
-                    ]}
-                  >
-                    <Text style={styles.groupModalPrimaryText}>{syncingGroups ? "Saving..." : "Save"}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        onChangeDraftDescription={(description) => setGroupEditDraft((current) => ({ ...current, description }))}
+        onChangeDraftTitle={(title) => setGroupEditDraft((current) => ({ ...current, title }))}
+        onClose={() => setGroupEditModalVisible(false)}
+        onSave={() => void handleSaveGroupEdit()}
+      />
 
       <View style={styles.tripsRoot}>
         <Text style={styles.subtitle}>Your local recorded routes and saved trip content.</Text>
@@ -1110,171 +971,30 @@ export default function TripsScreen() {
                 <Text style={styles.empty}>No trips match the selected date filter.</Text>
               ) : (
                 <View style={styles.list}>
-                  {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => {
-                    const statusLabel =
-                      trip.status === "active" ? "Active" : trip.status === "paused" ? "Paused" : trip.syncStatus;
-                    const showStatusBadge =
-                      trip.status !== "ended" || identitySession.mode === "authenticated";
-                    const isSyncBadge = trip.status === "ended" && identitySession.mode === "authenticated";
-                    const isTripSyncing = syncingTripId === trip.localId;
-                    const tripModeSummary = buildTripModeSummary(currentUserTripSegments, trip.localId);
-                    const tripSegmentsForCard = getVisibleTripSegmentsForTrip(currentUserTripSegments, trip.localId);
-                    const isTripSelected = selectedGroupTripIds.includes(trip.localId);
-                    const tripDurationMs = Math.max(
-                      0,
-                      new Date(trip.endedAt ?? new Date().toISOString()).getTime() -
-                        new Date(trip.startedAt).getTime(),
-                    );
-                    const tripDistanceLoading = !tripStatsByTripId.has(trip.localId);
-
-                    return (
-                      <Swipeable
-                        key={trip.localId}
-                        enabled={!isTripSelectionMode}
-                        friction={2}
-                        onSwipeableCloseStartDrag={suppressTapAfterSwipe}
-                        onSwipeableOpenStartDrag={suppressTapAfterSwipe}
-                        onSwipeableWillClose={suppressTapAfterSwipe}
-                        onSwipeableWillOpen={suppressTapAfterSwipe}
-                        overshootRight={false}
-                        renderRightActions={() => (
-                          <View style={styles.swipeActions}>
-                            <Pressable
-                              onPress={() => router.push(`/trips/${trip.localId}`)}
-                              style={[styles.swipeAction, styles.openSwipeAction]}
-                            >
-                              <Text style={styles.swipeActionText}>Open</Text>
-                            </Pressable>
-                            {trip.status !== "ended" ? (
-                              <Pressable
-                                onPress={() => void handleResumeTrip(trip)}
-                                style={[styles.swipeAction, styles.resumeSwipeAction]}
-                              >
-                                <Text style={[styles.swipeActionText, styles.resumeSwipeActionText]}>
-                                  Resume
-                                </Text>
-                              </Pressable>
-                            ) : (
-                              <Pressable
-                                onPress={() => void handleDeleteTrip(trip)}
-                                style={[styles.swipeAction, styles.deleteSwipeAction]}
-                              >
-                                <Text style={[styles.swipeActionText, styles.deleteSwipeActionText]}>
-                                  Delete
-                                </Text>
-                              </Pressable>
-                            )}
-                          </View>
-                        )}
-                      >
-                        <View style={styles.tripCardRow}>
-                          <View style={[styles.tripCard, isTripSelected && styles.tripCardSelected]}>
-                            <Pressable
-                              onLongPress={() => handleEnterTripSelection(trip.localId)}
-                              onPress={() => handleTripCardPress(trip.localId)}
-                              style={styles.tripBodyPressable}
-                            >
-                              <View style={styles.tripHeader}>
-                                <View style={styles.tripHeaderText}>
-                                  <Text style={styles.tripTitle}>{trip.title}</Text>
-                                  {trip.description ? (
-                                    <Text style={styles.tripDescription}>{trip.description}</Text>
-                                  ) : null}
-                                </View>
-                                {showStatusBadge ? (
-                                  isSyncBadge ? (
-                                    <Pressable
-                                      accessibilityLabel={isTripSyncing ? "Syncing trip" : "Sync trip"}
-                                      disabled={isTripSyncing || syncingTripId !== null}
-                                      onPress={(event) => {
-                                        event.stopPropagation();
-                                        void handleSyncTrip(trip);
-                                      }}
-                                      style={[
-                                        styles.tripBadge,
-                                        styles.tripBadgePressable,
-                                        isTripSyncing && styles.tripBadgeDisabled,
-                                      ]}
-                                    >
-                                      {isTripSyncing ? <ActivityIndicator color="#355035" size="small" /> : null}
-                                      <Text style={styles.tripBadgeText}>{isTripSyncing ? "syncing" : statusLabel}</Text>
-                                    </Pressable>
-                                  ) : (
-                                    <View style={styles.tripBadge}>
-                                      <Text style={styles.tripBadgeText}>{statusLabel}</Text>
-                                    </View>
-                                  )
-                                ) : null}
-                                {isTripSelectionMode ? (
-                                  <View
-                                    style={[
-                                      styles.selectionCheck,
-                                      isTripSelected && styles.selectionCheckSelected,
-                                    ]}
-                                  >
-                                    {isTripSelected ? (
-                                      <MaterialIcons color="#fffdf8" name="check" size={16} />
-                                    ) : null}
-                                  </View>
-                                ) : null}
-                              </View>
-
-                              <View style={styles.metaGrid}>
-                                <View style={styles.metaCell}>
-                                  <Text style={styles.metaKey}>Mode</Text>
-                                  <Text style={styles.metaValue}>{tripModeSummary}</Text>
-                                </View>
-                                <View style={styles.metaCell}>
-                                  <Text style={styles.metaKey}>Distance</Text>
-                                  {tripDistanceLoading ? (
-                                    <View style={styles.metaValueSkeleton} />
-                                  ) : (
-                                    <Text style={styles.metaValue}>
-                                      {distanceMeters === null ? "" : formatDistanceKm(distanceMeters)}
-                                    </Text>
-                                  )}
-                                </View>
-                                <View style={styles.metaCell}>
-                                  <Text style={styles.metaKey}>Waypoints</Text>
-                                  <Text style={styles.metaValue}>{String(waypointCount)}</Text>
-                                </View>
-                                <View style={styles.metaCell}>
-                                  <Text style={styles.metaKey}>Photos</Text>
-                                  <Text style={styles.metaValue}>{String(photoCount)}</Text>
-                                </View>
-                                <View style={styles.metaCell}>
-                                  <Text style={styles.metaKey}>Segments</Text>
-                                  <Text style={styles.metaValue}>{String(tripSegmentsForCard.length)}</Text>
-                                </View>
-                                <View style={styles.metaCell}>
-                                  <Text style={styles.metaKey}>Duration</Text>
-                                  <Text style={styles.metaValue}>
-                                    {formatDurationSummary(tripDurationMs)}
-                                  </Text>
-                                </View>
-                                <View style={styles.metaCell}>
-                                  <Text style={styles.metaKey}>Started</Text>
-                                  <Text style={styles.metaValue}>
-                                    {new Date(trip.startedAt).toLocaleDateString()}
-                                  </Text>
-                                </View>
-                                <View style={styles.metaCell}>
-                                  <Text style={styles.metaKey}>Ended</Text>
-                                  <Text style={styles.metaValue}>
-                                    {trip.endedAt
-                                      ? new Date(trip.endedAt).toLocaleDateString()
-                                      : trip.status === "paused"
-                                        ? "Paused"
-                                        : "Active"}
-                                  </Text>
-                                </View>
-                              </View>
-                            </Pressable>
-                          </View>
-                        </View>
-                      </Swipeable>
-                    );
-                  })}
+                  {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => (
+                    <TripCard
+                      key={trip.localId}
+                      anySyncing={syncingTripId !== null}
+                      distanceLoading={!tripStatsByTripId.has(trip.localId)}
+                      distanceMeters={distanceMeters}
+                      isSyncing={syncingTripId === trip.localId}
+                      isTripSelected={selectedGroupTripIds.includes(trip.localId)}
+                      isTripSelectionMode={isTripSelectionMode}
+                      photoCount={photoCount}
+                      sessionMode={identitySession.mode}
+                      trip={trip}
+                      tripModeSummary={buildTripModeSummary(currentUserTripSegments, trip.localId)}
+                      tripSegmentsCount={getVisibleTripSegmentsForTrip(currentUserTripSegments, trip.localId).length}
+                      waypointCount={waypointCount}
+                      onDelete={() => void handleDeleteTrip(trip)}
+                      onLongPress={() => handleEnterTripSelection(trip.localId)}
+                      onOpen={() => router.push(`/trips/${trip.localId}`)}
+                      onPress={() => handleTripCardPress(trip.localId)}
+                      onResume={() => void handleResumeTrip(trip)}
+                      onSwipeGesture={suppressTapAfterSwipe}
+                      onSync={() => void handleSyncTrip(trip)}
+                    />
+                  ))}
                 </View>
               )}
             </ScrollView>
