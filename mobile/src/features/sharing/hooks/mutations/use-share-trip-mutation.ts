@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { shareTripWithRecipient } from "../../services/trips/server-trip-sharing.service";
-import { useSessionStore } from "../../state/session-store";
+import { shareTripWithRecipient } from "../../../../services/trips/server-trip-sharing.service";
+import { useSessionStore } from "../../../../state/session-store";
 import { tripSharesQueryKey } from "../queries/use-trip-shares";
 
 export function useShareTripMutation(tripId: string | null | undefined) {

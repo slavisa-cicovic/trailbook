@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { listShareRecipients, listTripShares } from "../../services/trips/server-trip-sharing.service";
-import { useSessionStore } from "../../state/session-store";
+import { listShareRecipients, listTripShares } from "../../../../services/trips/server-trip-sharing.service";
+import { useSessionStore } from "../../../../state/session-store";
 
 export function tripSharesQueryKey(tripId: string, userId: string) {
   return ["trip-shares", tripId, userId] as const;

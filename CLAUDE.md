@@ -93,6 +93,8 @@ Rules:
 - Keep raw location events separate from derived trip points.
 - Keep derived stats on `trips` and `trip_segments`, not separate stats tables, unless a future versioning requirement appears.
 - Reprocessing should start from raw events and produce deterministic derived points/segments.
+- Keep app-level hooks in `mobile/src/core/hooks`.
+- Keep feature-specific query/mutation hooks under `mobile/src/features/<feature>/hooks`, for example sharing hooks in `mobile/src/features/sharing/hooks`.
 
 ## Recording Rules
 

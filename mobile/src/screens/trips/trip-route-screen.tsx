@@ -57,8 +57,8 @@ import { useWaypointAttachmentsStore } from "../../state/waypoint-attachments-st
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { enqueueAndDrainTripSync } from "../../services/sync/sync-actions.service";
-import { useTripShares, useShareRecipients } from "../../hooks/queries/use-trip-shares";
-import { useShareTripMutation } from "../../hooks/mutations/use-share-trip-mutation";
+import { useShareTripMutation } from "../../features/sharing/hooks/mutations/use-share-trip-mutation";
+import { useTripShares, useShareRecipients } from "../../features/sharing/hooks/queries/use-trip-shares";
 import TripEditModal from "./components/trip-edit-modal";
 import TripShareModal from "./components/trip-share-modal";
 import SegmentEditModal from "./components/segment-edit-modal";

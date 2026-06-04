@@ -58,7 +58,7 @@ import { setWaypointAttachments, useWaypointAttachmentsStore } from "../../state
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
-import { useSharedTripsList } from "../../hooks/queries/use-shared-trips-list";
+import { useSharedTripsList } from "../../features/sharing/hooks/queries/use-shared-trips-list";
 import {
   enqueueAndDrainTripGroupsSync,
   enqueueAndDrainTripSync,

@@ -8,7 +8,7 @@ import { getRecordingProfileColor, getRecordingProfileLabel } from "../../consta
 import type { Waypoint } from "../../domain/trips";
 import { formatDistanceKm } from "../../services/trip-points/trip-points.service";
 import { useSessionStore } from "../../state/session-store";
-import { useSharedTrip } from "../../hooks/queries/use-shared-trip";
+import { useSharedTrip } from "../../features/sharing/hooks/queries/use-shared-trip";
 import TripRouteMap, { type TrailbookMapType } from "./components/trip-route-map";
 
 const mapTypeOptions: { label: string; value: TrailbookMapType }[] = [

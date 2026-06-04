@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import type { WaypointAttachment } from "../../domain/trips";
 import { buildTripAttachmentContentUrl } from "../../services/trips/server-trip-sharing.service";
 import { useSessionStore } from "../../state/session-store";
-import { useSharedTrip } from "../../hooks/queries/use-shared-trip";
+import { useSharedTrip } from "../../features/sharing/hooks/queries/use-shared-trip";
 import WaypointPhotoViewerScreen from "./components/waypoint-photo-viewer-screen";
 
 export default function SharedTripWaypointPhotoScreen() {

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { getSharedTrip } from "../../services/trips/server-trip-sharing.service";
-import { useSessionStore } from "../../state/session-store";
+import { getSharedTrip } from "../../../../services/trips/server-trip-sharing.service";
+import { useSessionStore } from "../../../../state/session-store";
 
 export function sharedTripQueryKey(shareId: string, userId: string) {
   return ["shared-trip", shareId, userId] as const;
