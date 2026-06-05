@@ -1,7 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import * as FileSystem from "expo-file-system/legacy";
 
-const DATABASE_NAME = "trailbook.db";
+export const DATABASE_NAME = "trailbook.db";
 const DATABASE_VERSION = 14;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
