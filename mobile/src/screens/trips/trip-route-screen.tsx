@@ -213,26 +213,33 @@ export default function TripRouteScreen() {
   const shareMutation = useShareTripMutation(resolvedShareTripId);
 
   const resolvedTripId = Array.isArray(tripId) ? tripId[0] : tripId;
-  const currentUserTrips = identitySession
-    ? trips.filter((trip) => trip.userId === identitySession.userId)
-    : [];
-  const currentUserTripSegments = identitySession
-    ? tripSegments.filter((segment) => segment.userId === identitySession.userId)
-    : [];
-  const currentUserTripPauses = identitySession
-    ? tripPauses.filter((tripPause) => tripPause.userId === identitySession.userId)
-    : [];
-  const currentUserWaypoints = identitySession
-    ? waypoints.filter((waypoint) => waypoint.userId === identitySession.userId)
-    : [];
-  const currentUserWaypointAttachments = identitySession
-    ? waypointAttachments.filter((attachment) => attachment.userId === identitySession.userId)
-    : [];
+  const currentUserTrips = useMemo(
+    () => (currentUserId ? trips.filter((trip) => trip.userId === currentUserId) : []),
+    [currentUserId, trips],
+  );
+  const currentUserTripSegments = useMemo(
+    () => (currentUserId ? tripSegments.filter((segment) => segment.userId === currentUserId) : []),
+    [currentUserId, tripSegments],
+  );
+  const currentUserTripPauses = useMemo(
+    () => (currentUserId ? tripPauses.filter((tripPause) => tripPause.userId === currentUserId) : []),
+    [currentUserId, tripPauses],
+  );
+  const currentUserWaypoints = useMemo(
+    () => (currentUserId ? waypoints.filter((waypoint) => waypoint.userId === currentUserId) : []),
+    [currentUserId, waypoints],
+  );
+  const currentUserWaypointAttachments = useMemo(
+    () => (currentUserId ? waypointAttachments.filter((attachment) => attachment.userId === currentUserId) : []),
+    [currentUserId, waypointAttachments],
+  );
 
   const visibleTrips = getVisibleTrips(currentUserTrips);
   const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
+  const selectedTripLocalId = selectedTrip?.localId ?? null;
+  const selectedTripEndedAt = selectedTrip?.endedAt ?? null;
   const loadedSelectedTripPoints =
-    selectedTrip && selectedTripPointsTripId === selectedTrip.localId ? selectedTripPoints : [];
+    selectedTripLocalId && selectedTripPointsTripId === selectedTripLocalId ? selectedTripPoints : [];
   const routeLoading = Boolean(selectedTrip && (routePointsLoading || selectedTripPointsTripId !== selectedTrip.localId));
   const displayTripSegments = getDisplayTripSegments(currentUserTripSegments, selectedTrip);
   const selectedTripSegments = selectedTrip
@@ -249,10 +256,10 @@ export default function TripRouteScreen() {
   const selectedTripTimeline: TripTimelineEntry[] = selectedTrip
     ? buildTripTimelineEntries(selectedTripSegments, selectedTripPauses, new Date().toISOString())
     : [];
-  const selectedTripWaypoints = selectedTrip
-    ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTrip.localId)
+  const selectedTripWaypoints = selectedTripLocalId
+    ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTripLocalId)
     : [];
-  const selectedTripAttachments = selectedTrip
+  const selectedTripAttachments = selectedTripLocalId
     ? getVisibleAttachmentsForWaypoints(
         currentUserWaypointAttachments,
         selectedTripWaypoints.map((waypoint) => waypoint.localId),
@@ -273,24 +280,19 @@ export default function TripRouteScreen() {
     routeCoordinates.length > 0 ? routeCoordinates : fallbackCoordinates,
   );
 
-  const waypointMarkers = useMemo(
-    () => {
-      const firstPhotoUriByWaypointId = new Map<string, string>();
+  const firstPhotoUriByWaypointId = new Map<string, string>();
 
-      for (const attachment of selectedTripAttachments) {
-        if (!firstPhotoUriByWaypointId.has(attachment.waypointLocalId)) {
-          firstPhotoUriByWaypointId.set(attachment.waypointLocalId, attachment.localUri);
-        }
-      }
+  for (const attachment of selectedTripAttachments) {
+    if (!firstPhotoUriByWaypointId.has(attachment.waypointLocalId)) {
+      firstPhotoUriByWaypointId.set(attachment.waypointLocalId, attachment.localUri);
+    }
+  }
 
-      return selectedTripWaypoints.map((waypoint) => ({
-        firstPhotoUri: firstPhotoUriByWaypointId.get(waypoint.localId) ?? null,
-        waypoint,
-        hasPhotos: firstPhotoUriByWaypointId.has(waypoint.localId),
-      }));
-    },
-    [selectedTripAttachments, selectedTripWaypoints],
-  );
+  const waypointMarkers = selectedTripWaypoints.map((waypoint) => ({
+    firstPhotoUri: firstPhotoUriByWaypointId.get(waypoint.localId) ?? null,
+    waypoint,
+    hasPhotos: firstPhotoUriByWaypointId.has(waypoint.localId),
+  }));
 
   useEffect(() => {
     if (!syncBusy) {
@@ -333,7 +335,7 @@ export default function TripRouteScreen() {
     let cancelled = false;
 
     async function loadSelectedTripPoints() {
-      if (!selectedTrip) {
+      if (!selectedTripLocalId) {
         setSelectedTripPoints([]);
         setSelectedTripPointsTripId(null);
         setRoutePointsLoading(false);
@@ -345,11 +347,11 @@ export default function TripRouteScreen() {
       setRoutePointsLoading(true);
 
       try {
-        const tripPoints = await loadTripPointsForTrip(selectedTrip.localId);
+        const tripPoints = await loadTripPointsForTrip(selectedTripLocalId);
 
         if (!cancelled) {
           setSelectedTripPoints(tripPoints);
-          setSelectedTripPointsTripId(selectedTrip.localId);
+          setSelectedTripPointsTripId(selectedTripLocalId);
         }
       } finally {
         if (!cancelled) {
@@ -363,25 +365,28 @@ export default function TripRouteScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedTrip?.localId]);
+  }, [selectedTripLocalId]);
 
   useEffect(() => {
     if (
-      !selectedTrip?.endedAt ||
+      !selectedTripLocalId ||
+      !selectedTripEndedAt ||
       routePointsLoading ||
-      selectedTripPointsTripId !== selectedTrip.localId ||
+      selectedTripPointsTripId !== selectedTripLocalId ||
       currentUserTripSegments.every(
-        (segment) => segment.tripLocalId !== selectedTrip.localId || segment.endedAt !== null,
+        (segment) => segment.tripLocalId !== selectedTripLocalId || segment.endedAt !== null,
       )
     ) {
       return;
     }
 
+    const tripPointsForFinalization =
+      selectedTripPointsTripId === selectedTripLocalId ? selectedTripPoints : [];
     const finalizedTripSegments = finalizeEndedTripSegments(
       tripSegments,
-      loadedSelectedTripPoints,
-      selectedTrip.localId,
-      selectedTrip.endedAt,
+      tripPointsForFinalization,
+      selectedTripLocalId,
+      selectedTripEndedAt,
     );
     const changed =
       finalizedTripSegments.length !== tripSegments.length ||
@@ -395,10 +400,10 @@ export default function TripRouteScreen() {
     }
   }, [
     currentUserTripSegments,
-    loadedSelectedTripPoints,
     routePointsLoading,
-    selectedTrip?.endedAt,
-    selectedTrip?.localId,
+    selectedTripEndedAt,
+    selectedTripLocalId,
+    selectedTripPoints,
     selectedTripPointsTripId,
     tripSegments,
   ]);
@@ -407,12 +412,12 @@ export default function TripRouteScreen() {
     let cancelled = false;
 
     async function loadSegmentStats() {
-      if (!selectedTrip) {
+      if (!selectedTripLocalId) {
         setTripSegmentStatsBySegmentId(new Map());
         return;
       }
 
-      const nextStats = await loadTripSegmentStatsByTripLocalIds([selectedTrip.localId]);
+      const nextStats = await loadTripSegmentStatsByTripLocalIds([selectedTripLocalId]);
 
       if (!cancelled) {
         setTripSegmentStatsBySegmentId(nextStats);
@@ -424,7 +429,7 @@ export default function TripRouteScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedTrip?.localId]);
+  }, [selectedTripLocalId]);
 
   async function syncSelectedTripIfNeeded() {
     if (!identitySession?.sessionToken || !selectedTrip) {
