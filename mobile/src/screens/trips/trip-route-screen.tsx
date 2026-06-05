@@ -6,7 +6,6 @@ import {
   Alert,
   Animated,
   Easing,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -71,7 +70,7 @@ const mapTypeOptions: { label: string; value: TrailbookMapType }[] = [
   { label: "Hybrid", value: "hybrid" },
 ];
 
-const editableModeOptions = ["walk", "bike", "drive", "boat", "plane"] as const;
+type EditableMode = "bike" | "boat" | "drive" | "plane" | "walk";
 
 function buildTripMapRegion(
   coordinates: { latitude: number; longitude: number }[],
@@ -535,7 +534,7 @@ export default function TripRouteScreen() {
     }
   }
 
-  async function handleUpdateSegmentMode(nextMode: (typeof editableModeOptions)[number]) {
+  async function handleUpdateSegmentMode(nextMode: EditableMode) {
     if (!selectedTrip || !segmentEditSegmentId) {
       return;
     }

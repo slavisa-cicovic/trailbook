@@ -67,7 +67,7 @@ export function generateScenarioLocations(
   segments: ScenarioSegment[],
   startLat = 43.8563,
   startLon = 18.4131,
-  strategy: ScenarioTimestampStrategy = "sleep",
+  _strategy: ScenarioTimestampStrategy = "sleep",
 ): LocationObject[] {
   const totalMs = segments.reduce((sum, s) => sum + s.durationMs, 0);
   const startTs = Date.now() - totalMs - 15_000;

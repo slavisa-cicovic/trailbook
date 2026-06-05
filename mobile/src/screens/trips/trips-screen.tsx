@@ -2,22 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import {
-  ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
-import { Swipeable } from "react-native-gesture-handler";
 
 import ScreenLayout from "../../components/layout/screen-layout";
-import type { SharedTripSummary } from "../../domain/shared-trips";
 import type { Trip, TripGroup, TripGroupMember } from "../../domain/trips";
 import {
   buildTripModeSummary,
@@ -33,8 +26,6 @@ import {
   markTripDeleted,
   restoreTripDeletedState,
   type TripDateFilter,
-  updateTripMetadata,
-  type TripUpdateInput,
 } from "../../services/trips/trips-management.service";
 import {
   buildTripGroupMembersForTrips,
@@ -65,7 +56,6 @@ import {
 } from "../../services/sync/sync-actions.service";
 import { listTripSummaryStats, type TripSummaryStats } from "../../repositories/trips-repository";
 import { useTripsScreenHydration } from "../../core/hooks/use-trips-screen-hydration";
-import TripEditModal from "./components/trip-edit-modal";
 import TripGroupModal from "./components/trip-group-modal";
 import TripGroupEditModal from "./components/trip-group-edit-modal";
 import { TripCard } from "./components/trip-card";
@@ -106,8 +96,6 @@ export default function TripsScreen() {
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
   const [pendingUndo, setPendingUndo] = useState<PendingUndoState | null>(null);
-  const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
-  const [tripEditVisible, setTripEditVisible] = useState(false);
   const [dateFilter, setDateFilter] = useState<TripDateFilter>("all");
   const [listMode, setListMode] = useState<TripListMode>("owned");
   const [summaryExpanded, setSummaryExpanded] = useState(false);
@@ -134,10 +122,6 @@ export default function TripsScreen() {
     description: "",
   });
   const [groupEditDraft, setGroupEditDraft] = useState<GroupDraft>({
-    title: "",
-    description: "",
-  });
-  const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
     description: "",
   });
@@ -257,8 +241,6 @@ export default function TripsScreen() {
       tripCount: tripsAggregateSummary.planeTripCount,
     },
   ].filter((row) => row.distanceMeters > 0 || row.durationMs > 0);
-  const selectedTrip = visibleTrips.find((trip) => trip.localId === selectedTripId) ?? null;
-
   useEffect(() => {
     if (!pendingUndo) {
       return;
@@ -427,8 +409,6 @@ export default function TripsScreen() {
   }
 
   function handleEnterTripSelection(tripLocalId: string) {
-    setSelectedTripId(null);
-    setTripEditVisible(false);
     setSelectedGroupTripIds([tripLocalId]);
   }
 
@@ -638,10 +618,6 @@ export default function TripsScreen() {
       tripLocalId: trip.localId,
       tripTitle: trip.title,
     });
-    if (selectedTripId === trip.localId) {
-      setSelectedTripId(null);
-      setTripEditVisible(false);
-    }
   }
 
   async function handleUndoDelete() {
@@ -672,32 +648,6 @@ export default function TripsScreen() {
     }
 
     setPendingUndo(null);
-  }
-
-  function openTripEdit(trip: Trip) {
-    setSelectedTripId(trip.localId);
-    setTripDraft({
-      title: trip.title,
-      description: trip.description ?? "",
-    });
-    setTripEditVisible(true);
-  }
-
-  async function handleSaveTripEdit() {
-    if (!selectedTrip || tripDraft.title.trim().length === 0) {
-      return;
-    }
-
-    await setTrips(updateTripMetadata(trips, selectedTrip.localId, tripDraft, new Date().toISOString()));
-    setTripEditVisible(false);
-
-    if (selectedTrip.status === "ended") {
-      try {
-        await syncTripMutationViaOutbox(selectedTrip.localId);
-      } catch (error) {
-        Alert.alert("Edit sync failed", error instanceof Error ? error.message : "Trip edit could not be synced.");
-      }
-    }
   }
 
   async function handleResumeTrip(trip: Trip) {
@@ -789,15 +739,6 @@ export default function TripsScreen() {
       showBottomNavigation
       title="Trips"
     >
-      <TripEditModal
-        draft={tripDraft}
-        onChangeDescription={(description) => setTripDraft((current) => ({ ...current, description }))}
-        onChangeTitle={(title) => setTripDraft((current) => ({ ...current, title }))}
-        onClose={() => setTripEditVisible(false)}
-        onSave={() => void handleSaveTripEdit()}
-        visible={tripEditVisible}
-      />
-
       <TripGroupModal
         draft={groupDraft}
         existingGroups={visibleTripGroups}

@@ -1,4 +1,3 @@
-import type { SharedTripDetail, SharedTripSummary } from "../../domain/shared-trips";
 import type { OwnedServerTripDetail, OwnedServerTripSummary } from "../../domain/server-trips";
 import type { TripDiagnostics } from "../../domain/trip-diagnostics";
 import type {

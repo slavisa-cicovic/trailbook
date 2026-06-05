@@ -140,8 +140,6 @@ export async function loadTripPauses(): Promise<TripPause[]> {
 export async function saveTripPauses(tripPauses: TripPause[]): Promise<void> {
   await ensureTripPausesMigrated();
 
-  const database = await getDatabase();
-
   await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM trip_pauses");
 

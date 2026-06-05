@@ -5,7 +5,6 @@ import type { AuthenticatedUserSummary, AuthProvider } from "../../domain/identi
 import { API_ROUTES } from "../../constants/api-routes";
 import { getApiBaseUrl, requestFromBackend } from "../api/mobile-api.service";
 import {
-  AuthenticatedUserSummarySchema,
   GetCurrentUserResponseSchema,
   MobileAuthResultSchema,
 } from "../api/schemas/auth.schemas";

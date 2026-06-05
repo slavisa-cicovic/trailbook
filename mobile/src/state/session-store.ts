@@ -2,7 +2,6 @@ import { create } from "zustand";
 
 import {
   type AuthenticatedUserSummary,
-  DEMO_CREDENTIALS,
   type AuthenticatedDeviceSession,
   type TemporaryUserCredentials,
 } from "../domain/identity";

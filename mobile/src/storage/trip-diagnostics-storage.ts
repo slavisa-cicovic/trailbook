@@ -304,8 +304,6 @@ export async function loadTripDiagnostics(): Promise<TripDiagnostics[]> {
 export async function saveTripDiagnostics(tripDiagnostics: TripDiagnostics[]): Promise<void> {
   await ensureTripDiagnosticsMigrated();
 
-  const database = await getDatabase();
-
   await runExclusiveDatabaseWrite(async (database) => {
     await database.runAsync("DELETE FROM trip_diagnostics");
 

@@ -1,6 +1,6 @@
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { RecordingProfile, TripSegment } from "../../../domain/trips";
+import type { TripSegment } from "../../../domain/trips";
 import { getRecordingProfileLabel } from "../../../constants/recording-profiles";
 import Card from "../../../components/ui/card";
 
