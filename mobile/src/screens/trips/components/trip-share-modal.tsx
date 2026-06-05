@@ -1,16 +1,13 @@
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
-  ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+
+import BottomSheetModal from "../../../components/ui/bottom-sheet-modal";
+import ModalActions from "../../../components/ui/modal-actions";
 
 interface TripShareModalProps {
   busy?: boolean;
@@ -61,134 +58,70 @@ export default function TripShareModal({
       : [];
 
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
-      <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.modalScreen}>
-        <StatusBar barStyle="dark-content" />
-        <Pressable onPress={onClose} style={styles.modalBackdrop} />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.modalKeyboardAvoidingView}
-        >
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
-              <Text style={styles.modalTitle}>Share trip</Text>
-              <Text style={styles.modalSubtitle}>
-                Share this trip with one or more existing Trailbook accounts.
-              </Text>
-
-              {existingShares.filter((share) => share.status === "active" && share.revokedAt === null).length > 0 ? (
-                <View style={styles.shareList}>
-                  <Text style={styles.shareListTitle}>Already shared with</Text>
-                  {existingShares
-                    .filter((share) => share.status === "active" && share.revokedAt === null)
-                    .map((share) => (
-                      <View key={share.id} style={styles.shareListItem}>
-                        <Text style={styles.shareRecipientName}>{share.recipient.displayName}</Text>
-                        <Text style={styles.shareRecipientEmail}>{share.recipient.email}</Text>
-                      </View>
-                    ))}
-                </View>
-              ) : null}
-
-              <Text style={styles.fieldLabel}>Recipient email</Text>
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                onChangeText={onChangeRecipientEmail}
-                placeholder="friend@example.com"
-                placeholderTextColor="#8c9a86"
-                style={styles.fieldInput}
-                value={recipientEmail}
-              />
-
-              {filteredSuggestions.length > 0 ? (
-                <View style={styles.suggestionList}>
-                  {filteredSuggestions.map((recipient) => (
-                    <Pressable
-                      key={recipient.id}
-                      onPress={() => onChangeRecipientEmail(recipient.email)}
-                      style={styles.suggestionItem}
-                    >
-                      <Text style={styles.suggestionName}>{recipient.displayName}</Text>
-                      <Text style={styles.suggestionEmail}>{recipient.email}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              ) : null}
-
-              {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-              {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
-
-              <View style={styles.modalActions}>
-                <Pressable onPress={onClose} style={styles.secondaryButton}>
-                  <Text style={styles.secondaryButtonText}>Close</Text>
-                </Pressable>
-                <Pressable
-                  disabled={!canShare}
-                  onPress={onShare}
-                  style={[styles.primaryButton, !canShare && styles.disabledButton]}
-                >
-                  <Text style={styles.primaryButtonText}>{busy ? "Sharing..." : "Share"}</Text>
-                </Pressable>
+    <BottomSheetModal
+      onClose={onClose}
+      subtitle="Share this trip with one or more existing Trailbook accounts."
+      title="Share trip"
+      visible={visible}
+    >
+      {existingShares.filter((share) => share.status === "active" && share.revokedAt === null).length > 0 ? (
+        <View style={styles.shareList}>
+          <Text style={styles.shareListTitle}>Already shared with</Text>
+          {existingShares
+            .filter((share) => share.status === "active" && share.revokedAt === null)
+            .map((share) => (
+              <View key={share.id} style={styles.shareListItem}>
+                <Text style={styles.shareRecipientName}>{share.recipient.displayName}</Text>
+                <Text style={styles.shareRecipientEmail}>{share.recipient.email}</Text>
               </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </Modal>
+            ))}
+        </View>
+      ) : null}
+
+      <Text style={styles.fieldLabel}>Recipient email</Text>
+      <TextInput
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        onChangeText={onChangeRecipientEmail}
+        placeholder="friend@example.com"
+        placeholderTextColor="#8c9a86"
+        style={styles.fieldInput}
+        value={recipientEmail}
+      />
+
+      {filteredSuggestions.length > 0 ? (
+        <View style={styles.suggestionList}>
+          {filteredSuggestions.map((recipient) => (
+            <Pressable
+              key={recipient.id}
+              onPress={() => onChangeRecipientEmail(recipient.email)}
+              style={styles.suggestionItem}
+            >
+              <Text style={styles.suggestionName}>{recipient.displayName}</Text>
+              <Text style={styles.suggestionEmail}>{recipient.email}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
+
+      <ModalActions
+        primaryDisabled={!canShare}
+        primaryLabel="Share"
+        primaryLoading={busy}
+        primaryLoadingLabel="Sharing..."
+        secondaryLabel="Close"
+        onPrimaryPress={onShare}
+        onSecondaryPress={onClose}
+      />
+    </BottomSheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalScreen: {
-    flex: 1,
-    backgroundColor: "rgba(24, 31, 24, 0.36)",
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  modalKeyboardAvoidingView: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalSheet: {
-    maxHeight: "84%",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    backgroundColor: "#f3efe6",
-    overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: -6 },
-    elevation: 10,
-  },
-  modalHandle: {
-    alignSelf: "center",
-    width: 44,
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: "#c9d2c2",
-    marginTop: 10,
-  },
-  modalContent: {
-    paddingHorizontal: 24,
-    paddingTop: 14,
-    paddingBottom: 28,
-    gap: 14,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1f2a1f",
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#52624f",
-  },
   fieldLabel: {
     fontSize: 12,
     textTransform: "uppercase",
@@ -265,39 +198,5 @@ const styles = StyleSheet.create({
   suggestionEmail: {
     fontSize: 13,
     color: "#52624f",
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 8,
-  },
-  primaryButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#243224",
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#fffdf8",
-  },
-  secondaryButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#e6ece1",
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#243224",
-  },
-  disabledButton: {
-    opacity: 0.45,
   },
 });

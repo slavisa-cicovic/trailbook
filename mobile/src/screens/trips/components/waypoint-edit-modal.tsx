@@ -1,18 +1,14 @@
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
 
+import BottomSheetModal from "../../../components/ui/bottom-sheet-modal";
+import ModalActions from "../../../components/ui/modal-actions";
 import {
   WAYPOINT_CATEGORY_OPTIONS,
   getWaypointCategoryOption,
@@ -42,140 +38,77 @@ export default function WaypointEditModal({
   const canSave = draft.title.trim().length > 0;
 
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
-      <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.modalScreen}>
-        <StatusBar barStyle="dark-content" />
-        <Pressable onPress={onClose} style={styles.modalBackdrop} />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.modalKeyboardAvoidingView}
-        >
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
-              <Text style={styles.modalTitle}>Edit note</Text>
+    <BottomSheetModal onClose={onClose} title="Edit note" visible={visible}>
+      <Text style={styles.fieldLabel}>Title</Text>
+      <TextInput
+        onChangeText={onChangeTitle}
+        placeholder="Waypoint title"
+        placeholderTextColor="#8c9a86"
+        style={styles.fieldInput}
+        value={draft.title}
+      />
 
-              <Text style={styles.fieldLabel}>Title</Text>
-              <TextInput
-                onChangeText={onChangeTitle}
-                placeholder="Waypoint title"
-                placeholderTextColor="#8c9a86"
-                style={styles.fieldInput}
-                value={draft.title}
+      <Text style={styles.fieldLabel}>Category</Text>
+      <ScrollView
+        contentContainerStyle={styles.categoryPickerRow}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
+        {WAYPOINT_CATEGORY_OPTIONS.map((option) => {
+          const selected = option.value === draft.category;
+
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => onChangeCategory(option.value)}
+              style={[
+                styles.categoryChip,
+                { borderColor: option.color },
+                selected && { backgroundColor: option.color },
+              ]}
+            >
+              <MaterialIcons
+                color={selected ? "#fffdf8" : option.color}
+                name={getWaypointCategoryOption(option.value).iconName}
+                size={16}
               />
-
-              <Text style={styles.fieldLabel}>Category</Text>
-              <ScrollView
-                contentContainerStyle={styles.categoryPickerRow}
-                horizontal
-                showsHorizontalScrollIndicator={false}
+              <Text
+                style={[
+                  styles.categoryChipText,
+                  selected && styles.categoryChipTextSelected,
+                ]}
               >
-                {WAYPOINT_CATEGORY_OPTIONS.map((option) => {
-                  const selected = option.value === draft.category;
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => onChangeCategory(option.value)}
-                      style={[
-                        styles.categoryChip,
-                        { borderColor: option.color },
-                        selected && { backgroundColor: option.color },
-                      ]}
-                    >
-                      <MaterialIcons
-                        color={selected ? "#fffdf8" : option.color}
-                        name={getWaypointCategoryOption(option.value).iconName}
-                        size={16}
-                      />
-                      <Text
-                        style={[
-                          styles.categoryChipText,
-                          selected && styles.categoryChipTextSelected,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+      <Text style={styles.fieldLabel}>Note</Text>
+      <TextInput
+        multiline
+        numberOfLines={4}
+        onChangeText={onChangeNote}
+        placeholder="Waypoint note"
+        placeholderTextColor="#8c9a86"
+        style={[styles.fieldInput, styles.fieldTextarea]}
+        textAlignVertical="top"
+        value={draft.note}
+      />
 
-              <Text style={styles.fieldLabel}>Note</Text>
-              <TextInput
-                multiline
-                numberOfLines={4}
-                onChangeText={onChangeNote}
-                placeholder="Waypoint note"
-                placeholderTextColor="#8c9a86"
-                style={[styles.fieldInput, styles.fieldTextarea]}
-                textAlignVertical="top"
-                value={draft.note}
-              />
-
-              <View style={styles.modalActions}>
-                <Pressable onPress={onClose} style={styles.secondaryButton}>
-                  <Text style={styles.secondaryButtonText}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  disabled={!canSave}
-                  onPress={onSave}
-                  style={[styles.primaryButton, !canSave && styles.disabledButton]}
-                >
-                  <Text style={styles.primaryButtonText}>Save</Text>
-                </Pressable>
-              </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </Modal>
+      <ModalActions
+        primaryDisabled={!canSave}
+        primaryLabel="Save"
+        secondaryLabel="Cancel"
+        onPrimaryPress={onSave}
+        onSecondaryPress={onClose}
+      />
+    </BottomSheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalScreen: {
-    flex: 1,
-    backgroundColor: "rgba(24, 31, 24, 0.36)",
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  modalKeyboardAvoidingView: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalSheet: {
-    maxHeight: "84%",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    backgroundColor: "#f3efe6",
-    overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: -6 },
-    elevation: 10,
-  },
-  modalHandle: {
-    alignSelf: "center",
-    width: 44,
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: "#c9d2c2",
-    marginTop: 10,
-  },
-  modalContent: {
-    paddingHorizontal: 24,
-    paddingTop: 14,
-    paddingBottom: 28,
-    gap: 14,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1f2a1f",
-  },
   fieldLabel: {
     fontSize: 12,
     textTransform: "uppercase",
@@ -216,39 +149,5 @@ const styles = StyleSheet.create({
   },
   categoryChipTextSelected: {
     color: "#fffdf8",
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 8,
-  },
-  primaryButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#243224",
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#fffdf8",
-  },
-  secondaryButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#e6ece1",
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#243224",
-  },
-  disabledButton: {
-    opacity: 0.45,
   },
 });

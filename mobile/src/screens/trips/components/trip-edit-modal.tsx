@@ -1,17 +1,7 @@
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { StyleSheet, Text, TextInput } from "react-native";
 
+import BottomSheetModal from "../../../components/ui/bottom-sheet-modal";
+import ModalActions from "../../../components/ui/modal-actions";
 import type { TripUpdateInput } from "../../../services/trips/trips-management.service";
 
 interface TripEditModalProps {
@@ -34,104 +24,45 @@ export default function TripEditModal({
   const canSave = draft.title.trim().length > 0;
 
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
-      <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.modalScreen}>
-        <StatusBar barStyle="dark-content" />
-        <Pressable onPress={onClose} style={styles.modalBackdrop} />
-        <KeyboardAvoidingView
-          behavior="padding"
-          keyboardVerticalOffset={Platform.OS === "android" ? 8 : 0}
-          style={styles.modalKeyboardAvoidingView}
-        >
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
-              <Text style={styles.modalTitle}>Edit trip</Text>
+    <BottomSheetModal
+      keyboardBehavior="padding"
+      onClose={onClose}
+      title="Edit trip"
+      visible={visible}
+    >
+      <Text style={styles.fieldLabel}>Trip name</Text>
+      <TextInput
+        onChangeText={onChangeTitle}
+        placeholder="Trip name"
+        placeholderTextColor="#8c9a86"
+        style={styles.fieldInput}
+        value={draft.title}
+      />
 
-              <Text style={styles.fieldLabel}>Trip name</Text>
-              <TextInput
-                onChangeText={onChangeTitle}
-                placeholder="Trip name"
-                placeholderTextColor="#8c9a86"
-                style={styles.fieldInput}
-                value={draft.title}
-              />
+      <Text style={styles.fieldLabel}>Description</Text>
+      <TextInput
+        multiline
+        numberOfLines={4}
+        onChangeText={onChangeDescription}
+        placeholder="Trip description"
+        placeholderTextColor="#8c9a86"
+        style={[styles.fieldInput, styles.fieldTextarea]}
+        textAlignVertical="top"
+        value={draft.description}
+      />
 
-              <Text style={styles.fieldLabel}>Description</Text>
-              <TextInput
-                multiline
-                numberOfLines={4}
-                onChangeText={onChangeDescription}
-                placeholder="Trip description"
-                placeholderTextColor="#8c9a86"
-                style={[styles.fieldInput, styles.fieldTextarea]}
-                textAlignVertical="top"
-                value={draft.description}
-              />
-
-              <View style={styles.modalActions}>
-                <Pressable onPress={onClose} style={styles.secondaryButton}>
-                  <Text style={styles.secondaryButtonText}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  disabled={!canSave}
-                  onPress={onSave}
-                  style={[styles.primaryButton, !canSave && styles.disabledButton]}
-                >
-                  <Text style={styles.primaryButtonText}>Save</Text>
-                </Pressable>
-              </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </Modal>
+      <ModalActions
+        primaryDisabled={!canSave}
+        primaryLabel="Save"
+        secondaryLabel="Cancel"
+        onPrimaryPress={onSave}
+        onSecondaryPress={onClose}
+      />
+    </BottomSheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalScreen: {
-    flex: 1,
-    backgroundColor: "rgba(24, 31, 24, 0.36)",
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  modalKeyboardAvoidingView: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalSheet: {
-    maxHeight: "84%",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    backgroundColor: "#f3efe6",
-    overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: -6 },
-    elevation: 10,
-  },
-  modalHandle: {
-    alignSelf: "center",
-    width: 44,
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: "#c9d2c2",
-    marginTop: 10,
-  },
-  modalContent: {
-    paddingHorizontal: 24,
-    paddingTop: 14,
-    paddingBottom: 28,
-    gap: 14,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1f2a1f",
-  },
   fieldLabel: {
     fontSize: 12,
     textTransform: "uppercase",
@@ -150,39 +81,5 @@ const styles = StyleSheet.create({
   },
   fieldTextarea: {
     minHeight: 110,
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 8,
-  },
-  primaryButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#243224",
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#fffdf8",
-  },
-  secondaryButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#e6ece1",
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#243224",
-  },
-  disabledButton: {
-    opacity: 0.45,
   },
 });
