@@ -31,6 +31,26 @@ export interface TrackingOptions {
   timeInterval: number;
 }
 
+type DiagnosticTrackingOptions = Pick<
+  Location.LocationTaskOptions,
+  | "accuracy"
+  | "activityType"
+  | "distanceInterval"
+  | "pausesUpdatesAutomatically"
+  | "showsBackgroundLocationIndicator"
+  | "timeInterval"
+>;
+
+export interface BackgroundLocationTrackingDiagnosticState {
+  error: string | null;
+  expectedOptions: DiagnosticTrackingOptions | null;
+  optionsMatchExpected: boolean | null;
+  started: boolean | null;
+  supported: boolean;
+  taskName: string;
+  taskOptions: DiagnosticTrackingOptions | null;
+}
+
 export function toSnapshot(location: Location.LocationObject): CurrentLocationSnapshot {
   return {
     accuracy: location.coords.accuracy ?? null,
@@ -193,6 +213,23 @@ function backgroundTrackingOptionsMatch(
   );
 }
 
+function pickDiagnosticTrackingOptions(
+  options: Location.LocationTaskOptions | null,
+): DiagnosticTrackingOptions | null {
+  if (!options) {
+    return null;
+  }
+
+  return {
+    accuracy: options.accuracy,
+    activityType: options.activityType,
+    distanceInterval: options.distanceInterval,
+    pausesUpdatesAutomatically: options.pausesUpdatesAutomatically,
+    showsBackgroundLocationIndicator: options.showsBackgroundLocationIndicator,
+    timeInterval: options.timeInterval,
+  };
+}
+
 function wait(delayMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayMs);
@@ -216,6 +253,53 @@ export async function startBackgroundLocationTracking(
     payload: { profile },
     tripLocalId,
   });
+}
+
+export async function getBackgroundLocationTrackingDiagnosticState(
+  expectedProfile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
+): Promise<BackgroundLocationTrackingDiagnosticState> {
+  const expectedOptions = buildBackgroundTrackingOptions(expectedProfile);
+  const supported = await isBackgroundLocationTrackingSupported();
+
+  if (!supported) {
+    return {
+      error: null,
+      expectedOptions: pickDiagnosticTrackingOptions(expectedOptions),
+      optionsMatchExpected: null,
+      started: null,
+      supported,
+      taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+      taskOptions: null,
+    };
+  }
+
+  try {
+    const started = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
+    const taskOptions =
+      await TaskManager.getTaskOptionsAsync<Location.LocationTaskOptions>(
+        BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+      ).catch(() => null);
+
+    return {
+      error: null,
+      expectedOptions: pickDiagnosticTrackingOptions(expectedOptions),
+      optionsMatchExpected: backgroundTrackingOptionsMatch(taskOptions, expectedOptions),
+      started,
+      supported,
+      taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+      taskOptions: pickDiagnosticTrackingOptions(taskOptions),
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+      expectedOptions: pickDiagnosticTrackingOptions(expectedOptions),
+      optionsMatchExpected: null,
+      started: null,
+      supported,
+      taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+      taskOptions: null,
+    };
+  }
 }
 
 export async function startBackgroundLocationTrackingWithRetry(

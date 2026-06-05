@@ -30,6 +30,7 @@ import {
 import type { RecordingMode } from "../../domain/trips";
 import type { TrailbookMapType } from "../trips/components/trip-route-map";
 import {
+  getBackgroundLocationTrackingDiagnosticState,
   getCurrentForegroundLocation,
   restartBackgroundLocationTracking,
   type CurrentLocationSnapshot,
@@ -122,6 +123,7 @@ export default function RecordingScreen() {
   const [sessionMenuVisible, setSessionMenuVisible] = useState(false);
   const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
+  const lastWatchdogTickBucketRef = useRef<string | null>(null);
   const lastSilentGapBucketRef = useRef<string | null>(null);
   const lastSilentGapRecoveryBucketRef = useRef<string | null>(null);
   const silentGapRecoveryRunningRef = useRef(false);
@@ -313,6 +315,7 @@ export default function RecordingScreen() {
 
   useEffect(() => {
     if (recordingSession.status !== "recording" || !recordingSession.activeTripId) {
+      lastWatchdogTickBucketRef.current = null;
       lastSilentGapBucketRef.current = null;
       lastSilentGapRecoveryBucketRef.current = null;
       silentGapRecoveryRunningRef.current = false;
@@ -323,6 +326,11 @@ export default function RecordingScreen() {
 
     async function checkLocationSilentGap() {
       const observedAtMs = Date.now();
+      const observedAt = new Date(observedAtMs).toISOString();
+      const backgroundTrackingProfile = getBackgroundTrackingProfile(
+        recordingSession.recordingMode,
+        activeRecordingProfile,
+      );
       const diagnosticState = getLocationCallbackDiagnosticState(tripLocalId);
       const sessionStartedAtMs = recordingSession.startedAt
         ? new Date(recordingSession.startedAt).getTime()
@@ -331,6 +339,39 @@ export default function RecordingScreen() {
         diagnosticState.lastCallbackReceivedAtMs ??
         (Number.isFinite(sessionStartedAtMs) ? sessionStartedAtMs : observedAtMs);
       const gapMs = observedAtMs - lastCallbackReceivedAtMs;
+      const lastCallbackReceivedAt =
+        diagnosticState.lastCallbackReceivedAtMs === null
+          ? null
+          : new Date(diagnosticState.lastCallbackReceivedAtMs).toISOString();
+      const tickBucket = `${tripLocalId}:${Math.floor(observedAtMs / LOCATION_SILENT_GAP_WARNING_MS)}`;
+      let backgroundTrackingState: Awaited<
+        ReturnType<typeof getBackgroundLocationTrackingDiagnosticState>
+      > | null = null;
+      const basePayload = {
+        appState: AppState.currentState,
+        backgroundTrackingProfile,
+        batteryOptimizationIgnored:
+          batteryOptimizationSupported === true ? batteryOptimizationIgnored : null,
+        gapMs: Math.trunc(gapMs),
+        lastCallbackReceivedAt,
+        profile: activeRecordingProfile,
+        recordingMode: recordingSession.recordingMode,
+      };
+
+      if (Platform.OS === "android" && lastWatchdogTickBucketRef.current !== tickBucket) {
+        lastWatchdogTickBucketRef.current = tickBucket;
+        backgroundTrackingState =
+          await getBackgroundLocationTrackingDiagnosticState(backgroundTrackingProfile);
+        void recordRecordingNativeEvent({
+          eventType: "native_watchdog_tick",
+          payload: {
+            ...basePayload,
+            backgroundTrackingState,
+          },
+          recordedAt: observedAt,
+          tripLocalId,
+        });
+      }
 
       if (gapMs < LOCATION_SILENT_GAP_WARNING_MS) {
         return;
@@ -343,31 +384,27 @@ export default function RecordingScreen() {
       }
 
       lastSilentGapBucketRef.current = gapBucket;
+
+      if (Platform.OS === "android" && !backgroundTrackingState) {
+        backgroundTrackingState =
+          await getBackgroundLocationTrackingDiagnosticState(backgroundTrackingProfile);
+      }
+
       void recordRecordingNativeEvent({
         eventType: "native_watchdog_stale",
         payload: {
-          batteryOptimizationIgnored:
-            batteryOptimizationSupported === true ? batteryOptimizationIgnored : null,
-          gapMs: Math.trunc(gapMs),
-          lastCallbackReceivedAt:
-            diagnosticState.lastCallbackReceivedAtMs === null
-              ? null
-              : new Date(diagnosticState.lastCallbackReceivedAtMs).toISOString(),
-          profile: activeRecordingProfile,
-          recordingMode: recordingSession.recordingMode,
+          ...basePayload,
+          backgroundTrackingState,
         },
-        recordedAt: new Date(observedAtMs).toISOString(),
+        recordedAt: observedAt,
         tripLocalId,
       });
       recordLocationSilentGap(tripLocalId, recordingSession.recordingMode, {
         batteryOptimizationIgnored:
           batteryOptimizationSupported === true ? batteryOptimizationIgnored : null,
         gapMs,
-        lastCallbackReceivedAt:
-          diagnosticState.lastCallbackReceivedAtMs === null
-            ? null
-            : new Date(diagnosticState.lastCallbackReceivedAtMs).toISOString(),
-        observedAt: new Date(observedAtMs).toISOString(),
+        lastCallbackReceivedAt,
+        observedAt,
       });
 
       if (
@@ -385,10 +422,11 @@ export default function RecordingScreen() {
         console.warn("[Trailbook][location-silent-gap-recovery]", {
           gapMs: Math.trunc(gapMs),
           profile: activeRecordingProfile,
+          trackingStarted: backgroundTrackingState?.started ?? null,
           tripLocalId,
         });
         await restartBackgroundLocationTracking(
-          getBackgroundTrackingProfile(recordingSession.recordingMode, activeRecordingProfile),
+          backgroundTrackingProfile,
           tripLocalId,
           "silent-gap-watchdog",
         );
