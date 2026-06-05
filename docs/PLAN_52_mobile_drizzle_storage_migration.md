@@ -28,6 +28,10 @@ Still intentionally deferred:
 - Benchmarking and deciding on `trip_points` / `raw_location_events`.
 - Removing legacy SQL migrations.
 
+Subplans:
+
+- `PLAN_52A_drizzle_migration_baseline.md`: define and implement the Drizzle migration baseline/startup strategy before more repository migrations.
+
 ## Context
 
 Trailbook currently uses:
