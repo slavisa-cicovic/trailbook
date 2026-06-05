@@ -15,6 +15,7 @@ import {
 
 import { RECORDING_PROFILE_OPTIONS } from "../../../constants/recording-profiles";
 import type { RecordingMode } from "../../../domain/trips";
+import Card from "../../../components/ui/card";
 import LoadingButton from "../../../components/ui/loading-button";
 
 interface RecordingDraft {
@@ -66,12 +67,11 @@ export default function RecordingStartModal({
         style={styles.backdrop}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.card}>
-            <Text style={styles.title}>Start recording</Text>
-            <Text style={styles.subtitle}>
-              Give this route a name and choose the recording mode before the trip starts.
-            </Text>
-
+          <Card
+            style={styles.card}
+            subtitle="Give this route a name and choose the recording mode before the trip starts."
+            title="Start recording"
+          >
             <Text style={styles.fieldLabel}>Route name</Text>
             <TextInput
               autoCapitalize="sentences"
@@ -152,7 +152,7 @@ export default function RecordingStartModal({
                 Start
               </LoadingButton>
             </View>
-          </View>
+          </Card>
         </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
@@ -162,9 +162,7 @@ export default function RecordingStartModal({
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(20, 28, 20, 0.42)" },
   scrollContent: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-  card: { width: "100%", maxWidth: 420, borderRadius: 24, backgroundColor: "#fffdf8", padding: 20, gap: 10 },
-  title: { fontSize: 24, fontWeight: "700", color: "#1f2a1f" },
-  subtitle: { fontSize: 14, color: "#52624f", marginBottom: 4 },
+  card: { width: "100%", maxWidth: 420 },
   fieldLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, color: "#60705d" },
   fieldInput: { borderWidth: 1, borderColor: "#d7ddcf", borderRadius: 14, backgroundColor: "#ffffff", paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: "#243224" },
   fieldTextarea: { minHeight: 90 },

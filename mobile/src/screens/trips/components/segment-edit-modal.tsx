@@ -2,6 +2,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { RecordingProfile, TripSegment } from "../../../domain/trips";
 import { getRecordingProfileLabel } from "../../../constants/recording-profiles";
+import Card from "../../../components/ui/card";
 
 const EDITABLE_MODES = ["walk", "bike", "drive", "boat", "plane"] as const;
 type EditableMode = (typeof EDITABLE_MODES)[number];
@@ -21,13 +22,12 @@ export default function SegmentEditModal({ segment, onClose, onSelectMode }: Pro
       visible={segment !== null}
     >
       <View style={styles.overlay}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Change segment mode</Text>
-          {segment ? (
-            <Text style={styles.subtitle}>
-              Current: {getRecordingProfileLabel(segment.recordingProfile)}
-            </Text>
-          ) : null}
+        <Card
+          style={styles.card}
+          subtitle={segment ? `Current: ${getRecordingProfileLabel(segment.recordingProfile)}` : undefined}
+          title="Change segment mode"
+          titleStyle={styles.title}
+        >
           <View style={styles.options}>
             {EDITABLE_MODES.map((option) => {
               const selected = segment?.recordingProfile === option;
@@ -47,7 +47,7 @@ export default function SegmentEditModal({ segment, onClose, onSelectMode }: Pro
           <Pressable onPress={onClose} style={styles.cancelButton}>
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
-        </View>
+        </Card>
       </View>
     </Modal>
   );
@@ -55,9 +55,8 @@ export default function SegmentEditModal({ segment, onClose, onSelectMode }: Pro
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "rgba(22, 29, 22, 0.36)", alignItems: "center", justifyContent: "center", padding: 24 },
-  card: { width: "100%", maxWidth: 360, borderRadius: 20, backgroundColor: "#fffdf8", padding: 20, gap: 14 },
+  card: { width: "100%", maxWidth: 360, borderRadius: 20, gap: 14 },
   title: { fontSize: 18, fontWeight: "700", color: "#243224" },
-  subtitle: { fontSize: 13, color: "#60705d" },
   options: { gap: 8 },
   option: { borderRadius: 14, backgroundColor: "#eef2ea", paddingHorizontal: 14, paddingVertical: 12 },
   optionSelected: { backgroundColor: "#243224" },

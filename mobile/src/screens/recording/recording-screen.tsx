@@ -20,6 +20,7 @@ import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import RecordingControl from "../../components/recording/recording-control";
+import Card from "../../components/ui/card";
 import {
   DEFAULT_WAYPOINT_CATEGORY,
   WAYPOINT_CATEGORY_OPTIONS,
@@ -981,12 +982,11 @@ export default function RecordingScreen() {
             contentContainerStyle={styles.modalScrollContent}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Add note</Text>
-              <Text style={styles.modalSubtitle}>
-                Save a quick waypoint for this route using your current location.
-              </Text>
-
+            <Card
+              style={styles.modalCard}
+              subtitle="Save a quick waypoint for this route using your current location."
+              title="Add note"
+            >
               <Text style={styles.fieldLabel}>Title</Text>
               <TextInput
                 autoCapitalize="sentences"
@@ -1109,7 +1109,7 @@ export default function RecordingScreen() {
                   <Text style={styles.modalButtonPrimaryText}>Save note</Text>
                 </Pressable>
               </View>
-            </View>
+            </Card>
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
@@ -1462,20 +1462,6 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     maxWidth: 420,
-    borderRadius: 24,
-    backgroundColor: "#fffdf8",
-    padding: 20,
-    gap: 10,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1f2a1f",
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: "#52624f",
-    marginBottom: 4,
   },
   retryLocationButton: {
     marginTop: 12,

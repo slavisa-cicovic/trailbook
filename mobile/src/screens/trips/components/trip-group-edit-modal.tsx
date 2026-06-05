@@ -10,6 +10,8 @@ import {
   View,
 } from "react-native";
 
+import Card from "../../../components/ui/card";
+
 interface GroupDraft {
   description: string;
   title: string;
@@ -48,8 +50,7 @@ export default function TripGroupEditModal({
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.card}>
-              <Text style={styles.title}>Edit group</Text>
+            <Card style={styles.card} title="Edit group" titleStyle={styles.title}>
               <View style={styles.newGroupBlock}>
                 <Text style={styles.label}>Group details</Text>
                 <TextInput
@@ -80,7 +81,7 @@ export default function TripGroupEditModal({
                   <Text style={styles.primaryText}>{syncingGroups ? "Saving..." : "Save"}</Text>
                 </Pressable>
               </View>
-            </View>
+            </Card>
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -92,7 +93,7 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(20, 28, 20, 0.36)" },
   keyboard: { flex: 1 },
   scrollContent: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  card: { borderRadius: 24, backgroundColor: "#fffdf8", padding: 20, gap: 14 },
+  card: { gap: 14 },
   title: { fontSize: 22, fontWeight: "800", color: "#243224" },
   label: { fontSize: 12, fontWeight: "800", letterSpacing: 0.7, textTransform: "uppercase", color: "#76856f" },
   newGroupBlock: { gap: 8 },

@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 
+import Card from "../../../components/ui/card";
 import type { TripGroup } from "../../../domain/trips";
 
 interface GroupDraft {
@@ -56,12 +57,12 @@ export default function TripGroupModal({
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.card}>
-              <Text style={styles.title}>Add to group</Text>
-              <Text style={styles.description}>
-                {selectedTripCount} selected trip{selectedTripCount === 1 ? "" : "s"}
-              </Text>
-
+            <Card
+              style={styles.card}
+              subtitle={`${selectedTripCount} selected trip${selectedTripCount === 1 ? "" : "s"}`}
+              title="Add to group"
+              titleStyle={styles.title}
+            >
               {existingGroups.length > 0 ? (
                 <View style={styles.existingGroupsBlock}>
                   <Text style={styles.label}>Existing groups</Text>
@@ -128,7 +129,7 @@ export default function TripGroupModal({
                   <Text style={styles.primaryText}>{syncingGroups ? "Saving..." : "Save"}</Text>
                 </Pressable>
               </View>
-            </View>
+            </Card>
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -140,9 +141,8 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(20, 28, 20, 0.36)" },
   keyboard: { flex: 1 },
   scrollContent: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  card: { borderRadius: 24, backgroundColor: "#fffdf8", padding: 20, gap: 14 },
+  card: { gap: 14 },
   title: { fontSize: 22, fontWeight: "800", color: "#243224" },
-  description: { fontSize: 14, color: "#52624f" },
   label: { fontSize: 12, fontWeight: "800", letterSpacing: 0.7, textTransform: "uppercase", color: "#76856f" },
   existingGroupsBlock: { gap: 8 },
   existingGroupsRow: { flexDirection: "row", gap: 8 },

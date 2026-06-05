@@ -11,6 +11,7 @@ import {
 
 import { RECORDING_PROFILE_OPTIONS } from "../../../constants/recording-profiles";
 import type { RecordingMode } from "../../../domain/trips";
+import Card from "../../../components/ui/card";
 
 interface Props {
   activeMode: RecordingMode;
@@ -27,11 +28,11 @@ export default function RecordingProfileModal({ activeMode, visible, onClose, on
         style={styles.backdrop}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.card}>
-            <Text style={styles.title}>Recording mode</Text>
-            <Text style={styles.subtitle}>
-              Choose a fixed mode or let Trailbook infer segments automatically.
-            </Text>
+          <Card
+            style={styles.card}
+            subtitle="Choose a fixed mode or let Trailbook infer segments automatically."
+            title="Recording mode"
+          >
             <View style={styles.profileList}>
               {RECORDING_PROFILE_OPTIONS.map((option) => {
                 const selected = option.value === activeMode;
@@ -61,7 +62,7 @@ export default function RecordingProfileModal({ activeMode, visible, onClose, on
                 <Text style={styles.buttonSecondaryText}>Close</Text>
               </Pressable>
             </View>
-          </View>
+          </Card>
         </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
@@ -71,9 +72,7 @@ export default function RecordingProfileModal({ activeMode, visible, onClose, on
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(20, 28, 20, 0.42)" },
   scrollContent: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-  card: { width: "100%", maxWidth: 420, borderRadius: 24, backgroundColor: "#fffdf8", padding: 20, gap: 10 },
-  title: { fontSize: 24, fontWeight: "700", color: "#1f2a1f" },
-  subtitle: { fontSize: 14, color: "#52624f", marginBottom: 4 },
+  card: { width: "100%", maxWidth: 420 },
   profileList: { gap: 8 },
   profileOption: { borderWidth: 1, borderColor: "#d7ddcf", borderRadius: 16, backgroundColor: "#ffffff", paddingHorizontal: 14, paddingVertical: 12, gap: 4 },
   profileOptionSelected: { borderColor: "#243224", backgroundColor: "#edf4e9" },
