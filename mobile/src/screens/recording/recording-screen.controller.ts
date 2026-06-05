@@ -1,6 +1,8 @@
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import type { RecordingSessionSummary, Trip, TripPause, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
-import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
 import {
   DEMO_MONTHLY_TRIP_LIMIT,
   getRemainingDemoTripSlots,
@@ -119,11 +121,15 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function shouldUseIosExpoGoUiRecordingFallback() {
+  return Platform.OS === "ios" && Constants.executionEnvironment === "storeClient";
+}
+
 export function getEmptyRecordingDraft(): RecordingDraftInput {
   return {
     title: "",
     description: "",
-    recordingMode: DEFAULT_RECORDING_PROFILE,
+    recordingMode: "auto",
   };
 }
 
@@ -218,16 +224,23 @@ export async function startRecordingFromScreenController(
         concreteRecordingProfile,
       );
 
-      await startBackgroundLocationTrackingWithRetry(backgroundTrackingProfile, (attempt, error) => {
-        logStep("background-start-retry", {
-          attempt,
-          error: getErrorMessage(error),
+      if (shouldUseIosExpoGoUiRecordingFallback()) {
+        logStep("background-start-skipped-expo-go-ios-ui-preview", {
+          backgroundTrackingProfile,
+          concreteRecordingProfile,
         });
-      }, nextTrip.localId);
-      logStep("background-started", {
-        backgroundTrackingProfile,
-        concreteRecordingProfile,
-      });
+      } else {
+        await startBackgroundLocationTrackingWithRetry(backgroundTrackingProfile, (attempt, error) => {
+          logStep("background-start-retry", {
+            attempt,
+            error: getErrorMessage(error),
+          });
+        }, nextTrip.localId);
+        logStep("background-started", {
+          backgroundTrackingProfile,
+          concreteRecordingProfile,
+        });
+      }
     } catch (error) {
       const refreshedPermissionStatus = await input.refreshStatus();
       logStep("background-start-failed", {

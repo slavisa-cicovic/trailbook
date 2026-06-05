@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -11,6 +11,7 @@ import {
   View,
   type TextInput as TextInputType,
 } from "react-native";
+import { MaterialIcons } from "@expo/vector-icons";
 
 import { RECORDING_PROFILE_OPTIONS } from "../../../constants/recording-profiles";
 import type { RecordingMode } from "../../../domain/trips";
@@ -49,6 +50,9 @@ export default function RecordingStartModal({
 }: Props) {
   const titleInputRef = useRef<TextInputType>(null);
   const descriptionInputRef = useRef<TextInputType>(null);
+  const [recordingModeExpanded, setRecordingModeExpanded] = useState(false);
+  const selectedRecordingMode = RECORDING_PROFILE_OPTIONS.find((option) => option.value === draft.recordingMode) ??
+    RECORDING_PROFILE_OPTIONS[0];
 
   useEffect(() => {
     if (!visible) {
@@ -103,30 +107,54 @@ export default function RecordingStartModal({
               value={draft.description}
             />
 
-            <Text style={styles.fieldLabel}>Recording mode</Text>
-            <View style={styles.profileList}>
-              {RECORDING_PROFILE_OPTIONS.map((option) => {
-                const selected = option.value === draft.recordingMode;
-                return (
-                  <Pressable
-                    key={option.value}
-                    onPress={() => onChangeDraftMode(option.value)}
-                    style={[styles.profileOption, selected && styles.profileOptionSelected]}
-                  >
-                    <View style={styles.profileOptionHeader}>
-                      <Text style={[styles.profileOptionLabel, selected && styles.profileOptionLabelSelected]}>
-                        {option.label}
-                      </Text>
-                      <Text style={[styles.profileOptionTag, selected && styles.profileOptionTagSelected]}>
-                        {option.description}
-                      </Text>
-                    </View>
-                    <Text style={[styles.profileOptionHint, selected && styles.profileOptionHintSelected]}>
-                      {option.hint}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <View style={styles.recordingModePanel}>
+              <Pressable
+                onPress={() => setRecordingModeExpanded((current) => !current)}
+                style={styles.recordingModeHeader}
+              >
+                <View style={styles.recordingModeHeaderText}>
+                  <Text style={styles.fieldLabel}>Recording mode</Text>
+                  <Text style={styles.recordingModeSummary}>
+                    {selectedRecordingMode.label} · {selectedRecordingMode.description}
+                  </Text>
+                </View>
+                <MaterialIcons
+                  color="#52624f"
+                  name={recordingModeExpanded ? "expand-less" : "expand-more"}
+                  size={22}
+                />
+              </Pressable>
+
+              {recordingModeExpanded ? (
+                <View style={styles.profileList}>
+                  {RECORDING_PROFILE_OPTIONS.map((option) => {
+                    const selected = option.value === draft.recordingMode;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => onChangeDraftMode(option.value)}
+                        style={[styles.profileOption, selected && styles.profileOptionSelected]}
+                      >
+                        <View style={styles.profileOptionHeader}>
+                          <Text style={[styles.profileOptionLabel, selected && styles.profileOptionLabelSelected]}>
+                            {option.label}
+                          </Text>
+                          <Text style={[styles.profileOptionTag, selected && styles.profileOptionTagSelected]}>
+                            {option.description}
+                          </Text>
+                        </View>
+                        <Text style={[styles.profileOptionHint, selected && styles.profileOptionHintSelected]}>
+                          {option.hint}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={styles.recordingModeHint}>
+                  Auto is recommended. Open this only if you want to force a mode for testing.
+                </Text>
+              )}
             </View>
 
             <View style={styles.actions}>
@@ -160,6 +188,33 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   card: { width: "100%", maxWidth: 420 },
   fieldLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, color: "#60705d" },
+  recordingModePanel: {
+    borderWidth: 1,
+    borderColor: "#d7ddcf",
+    borderRadius: 18,
+    backgroundColor: "#f8fbf5",
+    padding: 12,
+    gap: 10,
+  },
+  recordingModeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  recordingModeHeaderText: {
+    flex: 1,
+    gap: 3,
+  },
+  recordingModeSummary: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  recordingModeHint: {
+    fontSize: 13,
+    color: "#52624f",
+  },
   profileList: { gap: 8 },
   profileOption: { borderWidth: 1, borderColor: "#d7ddcf", borderRadius: 16, backgroundColor: "#ffffff", paddingHorizontal: 14, paddingVertical: 12, gap: 4 },
   profileOptionSelected: { borderColor: "#243224", backgroundColor: "#edf4e9" },
