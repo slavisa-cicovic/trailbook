@@ -1006,7 +1006,11 @@ export default function TripsScreen() {
                         <View key={trip.localId} style={styles.tripCardRow}>
                           <View style={styles.groupMemberCard}>
                             <Pressable
-                              onPress={() => router.push(`/trips/${trip.localId}`)}
+                              onPress={() =>
+                                router.push(
+                                  `/trips/${trip.localId}?groupId=${encodeURIComponent(selectedGroup.localId)}`,
+                                )
+                              }
                               style={styles.tripBodyPressable}
                             >
                               <View style={styles.tripHeader}>

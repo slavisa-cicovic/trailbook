@@ -35,6 +35,10 @@ import {
   updateTripMetadata,
 } from "../../services/trips/trips-management.service";
 import {
+  getVisibleTripGroupMembers,
+  getVisibleTripGroups,
+} from "../../services/trips/trip-groups.service";
+import {
   formatDistanceKm,
 } from "../../services/trip-points/trip-points.service";
 import {
@@ -52,6 +56,8 @@ import { loadTripSegments } from "../../repositories/trip-segments-repository";
 import { loadTrips } from "../../repositories/trips-repository";
 import { loadWaypoints } from "../../repositories/waypoints-repository";
 import { useSessionStore } from "../../state/session-store";
+import { useTripGroupMembersStore } from "../../state/trip-group-members-store";
+import { useTripGroupsStore } from "../../state/trip-groups-store";
 import { useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
@@ -174,12 +180,25 @@ function getDisplayTripSegments(tripSegments: TripSegment[], selectedTrip: Trip 
   );
 }
 
+function buildTripRoutePath(tripLocalId: string, groupLocalId: string | undefined): string {
+  if (!groupLocalId) {
+    return `/trips/${tripLocalId}`;
+  }
+
+  return `/trips/${tripLocalId}?groupId=${encodeURIComponent(groupLocalId)}`;
+}
+
 export default function TripRouteScreen() {
   const router = useRouter();
-  const { tripId } = useLocalSearchParams<{ tripId?: string | string[] }>();
+  const { groupId, tripId } = useLocalSearchParams<{
+    groupId?: string | string[];
+    tripId?: string | string[];
+  }>();
   const identitySession = useSessionStore((state) => state.identitySession);
   const featureFlags = useFeatureFlags();
   const trips = useTripsStore((state) => state.trips);
+  const tripGroups = useTripGroupsStore((state) => state.tripGroups);
+  const tripGroupMembers = useTripGroupMembersStore((state) => state.tripGroupMembers);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const tripPauses = useTripPausesStore((state) => state.tripPauses);
   const waypoints = useWaypointsStore((state) => state.waypoints);
@@ -214,9 +233,18 @@ export default function TripRouteScreen() {
   const shareMutation = useShareTripMutation(resolvedShareTripId);
 
   const resolvedTripId = Array.isArray(tripId) ? tripId[0] : tripId;
+  const resolvedGroupId = Array.isArray(groupId) ? groupId[0] : groupId;
   const currentUserTrips = useMemo(
     () => (currentUserId ? trips.filter((trip) => trip.userId === currentUserId) : []),
     [currentUserId, trips],
+  );
+  const currentUserTripGroups = useMemo(
+    () => (currentUserId ? tripGroups.filter((group) => group.userId === currentUserId) : []),
+    [currentUserId, tripGroups],
+  );
+  const currentUserTripGroupMembers = useMemo(
+    () => (currentUserId ? tripGroupMembers.filter((member) => member.userId === currentUserId) : []),
+    [currentUserId, tripGroupMembers],
   );
   const currentUserTripSegments = useMemo(
     () => (currentUserId ? tripSegments.filter((segment) => segment.userId === currentUserId) : []),
@@ -236,7 +264,28 @@ export default function TripRouteScreen() {
   );
 
   const visibleTrips = getVisibleTrips(currentUserTrips);
+  const visibleTripGroups = getVisibleTripGroups(currentUserTripGroups);
+  const visibleTripGroupMembers = getVisibleTripGroupMembers(currentUserTripGroupMembers);
+  const selectedNavigationGroup = resolvedGroupId
+    ? visibleTripGroups.find((group) => group.localId === resolvedGroupId) ?? null
+    : null;
+  const tripNavigationOrder = selectedNavigationGroup
+    ? visibleTripGroupMembers
+        .filter((member) => member.groupLocalId === selectedNavigationGroup.localId)
+        .sort((left, right) => left.sortOrder - right.sortOrder)
+        .map((member) => visibleTrips.find((trip) => trip.localId === member.tripLocalId))
+        .filter((trip): trip is Trip => trip !== undefined)
+    : visibleTrips;
   const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
+  const selectedTripNavigationIndex = selectedTrip
+    ? tripNavigationOrder.findIndex((trip) => trip.localId === selectedTrip.localId)
+    : -1;
+  const previousTrip =
+    selectedTripNavigationIndex > 0 ? tripNavigationOrder[selectedTripNavigationIndex - 1] : null;
+  const nextTrip =
+    selectedTripNavigationIndex >= 0 && selectedTripNavigationIndex < tripNavigationOrder.length - 1
+      ? tripNavigationOrder[selectedTripNavigationIndex + 1]
+      : null;
   const selectedTripLocalId = selectedTrip?.localId ?? null;
   const selectedTripEndedAt = selectedTrip?.endedAt ?? null;
   const loadedSelectedTripPoints =
@@ -683,6 +732,15 @@ export default function TripRouteScreen() {
     router.push(`/trips/${selectedTrip.localId}/waypoints/${waypoint.localId}`);
   }
 
+  function handleNavigateTrip(trip: Trip | null) {
+    if (!trip) {
+      return;
+    }
+
+    setDetailsSheetVisible(false);
+    router.replace(buildTripRoutePath(trip.localId, selectedNavigationGroup?.localId));
+  }
+
   if (!identitySession) {
     return <Redirect href="/login" />;
   }
@@ -975,18 +1033,36 @@ export default function TripRouteScreen() {
           </View>
         </View>
         <View pointerEvents="box-none" style={styles.routeBottomBarWrap}>
-          <Pressable
-            onPress={() => setDetailsSheetVisible(true)}
-            style={styles.routeBottomBar}
-          >
-            <Text numberOfLines={1} style={styles.routeBottomTitle}>
-              {selectedTrip.title}
-            </Text>
-            <View style={styles.routeBottomMetaWrap}>
-              <Text style={styles.routeBottomMeta}>{distanceText}</Text>
-              <MaterialIcons color="#243224" name="expand-less" size={20} />
-            </View>
-          </Pressable>
+          <View style={styles.routeBottomBar}>
+            <Pressable
+              accessibilityLabel="Previous trip"
+              disabled={!previousTrip}
+              onPress={() => handleNavigateTrip(previousTrip)}
+              style={[styles.routeTripNavButton, !previousTrip && styles.routeTripNavButtonDisabled]}
+            >
+              <MaterialIcons color={previousTrip ? "#243224" : "#9aa596"} name="chevron-left" size={24} />
+            </Pressable>
+            <Pressable
+              onPress={() => setDetailsSheetVisible(true)}
+              style={styles.routeBottomTitleButton}
+            >
+              <Text numberOfLines={1} style={styles.routeBottomTitle}>
+                {selectedTrip.title}
+              </Text>
+              <View style={styles.routeBottomMetaWrap}>
+                <Text style={styles.routeBottomMeta}>{distanceText}</Text>
+                <MaterialIcons color="#243224" name="expand-less" size={20} />
+              </View>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Next trip"
+              disabled={!nextTrip}
+              onPress={() => handleNavigateTrip(nextTrip)}
+              style={[styles.routeTripNavButton, !nextTrip && styles.routeTripNavButtonDisabled]}
+            >
+              <MaterialIcons color={nextTrip ? "#243224" : "#9aa596"} name="chevron-right" size={24} />
+            </Pressable>
+          </View>
         </View>
       </View>
     </ScreenLayout>
@@ -1047,6 +1123,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 18,
     elevation: 7,
+  },
+  routeTripNavButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(230, 236, 225, 0.9)",
+  },
+  routeTripNavButtonDisabled: {
+    opacity: 0.42,
+  },
+  routeBottomTitleButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
   routeBottomTitle: {
     flex: 1,
@@ -1123,13 +1217,13 @@ const styles = StyleSheet.create({
   },
   mapTypeRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 5,
     borderRadius: 999,
     backgroundColor: "rgba(255, 253, 248, 0.92)",
     borderWidth: 1,
     borderColor: "rgba(235, 225, 207, 0.88)",
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
     shadowColor: "#142014",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
@@ -1158,14 +1252,14 @@ const styles = StyleSheet.create({
   mapTypeChip: {
     borderRadius: 999,
     backgroundColor: "#e6ece1",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
   },
   mapTypeChipSelected: {
     backgroundColor: "#243224",
   },
   mapTypeChipText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "700",
     color: "#355035",
   },
