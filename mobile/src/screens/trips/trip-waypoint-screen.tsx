@@ -4,6 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
+import IconButton from "../../components/ui/icon-button";
 import {
   DEFAULT_WAYPOINT_CATEGORY,
   getWaypointCategoryOption,
@@ -332,40 +333,33 @@ export default function TripWaypointScreen() {
 
       <View style={styles.headerCard}>
         <View style={styles.headerCardRow}>
-          <Pressable
+          <IconButton
             accessibilityLabel="Previous waypoint"
             disabled={!previousWaypoint}
+            disabledIconColor="#9da894"
+            icon="chevron-left"
+            iconSize={26}
             onPress={() => handleNavigateWaypoint(previousWaypoint?.localId ?? null)}
-            style={[styles.waypointNavButton, !previousWaypoint && styles.waypointNavButtonDisabled]}
-          >
-            <MaterialIcons
-              color={previousWaypoint ? "#243224" : "#9da894"}
-              name="chevron-left"
-              size={26}
-            />
-          </Pressable>
+            style={!previousWaypoint && styles.waypointNavButtonDisabled}
+          />
           <View style={styles.titleGroup}>
             <Text numberOfLines={2} style={styles.title}>{selectedWaypoint.title}</Text>
-            <Pressable
+            <IconButton
               accessibilityLabel="Edit waypoint"
+              icon="edit"
               onPress={handleOpenEdit}
-              style={styles.headerIconButton}
-            >
-              <MaterialIcons color="#243224" name="edit" size={18} />
-            </Pressable>
+              size="sm"
+            />
           </View>
-          <Pressable
+          <IconButton
             accessibilityLabel="Next waypoint"
             disabled={!nextWaypoint}
+            disabledIconColor="#9da894"
+            icon="chevron-right"
+            iconSize={26}
             onPress={() => handleNavigateWaypoint(nextWaypoint?.localId ?? null)}
-            style={[styles.waypointNavButton, !nextWaypoint && styles.waypointNavButtonDisabled]}
-          >
-            <MaterialIcons
-              color={nextWaypoint ? "#243224" : "#9da894"}
-              name="chevron-right"
-              size={26}
-            />
-          </Pressable>
+            style={!nextWaypoint && styles.waypointNavButtonDisabled}
+          />
         </View>
         {selectedWaypoint.note ? <Text style={styles.note}>{selectedWaypoint.note}</Text> : null}
       </View>
@@ -546,24 +540,8 @@ const styles = StyleSheet.create({
     gap: 6,
     minWidth: 0,
   },
-  waypointNavButton: {
-    width: 38,
-    height: 38,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 999,
-    backgroundColor: "#e6ece1",
-  },
   waypointNavButtonDisabled: {
     opacity: 0.45,
-  },
-  headerIconButton: {
-    width: 34,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 999,
-    backgroundColor: "#e6ece1",
   },
   note: {
     fontSize: 15,

@@ -22,6 +22,7 @@ import RecordingControl from "../../components/recording/recording-control";
 import Card from "../../components/ui/card";
 import FormField from "../../components/ui/form-field";
 import WaypointCategoryPicker from "../../components/waypoints/waypoint-category-picker";
+import WaypointPhotoDraftCarousel from "../../components/waypoints/waypoint-photo-draft-carousel";
 import {
   DEFAULT_WAYPOINT_CATEGORY,
 } from "../../constants/waypoint-categories";
@@ -1024,35 +1025,11 @@ export default function RecordingScreen() {
                 </Pressable>
               </View>
 
-              {waypointDraft.photos.length > 0 ? (
-                <ScrollView
-                  contentContainerStyle={styles.photoDraftCarouselContent}
-                  decelerationRate="fast"
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  snapToAlignment="start"
-                  snapToInterval={draftPhotoCardWidth + 12}
-                >
-                  {waypointDraft.photos.map((photo, index) => (
-                    <View
-                      key={`${photo.localUri}-${index}`}
-                      style={[styles.photoDraftCard, { width: draftPhotoCardWidth }]}
-                    >
-                      <Image source={{ uri: photo.localUri }} style={styles.photoPreview} />
-                      <Pressable
-                        onPress={() => handleRemoveDraftPhoto(index)}
-                        style={styles.removeDraftPhotoButton}
-                      >
-                        <Text style={styles.removeDraftPhotoText}>Remove</Text>
-                      </Pressable>
-                    </View>
-                  ))}
-                </ScrollView>
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <Text style={styles.photoPlaceholderText}>No photos selected yet.</Text>
-                </View>
-              )}
+              <WaypointPhotoDraftCarousel
+                cardWidth={draftPhotoCardWidth}
+                onRemovePhoto={handleRemoveDraftPhoto}
+                photos={waypointDraft.photos}
+              />
 
               <View style={styles.modalActions}>
                 <Pressable
@@ -1446,11 +1423,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     color: "#60705d",
   },
-  photoDraftCarouselContent: {
-    gap: 12,
-    paddingBottom: 4,
-    paddingRight: 18,
-  },
   photoHelpText: {
     fontSize: 13,
     color: "#52624f",
@@ -1485,46 +1457,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#fffdf8",
-  },
-  photoDraftCard: {
-    borderRadius: 18,
-    overflow: "hidden",
-    backgroundColor: "#f6f1e5",
-    borderWidth: 1,
-    borderColor: "#ebe1cf",
-  },
-  photoPreview: {
-    width: "100%",
-    aspectRatio: 1.08,
-    backgroundColor: "#d7ddcf",
-  },
-  removeDraftPhotoButton: {
-    position: "absolute",
-    right: 8,
-    top: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(247, 224, 219, 0.92)",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  removeDraftPhotoText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#9f3f31",
-  },
-  photoPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#d7ddcf",
-    borderRadius: 18,
-    backgroundColor: "#f3f6ef",
-    minHeight: 110,
-    paddingHorizontal: 16,
-  },
-  photoPlaceholderText: {
-    fontSize: 14,
-    color: "#60705d",
   },
   profileList: {
     gap: 8,

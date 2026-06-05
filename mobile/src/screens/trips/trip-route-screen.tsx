@@ -15,6 +15,7 @@ import {
 } from "react-native";
 
 import ScreenLayout from "../../components/layout/screen-layout";
+import IconButton from "../../components/ui/icon-button";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
 import { useFeatureFlags } from "../../core/hooks/use-feature-flags";
 import type { Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
@@ -772,46 +773,43 @@ export default function TripRouteScreen() {
         {detailsExpanded ? (
           <View style={styles.detailsAccordionBody}>
             <View style={styles.tripActionToolbar}>
-              <Pressable
+              <IconButton
                 accessibilityLabel="Edit trip"
+                icon="edit"
                 onPress={() => openTripEdit(selectedTrip)}
-                style={styles.headerIconButton}
-              >
-                <MaterialIcons color="#243224" name="edit" size={18} />
-              </Pressable>
+              />
               {selectedTrip.status === "ended" &&
               identitySession.mode === "authenticated" &&
               featureFlags.rawEventReprocessingEnabled ? (
-                <Pressable
+                <IconButton
                   accessibilityLabel={rawReprocessBusy ? "Reprocessing route" : "Reprocess route"}
                   disabled={rawReprocessBusy}
+                  disabledIconColor="#6b7280"
+                  icon="replay"
                   onPress={() => void handlePreviewRawReprocessing()}
-                  style={[styles.headerIconButton, styles.reprocessButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
-                >
-                  <MaterialIcons color={rawReprocessBusy ? "#6b7280" : "#243224"} name="replay" size={18} />
-                </Pressable>
+                  style={[styles.reprocessButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
+                />
               ) : null}
               {identitySession.mode === "authenticated" ? (
                 <>
-                  <Pressable
+                  <IconButton
                     accessibilityLabel={syncBusy ? "Syncing trip" : "Sync trip"}
                     disabled={syncBusy}
                     onPress={() => void syncSelectedTripIfNeeded()}
-                    style={[styles.headerIconButton, styles.syncButton, syncBusy && styles.headerIconButtonDisabled]}
+                    style={[styles.syncButton, syncBusy && styles.headerIconButtonDisabled]}
                   >
                     <Animated.View style={syncIconAnimatedStyle}>
                       <MaterialIcons color={syncIconColor} name="sync" size={18} />
                     </Animated.View>
-                  </Pressable>
-                  <Pressable
+                  </IconButton>
+                  <IconButton
                     accessibilityLabel="Share trip"
+                    icon="share"
                     onPress={() => {
                       void openTripShare();
                     }}
-                    style={[styles.headerIconButton, styles.shareButton]}
-                  >
-                    <MaterialIcons color="#243224" name="share" size={18} />
-                  </Pressable>
+                    style={styles.shareButton}
+                  />
                 </>
               ) : null}
             </View>
@@ -1018,11 +1016,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: "#4f5f4f",
-  },
-  headerIconButton: {
-    borderRadius: 999,
-    backgroundColor: "#e6ece1",
-    padding: 10,
   },
   headerIconButtonDisabled: {
     opacity: 0.72,
