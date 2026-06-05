@@ -2,11 +2,11 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 
 import BottomSheetModal from "../../../components/ui/bottom-sheet-modal";
+import FormField from "../../../components/ui/form-field";
 import ModalActions from "../../../components/ui/modal-actions";
 
 interface TripShareModalProps {
@@ -78,15 +78,13 @@ export default function TripShareModal({
         </View>
       ) : null}
 
-      <Text style={styles.fieldLabel}>Recipient email</Text>
-      <TextInput
+      <FormField
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
+        label="Recipient email"
         onChangeText={onChangeRecipientEmail}
         placeholder="friend@example.com"
-        placeholderTextColor="#8c9a86"
-        style={styles.fieldInput}
         value={recipientEmail}
       />
 
@@ -122,22 +120,6 @@ export default function TripShareModal({
 }
 
 const styles = StyleSheet.create({
-  fieldLabel: {
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: "#60705d",
-  },
-  fieldInput: {
-    borderWidth: 1,
-    borderColor: "#d7ddcf",
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#243224",
-  },
   errorText: {
     fontSize: 14,
     fontWeight: "600",

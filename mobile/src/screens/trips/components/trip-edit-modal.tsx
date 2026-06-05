@@ -1,6 +1,7 @@
-import { StyleSheet, Text, TextInput } from "react-native";
+import { StyleSheet } from "react-native";
 
 import BottomSheetModal from "../../../components/ui/bottom-sheet-modal";
+import FormField from "../../../components/ui/form-field";
 import ModalActions from "../../../components/ui/modal-actions";
 import type { TripUpdateInput } from "../../../services/trips/trips-management.service";
 
@@ -30,24 +31,21 @@ export default function TripEditModal({
       title="Edit trip"
       visible={visible}
     >
-      <Text style={styles.fieldLabel}>Trip name</Text>
-      <TextInput
+      <FormField
+        label="Trip name"
         onChangeText={onChangeTitle}
         placeholder="Trip name"
-        placeholderTextColor="#8c9a86"
-        style={styles.fieldInput}
         value={draft.title}
       />
 
-      <Text style={styles.fieldLabel}>Description</Text>
-      <TextInput
+      <FormField
+        label="Description"
         multiline
         numberOfLines={4}
         onChangeText={onChangeDescription}
         placeholder="Trip description"
-        placeholderTextColor="#8c9a86"
-        style={[styles.fieldInput, styles.fieldTextarea]}
-        textAlignVertical="top"
+        style={styles.descriptionInput}
+        textarea
         value={draft.description}
       />
 
@@ -63,23 +61,7 @@ export default function TripEditModal({
 }
 
 const styles = StyleSheet.create({
-  fieldLabel: {
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: "#60705d",
-  },
-  fieldInput: {
-    borderWidth: 1,
-    borderColor: "#d7ddcf",
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#243224",
-  },
-  fieldTextarea: {
+  descriptionInput: {
     minHeight: 110,
   },
 });

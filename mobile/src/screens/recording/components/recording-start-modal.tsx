@@ -8,7 +8,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   type TextInput as TextInputType,
 } from "react-native";
@@ -16,6 +15,7 @@ import {
 import { RECORDING_PROFILE_OPTIONS } from "../../../constants/recording-profiles";
 import type { RecordingMode } from "../../../domain/trips";
 import Card from "../../../components/ui/card";
+import FormField from "../../../components/ui/form-field";
 import LoadingButton from "../../../components/ui/loading-button";
 
 interface RecordingDraft {
@@ -72,38 +72,34 @@ export default function RecordingStartModal({
             subtitle="Give this route a name and choose the recording mode before the trip starts."
             title="Start recording"
           >
-            <Text style={styles.fieldLabel}>Route name</Text>
-            <TextInput
+            <FormField
               autoCapitalize="sentences"
               autoCorrect
               enablesReturnKeyAutomatically
               enterKeyHint="next"
+              label="Route name"
               onChangeText={onChangeDraftTitle}
               onSubmitEditing={() => descriptionInputRef.current?.focus()}
               placeholder="e.g. Drive to Belgrade"
-              placeholderTextColor="#8c9a86"
               ref={titleInputRef}
               returnKeyType="next"
-              style={styles.fieldInput}
               value={draft.title}
             />
 
-            <Text style={styles.fieldLabel}>Description</Text>
-            <TextInput
+            <FormField
               autoCapitalize="sentences"
               autoCorrect
               blurOnSubmit
               enterKeyHint="done"
+              label="Description"
               multiline
               numberOfLines={3}
               onChangeText={onChangeDraftDescription}
               onSubmitEditing={() => Keyboard.dismiss()}
               placeholder="Optional notes. You can also dictate with the keyboard microphone."
-              placeholderTextColor="#8c9a86"
               ref={descriptionInputRef}
               returnKeyType="done"
-              style={[styles.fieldInput, styles.fieldTextarea]}
-              textAlignVertical="top"
+              textarea
               value={draft.description}
             />
 
@@ -164,8 +160,6 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   card: { width: "100%", maxWidth: 420 },
   fieldLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, color: "#60705d" },
-  fieldInput: { borderWidth: 1, borderColor: "#d7ddcf", borderRadius: 14, backgroundColor: "#ffffff", paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: "#243224" },
-  fieldTextarea: { minHeight: 90 },
   profileList: { gap: 8 },
   profileOption: { borderWidth: 1, borderColor: "#d7ddcf", borderRadius: 16, backgroundColor: "#ffffff", paddingHorizontal: 14, paddingVertical: 12, gap: 4 },
   profileOptionSelected: { borderColor: "#243224", backgroundColor: "#edf4e9" },

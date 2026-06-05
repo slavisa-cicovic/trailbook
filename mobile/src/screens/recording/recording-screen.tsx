@@ -10,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -21,9 +20,10 @@ import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 import ScreenLayout from "../../components/layout/screen-layout";
 import RecordingControl from "../../components/recording/recording-control";
 import Card from "../../components/ui/card";
+import FormField from "../../components/ui/form-field";
+import WaypointCategoryPicker from "../../components/waypoints/waypoint-category-picker";
 import {
   DEFAULT_WAYPOINT_CATEGORY,
-  WAYPOINT_CATEGORY_OPTIONS,
 } from "../../constants/waypoint-categories";
 import type { RecordingMode } from "../../domain/trips";
 import type { TrailbookMapType } from "../trips/components/trip-route-map";
@@ -987,63 +987,27 @@ export default function RecordingScreen() {
               subtitle="Save a quick waypoint for this route using your current location."
               title="Add note"
             >
-              <Text style={styles.fieldLabel}>Title</Text>
-              <TextInput
+              <FormField
                 autoCapitalize="sentences"
+                label="Title"
                 onChangeText={(title) => setWaypointDraft((current) => ({ ...current, title }))}
                 placeholder="Viewpoint"
-                placeholderTextColor="#8c9a86"
-                style={styles.fieldInput}
                 value={waypointDraft.title}
               />
 
-              <Text style={styles.fieldLabel}>Category</Text>
-              <ScrollView
-                contentContainerStyle={styles.categoryPickerRow}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-              >
-                {WAYPOINT_CATEGORY_OPTIONS.map((option) => {
-                  const selected = option.value === waypointDraft.category;
+              <WaypointCategoryPicker
+                onChangeCategory={handleSelectWaypointCategory}
+                value={waypointDraft.category}
+              />
 
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => handleSelectWaypointCategory(option.value)}
-                      style={[
-                        styles.categoryChip,
-                        { borderColor: option.color },
-                        selected && { backgroundColor: option.color },
-                      ]}
-                    >
-                      <MaterialIcons
-                        color={selected ? "#fffdf8" : option.color}
-                        name={option.iconName}
-                        size={16}
-                      />
-                      <Text
-                        style={[
-                          styles.categoryChipText,
-                          selected && styles.categoryChipTextSelected,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-
-              <Text style={styles.fieldLabel}>Note</Text>
-              <TextInput
+              <FormField
                 autoCapitalize="sentences"
+                label="Note"
                 multiline
                 numberOfLines={3}
                 onChangeText={(note) => setWaypointDraft((current) => ({ ...current, note }))}
                 placeholder="What do you want to remember here?"
-                placeholderTextColor="#8c9a86"
-                style={[styles.fieldInput, styles.fieldTextarea]}
-                textAlignVertical="top"
+                textarea
                 value={waypointDraft.note}
               />
 
@@ -1482,19 +1446,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     color: "#60705d",
   },
-  fieldInput: {
-    borderWidth: 1,
-    borderColor: "#d7ddcf",
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#243224",
-  },
-  fieldTextarea: {
-    minHeight: 90,
-  },
   photoDraftCarouselContent: {
     gap: 12,
     paddingBottom: 4,
@@ -1586,28 +1537,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 4,
-  },
-  categoryPickerRow: {
-    gap: 8,
-    paddingBottom: 4,
-  },
-  categoryChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderRadius: 999,
-    backgroundColor: "#fffdf8",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  categoryChipText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#355035",
-  },
-  categoryChipTextSelected: {
-    color: "#fffdf8",
   },
   profileOptionSelected: {
     borderColor: "#243224",
