@@ -6,6 +6,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -187,7 +188,7 @@ export default function TripRouteScreen() {
 
   const [tripEditVisible, setTripEditVisible] = useState(false);
   const [tripShareVisible, setTripShareVisible] = useState(false);
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [detailsSheetVisible, setDetailsSheetVisible] = useState(false);
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
   const [shareRecipientEmail, setShareRecipientEmail] = useState("");
   const [shareError, setShareError] = useState<string | null>(null);
@@ -757,207 +758,237 @@ export default function TripRouteScreen() {
         visible={tripShareVisible}
       />
 
-      <View style={styles.detailsAccordionCard}>
-        <Pressable
-          onPress={() => setDetailsExpanded((current) => !current)}
-          style={styles.detailsAccordionTrigger}
-        >
-          <Text numberOfLines={1} style={styles.tripTitle}>
-            {selectedTrip.title}
-          </Text>
-          <View style={styles.detailsAccordionActions}>
-            <MaterialIcons
-              color="#243224"
-              name={detailsExpanded ? "expand-less" : "expand-more"}
-              size={22}
-            />
-          </View>
-        </Pressable>
-
-        {detailsExpanded ? (
-          <View style={styles.detailsAccordionBody}>
-            <View style={styles.tripActionToolbar}>
-              <IconButton
-                accessibilityLabel="Edit trip"
-                icon="edit"
-                onPress={() => openTripEdit(selectedTrip)}
-              />
-              {selectedTrip.status === "ended" &&
-              identitySession.mode === "authenticated" &&
-              featureFlags.rawEventReprocessingEnabled ? (
-                <IconButton
-                  accessibilityLabel={rawReprocessBusy ? "Reprocessing route" : "Reprocess route"}
-                  disabled={rawReprocessBusy}
-                  disabledIconColor="#6b7280"
-                  icon="replay"
-                  onPress={() => void handlePreviewRawReprocessing()}
-                  style={[styles.reprocessButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
-                />
-              ) : null}
-              {identitySession.mode === "authenticated" ? (
-                <>
-                  <IconButton
-                    accessibilityLabel={syncBusy ? "Syncing trip" : "Sync trip"}
-                    disabled={syncBusy}
-                    onPress={() => void syncSelectedTripIfNeeded()}
-                    style={[styles.syncButton, syncBusy && styles.headerIconButtonDisabled]}
-                  >
-                    <Animated.View style={syncIconAnimatedStyle}>
-                      <MaterialIcons color={syncIconColor} name="sync" size={18} />
-                    </Animated.View>
-                  </IconButton>
-                  <IconButton
-                    accessibilityLabel="Share trip"
-                    icon="share"
-                    onPress={() => {
-                      void openTripShare();
-                    }}
-                    style={styles.shareButton}
-                  />
-                </>
-              ) : null}
-            </View>
-            {selectedTrip.description ? (
-              <Text style={styles.tripDescription}>{selectedTrip.description}</Text>
-            ) : null}
-            {identitySession.mode !== "authenticated" ? (
-              <Text style={styles.demoHint}>Demo trips stay local-only and cannot be shared.</Text>
-            ) : null}
-            {shareSuccess ? <Text style={styles.shareSuccessText}>{shareSuccess}</Text> : null}
-            <View style={styles.summaryGrid}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryKey}>Waypoints</Text>
-                <Text style={styles.summaryValue}>{String(selectedTripWaypoints.length)}</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryKey}>Photos</Text>
-                <Text style={styles.summaryValue}>{String(selectedTripAttachments.length)}</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryKey}>Distance</Text>
-                <Text style={styles.summaryValue}>{distanceText}</Text>
-              </View>
-            </View>
-            <View style={styles.batteryConsumptionItem}>
-              <Text style={styles.summaryKey}>Battery consumption</Text>
-              <Text style={styles.summaryValue}>
-                {formatBatteryConsumption(
-                  selectedTrip.batteryStartLevelPercent,
-                  selectedTrip.batteryEndLevelPercent,
-                )}
-              </Text>
-              <Text style={styles.batteryConsumptionMeta}>
-                {formatBatterySnapshot(selectedTrip.batteryStartLevelPercent, selectedTrip.batteryStartState)}
-                {" -> "}
-                {formatBatterySnapshot(selectedTrip.batteryEndLevelPercent, selectedTrip.batteryEndState)}
-              </Text>
-            </View>
-            {selectedTripTimeline.length > 0 ? (
-              <View style={styles.segmentsList}>
-                <Text style={styles.segmentsTitle}>Timeline</Text>
-                <ScrollView
-                  nestedScrollEnabled
-                  showsVerticalScrollIndicator={selectedTripTimeline.length > 3}
-                  style={styles.segmentsScroll}
-                >
-                  {selectedTripTimeline.map((entry) =>
-                    entry.type === "segment" ? (
-                      <View key={entry.segment.localId} style={styles.segmentRow}>
-                        <View style={styles.segmentHeader}>
-                          <View style={styles.segmentHeaderLead}>
-                            <Text style={styles.segmentMode}>{getRecordingProfileLabel(entry.segment.recordingProfile)}</Text>
-                            {selectedTrip.status === "ended" ? (
-                              <Pressable
-                                onPress={() => setSegmentEditSegmentId(entry.segment.localId)}
-                                style={styles.segmentEditIconButton}
-                              >
-                                <MaterialIcons color="#52624f" name="edit" size={16} />
-                              </Pressable>
-                            ) : null}
-                          </View>
-                          <Text style={styles.segmentDistance}>{formatDistanceKm(entry.distanceMeters)}</Text>
-                        </View>
-                        <Text style={styles.segmentMeta}>
-                          {new Date(entry.segment.startedAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                          {" - "}
-                          {entry.segment.endedAt
-                            ? new Date(entry.segment.endedAt).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "Active"}
-                          {" • "}
-                          {entry.durationLabel}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View key={entry.pause.localId} style={[styles.segmentRow, styles.pauseRow]}>
-                        <View style={styles.segmentHeader}>
-                          <View style={styles.segmentHeaderLead}>
-                            <Text style={styles.pauseMode}>Pause</Text>
-                          </View>
-                          <Text style={styles.pauseDuration}>{entry.durationLabel}</Text>
-                        </View>
-                        <Text style={styles.segmentMeta}>
-                          {new Date(entry.pause.startedAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                          {" - "}
-                          {entry.pause.endedAt
-                            ? new Date(entry.pause.endedAt).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "Paused"}
-                        </Text>
-                      </View>
-                    ),
-                  )}
-                </ScrollView>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.mapTypeRow}>
-        {mapTypeOptions.map((option) => {
-          const selected = option.value === mapType;
-
-          return (
-            <Pressable
-              key={option.value}
-              onPress={() => setMapType(option.value)}
-              style={[styles.mapTypeChip, selected && styles.mapTypeChipSelected]}
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setDetailsSheetVisible(false)}
+        transparent
+        visible={detailsSheetVisible}
+      >
+        <View style={styles.routeDetailsOverlay}>
+          <Pressable
+            accessibilityLabel="Close route details"
+            onPress={() => setDetailsSheetVisible(false)}
+            style={styles.routeDetailsBackdrop}
+          />
+          <View style={styles.routeDetailsSheet}>
+            <View style={styles.routeDetailsHandle} />
+            <Text numberOfLines={1} style={styles.routeDetailsTitle}>
+              {selectedTrip.title}
+            </Text>
+            <ScrollView
+              contentContainerStyle={styles.routeDetailsBody}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
             >
-              <Text style={[styles.mapTypeChipText, selected && styles.mapTypeChipTextSelected]}>
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {routeLoading ? (
-        <View style={styles.routeLoadingCard}>
-          <ActivityIndicator color="#355035" />
-          <Text style={styles.routeLoadingTitle}>Loading route</Text>
-          <Text style={styles.routeLoadingText}>Preparing map data for this trip.</Text>
+              <View style={styles.tripActionToolbar}>
+                <IconButton
+                  accessibilityLabel="Edit trip"
+                  icon="edit"
+                  onPress={() => {
+                    setDetailsSheetVisible(false);
+                    openTripEdit(selectedTrip);
+                  }}
+                />
+                {selectedTrip.status === "ended" &&
+                identitySession.mode === "authenticated" &&
+                featureFlags.rawEventReprocessingEnabled ? (
+                  <IconButton
+                    accessibilityLabel={rawReprocessBusy ? "Reprocessing route" : "Reprocess route"}
+                    disabled={rawReprocessBusy}
+                    disabledIconColor="#6b7280"
+                    icon="replay"
+                    onPress={() => void handlePreviewRawReprocessing()}
+                    style={[styles.reprocessButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
+                  />
+                ) : null}
+                {identitySession.mode === "authenticated" ? (
+                  <>
+                    <IconButton
+                      accessibilityLabel={syncBusy ? "Syncing trip" : "Sync trip"}
+                      disabled={syncBusy}
+                      onPress={() => void syncSelectedTripIfNeeded()}
+                      style={[styles.syncButton, syncBusy && styles.headerIconButtonDisabled]}
+                    >
+                      <Animated.View style={syncIconAnimatedStyle}>
+                        <MaterialIcons color={syncIconColor} name="sync" size={18} />
+                      </Animated.View>
+                    </IconButton>
+                    <IconButton
+                      accessibilityLabel="Share trip"
+                      icon="share"
+                      onPress={() => {
+                        setDetailsSheetVisible(false);
+                        void openTripShare();
+                      }}
+                      style={styles.shareButton}
+                    />
+                  </>
+                ) : null}
+              </View>
+              {selectedTrip.description ? (
+                <Text style={styles.tripDescription}>{selectedTrip.description}</Text>
+              ) : null}
+              {identitySession.mode !== "authenticated" ? (
+                <Text style={styles.demoHint}>Demo trips stay local-only and cannot be shared.</Text>
+              ) : null}
+              {shareSuccess ? <Text style={styles.shareSuccessText}>{shareSuccess}</Text> : null}
+              <View style={styles.summaryGrid}>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryKey}>Waypoints</Text>
+                  <Text style={styles.summaryValue}>{String(selectedTripWaypoints.length)}</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryKey}>Photos</Text>
+                  <Text style={styles.summaryValue}>{String(selectedTripAttachments.length)}</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryKey}>Distance</Text>
+                  <Text style={styles.summaryValue}>{distanceText}</Text>
+                </View>
+              </View>
+              <View style={styles.batteryConsumptionItem}>
+                <Text style={styles.summaryKey}>Battery consumption</Text>
+                <Text style={styles.summaryValue}>
+                  {formatBatteryConsumption(
+                    selectedTrip.batteryStartLevelPercent,
+                    selectedTrip.batteryEndLevelPercent,
+                  )}
+                </Text>
+                <Text style={styles.batteryConsumptionMeta}>
+                  {formatBatterySnapshot(selectedTrip.batteryStartLevelPercent, selectedTrip.batteryStartState)}
+                  {" -> "}
+                  {formatBatterySnapshot(selectedTrip.batteryEndLevelPercent, selectedTrip.batteryEndState)}
+                </Text>
+              </View>
+              {selectedTripTimeline.length > 0 ? (
+                <View style={styles.segmentsList}>
+                  <Text style={styles.segmentsTitle}>Timeline</Text>
+                  <ScrollView
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator={selectedTripTimeline.length > 3}
+                    style={styles.segmentsScroll}
+                  >
+                    {selectedTripTimeline.map((entry) =>
+                      entry.type === "segment" ? (
+                        <View key={entry.segment.localId} style={styles.segmentRow}>
+                          <View style={styles.segmentHeader}>
+                            <View style={styles.segmentHeaderLead}>
+                              <Text style={styles.segmentMode}>
+                                {getRecordingProfileLabel(entry.segment.recordingProfile)}
+                              </Text>
+                              {selectedTrip.status === "ended" ? (
+                                <Pressable
+                                  onPress={() => {
+                                    setDetailsSheetVisible(false);
+                                    setSegmentEditSegmentId(entry.segment.localId);
+                                  }}
+                                  style={styles.segmentEditIconButton}
+                                >
+                                  <MaterialIcons color="#52624f" name="edit" size={16} />
+                                </Pressable>
+                              ) : null}
+                            </View>
+                            <Text style={styles.segmentDistance}>{formatDistanceKm(entry.distanceMeters)}</Text>
+                          </View>
+                          <Text style={styles.segmentMeta}>
+                            {new Date(entry.segment.startedAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                            {" - "}
+                            {entry.segment.endedAt
+                              ? new Date(entry.segment.endedAt).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "Active"}
+                            {" • "}
+                            {entry.durationLabel}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View key={entry.pause.localId} style={[styles.segmentRow, styles.pauseRow]}>
+                          <View style={styles.segmentHeader}>
+                            <View style={styles.segmentHeaderLead}>
+                              <Text style={styles.pauseMode}>Pause</Text>
+                            </View>
+                            <Text style={styles.pauseDuration}>{entry.durationLabel}</Text>
+                          </View>
+                          <Text style={styles.segmentMeta}>
+                            {new Date(entry.pause.startedAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                            {" - "}
+                            {entry.pause.endedAt
+                              ? new Date(entry.pause.endedAt).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "Paused"}
+                          </Text>
+                        </View>
+                      ),
+                    )}
+                  </ScrollView>
+                </View>
+              ) : null}
+            </ScrollView>
+          </View>
         </View>
-      ) : (
-        <TripRouteMap
-          coordinates={routeCoordinates}
-          mapType={mapType}
-          onSelectWaypoint={handleSelectWaypoint}
-          region={selectedTripMapRegion}
-          segmentPolylines={segmentPolylines}
-          waypointMarkers={waypointMarkers}
-        />
-      )}
+      </Modal>
+
+      <View style={styles.routeMapShell}>
+        {routeLoading ? (
+          <View style={styles.routeLoadingCard}>
+            <ActivityIndicator color="#355035" />
+            <Text style={styles.routeLoadingTitle}>Loading route</Text>
+            <Text style={styles.routeLoadingText}>Preparing map data for this trip.</Text>
+          </View>
+        ) : (
+          <TripRouteMap
+            coordinates={routeCoordinates}
+            mapType={mapType}
+            onSelectWaypoint={handleSelectWaypoint}
+            region={selectedTripMapRegion}
+            segmentPolylines={segmentPolylines}
+            waypointMarkers={waypointMarkers}
+          />
+        )}
+        <View pointerEvents="box-none" style={styles.routeMapOverlay}>
+          <View style={styles.mapTypeRow}>
+            {mapTypeOptions.map((option) => {
+              const selected = option.value === mapType;
+
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setMapType(option.value)}
+                  style={[styles.mapTypeChip, selected && styles.mapTypeChipSelected]}
+                >
+                  <Text style={[styles.mapTypeChipText, selected && styles.mapTypeChipTextSelected]}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+        <View pointerEvents="box-none" style={styles.routeBottomBarWrap}>
+          <Pressable
+            onPress={() => setDetailsSheetVisible(true)}
+            style={styles.routeBottomBar}
+          >
+            <Text numberOfLines={1} style={styles.routeBottomTitle}>
+              {selectedTrip.title}
+            </Text>
+            <View style={styles.routeBottomMetaWrap}>
+              <Text style={styles.routeBottomMeta}>{distanceText}</Text>
+              <MaterialIcons color="#243224" name="expand-less" size={20} />
+            </View>
+          </Pressable>
+        </View>
+      </View>
     </ScreenLayout>
   );
 }
@@ -965,8 +996,6 @@ export default function TripRouteScreen() {
 const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
-    gap: 12,
-    paddingBottom: 12,
   },
   emptyState: {
     flex: 1,
@@ -984,37 +1013,105 @@ const styles = StyleSheet.create({
     color: "#52624f",
     textAlign: "center",
   },
-  detailsAccordionCard: {
-    borderRadius: 20,
-    backgroundColor: "#f6f1e5",
+  routeMapShell: {
+    flex: 1,
+    position: "relative",
+  },
+  routeMapOverlay: {
+    position: "absolute",
+    top: 14,
+    left: 14,
+    right: 14,
+    alignItems: "flex-start",
+  },
+  routeBottomBarWrap: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    bottom: 16,
+  },
+  routeBottomBar: {
+    minHeight: 58,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 253, 248, 0.94)",
     borderWidth: 1,
-    borderColor: "#ebe1cf",
-    padding: 16,
-  },
-  detailsAccordionTrigger: {
+    borderColor: "rgba(235, 225, 207, 0.9)",
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: "#142014",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 7,
   },
-  detailsAccordionActions: {
+  routeBottomTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  routeBottomMetaWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 4,
   },
-  detailsAccordionBody: {
+  routeBottomMeta: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#52624f",
+  },
+  routeDetailsOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(20, 28, 20, 0.28)",
+  },
+  routeDetailsBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  routeDetailsSheet: {
+    width: "100%",
+    maxHeight: "82%",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    backgroundColor: "rgba(248, 244, 234, 0.98)",
+    borderWidth: 1,
+    borderColor: "rgba(235, 225, 207, 0.92)",
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 22,
+    shadowColor: "#142014",
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  routeDetailsHandle: {
+    alignSelf: "center",
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(82, 98, 79, 0.35)",
+    marginBottom: 12,
+  },
+  routeDetailsTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#243224",
+    marginBottom: 2,
+  },
+  routeDetailsBody: {
     gap: 14,
     paddingTop: 14,
+    paddingBottom: 12,
   },
   tripActionToolbar: {
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: 10,
-  },
-  tripTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#243224",
   },
   tripDescription: {
     fontSize: 14,
@@ -1027,6 +1124,17 @@ const styles = StyleSheet.create({
   mapTypeRow: {
     flexDirection: "row",
     gap: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 253, 248, 0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(235, 225, 207, 0.88)",
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    shadowColor: "#142014",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
   syncButton: {
     backgroundColor: "#e6ece1",
