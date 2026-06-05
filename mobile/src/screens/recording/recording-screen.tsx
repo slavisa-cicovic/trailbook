@@ -22,6 +22,7 @@ import RecordingControl from "../../components/recording/recording-control";
 import Card from "../../components/ui/card";
 import FormField from "../../components/ui/form-field";
 import WaypointCategoryPicker from "../../components/waypoints/waypoint-category-picker";
+import WaypointPhotoActionRow from "../../components/waypoints/waypoint-photo-action-row";
 import WaypointPhotoDraftCarousel from "../../components/waypoints/waypoint-photo-draft-carousel";
 import {
   DEFAULT_WAYPOINT_CATEGORY,
@@ -1016,14 +1017,10 @@ export default function RecordingScreen() {
               <Text style={styles.photoHelpText}>
                 Add one or more photos from the camera or your library.
               </Text>
-              <View style={styles.photoActionRow}>
-                <Pressable onPress={() => void handleTakePhoto()} style={styles.photoActionPrimary}>
-                  <Text style={styles.photoActionPrimaryText}>Take photo</Text>
-                </Pressable>
-                <Pressable onPress={() => void handleChoosePhoto()} style={styles.photoActionSecondary}>
-                  <Text style={styles.photoActionSecondaryText}>Add photos</Text>
-                </Pressable>
-              </View>
+              <WaypointPhotoActionRow
+                onAddPhotos={() => void handleChoosePhoto()}
+                onTakePhoto={() => void handleTakePhoto()}
+              />
 
               <WaypointPhotoDraftCarousel
                 cardWidth={draftPhotoCardWidth}
@@ -1427,36 +1424,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#52624f",
     marginTop: -2,
-  },
-  photoActionRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  photoActionPrimary: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#243224",
-    paddingVertical: 12,
-  },
-  photoActionPrimaryText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#fffdf8",
-  },
-  photoActionSecondary: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#3c5a3c",
-    paddingVertical: 12,
-  },
-  photoActionSecondaryText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#fffdf8",
   },
   profileList: {
     gap: 8,
