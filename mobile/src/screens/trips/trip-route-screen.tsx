@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import {
@@ -194,7 +194,7 @@ export default function TripRouteScreen() {
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
   const [resolvedShareTripId, setResolvedShareTripId] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
-  const syncIconRotation = useRef(new Animated.Value(0)).current;
+  const [syncIconRotation] = useState(() => new Animated.Value(0));
   const [rawReprocessBusy, setRawReprocessBusy] = useState(false);
   const [segmentEditSegmentId, setSegmentEditSegmentId] = useState<string | null>(null);
   const [tripSegmentStatsBySegmentId, setTripSegmentStatsBySegmentId] = useState<

@@ -77,9 +77,8 @@ export default function TripWaypointScreen() {
   const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
   const tripWaypoints = selectedTrip ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTrip.localId) : [];
   const selectedWaypoint = tripWaypoints.find((waypoint) => waypoint.localId === resolvedWaypointId) ?? null;
-  const waypointNavigationOrder = useMemo(
-    () => [...tripWaypoints].sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
-    [tripWaypoints],
+  const waypointNavigationOrder = [...tripWaypoints].sort((left, right) =>
+    left.createdAt.localeCompare(right.createdAt),
   );
   const selectedWaypointIndex = selectedWaypoint
     ? waypointNavigationOrder.findIndex((waypoint) => waypoint.localId === selectedWaypoint.localId)

@@ -364,7 +364,7 @@ function maybeLogDiagnostics(diagnostics: MutableTripPointDiagnostics) {
 
   diagnostics.lastLoggedAtCallbackCount = diagnostics.callbackCount;
 
-  console.info("[Trailbook][location-summary]", JSON.stringify(buildSummary(diagnostics)));
+  console.warn("[Trailbook][location-summary]", JSON.stringify(buildSummary(diagnostics)));
 }
 
 function attachDecisionToRecentEvent(
@@ -462,7 +462,7 @@ export function recordLocationCallback(
   });
   trimRecentEvents(diagnostics);
 
-  console.info(
+  console.warn(
     "[Trailbook][location-callback]",
     JSON.stringify({
       accuracy: snapshot.accuracy,
@@ -556,7 +556,7 @@ export function recordTripPointDiagnostic(
 
   attachDecisionToRecentEvent(diagnostics, reason, options);
 
-  console.info(
+  console.warn(
     "[Trailbook][location-decision]",
     JSON.stringify({
       reason,
@@ -612,7 +612,7 @@ export function recordLocationSilentGap(
   diagnostics.lastSilentGapLoggedAtMs = Number.isFinite(observedAtMs) ? observedAtMs : Date.now();
   diagnostics.updatedAt = input.observedAt;
 
-  console.info(
+  console.warn(
     "[Trailbook][location-silent-gap]",
     JSON.stringify({
       batteryOptimizationIgnored: input.batteryOptimizationIgnored,
@@ -651,7 +651,7 @@ export function flushTripPointDiagnostics(tripLocalId: string) {
 
   diagnostics.updatedAt = new Date().toISOString();
 
-  console.info(
+  console.warn(
     "[Trailbook][location-summary][final]",
     JSON.stringify({
       ...buildSummary(diagnostics),

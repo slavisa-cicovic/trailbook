@@ -83,7 +83,8 @@ const TRIP_DATE_FILTER_OPTIONS: { label: string; value: TripDateFilter }[] = [
 
 export default function TripsScreen() {
   const router = useRouter();
-  const suppressTapUntilRef = useRef(0);
+  const suppressTapAfterSwipeRef = useRef(false);
+  const suppressTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useTripsScreenHydration();
   const identitySession = useSessionStore((state) => state.identitySession);
   const recordingSession = useRecordingStore((state) => state.session);
@@ -147,7 +148,6 @@ export default function TripsScreen() {
 
   const visibleTrips = getVisibleTrips(currentUserTrips);
   const visibleTripGroups = getVisibleTripGroups(currentUserTripGroups);
-  const visibleTripGroupIdsKey = visibleTripGroups.map((group) => group.localId).join("|");
   const visibleTripGroupMembers = getVisibleTripGroupMembers(currentUserTripGroupMembers);
   const tripGroupSummaries = buildTripGroupSummaries(visibleTripGroups, visibleTripGroupMembers, visibleTrips);
   const selectedGroup = selectedGroupId
@@ -253,12 +253,15 @@ export default function TripsScreen() {
     return () => clearTimeout(timeoutId);
   }, [pendingUndo]);
 
+  /* eslint-disable react-hooks/preserve-manual-memoization */
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
 
       async function loadTripStats() {
-        if (filteredTripIds.length === 0) {
+        const tripIds = filteredTripIdsKey.length > 0 ? filteredTripIdsKey.split("|") : [];
+
+        if (tripIds.length === 0) {
           setTripStatsByTripId(new Map());
           setTripStatsLoading(false);
           return;
@@ -267,7 +270,7 @@ export default function TripsScreen() {
         setTripStatsLoading(true);
 
         try {
-          const nextTripStatsByTripId = await listTripSummaryStats(filteredTripIds);
+          const nextTripStatsByTripId = await listTripSummaryStats(tripIds);
 
           if (!cancelled) {
             setTripStatsByTripId(nextTripStatsByTripId);
@@ -286,22 +289,16 @@ export default function TripsScreen() {
       };
     }, [filteredTripIdsKey]),
   );
+  /* eslint-enable react-hooks/preserve-manual-memoization */
 
-  useEffect(() => {
-    if (listMode !== "owned" && selectedGroupTripIds.length > 0) {
-      setSelectedGroupTripIds([]);
-    }
-  }, [listMode, selectedGroupTripIds.length]);
-
-  useEffect(() => {
-    if (!selectedGroupId) {
-      return;
-    }
-
-    if (!visibleTripGroups.some((group) => group.localId === selectedGroupId)) {
-      setSelectedGroupId(null);
-    }
-  }, [selectedGroupId, visibleTripGroupIdsKey]);
+  useEffect(
+    () => () => {
+      if (suppressTapTimeoutRef.current) {
+        clearTimeout(suppressTapTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   async function syncTripMutationViaOutbox(tripLocalId: string) {
     if (identitySession?.mode !== "authenticated" || !identitySession.sessionToken) {
@@ -546,6 +543,14 @@ export default function TripsScreen() {
     await syncTripGroupsMutation(tripGroups, nextMembers);
   }
 
+  function handleChangeListMode(nextListMode: TripListMode) {
+    setListMode(nextListMode);
+
+    if (nextListMode !== "owned") {
+      setSelectedGroupTripIds([]);
+    }
+  }
+
   function handleConfirmDeleteTripGroup(group: TripGroup) {
     Alert.alert("Delete group", `Delete "${group.title}"? Trips will not be deleted.`, [
       { text: "Cancel", style: "cancel" },
@@ -709,7 +714,7 @@ export default function TripsScreen() {
   }
 
   function handleTripCardPress(tripLocalId: string) {
-    if (Date.now() < suppressTapUntilRef.current) {
+    if (suppressTapAfterSwipeRef.current) {
       return;
     }
 
@@ -722,7 +727,16 @@ export default function TripsScreen() {
   }
 
   function suppressTapAfterSwipe() {
-    suppressTapUntilRef.current = Date.now() + 1200;
+    suppressTapAfterSwipeRef.current = true;
+
+    if (suppressTapTimeoutRef.current) {
+      clearTimeout(suppressTapTimeoutRef.current);
+    }
+
+    suppressTapTimeoutRef.current = setTimeout(() => {
+      suppressTapAfterSwipeRef.current = false;
+      suppressTapTimeoutRef.current = null;
+    }, 1200);
   }
 
   if (!identitySession) {
@@ -768,7 +782,7 @@ export default function TripsScreen() {
 
         <View style={styles.modeToggleRow}>
           <Pressable
-            onPress={() => setListMode("owned")}
+            onPress={() => handleChangeListMode("owned")}
             style={[styles.modeToggleChip, listMode === "owned" && styles.modeToggleChipSelected]}
           >
             <Text
@@ -778,7 +792,7 @@ export default function TripsScreen() {
             </Text>
           </Pressable>
           <Pressable
-            onPress={() => setListMode("groups")}
+            onPress={() => handleChangeListMode("groups")}
             style={[styles.modeToggleChip, listMode === "groups" && styles.modeToggleChipSelected]}
           >
             <Text
@@ -789,7 +803,7 @@ export default function TripsScreen() {
           </Pressable>
           <Pressable
             disabled={identitySession.mode !== "authenticated"}
-            onPress={() => setListMode("shared")}
+            onPress={() => handleChangeListMode("shared")}
             style={[
               styles.modeToggleChip,
               listMode === "shared" && styles.modeToggleChipSelected,

@@ -147,7 +147,9 @@ export default function RecordingConfigProfileScreen() {
   }, [identitySession, parsedTarget]);
 
   useEffect(() => {
-    void loadConfig();
+    const timeoutId = setTimeout(() => void loadConfig(), 0);
+
+    return () => clearTimeout(timeoutId);
   }, [loadConfig]);
 
   async function handleSave() {
