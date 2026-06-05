@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { AppThemeMode } from "../constants/app-theme";
-import { loadJsonRecord, saveJsonRecord } from "./sqlite/db";
+import { loadJsonRecord, saveJsonRecord } from "./app-kv-storage";
 
 function normalizeThemeMode(value: unknown): AppThemeMode {
   if (value === "night") {

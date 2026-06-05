@@ -605,40 +605,6 @@ export async function clearLocalTripData(): Promise<void> {
   });
 }
 
-export async function loadJsonRecord<T>(storageKey: string): Promise<T | null> {
-  const database = await getDatabase();
-  const row = await database.getFirstAsync<{ json_value: string }>(
-    "SELECT json_value FROM app_kv WHERE storage_key = ?",
-    storageKey,
-  );
-
-  if (!row) {
-    return null;
-  }
-
-  return JSON.parse(row.json_value) as T;
-}
-
-export async function saveJsonRecord<T>(storageKey: string, value: T | null): Promise<void> {
-  await runExclusiveDatabaseWrite(async (database) => {
-    if (value === null) {
-      await database.runAsync("DELETE FROM app_kv WHERE storage_key = ?", storageKey);
-      return;
-    }
-
-    await database.runAsync(
-      `INSERT OR REPLACE INTO app_kv (
-        storage_key,
-        json_value,
-        updated_at
-      ) VALUES (?, ?, ?)`,
-      storageKey,
-      JSON.stringify(value),
-      new Date().toISOString(),
-    );
-  });
-}
-
 export async function runExclusiveDatabaseWrite<T>(
   task: (transaction: SQLite.SQLiteDatabase) => Promise<T>,
 ): Promise<T> {

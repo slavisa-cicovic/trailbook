@@ -18,6 +18,7 @@ Completed in the first implementation pass:
 - Kept existing `PRAGMA user_version` migrations as the runtime source of truth.
 - Migrated `trip_groups` storage to Drizzle behind the existing repository API.
 - Migrated `trip_group_members` storage to Drizzle behind the existing repository API.
+- Migrated shared `app_kv` JSON storage to Drizzle behind the existing storage API.
 - Kept recording hot-path tables on existing optimized SQL.
 
 Still intentionally deferred:
@@ -31,6 +32,7 @@ Still intentionally deferred:
 Subplans:
 
 - `PLAN_52A_drizzle_migration_baseline.md`: define and implement the Drizzle migration baseline/startup strategy before more repository migrations.
+- `PLAN_52B_drizzle_app_kv_storage.md`: migrate the shared JSON key-value storage primitive to Drizzle behind the existing API.
 
 ## Context
 

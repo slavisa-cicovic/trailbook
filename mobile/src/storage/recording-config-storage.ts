@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { CachedMobileRecordingConfig } from "../domain/recording-config";
-import { loadJsonRecord, saveJsonRecord } from "./sqlite/db";
+import { loadJsonRecord, saveJsonRecord } from "./app-kv-storage";
 import { migrateOnce } from "./sqlite/migrate-once";
 
 async function ensureRecordingConfigMigrated(): Promise<void> {

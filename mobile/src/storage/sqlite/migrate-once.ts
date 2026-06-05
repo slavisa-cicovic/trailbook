@@ -1,4 +1,4 @@
-import { loadJsonRecord, saveJsonRecord } from "./db";
+import { loadJsonRecord, saveJsonRecord } from "../app-kv-storage";
 
 const MIGRATIONS_KEY = "trailbook.migrations.v1";
 

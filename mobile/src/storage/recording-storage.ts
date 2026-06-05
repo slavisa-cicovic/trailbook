@@ -12,7 +12,7 @@ import {
   normalizeMotionActivityType,
 } from "../domain/motion-activity";
 import type { RecordingSessionSummary } from "../domain/trips";
-import { loadJsonRecord, saveJsonRecord } from "./sqlite/db";
+import { loadJsonRecord, saveJsonRecord } from "./app-kv-storage";
 import { migrateOnce } from "./sqlite/migrate-once";
 
 function normalizeRecordingSession(
