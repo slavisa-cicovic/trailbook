@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   AppState,
   Image,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -107,6 +109,8 @@ import RecordingStartModal from "./components/recording-start-modal";
 
 const LOCATION_SILENT_GAP_WARNING_MS = 2 * 60 * 1000;
 const LOCATION_SILENT_GAP_WATCHDOG_INTERVAL_MS = 30 * 1000;
+const SESSION_SHEET_DISMISS_DRAG_Y = 80;
+const SESSION_SHEET_DISMISS_VELOCITY_Y = 1.1;
 
 export default function RecordingScreen() {
   const { width: screenWidth } = useWindowDimensions();
@@ -123,6 +127,7 @@ export default function RecordingScreen() {
   const [sessionMenuVisible, setSessionMenuVisible] = useState(false);
   const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
   const [mapType, setMapType] = useState<TrailbookMapType>("standard");
+  const [sessionSheetDragY] = useState(() => new Animated.Value(0));
   const lastWatchdogTickBucketRef = useRef<string | null>(null);
   const lastSilentGapBucketRef = useRef<string | null>(null);
   const lastSilentGapRecoveryBucketRef = useRef<string | null>(null);
@@ -189,6 +194,43 @@ export default function RecordingScreen() {
   function logRecordingStartStep(step: string, details?: Record<string, unknown>) {
     console.warn("[Trailbook][recording-start]", details ? { step, ...details } : { step });
   }
+
+  function closeSessionMenu() {
+    setSessionMenuVisible(false);
+    sessionSheetDragY.setValue(0);
+  }
+
+  const sessionSheetPanResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gestureState) =>
+      Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && gestureState.dy > 4,
+    onPanResponderMove: (_event, gestureState) => {
+      sessionSheetDragY.setValue(Math.max(0, gestureState.dy));
+    },
+    onPanResponderRelease: (_event, gestureState) => {
+      if (
+        gestureState.dy > SESSION_SHEET_DISMISS_DRAG_Y ||
+        gestureState.vy > SESSION_SHEET_DISMISS_VELOCITY_Y
+      ) {
+        closeSessionMenu();
+        return;
+      }
+
+      Animated.spring(sessionSheetDragY, {
+        toValue: 0,
+        tension: 90,
+        friction: 12,
+        useNativeDriver: true,
+      }).start();
+    },
+    onPanResponderTerminate: () => {
+      Animated.spring(sessionSheetDragY, {
+        toValue: 0,
+        tension: 90,
+        friction: 12,
+        useNativeDriver: true,
+      }).start();
+    },
+  });
 
   function getDemoRemainingPhotoSlots(pendingDraftPhotoCount = 0) {
     if (!activeTrip) {
@@ -1226,21 +1268,24 @@ export default function RecordingScreen() {
           </View>
         </View>
 
-        {sessionMenuVisible ? (
+        <Modal
+          animationType="slide"
+          onRequestClose={closeSessionMenu}
+          transparent
+          visible={sessionMenuVisible}
+        >
           <View style={styles.drawerOverlay}>
             <Pressable
-              onPress={() => setSessionMenuVisible(false)}
+              onPress={closeSessionMenu}
               style={styles.drawerBackdrop}
             />
-            <View style={styles.drawerPanel}>
+            <Animated.View
+              {...sessionSheetPanResponder.panHandlers}
+              style={[styles.drawerPanel, { transform: [{ translateY: sessionSheetDragY }] }]}
+            >
+              <View style={styles.drawerHandle} />
               <View style={styles.drawerHeader}>
                 <Text style={styles.drawerTitle}>Current session</Text>
-                <Pressable
-                  onPress={() => setSessionMenuVisible(false)}
-                  style={styles.drawerCloseButton}
-                >
-                  <Text style={styles.drawerCloseText}>Close</Text>
-                </Pressable>
               </View>
 
               <ScrollView
@@ -1259,7 +1304,7 @@ export default function RecordingScreen() {
                     {canChangeMode ? (
                       <Pressable
                         onPress={() => {
-                          setSessionMenuVisible(false);
+                          closeSessionMenu();
                           setProfileModalVisible(true);
                         }}
                         style={styles.modeButton}
@@ -1278,7 +1323,7 @@ export default function RecordingScreen() {
                     {activeTrip ? (
                       <Pressable
                         onPress={() => {
-                          setSessionMenuVisible(false);
+                          closeSessionMenu();
                           openWaypointModal();
                         }}
                         style={styles.noteButton}
@@ -1412,9 +1457,9 @@ export default function RecordingScreen() {
                   </View>
                 ) : null}
               </ScrollView>
-            </View>
+            </Animated.View>
           </View>
-        ) : null}
+        </Modal>
 
       </View>
     </ScreenLayout>
@@ -1737,28 +1782,35 @@ const styles = StyleSheet.create({
     color: "#fffdf8",
   },
   drawerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: "row",
+    flex: 1,
     justifyContent: "flex-end",
+    backgroundColor: "rgba(20, 28, 20, 0.24)",
   },
   drawerBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(20, 28, 20, 0.18)",
+    ...StyleSheet.absoluteFillObject,
   },
   drawerPanel: {
-    width: "82%",
-    maxWidth: 360,
-    backgroundColor: "#f8f4ea",
-    paddingTop: 72,
-    paddingHorizontal: 14,
-    paddingBottom: 18,
-    borderTopLeftRadius: 28,
-    borderBottomLeftRadius: 28,
+    width: "100%",
+    maxHeight: "82%",
+    backgroundColor: "rgba(248, 244, 234, 0.98)",
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === "ios" ? 30 : 20,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     shadowColor: "#243224",
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    shadowOffset: { width: -4, height: 0 },
-    elevation: 10,
+    shadowOpacity: 0.22,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 80,
+  },
+  drawerHandle: {
+    alignSelf: "center",
+    width: 42,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(82, 98, 79, 0.35)",
+    marginBottom: 12,
   },
   drawerHeader: {
     flexDirection: "row",
@@ -1769,17 +1821,6 @@ const styles = StyleSheet.create({
   },
   drawerTitle: {
     fontSize: 18,
-    fontWeight: "700",
-    color: "#243224",
-  },
-  drawerCloseButton: {
-    borderRadius: 999,
-    backgroundColor: "#e6ece1",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  drawerCloseText: {
-    fontSize: 13,
     fontWeight: "700",
     color: "#243224",
   },
