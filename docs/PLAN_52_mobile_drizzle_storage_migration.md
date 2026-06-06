@@ -22,6 +22,7 @@ Completed in the first implementation pass:
 - Migrated `waypoints` and `waypoint_attachments` storage to Drizzle behind the existing repository API.
 - Migrated `trip_pauses` and `trip_route_variants` storage to Drizzle behind the existing APIs.
 - Migrated `trips` and `trip_segments` storage to Drizzle behind the existing APIs, including segment stats refresh side effects.
+- Migrated `sync_outbox`, `diagnostic_events`, `trip_diagnostics` and `recording_native_events` storage to Drizzle behind the existing APIs.
 - Kept recording hot-path tables on existing optimized SQL.
 
 Still intentionally deferred:
@@ -36,6 +37,7 @@ Subplans:
 - `PLAN_52C_drizzle_waypoints_storage.md`: migrate waypoint and waypoint attachment storage to Drizzle behind the existing repository API.
 - `PLAN_52D_drizzle_pauses_route_variants_storage.md`: migrate trip pauses and route variant storage to Drizzle behind the existing APIs.
 - `PLAN_52E_drizzle_trips_segments_storage.md`: completed; migrate trips and trip segments storage to Drizzle while preserving stats refresh side effects.
+- `PLAN_52F_drizzle_sync_observability_storage.md`: completed; migrate sync outbox and observability storage while keeping recording hot-path tables on optimized SQL.
 
 ## Context
 

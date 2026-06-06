@@ -1,14 +1,11 @@
-import type { RecordingNativeEvent, RecordingNativeEventType } from "../domain/recording-native-event";
-import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { asc, desc } from "drizzle-orm";
 
-interface RecordingNativeEventRow {
-  created_at: string;
-  event_type: RecordingNativeEventType;
-  local_id: string;
-  payload_json: string | null;
-  recorded_at: string;
-  trip_local_id: string | null;
-}
+import type { RecordingNativeEvent, RecordingNativeEventType } from "../domain/recording-native-event";
+import { getDrizzleDatabase, runExclusiveDrizzleWrite } from "./drizzle/db";
+import { recordingNativeEvents as recordingNativeEventsTable } from "./drizzle/schema";
+
+type RecordingNativeEventRow = typeof recordingNativeEventsTable.$inferSelect;
+type RecordingNativeEventInsert = typeof recordingNativeEventsTable.$inferInsert;
 
 export interface RecordingNativeEventSummary {
   count: number;
@@ -18,12 +15,23 @@ export interface RecordingNativeEventSummary {
 
 function toRecordingNativeEvent(row: RecordingNativeEventRow): RecordingNativeEvent {
   return {
-    createdAt: row.created_at,
-    eventType: row.event_type,
-    localId: row.local_id,
-    payload: row.payload_json ? (JSON.parse(row.payload_json) as Record<string, unknown>) : null,
-    recordedAt: row.recorded_at,
-    tripLocalId: row.trip_local_id,
+    createdAt: row.createdAt,
+    eventType: row.eventType as RecordingNativeEventType,
+    localId: row.localId,
+    payload: row.payloadJson ? (JSON.parse(row.payloadJson) as Record<string, unknown>) : null,
+    recordedAt: row.recordedAt,
+    tripLocalId: row.tripLocalId,
+  };
+}
+
+function toRecordingNativeEventRow(event: RecordingNativeEvent): RecordingNativeEventInsert {
+  return {
+    createdAt: event.createdAt,
+    eventType: event.eventType,
+    localId: event.localId,
+    payloadJson: event.payload ? JSON.stringify(event.payload) : null,
+    recordedAt: event.recordedAt,
+    tripLocalId: event.tripLocalId,
   };
 }
 
@@ -47,57 +55,58 @@ export async function appendRecordingNativeEvent(input: {
     tripLocalId: input.tripLocalId ?? null,
   };
 
-  await runExclusiveDatabaseWrite(async (database) => {
-    await database.runAsync(
-      `INSERT INTO recording_native_events (
-        local_id,
-        trip_local_id,
-        event_type,
-        recorded_at,
-        payload_json,
-        created_at
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
-      event.localId,
-      event.tripLocalId,
-      event.eventType,
-      event.recordedAt,
-      event.payload ? JSON.stringify(event.payload) : null,
-      event.createdAt,
-    );
+  await runExclusiveDrizzleWrite(async (database) => {
+    await database.insert(recordingNativeEventsTable).values(toRecordingNativeEventRow(event));
   });
 
   return event;
 }
 
 export async function loadRecentRecordingNativeEvents(limit = 100): Promise<RecordingNativeEvent[]> {
-  const database = await getDatabase();
-  const rows = await database.getAllAsync<RecordingNativeEventRow>(
-    `SELECT *
-     FROM recording_native_events
-     ORDER BY recorded_at DESC, local_id DESC
-     LIMIT ?`,
-    limit,
-  );
+  const database = await getDrizzleDatabase();
+  const rows = await database
+    .select()
+    .from(recordingNativeEventsTable)
+    .orderBy(desc(recordingNativeEventsTable.recordedAt), desc(recordingNativeEventsTable.localId))
+    .limit(limit);
 
   return rows.map(toRecordingNativeEvent);
 }
 
 export async function loadRecordingNativeEventSummary(): Promise<RecordingNativeEventSummary[]> {
-  const database = await getDatabase();
-  const rows = await database.getAllAsync<{
-    count: number;
-    event_type: RecordingNativeEventType;
-    last_recorded_at: string | null;
-  }>(
-    `SELECT event_type, COUNT(*) as count, MAX(recorded_at) as last_recorded_at
-     FROM recording_native_events
-     GROUP BY event_type
-     ORDER BY last_recorded_at DESC, event_type ASC`,
-  );
+  const database = await getDrizzleDatabase();
+  const rows = await database
+    .select({
+      eventType: recordingNativeEventsTable.eventType,
+      recordedAt: recordingNativeEventsTable.recordedAt,
+    })
+    .from(recordingNativeEventsTable)
+    .orderBy(desc(recordingNativeEventsTable.recordedAt), asc(recordingNativeEventsTable.eventType));
+  const summariesByEventType = new Map<RecordingNativeEventType, RecordingNativeEventSummary>();
 
-  return rows.map((row) => ({
-    count: row.count,
-    eventType: row.event_type,
-    lastRecordedAt: row.last_recorded_at,
-  }));
+  for (const row of rows) {
+    const eventType = row.eventType as RecordingNativeEventType;
+    const summary = summariesByEventType.get(eventType);
+
+    if (summary) {
+      summary.count += 1;
+      continue;
+    }
+
+    summariesByEventType.set(eventType, {
+      count: 1,
+      eventType,
+      lastRecordedAt: row.recordedAt,
+    });
+  }
+
+  return [...summariesByEventType.values()].sort((left, right) => {
+    const recordedAtComparison = String(right.lastRecordedAt ?? "").localeCompare(String(left.lastRecordedAt ?? ""));
+
+    if (recordedAtComparison !== 0) {
+      return recordedAtComparison;
+    }
+
+    return left.eventType.localeCompare(right.eventType);
+  });
 }

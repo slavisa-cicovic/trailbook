@@ -1,4 +1,7 @@
-import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { asc, eq, or, sql } from "drizzle-orm";
+
+import { getDrizzleDatabase, runExclusiveDrizzleWrite } from "./drizzle/db";
+import { syncOutbox as syncOutboxTable } from "./drizzle/schema";
 
 export type SyncOutboxEntityType = "trip" | "trip_groups";
 export type SyncOutboxOperation = "trip_sync" | "trip_groups_sync";
@@ -17,31 +20,21 @@ export interface SyncOutboxItem<TPayload = unknown> {
   updatedAt: string;
 }
 
-interface SyncOutboxRow {
-  attempt_count: number;
-  created_at: string;
-  entity_local_id: string;
-  entity_type: SyncOutboxEntityType;
-  id: string;
-  last_error: string | null;
-  operation: SyncOutboxOperation;
-  payload_json: string;
-  status: SyncOutboxStatus;
-  updated_at: string;
-}
+type SyncOutboxRow = typeof syncOutboxTable.$inferSelect;
+type SyncOutboxInsert = typeof syncOutboxTable.$inferInsert;
 
 function toSyncOutboxItem<TPayload>(row: SyncOutboxRow): SyncOutboxItem<TPayload> {
   return {
-    attemptCount: row.attempt_count,
-    createdAt: row.created_at,
-    entityLocalId: row.entity_local_id,
-    entityType: row.entity_type,
+    attemptCount: row.attemptCount,
+    createdAt: row.createdAt,
+    entityLocalId: row.entityLocalId,
+    entityType: row.entityType as SyncOutboxEntityType,
     id: row.id,
-    lastError: row.last_error,
-    operation: row.operation,
-    payload: JSON.parse(row.payload_json) as TPayload,
-    status: row.status,
-    updatedAt: row.updated_at,
+    lastError: row.lastError,
+    operation: row.operation as SyncOutboxOperation,
+    payload: JSON.parse(row.payloadJson) as TPayload,
+    status: row.status as SyncOutboxStatus,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -62,34 +55,32 @@ export async function enqueueSyncOutboxItem<TPayload>(input: {
   const now = new Date().toISOString();
   const id = createSyncOutboxId(input);
   const payloadJson = JSON.stringify(input.payload ?? {});
+  const row: SyncOutboxInsert = {
+    attemptCount: 0,
+    createdAt: now,
+    entityLocalId: input.entityLocalId,
+    entityType: input.entityType,
+    id,
+    lastError: null,
+    operation: input.operation,
+    payloadJson,
+    status: "pending",
+    updatedAt: now,
+  };
 
-  await runExclusiveDatabaseWrite(async (database) => {
-    await database.runAsync(
-      `INSERT INTO sync_outbox (
-        id,
-        entity_type,
-        entity_local_id,
-        operation,
-        payload_json,
-        status,
-        attempt_count,
-        last_error,
-        created_at,
-        updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        payload_json = excluded.payload_json,
-        status = 'pending',
-        last_error = NULL,
-        updated_at = excluded.updated_at`,
-      id,
-      input.entityType,
-      input.entityLocalId,
-      input.operation,
-      payloadJson,
-      now,
-      now,
-    );
+  await runExclusiveDrizzleWrite(async (database) => {
+    await database
+      .insert(syncOutboxTable)
+      .values(row)
+      .onConflictDoUpdate({
+        target: syncOutboxTable.id,
+        set: {
+          lastError: null,
+          payloadJson,
+          status: "pending",
+          updatedAt: now,
+        },
+      });
   });
 
   return {
@@ -107,15 +98,13 @@ export async function enqueueSyncOutboxItem<TPayload>(input: {
 }
 
 export async function loadPendingSyncOutboxItems(limit = 20): Promise<SyncOutboxItem[]> {
-  const database = await getDatabase();
-  const rows = await database.getAllAsync<SyncOutboxRow>(
-    `SELECT *
-     FROM sync_outbox
-     WHERE status IN ('pending', 'failed')
-     ORDER BY created_at ASC, id ASC
-     LIMIT ?`,
-    limit,
-  );
+  const database = await getDrizzleDatabase();
+  const rows = await database
+    .select()
+    .from(syncOutboxTable)
+    .where(or(eq(syncOutboxTable.status, "pending"), eq(syncOutboxTable.status, "failed")))
+    .orderBy(asc(syncOutboxTable.createdAt), asc(syncOutboxTable.id))
+    .limit(limit);
 
   return rows.map(toSyncOutboxItem);
 }
@@ -127,12 +116,8 @@ export async function loadSyncOutboxSummary(): Promise<{
   succeeded: number;
   total: number;
 }> {
-  const database = await getDatabase();
-  const rows = await database.getAllAsync<{ count: number; status: SyncOutboxStatus }>(
-    `SELECT status, COUNT(*) as count
-     FROM sync_outbox
-     GROUP BY status`,
-  );
+  const database = await getDrizzleDatabase();
+  const rows = await database.select({ status: syncOutboxTable.status }).from(syncOutboxTable);
   const summary = {
     failed: 0,
     pending: 0,
@@ -142,8 +127,9 @@ export async function loadSyncOutboxSummary(): Promise<{
   };
 
   for (const row of rows) {
-    summary[row.status] = row.count;
-    summary.total += row.count;
+    const status = row.status as SyncOutboxStatus;
+    summary[status] += 1;
+    summary.total += 1;
   }
 
   return summary;
@@ -152,32 +138,30 @@ export async function loadSyncOutboxSummary(): Promise<{
 export async function markSyncOutboxItemRunning(id: string): Promise<void> {
   const now = new Date().toISOString();
 
-  await runExclusiveDatabaseWrite(async (database) => {
-    await database.runAsync(
-      `UPDATE sync_outbox
-       SET status = 'running',
-           attempt_count = attempt_count + 1,
-           updated_at = ?
-       WHERE id = ?`,
-      now,
-      id,
-    );
+  await runExclusiveDrizzleWrite(async (database) => {
+    await database
+      .update(syncOutboxTable)
+      .set({
+        attemptCount: sql`${syncOutboxTable.attemptCount} + 1`,
+        status: "running",
+        updatedAt: now,
+      })
+      .where(eq(syncOutboxTable.id, id));
   });
 }
 
 export async function markSyncOutboxItemSucceeded(id: string): Promise<void> {
   const now = new Date().toISOString();
 
-  await runExclusiveDatabaseWrite(async (database) => {
-    await database.runAsync(
-      `UPDATE sync_outbox
-       SET status = 'succeeded',
-           last_error = NULL,
-           updated_at = ?
-       WHERE id = ?`,
-      now,
-      id,
-    );
+  await runExclusiveDrizzleWrite(async (database) => {
+    await database
+      .update(syncOutboxTable)
+      .set({
+        lastError: null,
+        status: "succeeded",
+        updatedAt: now,
+      })
+      .where(eq(syncOutboxTable.id, id));
   });
 }
 
@@ -185,16 +169,14 @@ export async function markSyncOutboxItemFailed(id: string, error: unknown): Prom
   const now = new Date().toISOString();
   const message = error instanceof Error ? error.message : String(error);
 
-  await runExclusiveDatabaseWrite(async (database) => {
-    await database.runAsync(
-      `UPDATE sync_outbox
-       SET status = 'failed',
-           last_error = ?,
-           updated_at = ?
-       WHERE id = ?`,
-      message,
-      now,
-      id,
-    );
+  await runExclusiveDrizzleWrite(async (database) => {
+    await database
+      .update(syncOutboxTable)
+      .set({
+        lastError: message,
+        status: "failed",
+        updatedAt: now,
+      })
+      .where(eq(syncOutboxTable.id, id));
   });
 }
