@@ -1,10 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { asc, eq } from "drizzle-orm";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { WaypointAttachment } from "../domain/trips";
 import { resolveStoredPhotoUri } from "../services/media/photo-storage.service";
-import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { getDrizzleDatabase, runExclusiveDrizzleWrite } from "./drizzle/db";
+import { waypointAttachments as waypointAttachmentsTable } from "./drizzle/schema";
 import { migrateOnce } from "./sqlite/migrate-once";
+
+type WaypointAttachmentRow = typeof waypointAttachmentsTable.$inferSelect;
+type WaypointAttachmentInsert = typeof waypointAttachmentsTable.$inferInsert;
 
 function normalizeWaypointAttachment(
   value: Partial<WaypointAttachment> &
@@ -29,56 +34,47 @@ function normalizeWaypointAttachment(
   };
 }
 
-interface WaypointAttachmentRow {
-  created_at: string;
-  deleted_at: string | null;
-  device_id: string;
-  file_size: number | null;
-  local_id: string;
-  local_uri: string;
-  mime_type: string | null;
-  server_id: string | null;
-  sync_status: WaypointAttachment["syncStatus"];
-  type: WaypointAttachment["type"];
-  updated_at: string;
-  user_id: string;
-  waypoint_local_id: string;
-}
-
-function toWaypointAttachmentRow(attachment: WaypointAttachment): WaypointAttachmentRow {
+function toWaypointAttachmentRow(attachment: WaypointAttachment): WaypointAttachmentInsert {
   return {
-    created_at: attachment.createdAt,
-    deleted_at: attachment.deletedAt,
-    device_id: attachment.deviceId,
-    file_size: attachment.fileSize,
-    local_id: attachment.localId,
-    local_uri: attachment.localUri,
-    mime_type: attachment.mimeType,
-    server_id: attachment.serverId,
-    sync_status: attachment.syncStatus,
+    createdAt: attachment.createdAt,
+    deletedAt: attachment.deletedAt,
+    deviceId: attachment.deviceId,
+    fileSize: attachment.fileSize,
+    localId: attachment.localId,
+    localUri: attachment.localUri,
+    mimeType: attachment.mimeType,
+    serverId: attachment.serverId,
+    syncStatus: attachment.syncStatus,
     type: attachment.type,
-    updated_at: attachment.updatedAt,
-    user_id: attachment.userId,
-    waypoint_local_id: attachment.waypointLocalId,
+    updatedAt: attachment.updatedAt,
+    userId: attachment.userId,
+    waypointLocalId: attachment.waypointLocalId,
   };
 }
 
 function toWaypointAttachmentFromRow(row: WaypointAttachmentRow): WaypointAttachment {
   return normalizeWaypointAttachment({
-    createdAt: row.created_at,
-    deletedAt: row.deleted_at,
-    deviceId: row.device_id,
-    fileSize: row.file_size,
-    localId: row.local_id,
-    localUri: row.local_uri,
-    mimeType: row.mime_type,
-    serverId: row.server_id,
-    syncStatus: row.sync_status,
-    type: row.type,
-    updatedAt: row.updated_at,
-    userId: row.user_id,
-    waypointLocalId: row.waypoint_local_id,
+    createdAt: row.createdAt,
+    deletedAt: row.deletedAt,
+    deviceId: row.deviceId,
+    fileSize: row.fileSize,
+    localId: row.localId,
+    localUri: row.localUri,
+    mimeType: row.mimeType,
+    serverId: row.serverId,
+    syncStatus: row.syncStatus as WaypointAttachment["syncStatus"],
+    type: row.type as WaypointAttachment["type"],
+    updatedAt: row.updatedAt,
+    userId: row.userId,
+    waypointLocalId: row.waypointLocalId,
   });
+}
+
+function toWaypointAttachmentUpdate(
+  row: WaypointAttachmentInsert,
+): Omit<WaypointAttachmentInsert, "localId"> {
+  const { localId: _localId, ...update } = row;
+  return update;
 }
 
 async function loadLegacyWaypointAttachmentsFromAsyncStorage(): Promise<WaypointAttachment[]> {
@@ -96,12 +92,13 @@ async function loadLegacyWaypointAttachmentsFromAsyncStorage(): Promise<Waypoint
 
 async function ensureWaypointAttachmentsMigrated(): Promise<void> {
   await migrateOnce("async-storage/waypoint-attachments", async () => {
-    const database = await getDatabase();
-    const countRow = await database.getFirstAsync<{ count: number }>(
-      "SELECT COUNT(*) as count FROM waypoint_attachments",
-    );
+    const database = await getDrizzleDatabase();
+    const existingRows = await database
+      .select({ localId: waypointAttachmentsTable.localId })
+      .from(waypointAttachmentsTable)
+      .limit(1);
 
-    if ((countRow?.count ?? 0) > 0) {
+    if (existingRows.length > 0) {
       return;
     }
 
@@ -111,40 +108,8 @@ async function ensureWaypointAttachmentsMigrated(): Promise<void> {
       return;
     }
 
-    await runExclusiveDatabaseWrite(async (database) => {
-      for (const attachment of legacyAttachments) {
-        const row = toWaypointAttachmentRow(attachment);
-        await database.runAsync(
-          `INSERT OR REPLACE INTO waypoint_attachments (
-            local_id,
-            server_id,
-            waypoint_local_id,
-            device_id,
-            user_id,
-            type,
-            local_uri,
-            mime_type,
-            file_size,
-            created_at,
-            updated_at,
-            deleted_at,
-            sync_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          row.local_id,
-          row.server_id,
-          row.waypoint_local_id,
-          row.device_id,
-          row.user_id,
-          row.type,
-          row.local_uri,
-          row.mime_type,
-          row.file_size,
-          row.created_at,
-          row.updated_at,
-          row.deleted_at,
-          row.sync_status,
-        );
-      }
+    await runExclusiveDrizzleWrite(async (database) => {
+      await database.insert(waypointAttachmentsTable).values(legacyAttachments.map(toWaypointAttachmentRow));
     });
   });
 }
@@ -152,10 +117,11 @@ async function ensureWaypointAttachmentsMigrated(): Promise<void> {
 export async function loadWaypointAttachments(): Promise<WaypointAttachment[]> {
   await ensureWaypointAttachmentsMigrated();
 
-  const database = await getDatabase();
-  const rows = await database.getAllAsync<WaypointAttachmentRow>(
-    "SELECT * FROM waypoint_attachments ORDER BY created_at ASC, local_id ASC",
-  );
+  const database = await getDrizzleDatabase();
+  const rows = await database
+    .select()
+    .from(waypointAttachmentsTable)
+    .orderBy(asc(waypointAttachmentsTable.createdAt), asc(waypointAttachmentsTable.localId));
 
   return rows.map(toWaypointAttachmentFromRow);
 }
@@ -185,41 +151,11 @@ export async function saveWaypointAttachments(
   await ensureWaypointAttachmentsMigrated();
 
   if (!previousAttachments) {
-    await runExclusiveDatabaseWrite(async (database) => {
-      await database.runAsync("DELETE FROM waypoint_attachments");
+    await runExclusiveDrizzleWrite(async (database) => {
+      await database.delete(waypointAttachmentsTable);
 
-      for (const attachment of attachments) {
-        const row = toWaypointAttachmentRow(attachment);
-        await database.runAsync(
-          `INSERT INTO waypoint_attachments (
-            local_id,
-            server_id,
-            waypoint_local_id,
-            device_id,
-            user_id,
-            type,
-            local_uri,
-            mime_type,
-            file_size,
-            created_at,
-            updated_at,
-            deleted_at,
-            sync_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          row.local_id,
-          row.server_id,
-          row.waypoint_local_id,
-          row.device_id,
-          row.user_id,
-          row.type,
-          row.local_uri,
-          row.mime_type,
-          row.file_size,
-          row.created_at,
-          row.updated_at,
-          row.deleted_at,
-          row.sync_status,
-        );
+      if (attachments.length > 0) {
+        await database.insert(waypointAttachmentsTable).values(attachments.map(toWaypointAttachmentRow));
       }
     });
 
@@ -242,43 +178,20 @@ export async function saveWaypointAttachments(
     return;
   }
 
-  await runExclusiveDatabaseWrite(async (database) => {
+  await runExclusiveDrizzleWrite(async (database) => {
     for (const attachment of removedAttachments) {
-      await database.runAsync("DELETE FROM waypoint_attachments WHERE local_id = ?", attachment.localId);
+      await database.delete(waypointAttachmentsTable).where(eq(waypointAttachmentsTable.localId, attachment.localId));
     }
 
     for (const attachment of upsertAttachments) {
       const row = toWaypointAttachmentRow(attachment);
-      await database.runAsync(
-        `INSERT OR REPLACE INTO waypoint_attachments (
-          local_id,
-          server_id,
-          waypoint_local_id,
-          device_id,
-          user_id,
-          type,
-          local_uri,
-          mime_type,
-          file_size,
-          created_at,
-          updated_at,
-          deleted_at,
-          sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.local_id,
-        row.server_id,
-        row.waypoint_local_id,
-        row.device_id,
-        row.user_id,
-        row.type,
-        row.local_uri,
-        row.mime_type,
-        row.file_size,
-        row.created_at,
-        row.updated_at,
-        row.deleted_at,
-        row.sync_status,
-      );
+      await database
+        .insert(waypointAttachmentsTable)
+        .values(row)
+        .onConflictDoUpdate({
+          target: waypointAttachmentsTable.localId,
+          set: toWaypointAttachmentUpdate(row),
+        });
     }
   });
 }

@@ -1,10 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { asc, eq } from "drizzle-orm";
 
 import { DEFAULT_WAYPOINT_CATEGORY, normalizeWaypointCategory } from "../constants/waypoint-categories";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { Waypoint } from "../domain/trips";
-import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { getDrizzleDatabase, runExclusiveDrizzleWrite } from "./drizzle/db";
+import { waypoints as waypointsTable } from "./drizzle/schema";
 import { migrateOnce } from "./sqlite/migrate-once";
+
+type WaypointRow = typeof waypointsTable.$inferSelect;
+type WaypointInsert = typeof waypointsTable.$inferInsert;
 
 function normalizeWaypoint(
   value: Partial<Waypoint> & Pick<Waypoint, "localId" | "tripLocalId" | "deviceId" | "userId">,
@@ -30,62 +35,49 @@ function normalizeWaypoint(
   };
 }
 
-interface WaypointRow {
-  category: Waypoint["category"];
-  created_at: string;
-  deleted_at: string | null;
-  device_id: string;
-  latitude: number;
-  local_id: string;
-  longitude: number;
-  note: string | null;
-  segment_local_id: string | null;
-  server_id: string | null;
-  sync_status: Waypoint["syncStatus"];
-  title: string;
-  trip_local_id: string;
-  updated_at: string;
-  user_id: string;
-}
-
-function toWaypointRow(waypoint: Waypoint): WaypointRow {
+function toWaypointRow(waypoint: Waypoint): WaypointInsert {
   return {
     category: waypoint.category,
-    created_at: waypoint.createdAt,
-    deleted_at: waypoint.deletedAt,
-    device_id: waypoint.deviceId,
+    createdAt: waypoint.createdAt,
+    deletedAt: waypoint.deletedAt,
+    deviceId: waypoint.deviceId,
     latitude: waypoint.latitude,
-    local_id: waypoint.localId,
+    localId: waypoint.localId,
     longitude: waypoint.longitude,
     note: waypoint.note,
-    segment_local_id: waypoint.segmentLocalId,
-    server_id: waypoint.serverId,
-    sync_status: waypoint.syncStatus,
+    segmentLocalId: waypoint.segmentLocalId,
+    serverId: waypoint.serverId,
+    syncStatus: waypoint.syncStatus,
     title: waypoint.title,
-    trip_local_id: waypoint.tripLocalId,
-    updated_at: waypoint.updatedAt,
-    user_id: waypoint.userId,
+    tripLocalId: waypoint.tripLocalId,
+    updatedAt: waypoint.updatedAt,
+    userId: waypoint.userId,
   };
 }
 
 function toWaypointFromRow(row: WaypointRow): Waypoint {
   return normalizeWaypoint({
-    category: row.category,
-    createdAt: row.created_at,
-    deletedAt: row.deleted_at,
-    deviceId: row.device_id,
+    category: row.category as Waypoint["category"],
+    createdAt: row.createdAt,
+    deletedAt: row.deletedAt,
+    deviceId: row.deviceId,
     latitude: row.latitude,
-    localId: row.local_id,
+    localId: row.localId,
     longitude: row.longitude,
     note: row.note,
-    segmentLocalId: row.segment_local_id,
-    serverId: row.server_id,
-    syncStatus: row.sync_status,
+    segmentLocalId: row.segmentLocalId,
+    serverId: row.serverId,
+    syncStatus: row.syncStatus as Waypoint["syncStatus"],
     title: row.title,
-    tripLocalId: row.trip_local_id,
-    updatedAt: row.updated_at,
-    userId: row.user_id,
+    tripLocalId: row.tripLocalId,
+    updatedAt: row.updatedAt,
+    userId: row.userId,
   });
+}
+
+function toWaypointUpdate(row: WaypointInsert): Omit<WaypointInsert, "localId"> {
+  const { localId: _localId, ...update } = row;
+  return update;
 }
 
 async function loadLegacyWaypointsFromAsyncStorage(): Promise<Waypoint[]> {
@@ -102,10 +94,10 @@ async function loadLegacyWaypointsFromAsyncStorage(): Promise<Waypoint[]> {
 
 async function ensureWaypointsMigrated(): Promise<void> {
   await migrateOnce("async-storage/waypoints", async () => {
-    const database = await getDatabase();
-    const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM waypoints");
+    const database = await getDrizzleDatabase();
+    const existingRows = await database.select({ localId: waypointsTable.localId }).from(waypointsTable).limit(1);
 
-    if ((countRow?.count ?? 0) > 0) {
+    if (existingRows.length > 0) {
       return;
     }
 
@@ -115,44 +107,8 @@ async function ensureWaypointsMigrated(): Promise<void> {
       return;
     }
 
-    await runExclusiveDatabaseWrite(async (database) => {
-      for (const waypoint of legacyWaypoints) {
-        const row = toWaypointRow(waypoint);
-        await database.runAsync(
-          `INSERT OR REPLACE INTO waypoints (
-            local_id,
-            server_id,
-            trip_local_id,
-            segment_local_id,
-            device_id,
-            user_id,
-            latitude,
-            longitude,
-            category,
-            title,
-            note,
-            created_at,
-            updated_at,
-            deleted_at,
-            sync_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          row.local_id,
-          row.server_id,
-          row.trip_local_id,
-          row.segment_local_id,
-          row.device_id,
-          row.user_id,
-          row.latitude,
-          row.longitude,
-          row.category,
-          row.title,
-          row.note,
-          row.created_at,
-          row.updated_at,
-          row.deleted_at,
-          row.sync_status,
-        );
-      }
+    await runExclusiveDrizzleWrite(async (database) => {
+      await database.insert(waypointsTable).values(legacyWaypoints.map(toWaypointRow));
     });
   });
 }
@@ -160,8 +116,11 @@ async function ensureWaypointsMigrated(): Promise<void> {
 export async function loadWaypoints(): Promise<Waypoint[]> {
   await ensureWaypointsMigrated();
 
-  const database = await getDatabase();
-  const rows = await database.getAllAsync<WaypointRow>("SELECT * FROM waypoints ORDER BY created_at ASC, local_id ASC");
+  const database = await getDrizzleDatabase();
+  const rows = await database
+    .select()
+    .from(waypointsTable)
+    .orderBy(asc(waypointsTable.createdAt), asc(waypointsTable.localId));
 
   return rows.map(toWaypointFromRow);
 }
@@ -190,45 +149,11 @@ export async function saveWaypoints(waypoints: Waypoint[], previousWaypoints?: W
   await ensureWaypointsMigrated();
 
   if (!previousWaypoints) {
-    await runExclusiveDatabaseWrite(async (database) => {
-      await database.runAsync("DELETE FROM waypoints");
+    await runExclusiveDrizzleWrite(async (database) => {
+      await database.delete(waypointsTable);
 
-      for (const waypoint of waypoints) {
-        const row = toWaypointRow(waypoint);
-        await database.runAsync(
-          `INSERT INTO waypoints (
-            local_id,
-            server_id,
-            trip_local_id,
-            segment_local_id,
-            device_id,
-            user_id,
-            latitude,
-            longitude,
-            category,
-            title,
-            note,
-            created_at,
-            updated_at,
-            deleted_at,
-            sync_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          row.local_id,
-          row.server_id,
-          row.trip_local_id,
-          row.segment_local_id,
-          row.device_id,
-          row.user_id,
-          row.latitude,
-          row.longitude,
-          row.category,
-          row.title,
-          row.note,
-          row.created_at,
-          row.updated_at,
-          row.deleted_at,
-          row.sync_status,
-        );
+      if (waypoints.length > 0) {
+        await database.insert(waypointsTable).values(waypoints.map(toWaypointRow));
       }
     });
 
@@ -247,47 +172,20 @@ export async function saveWaypoints(waypoints: Waypoint[], previousWaypoints?: W
     return;
   }
 
-  await runExclusiveDatabaseWrite(async (database) => {
+  await runExclusiveDrizzleWrite(async (database) => {
     for (const waypoint of removedWaypoints) {
-      await database.runAsync("DELETE FROM waypoints WHERE local_id = ?", waypoint.localId);
+      await database.delete(waypointsTable).where(eq(waypointsTable.localId, waypoint.localId));
     }
 
     for (const waypoint of upsertWaypoints) {
       const row = toWaypointRow(waypoint);
-      await database.runAsync(
-        `INSERT OR REPLACE INTO waypoints (
-          local_id,
-          server_id,
-          trip_local_id,
-          segment_local_id,
-          device_id,
-          user_id,
-          latitude,
-          longitude,
-          category,
-          title,
-          note,
-          created_at,
-          updated_at,
-          deleted_at,
-          sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.local_id,
-        row.server_id,
-        row.trip_local_id,
-        row.segment_local_id,
-        row.device_id,
-        row.user_id,
-        row.latitude,
-        row.longitude,
-        row.category,
-        row.title,
-        row.note,
-        row.created_at,
-        row.updated_at,
-        row.deleted_at,
-        row.sync_status,
-      );
+      await database
+        .insert(waypointsTable)
+        .values(row)
+        .onConflictDoUpdate({
+          target: waypointsTable.localId,
+          set: toWaypointUpdate(row),
+        });
     }
   });
 }

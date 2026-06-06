@@ -19,12 +19,13 @@ Completed in the first implementation pass:
 - Migrated `trip_groups` storage to Drizzle behind the existing repository API.
 - Migrated `trip_group_members` storage to Drizzle behind the existing repository API.
 - Migrated shared `app_kv` JSON storage to Drizzle behind the existing storage API.
+- Migrated `waypoints` and `waypoint_attachments` storage to Drizzle behind the existing repository API.
 - Kept recording hot-path tables on existing optimized SQL.
 
 Still intentionally deferred:
 
 - Generated/bundled Drizzle migration baseline.
-- Migrating waypoints, attachments, pauses and route variants.
+- Migrating pauses and route variants.
 - Migrating `trips` and `trip_segments`.
 - Benchmarking and deciding on `trip_points` / `raw_location_events`.
 - Removing legacy SQL migrations.
@@ -33,6 +34,7 @@ Subplans:
 
 - `PLAN_52A_drizzle_migration_baseline.md`: define and implement the Drizzle migration baseline/startup strategy before more repository migrations.
 - `PLAN_52B_drizzle_app_kv_storage.md`: migrate the shared JSON key-value storage primitive to Drizzle behind the existing API.
+- `PLAN_52C_drizzle_waypoints_storage.md`: migrate waypoint and waypoint attachment storage to Drizzle behind the existing repository API.
 
 ## Context
 
