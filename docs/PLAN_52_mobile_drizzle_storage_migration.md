@@ -38,6 +38,7 @@ Subplans:
 - `PLAN_52D_drizzle_pauses_route_variants_storage.md`: migrate trip pauses and route variant storage to Drizzle behind the existing APIs.
 - `PLAN_52E_drizzle_trips_segments_storage.md`: completed; migrate trips and trip segments storage to Drizzle while preserving stats refresh side effects.
 - `PLAN_52F_drizzle_sync_observability_storage.md`: completed; migrate sync outbox and observability storage while keeping recording hot-path tables on optimized SQL.
+- `PLAN_52G_trip_points_raw_events_benchmark.md`: benchmark and decide whether hot-path `trip_points` / `raw_location_events` should remain raw SQL, partially migrate, or fully migrate.
 
 ## Context
 

@@ -624,6 +624,15 @@ export default function SettingsScreen() {
               title="Reprocess raw route"
               value="Open"
             />
+            <SettingsDivider theme={theme} />
+            <SettingsRow
+              description="Benchmark raw SQL vs Drizzle for trip points and raw location events using synthetic local rows."
+              iconName="speed"
+              onPress={() => router.push("/settings/storage-benchmark")}
+              theme={theme}
+              title="Storage benchmark"
+              value="Open"
+            />
           </SettingsSection>
         ) : null}
 
