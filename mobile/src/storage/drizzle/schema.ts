@@ -364,3 +364,30 @@ export const diagnosticEvents = sqliteTable(
     ),
   ],
 );
+
+// Explicit contract used by tests to keep the Drizzle mirror aligned with legacy indexes.
+export const DRIZZLE_SCHEMA_INDEX_NAMES = [
+  "idx_trips_user_id_updated_at",
+  "idx_trip_pauses_trip_local_id_started_at",
+  "idx_trip_segments_trip_local_id_started_at",
+  "idx_trip_points_trip_local_id_recorded_at",
+  "idx_trip_points_user_id",
+  "idx_waypoints_trip_local_id_created_at",
+  "idx_waypoint_attachments_waypoint_local_id_created_at",
+  "idx_trip_segment_stats_trip_local_id",
+  "idx_trip_groups_user_id_deleted_at_updated_at",
+  "idx_trip_group_members_user_group_deleted_sort",
+  "idx_trip_group_members_user_trip_deleted",
+  "idx_trip_group_members_active_trip",
+  "idx_raw_location_events_trip_recorded_at",
+  "idx_raw_location_events_trip_status_recorded_at",
+  "idx_raw_location_events_batch_id",
+  "idx_sync_outbox_status_created_at",
+  "idx_sync_outbox_pending_entity_operation",
+  "idx_trip_route_variants_trip_type",
+  "idx_recording_native_events_trip_recorded_at",
+  "idx_recording_native_events_type_recorded_at",
+  "idx_diagnostic_events_recorded_at",
+  "idx_diagnostic_events_trip_recorded_at",
+  "idx_diagnostic_events_category_severity_recorded_at",
+] as const;

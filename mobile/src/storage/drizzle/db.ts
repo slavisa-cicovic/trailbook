@@ -10,6 +10,11 @@ import {
 } from "./migrations";
 import * as schema from "./schema";
 
+// Drizzle provides typed access over the database created by sqlite/db.ts.
+// Startup intentionally runs legacy migrations first, then records/runs Drizzle
+// migrations after the no-op baseline. Do not make Drizzle the only migration
+// owner until PLAN_52I removal criteria are satisfied.
+
 export type TrailbookDrizzleDatabase = ExpoSQLiteDatabase<typeof schema> & {
   $client: SQLite.SQLiteDatabase;
 };

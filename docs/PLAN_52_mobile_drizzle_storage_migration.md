@@ -40,6 +40,7 @@ Subplans:
 - `PLAN_52F_drizzle_sync_observability_storage.md`: completed; migrate sync outbox and observability storage while keeping recording hot-path tables on optimized SQL.
 - `PLAN_52G_trip_points_raw_events_benchmark.md`: benchmark and decide whether hot-path `trip_points` / `raw_location_events` should remain raw SQL, partially migrate, or fully migrate.
 - `PLAN_52H_keep_hot_path_sql_hardening.md`: harden the intentionally raw SQL hot path with documentation, clearer structure and contract tests.
+- `PLAN_52I_legacy_migrations_cleanup.md`: define legacy migration ownership, schema drift guardrails and criteria for any future migration cleanup.
 
 ## Context
 
@@ -124,6 +125,25 @@ Raw SQL:
 ```
 
 `PLAN_52H` documents and tests this raw SQL exception instead of migrating it.
+
+## Mobile SQLite Schema Change Checklist
+
+Until migration ownership changes, any mobile SQLite schema change must follow this checklist:
+
+1. Update the legacy migration path in `mobile/src/storage/sqlite/db.ts`.
+2. Increment `DATABASE_VERSION`.
+3. Update the Drizzle schema mirror in `mobile/src/storage/drizzle/schema.ts`.
+4. Add or update a Drizzle migration only if the change is intentionally post-baseline Drizzle-owned.
+5. Update schema drift expectations in storage contract tests.
+6. Run:
+
+```bash
+npm run test --workspace mobile
+npm run typecheck --workspace mobile
+npm run lint --workspace mobile
+```
+
+Legacy migrations stay in place until all supported installed versions are safely at or above the Drizzle baseline and an explicit cleanup plan defines a rollback path.
 
 ## Phase 1: Installation And Skeleton
 

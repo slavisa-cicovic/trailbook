@@ -4,6 +4,11 @@ import * as FileSystem from "expo-file-system/legacy";
 export const DATABASE_NAME = "trailbook.db";
 const DATABASE_VERSION = 14;
 
+// Legacy migrations are the runtime bootstrap source of truth for existing installs.
+// Drizzle opens the same database after this path initializes PRAGMA user_version.
+// Until migration ownership changes, every schema change must update this file and
+// the Drizzle schema mirror together.
+
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let databaseWriteQueue: Promise<void> = Promise.resolve();
 
