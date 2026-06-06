@@ -1,11 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { asc, eq } from "drizzle-orm";
 
 import { DEFAULT_RECORDING_PROFILE, normalizeRecordingProfile } from "../constants/recording-profiles";
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripSegment } from "../domain/trips";
-import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { getDrizzleDatabase, runExclusiveDrizzleWrite } from "./drizzle/db";
+import { tripSegments as tripSegmentsTable } from "./drizzle/schema";
 import { migrateOnce } from "./sqlite/migrate-once";
 import { refreshTripSegmentStatsForTripLocalIds, refreshTripStatsForTripLocalIds } from "./trip-points-storage";
+
+type TripSegmentRow = typeof tripSegmentsTable.$inferSelect;
+type TripSegmentInsert = typeof tripSegmentsTable.$inferInsert;
 
 function normalizeTripSegment(
   value: Partial<TripSegment> & Pick<TripSegment, "localId" | "tripLocalId" | "deviceId" | "userId">,
@@ -31,62 +36,49 @@ function normalizeTripSegment(
   };
 }
 
-interface TripSegmentRow {
-  created_at: string;
-  device_id: string;
-  ended_at: string | null;
-  local_id: string;
-  recording_profile: TripSegment["recordingProfile"];
-  point_count: number | null;
-  distance_meters: number | null;
-  duration_ms: number | null;
-  stats_updated_at: string | null;
-  server_id: string | null;
-  started_at: string;
-  sync_status: TripSegment["syncStatus"];
-  trip_local_id: string;
-  updated_at: string;
-  user_id: string;
-}
-
-function toTripSegmentRow(tripSegment: TripSegment): TripSegmentRow {
+function toTripSegmentRow(tripSegment: TripSegment): TripSegmentInsert {
   return {
-    created_at: tripSegment.createdAt,
-    device_id: tripSegment.deviceId,
-    ended_at: tripSegment.endedAt,
-    local_id: tripSegment.localId,
-    recording_profile: tripSegment.recordingProfile,
-    point_count: tripSegment.pointCount,
-    distance_meters: tripSegment.distanceMeters,
-    duration_ms: tripSegment.durationMs,
-    stats_updated_at: tripSegment.statsUpdatedAt,
-    server_id: tripSegment.serverId,
-    started_at: tripSegment.startedAt,
-    sync_status: tripSegment.syncStatus,
-    trip_local_id: tripSegment.tripLocalId,
-    updated_at: tripSegment.updatedAt,
-    user_id: tripSegment.userId,
+    createdAt: tripSegment.createdAt,
+    deviceId: tripSegment.deviceId,
+    distanceMeters: tripSegment.distanceMeters,
+    durationMs: tripSegment.durationMs,
+    endedAt: tripSegment.endedAt,
+    localId: tripSegment.localId,
+    pointCount: tripSegment.pointCount,
+    recordingProfile: tripSegment.recordingProfile,
+    serverId: tripSegment.serverId,
+    startedAt: tripSegment.startedAt,
+    statsUpdatedAt: tripSegment.statsUpdatedAt,
+    syncStatus: tripSegment.syncStatus,
+    tripLocalId: tripSegment.tripLocalId,
+    updatedAt: tripSegment.updatedAt,
+    userId: tripSegment.userId,
   };
 }
 
 function toTripSegmentFromRow(row: TripSegmentRow): TripSegment {
   return normalizeTripSegment({
-    createdAt: row.created_at,
-    deviceId: row.device_id,
-    endedAt: row.ended_at,
-    localId: row.local_id,
-    recordingProfile: row.recording_profile,
-    pointCount: row.point_count,
-    distanceMeters: row.distance_meters,
-    durationMs: row.duration_ms,
-    statsUpdatedAt: row.stats_updated_at,
-    serverId: row.server_id,
-    startedAt: row.started_at,
-    syncStatus: row.sync_status,
-    tripLocalId: row.trip_local_id,
-    updatedAt: row.updated_at,
-    userId: row.user_id,
+    createdAt: row.createdAt,
+    deviceId: row.deviceId,
+    distanceMeters: row.distanceMeters,
+    durationMs: row.durationMs,
+    endedAt: row.endedAt,
+    localId: row.localId,
+    pointCount: row.pointCount,
+    recordingProfile: row.recordingProfile as TripSegment["recordingProfile"],
+    serverId: row.serverId,
+    startedAt: row.startedAt,
+    statsUpdatedAt: row.statsUpdatedAt,
+    syncStatus: row.syncStatus as TripSegment["syncStatus"],
+    tripLocalId: row.tripLocalId,
+    updatedAt: row.updatedAt,
+    userId: row.userId,
   });
+}
+
+function toTripSegmentUpdate(row: TripSegmentInsert): Omit<TripSegmentInsert, "localId"> {
+  const { localId: _localId, ...update } = row;
+  return update;
 }
 
 async function loadLegacyTripSegmentsFromAsyncStorage(): Promise<TripSegment[]> {
@@ -103,10 +95,13 @@ async function loadLegacyTripSegmentsFromAsyncStorage(): Promise<TripSegment[]> 
 
 async function ensureTripSegmentsMigrated(): Promise<void> {
   await migrateOnce("async-storage/trip-segments", async () => {
-    const database = await getDatabase();
-    const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM trip_segments");
+    const database = await getDrizzleDatabase();
+    const existingRows = await database
+      .select({ localId: tripSegmentsTable.localId })
+      .from(tripSegmentsTable)
+      .limit(1);
 
-    if ((countRow?.count ?? 0) > 0) {
+    if (existingRows.length > 0) {
       return;
     }
 
@@ -116,44 +111,8 @@ async function ensureTripSegmentsMigrated(): Promise<void> {
       return;
     }
 
-    await runExclusiveDatabaseWrite(async (database) => {
-      for (const tripSegment of legacyTripSegments) {
-        const row = toTripSegmentRow(tripSegment);
-        await database.runAsync(
-          `INSERT OR REPLACE INTO trip_segments (
-            local_id,
-            server_id,
-            trip_local_id,
-            device_id,
-            user_id,
-            recording_profile,
-            point_count,
-            distance_meters,
-            duration_ms,
-            stats_updated_at,
-            started_at,
-            ended_at,
-            created_at,
-            updated_at,
-            sync_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          row.local_id,
-          row.server_id,
-          row.trip_local_id,
-          row.device_id,
-          row.user_id,
-          row.recording_profile,
-          row.point_count,
-          row.distance_meters,
-          row.duration_ms,
-          row.stats_updated_at,
-          row.started_at,
-          row.ended_at,
-          row.created_at,
-          row.updated_at,
-          row.sync_status,
-        );
-      }
+    await runExclusiveDrizzleWrite(async (database) => {
+      await database.insert(tripSegmentsTable).values(legacyTripSegments.map(toTripSegmentRow));
     });
 
     await refreshTripSegmentStatsForTripLocalIds(
@@ -168,10 +127,11 @@ async function ensureTripSegmentsMigrated(): Promise<void> {
 export async function loadTripSegments(): Promise<TripSegment[]> {
   await ensureTripSegmentsMigrated();
 
-  const database = await getDatabase();
-  const rows = await database.getAllAsync<TripSegmentRow>(
-    "SELECT * FROM trip_segments ORDER BY started_at ASC, local_id ASC",
-  );
+  const database = await getDrizzleDatabase();
+  const rows = await database
+    .select()
+    .from(tripSegmentsTable)
+    .orderBy(asc(tripSegmentsTable.startedAt), asc(tripSegmentsTable.localId));
 
   return rows.map(toTripSegmentFromRow);
 }
@@ -203,45 +163,11 @@ export async function saveTripSegments(
   await ensureTripSegmentsMigrated();
 
   if (!previousTripSegments) {
-    await runExclusiveDatabaseWrite(async (database) => {
-      await database.runAsync("DELETE FROM trip_segments");
+    await runExclusiveDrizzleWrite(async (database) => {
+      await database.delete(tripSegmentsTable);
 
-      for (const tripSegment of tripSegments) {
-        const row = toTripSegmentRow(tripSegment);
-        await database.runAsync(
-          `INSERT INTO trip_segments (
-            local_id,
-            server_id,
-            trip_local_id,
-            device_id,
-            user_id,
-            recording_profile,
-            point_count,
-            distance_meters,
-            duration_ms,
-            stats_updated_at,
-            started_at,
-            ended_at,
-            created_at,
-            updated_at,
-            sync_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          row.local_id,
-          row.server_id,
-          row.trip_local_id,
-          row.device_id,
-          row.user_id,
-          row.recording_profile,
-          row.point_count,
-          row.distance_meters,
-          row.duration_ms,
-          row.stats_updated_at,
-          row.started_at,
-          row.ended_at,
-          row.created_at,
-          row.updated_at,
-          row.sync_status,
-        );
+      if (tripSegments.length > 0) {
+        await database.insert(tripSegmentsTable).values(tripSegments.map(toTripSegmentRow));
       }
     });
 
@@ -282,47 +208,20 @@ export async function saveTripSegments(
     ]),
   );
 
-  await runExclusiveDatabaseWrite(async (database) => {
+  await runExclusiveDrizzleWrite(async (database) => {
     for (const tripSegment of removedTripSegments) {
-      await database.runAsync("DELETE FROM trip_segments WHERE local_id = ?", tripSegment.localId);
+      await database.delete(tripSegmentsTable).where(eq(tripSegmentsTable.localId, tripSegment.localId));
     }
 
     for (const tripSegment of upsertTripSegments) {
       const row = toTripSegmentRow(tripSegment);
-      await database.runAsync(
-        `INSERT OR REPLACE INTO trip_segments (
-          local_id,
-          server_id,
-          trip_local_id,
-          device_id,
-          user_id,
-          recording_profile,
-          point_count,
-          distance_meters,
-          duration_ms,
-          stats_updated_at,
-          started_at,
-          ended_at,
-          created_at,
-          updated_at,
-          sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.local_id,
-        row.server_id,
-        row.trip_local_id,
-        row.device_id,
-        row.user_id,
-        row.recording_profile,
-        row.point_count,
-        row.distance_meters,
-        row.duration_ms,
-        row.stats_updated_at,
-        row.started_at,
-        row.ended_at,
-        row.created_at,
-        row.updated_at,
-        row.sync_status,
-      );
+      await database
+        .insert(tripSegmentsTable)
+        .values(row)
+        .onConflictDoUpdate({
+          target: tripSegmentsTable.localId,
+          set: toTripSegmentUpdate(row),
+        });
     }
   });
 

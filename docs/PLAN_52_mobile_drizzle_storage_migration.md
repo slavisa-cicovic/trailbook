@@ -8,7 +8,7 @@ The goal is not to "ORM-ify" the app. The goal is to remove fragile hand-written
 
 ## Implementation Status
 
-Updated: 2026-06-05
+Updated: 2026-06-06
 
 Completed in the first implementation pass:
 
@@ -21,12 +21,11 @@ Completed in the first implementation pass:
 - Migrated shared `app_kv` JSON storage to Drizzle behind the existing storage API.
 - Migrated `waypoints` and `waypoint_attachments` storage to Drizzle behind the existing repository API.
 - Migrated `trip_pauses` and `trip_route_variants` storage to Drizzle behind the existing APIs.
+- Migrated `trips` and `trip_segments` storage to Drizzle behind the existing APIs, including segment stats refresh side effects.
 - Kept recording hot-path tables on existing optimized SQL.
 
 Still intentionally deferred:
 
-- Generated/bundled Drizzle migration baseline.
-- Migrating `trips` and `trip_segments`.
 - Benchmarking and deciding on `trip_points` / `raw_location_events`.
 - Removing legacy SQL migrations.
 
@@ -36,6 +35,7 @@ Subplans:
 - `PLAN_52B_drizzle_app_kv_storage.md`: migrate the shared JSON key-value storage primitive to Drizzle behind the existing API.
 - `PLAN_52C_drizzle_waypoints_storage.md`: migrate waypoint and waypoint attachment storage to Drizzle behind the existing repository API.
 - `PLAN_52D_drizzle_pauses_route_variants_storage.md`: migrate trip pauses and route variant storage to Drizzle behind the existing APIs.
+- `PLAN_52E_drizzle_trips_segments_storage.md`: completed; migrate trips and trip segments storage to Drizzle while preserving stats refresh side effects.
 
 ## Context
 
