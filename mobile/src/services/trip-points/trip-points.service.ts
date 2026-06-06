@@ -8,7 +8,6 @@ import {
   type LocationCallbackSource,
 } from "./trip-point-diagnostics.service";
 
-const MIN_SEGMENT_DISTANCE_METERS = 5;
 const LONG_GAP_THRESHOLD_MS = 5 * 60 * 1000;
 const EARLY_SESSION_THRESHOLD_MS = 2 * 60 * 1000;
 
@@ -638,24 +637,6 @@ export function clearAllPendingTripPointContinuity() {
   pendingContinuityByTripLocalId.clear();
 }
 
-export function calculateTripDistanceMeters(tripPoints: TripPoint[]): number {
-  if (tripPoints.length < 2) {
-    return 0;
-  }
-
-  let totalDistanceMeters = 0;
-
-  for (let index = 1; index < tripPoints.length; index += 1) {
-    const segmentDistance = calculateDistanceBetweenPoints(tripPoints[index - 1], tripPoints[index]);
-
-    if (segmentDistance >= MIN_SEGMENT_DISTANCE_METERS) {
-      totalDistanceMeters += segmentDistance;
-    }
-  }
-
-  return totalDistanceMeters;
-}
-
 export function formatDistanceKm(distanceMeters: number): string {
   const kilometers = distanceMeters / 1000;
 
@@ -665,6 +646,8 @@ export function formatDistanceKm(distanceMeters: number): string {
 
   return `${kilometers.toFixed(2)} km`;
 }
+
+export { calculateTripDistanceMeters } from "../trips/trip-distance.service";
 
 export {
   flushTripPointDiagnostics,
@@ -676,5 +659,4 @@ export {
   recordTripPointDiagnostic,
   resetTripPointDiagnostics,
 } from "./trip-point-diagnostics.service";
-
 

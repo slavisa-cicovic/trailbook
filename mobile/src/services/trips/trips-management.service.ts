@@ -7,10 +7,10 @@ import type {
   WaypointCategory,
 } from "../../domain/trips";
 import {
-  calculateTripDistanceMeters,
   getVisibleTripPointsForTrip,
   groupVisibleTripPointsByTripId,
 } from "../trip-points/trip-points.service";
+import { calculateTripDistanceMeters } from "./trip-distance.service";
 
 export interface TripSummary {
   distanceMeters: number;

@@ -54,7 +54,7 @@ import {
   enqueueAndDrainTripGroupsSync,
   enqueueAndDrainTripSync,
 } from "../../services/sync/sync-actions.service";
-import { listTripSummaryStats, type TripSummaryStats } from "../../repositories/trips-repository";
+import { listTripsScreenItems, type TripSummaryStats } from "../../repositories/trips-repository";
 import { useTripsScreenHydration } from "../../core/hooks/use-trips-screen-hydration";
 import TripGroupModal from "./components/trip-group-modal";
 import TripGroupEditModal from "./components/trip-group-edit-modal";
@@ -253,7 +253,6 @@ export default function TripsScreen() {
     return () => clearTimeout(timeoutId);
   }, [pendingUndo]);
 
-  /* eslint-disable react-hooks/preserve-manual-memoization */
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -270,7 +269,17 @@ export default function TripsScreen() {
         setTripStatsLoading(true);
 
         try {
-          const nextTripStatsByTripId = await listTripSummaryStats(tripIds);
+          const tripItems = await listTripsScreenItems({
+            tripLocalIds: tripIds,
+            userId: identitySession?.userId ?? null,
+          });
+          const nextTripStatsByTripId = new Map<string, TripSummaryStats>();
+
+          for (const item of tripItems) {
+            if (item.stats) {
+              nextTripStatsByTripId.set(item.trip.localId, item.stats);
+            }
+          }
 
           if (!cancelled) {
             setTripStatsByTripId(nextTripStatsByTripId);
@@ -287,9 +296,8 @@ export default function TripsScreen() {
       return () => {
         cancelled = true;
       };
-    }, [filteredTripIdsKey]),
+    }, [filteredTripIdsKey, identitySession?.userId]),
   );
-  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   useEffect(
     () => () => {

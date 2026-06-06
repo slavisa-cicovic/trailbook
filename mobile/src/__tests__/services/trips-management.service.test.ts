@@ -7,9 +7,12 @@ import {
 } from "../../services/trips/trips-management.service";
 
 vi.mock("../../services/trip-points/trip-points.service", () => ({
-  calculateTripDistanceMeters: () => 0,
   getVisibleTripPointsForTrip: () => [],
   groupVisibleTripPointsByTripId: () => new Map(),
+}));
+
+vi.mock("../../services/trips/trip-distance.service", () => ({
+  calculateTripDistanceMeters: () => 0,
 }));
 
 function makeTrip(overrides: Partial<Trip> & Pick<Trip, "localId" | "startedAt">): Trip {

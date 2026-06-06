@@ -4,7 +4,8 @@ import {
   getRecordingProfileLabel,
 } from "../../constants/recording-profiles";
 import type { RecordingProfile, Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
-import { calculateTripDistanceMeters, getVisibleTripPointsForTrip } from "../trip-points/trip-points.service";
+import { getVisibleTripPointsForTrip } from "../trip-points/trip-points.service";
+import { calculateTripDistanceMeters } from "../trips/trip-distance.service";
 import { formatDurationSummary } from "../trips/trips-management.service";
 
 export interface TripSegmentSummary {

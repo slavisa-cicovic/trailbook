@@ -55,7 +55,6 @@ vi.mock("../../services/recording/auto-recording.service", () => ({
 
 vi.mock("../../services/trip-points/trip-points.service", () => ({
   appendTripPointIfUseful: vi.fn((tripPoints, nextTripPoint) => [...tripPoints, nextTripPoint]),
-  calculateTripDistanceMeters: vi.fn((tripPoints) => Math.max(0, tripPoints.length - 1) * 100),
   createTripPointForLocation: vi.fn((trip, segmentLocalId, snapshot) => ({
     accuracy: snapshot.accuracy,
     altitude: snapshot.altitude,
@@ -72,6 +71,10 @@ vi.mock("../../services/trip-points/trip-points.service", () => ({
     userId: trip.userId,
   })),
   resetPendingTripPointContinuity: vi.fn(),
+}));
+
+vi.mock("../../services/trips/trip-distance.service", () => ({
+  calculateTripDistanceMeters: vi.fn((tripPoints) => Math.max(0, tripPoints.length - 1) * 100),
 }));
 
 const trip: Trip = {

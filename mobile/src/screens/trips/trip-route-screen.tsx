@@ -53,7 +53,7 @@ import {
   type TripSegmentStatsRow,
 } from "../../repositories/trip-points-repository";
 import { loadTripSegments } from "../../repositories/trip-segments-repository";
-import { loadTrips } from "../../repositories/trips-repository";
+import { getTripRouteScreenModel, loadTrips } from "../../repositories/trips-repository";
 import { loadWaypoints } from "../../repositories/waypoints-repository";
 import { useSessionStore } from "../../state/session-store";
 import { useTripGroupMembersStore } from "../../state/trip-group-members-store";
@@ -384,10 +384,11 @@ export default function TripRouteScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadSelectedTripPoints() {
+    async function loadSelectedTripRouteModel() {
       if (!selectedTripLocalId) {
         setSelectedTripPoints([]);
         setSelectedTripPointsTripId(null);
+        setTripSegmentStatsBySegmentId(new Map());
         setRoutePointsLoading(false);
         return;
       }
@@ -397,11 +398,16 @@ export default function TripRouteScreen() {
       setRoutePointsLoading(true);
 
       try {
-        const tripPoints = await loadTripPointsForTrip(selectedTripLocalId);
+        const routeModel = await getTripRouteScreenModel({
+          groupLocalId: resolvedGroupId ?? null,
+          tripLocalId: selectedTripLocalId,
+          userId: currentUserId,
+        });
 
         if (!cancelled) {
-          setSelectedTripPoints(tripPoints);
+          setSelectedTripPoints(routeModel?.tripPoints ?? []);
           setSelectedTripPointsTripId(selectedTripLocalId);
+          setTripSegmentStatsBySegmentId(routeModel?.segmentStatsBySegmentId ?? new Map());
         }
       } finally {
         if (!cancelled) {
@@ -410,12 +416,12 @@ export default function TripRouteScreen() {
       }
     }
 
-    void loadSelectedTripPoints();
+    void loadSelectedTripRouteModel();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedTripLocalId]);
+  }, [currentUserId, resolvedGroupId, selectedTripLocalId]);
 
   useEffect(() => {
     if (
@@ -457,29 +463,6 @@ export default function TripRouteScreen() {
     selectedTripPointsTripId,
     tripSegments,
   ]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadSegmentStats() {
-      if (!selectedTripLocalId) {
-        setTripSegmentStatsBySegmentId(new Map());
-        return;
-      }
-
-      const nextStats = await loadTripSegmentStatsByTripLocalIds([selectedTripLocalId]);
-
-      if (!cancelled) {
-        setTripSegmentStatsBySegmentId(nextStats);
-      }
-    }
-
-    void loadSegmentStats();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedTripLocalId]);
 
   async function syncSelectedTripIfNeeded() {
     if (!identitySession?.sessionToken || !selectedTrip) {

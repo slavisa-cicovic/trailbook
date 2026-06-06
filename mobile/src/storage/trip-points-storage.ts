@@ -7,6 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripPoint } from "../domain/trips";
+import { calculateTripDistanceMeters } from "../services/trips/trip-distance.service";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 import { migrateOnce } from "./sqlite/migrate-once";
 
@@ -103,43 +104,6 @@ function toTripPoint(row: TripPointRow): TripPoint {
     tripLocalId: row.trip_local_id,
     userId: row.user_id,
   });
-}
-
-function calculateDistanceBetweenPoints(left: TripPoint, right: TripPoint): number {
-  const earthRadiusMeters = 6371000;
-  const deltaLatitude = ((right.latitude - left.latitude) * Math.PI) / 180;
-  const deltaLongitude = ((right.longitude - left.longitude) * Math.PI) / 180;
-  const latitudeLeft = (left.latitude * Math.PI) / 180;
-  const latitudeRight = (right.latitude * Math.PI) / 180;
-
-  const haversine =
-    Math.sin(deltaLatitude / 2) * Math.sin(deltaLatitude / 2) +
-    Math.cos(latitudeLeft) *
-      Math.cos(latitudeRight) *
-      Math.sin(deltaLongitude / 2) *
-      Math.sin(deltaLongitude / 2);
-
-  const arc = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
-
-  return earthRadiusMeters * arc;
-}
-
-function calculateTripDistanceMeters(tripPoints: TripPoint[]): number {
-  if (tripPoints.length < 2) {
-    return 0;
-  }
-
-  let totalDistanceMeters = 0;
-
-  for (let index = 1; index < tripPoints.length; index += 1) {
-    const segmentDistance = calculateDistanceBetweenPoints(tripPoints[index - 1], tripPoints[index]);
-
-    if (segmentDistance >= 5) {
-      totalDistanceMeters += segmentDistance;
-    }
-  }
-
-  return totalDistanceMeters;
 }
 
 function calculateSegmentedTripDistanceMeters(tripPoints: TripPoint[]): number {

@@ -4,10 +4,10 @@ import type { CurrentLocationSnapshot } from "../location/location.service";
 import type { LocationCallbackSource } from "../trip-points/trip-point-diagnostics.service";
 import {
   appendTripPointIfUseful,
-  calculateTripDistanceMeters,
   createTripPointForLocation,
   resetPendingTripPointContinuity,
 } from "../trip-points/trip-points.service";
+import { calculateTripDistanceMeters } from "../trips/trip-distance.service";
 import { buildAutoBatchProfileSections } from "./auto-recording.service";
 import {
   buildRawLocationEventProcessingResults,
