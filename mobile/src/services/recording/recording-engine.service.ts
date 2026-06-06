@@ -22,9 +22,15 @@ import type { LocationCallbackSource } from "../trip-points/trip-point-diagnosti
 import {
   processRecordedLocationSnapshots,
   type PersistRecordedLocationOptions,
+  type RecordingPipelineResult,
 } from "./recording-pipeline.service";
 import { buildRawLocationEventProcessingResults } from "./raw-location-event-processing.service";
 import { recordRecordingNativeEvent } from "./recording-native-events.service";
+import {
+  countRawProcessingResults,
+  recordRecordingProcessingTrace,
+  type RecordingProcessingTrace,
+} from "./recording-processing-trace.service";
 
 function formatRawLocationCoordinate(value: number): string {
   return value.toFixed(7);
@@ -113,6 +119,31 @@ async function refreshAcceptedTripStats(
   await refreshTripStatsForTripLocalId(tripLocalId);
 }
 
+function withRawProcessingTrace(input: {
+  batchId: string | null;
+  pipelineResult: RecordingPipelineResult;
+  processingResults: RawLocationEventProcessingResult[];
+  rawInsertedCount: number;
+}): RecordingProcessingTrace {
+  const acceptedRawCount = countRawProcessingResults(input.processingResults, "accepted");
+  const duplicateRawCount = countRawProcessingResults(input.processingResults, "duplicate");
+  const rejectedRawCount = countRawProcessingResults(input.processingResults, "rejected");
+
+  return {
+    ...input.pipelineResult.processingTrace,
+    acceptedPointCount: input.processingResults.length > 0
+      ? acceptedRawCount
+      : input.pipelineResult.acceptedPointCount,
+    batchId: input.batchId,
+    duplicateRawEventCount: duplicateRawCount,
+    rawInsertedCount: input.rawInsertedCount,
+    rejectedPointCount: input.processingResults.length > 0
+      ? rejectedRawCount
+      : input.pipelineResult.rejectedPointCount,
+    rejectedRawEventCount: rejectedRawCount,
+  };
+}
+
 export async function recordLocationSnapshots(
   snapshots: CurrentLocationSnapshot[],
   callbackSource: LocationCallbackSource,
@@ -128,11 +159,12 @@ export async function recordLocationSnapshots(
       ? recordingSession.activeTripId
       : null;
   const origin = options.origin ?? "device";
+  let batchId: string | null = null;
   let rawEvents: RawLocationEvent[] = [];
   let beforeTripPoints: TripPoint[] = [];
 
   if (activeTripId) {
-    const batchId = Crypto.randomUUID();
+    batchId = Crypto.randomUUID();
     const receivedAt = new Date().toISOString();
 
     rawEvents = buildRawLocationEvents({
@@ -171,14 +203,28 @@ export async function recordLocationSnapshots(
     });
   }
 
-  await processRecordedLocationSnapshots(snapshots, callbackSource, options);
+  const pipelineResult = await processRecordedLocationSnapshots(snapshots, callbackSource, options);
 
-  if (!activeTripId || rawEvents.length === 0) {
+  if (!activeTripId) {
+    return;
+  }
+
+  let processingResults: RawLocationEventProcessingResult[] = [];
+
+  if (rawEvents.length === 0) {
+    void recordRecordingProcessingTrace(
+      withRawProcessingTrace({
+        batchId,
+        pipelineResult,
+        processingResults,
+        rawInsertedCount: rawEvents.length,
+      }),
+    );
     return;
   }
 
   const afterTripPoints = await loadTripPointsForTrip(activeTripId).catch(() => beforeTripPoints);
-  const processingResults = buildRawLocationEventProcessingResults({
+  processingResults = buildRawLocationEventProcessingResults({
     acceptedDecision: "accepted-by-recording-pipeline",
     afterTripPoints,
     beforeTripPoints,
@@ -200,6 +246,14 @@ export async function recordLocationSnapshots(
       tripLocalId: activeTripId,
     });
   });
+  void recordRecordingProcessingTrace(
+    withRawProcessingTrace({
+      batchId,
+      pipelineResult,
+      processingResults,
+      rawInsertedCount: rawEvents.length,
+    }),
+  );
 }
 
 export function persistBackgroundRecordedLocations(

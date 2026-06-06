@@ -13,6 +13,11 @@ import {
   buildRawLocationEventProcessingResults,
   sortRawLocationEvents,
 } from "./raw-location-event-processing.service";
+import {
+  countDuplicateRecordedAtValues,
+  countRawProcessingResults,
+  type RecordingProcessingTrace,
+} from "./recording-processing-trace.service";
 
 export { buildRawLocationEventProcessingResults, sortRawLocationEvents };
 
@@ -41,6 +46,7 @@ export interface RecordingProcessorReplayOutput {
   lastRawRecordedAt: string | null;
   maxAcceptedGapMs: number;
   maxRawGapMs: number;
+  processingTrace: RecordingProcessingTrace;
   processingResults: RawLocationEventProcessingResult[];
   rejectedRawEventCount: number;
   tripPoints: TripPoint[];
@@ -104,6 +110,20 @@ function withSegmentStats(segment: TripSegment, tripPoints: TripPoint[]): TripSe
     pointCount: segmentPoints.length,
     statsUpdatedAt,
   };
+}
+
+function getRawEventTraceOrigin(rawEvents: RawLocationEvent[]): RecordingProcessingTrace["origin"] {
+  const origins = new Set(rawEvents.map((event) => event.origin));
+
+  if (origins.size === 0) {
+    return "reprocess";
+  }
+
+  if (origins.size === 1) {
+    return rawEvents[0]?.origin ?? "reprocess";
+  }
+
+  return "mixed";
 }
 
 export function getTripDistanceMeters(
@@ -229,6 +249,36 @@ export function processRawLocationEventsForTrip(
     rawEvents: sortedRawEvents,
     rejectedDecision: "filtered-by-recording-processor",
   });
+  const previousProfile = input.fallbackProfile ?? input.trip.recordingProfile;
+  const firstTransitionSection =
+    sections.find((section, index) => index > 0 || section.profile !== previousProfile) ?? null;
+  const lastSection = sections[sections.length - 1] ?? null;
+  const processingTrace: RecordingProcessingTrace = {
+    acceptedPointCount: nextTripPoints.length,
+    activeProfile: lastSection?.profile ?? previousProfile,
+    batchId: null,
+    callbackSource: "reprocess",
+    duplicateRawEventCount: countRawProcessingResults(processingResults, "duplicate"),
+    duplicateRecordedAtCount: countDuplicateRecordedAtValues(sortedRawEvents.map((event) => event.recordedAt)),
+    firstRecordedAt: firstRawRecordedAt,
+    inferredProfile: firstTransitionSection?.profile ?? lastSection?.profile ?? null,
+    inputSnapshotCount: sortedRawEvents.length,
+    lastRecordedAt: lastRawRecordedAt,
+    maxAcceptedGapMs: getMaxGapMs(nextTripPoints.map((tripPoint) => tripPoint.recordedAt)),
+    maxRawGapMs: getMaxGapMs(sortedRawEvents.map((event) => event.recordedAt)),
+    origin: getRawEventTraceOrigin(sortedRawEvents),
+    previousProfile,
+    processingMode: "reprocess",
+    processedAt: processingResults[0]?.processedAt ?? new Date().toISOString(),
+    rawInsertedCount: sortedRawEvents.length,
+    recoveredPointCount: 0,
+    rejectedPointCount: countRawProcessingResults(processingResults, "rejected"),
+    rejectedRawEventCount: countRawProcessingResults(processingResults, "rejected"),
+    sortedSnapshotCount: sortedRawEvents.length,
+    transitionAt: firstTransitionSection?.startedAt ?? null,
+    transitionChanged: firstTransitionSection !== null,
+    tripLocalId: input.trip.localId,
+  };
 
   return {
     duplicateRawEventCount: processingResults.filter((result) => result.processingStatus === "duplicate").length,
@@ -236,6 +286,7 @@ export function processRawLocationEventsForTrip(
     lastRawRecordedAt,
     maxAcceptedGapMs: getMaxGapMs(nextTripPoints.map((tripPoint) => tripPoint.recordedAt)),
     maxRawGapMs: getMaxGapMs(sortedRawEvents.map((event) => event.recordedAt)),
+    processingTrace,
     processingResults,
     rejectedRawEventCount: processingResults.filter((result) => result.processingStatus === "rejected").length,
     tripPoints: nextTripPoints,

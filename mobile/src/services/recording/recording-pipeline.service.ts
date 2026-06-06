@@ -28,11 +28,18 @@ import { loadWaypoints } from "../../repositories/waypoints-repository";
 import {
   applyAutoRecordingTransition,
   buildAutoBatchProfileSections,
+  inferAutoRecordingProfile,
   recordAutoRecordingSample,
   type AutoBatchProfileSection,
 } from "./auto-recording.service";
 import { updateRecordingLastPoint, updateRecordingMotionActivity, updateRecordingSegment } from "./recording.service";
 import { setBatchProcessing } from "../../state/batch-processing-store";
+import {
+  countDuplicateRecordedAtValues,
+  getMaxRecordedAtGapMs,
+  getTraceRecordedAtRange,
+  type RecordingProcessingTrace,
+} from "./recording-processing-trace.service";
 
 const AUTO_REJECTED_RECOVERY_MAX_AGE_MS = 10 * 60 * 1000;
 const AUTO_REJECTED_RECOVERY_MAX_COUNT = 120;
@@ -40,11 +47,19 @@ const BATCH_DETECTION_MIN_SNAPSHOT_COUNT = 5;
 const BATCH_DETECTION_LAG_MS = 2 * 60 * 1000;
 const rejectedAutoSnapshotsByTripLocalId = new Map<string, CurrentLocationSnapshot[]>();
 const simulationLocationInjectionTripIds = new Set<string>();
-let recordingPipelineWriteQueue = Promise.resolve();
+let recordingPipelineWriteQueue: Promise<unknown> = Promise.resolve();
 
 export interface PersistRecordedLocationOptions {
   origin?: "device" | "simulation";
   restartTrackingOnAutoTransition?: boolean;
+}
+
+export interface RecordingPipelineResult {
+  acceptedPointCount: number;
+  duplicateRecordedAtCount: number;
+  processingTrace: RecordingProcessingTrace;
+  recoveredPointCount: number;
+  rejectedPointCount: number;
 }
 
 export function setSimulationLocationInjectionActive(tripLocalId: string, active: boolean) {
@@ -112,7 +127,59 @@ async function persistRecordedLocationSnapshots(
   snapshots: CurrentLocationSnapshot[],
   callbackSource: LocationCallbackSource,
   options: PersistRecordedLocationOptions = {},
-): Promise<void> {
+): Promise<RecordingPipelineResult> {
+  const inputRecordedAtValues = snapshots.map((snapshot) => snapshot.recordedAt);
+  const { firstRecordedAt, lastRecordedAt } = getTraceRecordedAtRange(inputRecordedAtValues);
+  const processedAt = new Date().toISOString();
+  const acceptedRecordedAtValues: string[] = [];
+  let acceptedPointCount = 0;
+  let duplicateRecordedAtCount = countDuplicateRecordedAtValues(inputRecordedAtValues);
+  let rejectedPointCount = 0;
+  let recoveredPointCount = 0;
+  let tripLocalId: string | null = null;
+  let previousProfile: RecordingProcessingTrace["previousProfile"] = null;
+  let activeProfile: RecordingProcessingTrace["activeProfile"] = null;
+  let inferredProfile: RecordingProcessingTrace["inferredProfile"] = null;
+  let transitionAt: string | null = null;
+  let transitionChanged = false;
+
+  function buildPipelineResult(): RecordingPipelineResult {
+    const processingTrace: RecordingProcessingTrace = {
+      acceptedPointCount,
+      activeProfile,
+      batchId: null,
+      callbackSource,
+      duplicateRawEventCount: 0,
+      duplicateRecordedAtCount,
+      firstRecordedAt,
+      inferredProfile,
+      inputSnapshotCount: snapshots.length,
+      lastRecordedAt,
+      maxAcceptedGapMs: getMaxRecordedAtGapMs(acceptedRecordedAtValues),
+      maxRawGapMs: getMaxRecordedAtGapMs(inputRecordedAtValues),
+      origin: options.origin ?? "device",
+      previousProfile,
+      processingMode: "live",
+      processedAt,
+      rawInsertedCount: 0,
+      recoveredPointCount,
+      rejectedPointCount,
+      rejectedRawEventCount: 0,
+      sortedSnapshotCount: snapshots.length,
+      transitionAt,
+      transitionChanged,
+      tripLocalId,
+    };
+
+    return {
+      acceptedPointCount,
+      duplicateRecordedAtCount,
+      processingTrace,
+      recoveredPointCount,
+      rejectedPointCount,
+    };
+  }
+
   // Detect batch synchronously BEFORE the first await so the UI overlay
   // is guaranteed to appear before any user interaction can happen.
   const oldestRecordedAtMs = getOldestRecordedAtMs(snapshots);
@@ -134,17 +201,20 @@ async function persistRecordedLocationSnapshots(
     recordingSession.status !== "recording" ||
     !recordingSession.activeTripId
   ) {
-    return;
+    return buildPipelineResult();
   }
 
   const initialRecordingSession = recordingSession;
   const locationOrigin = options.origin ?? "device";
+  tripLocalId = recordingSession.activeTripId;
+  previousProfile = recordingSession.recordingProfile;
+  activeProfile = recordingSession.recordingProfile;
 
   if (
     locationOrigin === "device" &&
     simulationLocationInjectionTripIds.has(recordingSession.activeTripId)
   ) {
-    return;
+    return buildPipelineResult();
   }
 
   const trips = await loadTrips();
@@ -158,7 +228,7 @@ async function persistRecordedLocationSnapshots(
     ) ?? null;
 
   if (!activeTrip) {
-    return;
+    return buildPipelineResult();
   }
 
   const recordingTrip = activeTrip;
@@ -171,6 +241,12 @@ async function persistRecordedLocationSnapshots(
   let lastRecordedAt = recordingSession.lastPointRecordedAt;
   let nextRecordingSession = recordingSession;
   let lastSequentialTripPoint: ReturnType<typeof createTripPointForLocation> | null = null;
+  const initialOpenSegment =
+    tripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ??
+    getOpenTripSegmentForTrip(tripSegments, recordingTrip.localId);
+
+  previousProfile = initialOpenSegment?.recordingProfile ?? recordingSession.recordingProfile;
+  activeProfile = previousProfile;
 
   function appendSnapshotIfUseful(snapshot: CurrentLocationSnapshot): boolean {
     const fallbackOpenSegment = getOpenTripSegmentForTrip(nextTripSegments, recordingTrip.localId);
@@ -195,6 +271,8 @@ async function persistRecordedLocationSnapshots(
       nextTripPoints = appendedTripPoints;
       pointsChanged = true;
       nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, snapshot.recordedAt);
+      acceptedPointCount += 1;
+      acceptedRecordedAtValues.push(snapshot.recordedAt);
     }
 
     return pointsWereAppended;
@@ -225,6 +303,8 @@ async function persistRecordedLocationSnapshots(
       nextTripPoints = appendedTripPoints;
       pointsChanged = true;
       nextRecordingSession = updateRecordingLastPoint(nextRecordingSession, snapshot.recordedAt);
+      acceptedPointCount += 1;
+      acceptedRecordedAtValues.push(snapshot.recordedAt);
     }
 
     return pointsWereAppended;
@@ -255,23 +335,29 @@ async function persistRecordedLocationSnapshots(
     }
 
     if (activeSegment.recordingProfile === section.profile) {
+      activeProfile = activeSegment.recordingProfile;
       return activeSegment.localId;
     }
 
-    const transitionAt = getClampedTransitionAt(activeSegment.startedAt, section.startedAt);
-    const closedSegments = closeActiveTripSegment(nextTripSegments, activeSegment.localId, transitionAt);
+    const nextTransitionAt = getClampedTransitionAt(activeSegment.startedAt, section.startedAt);
+    transitionChanged = true;
+    transitionAt = transitionAt ?? nextTransitionAt;
+    inferredProfile = section.profile;
+    activeProfile = section.profile;
+
+    const closedSegments = closeActiveTripSegment(nextTripSegments, activeSegment.localId, nextTransitionAt);
     const { nextSegment, tripSegments: stagedTripSegments } = startNextTripSegment(
       recordingTrip,
       closedSegments,
       section.profile,
-      transitionAt,
+      nextTransitionAt,
     );
     const normalizedState = normalizeAutoClosedTripSegment(
       stagedTripSegments,
       nextTripPoints,
       nextWaypoints,
       recordingTrip.localId,
-      transitionAt,
+      nextTransitionAt,
     );
     const prunedState = removeInitialAutoBootstrapWalkSegment(
       normalizedState.tripSegments,
@@ -279,7 +365,7 @@ async function persistRecordedLocationSnapshots(
       normalizedState.waypoints,
       recordingTrip.localId,
       nextSegment.localId,
-      transitionAt,
+      nextTransitionAt,
     );
 
     if (prunedState.tripPoints !== nextTripPoints) {
@@ -319,6 +405,10 @@ async function persistRecordedLocationSnapshots(
       return false;
     }
 
+    inferredProfile = sections.find((section) => section.profile !== nextRecordingSession.recordingProfile)?.profile
+      ?? sections[sections.length - 1]?.profile
+      ?? inferredProfile;
+
     for (const section of sections) {
       const segmentLocalId = ensureBatchSectionSegment(section);
 
@@ -330,10 +420,13 @@ async function persistRecordedLocationSnapshots(
             recordedAt: snapshot.recordedAt,
             source: callbackSource,
           });
+          duplicateRecordedAtCount += 1;
           continue;
         }
 
-        appendBatchSnapshotIfUseful(snapshot, section.profile, segmentLocalId);
+        if (!appendBatchSnapshotIfUseful(snapshot, section.profile, segmentLocalId)) {
+          rejectedPointCount += 1;
+        }
         lastRecordedAt = snapshot.recordedAt;
       }
     }
@@ -377,7 +470,8 @@ async function persistRecordedLocationSnapshots(
 
   if (await processAutoBatchSnapshots()) {
     await writePendingChanges();
-    return;
+    activeProfile = nextRecordingSession.recordingProfile;
+    return buildPipelineResult();
   }
 
   for (const snapshot of snapshots) {
@@ -397,6 +491,7 @@ async function persistRecordedLocationSnapshots(
           source: callbackSource,
         },
       );
+      duplicateRecordedAtCount += 1;
       continue;
     }
 
@@ -404,6 +499,7 @@ async function persistRecordedLocationSnapshots(
       const motionActivity = await getLatestMotionActivityAsync(snapshot.recordedAt);
 
       nextRecordingSession = updateRecordingMotionActivity(nextRecordingSession, motionActivity);
+      inferredProfile = inferAutoRecordingProfile(rawAutoSamples ?? [], motionActivity) ?? inferredProfile;
       const autoTransition = applyAutoRecordingTransition(
         nextRecordingSession,
         recordingTrip,
@@ -424,6 +520,10 @@ async function persistRecordedLocationSnapshots(
       nextWaypoints = autoTransition.waypoints;
 
       if (autoTransition.changed) {
+        transitionChanged = true;
+        transitionAt = transitionAt ?? snapshot.recordedAt;
+        activeProfile = nextRecordingSession.recordingProfile;
+
         if (restartTrackingOnAutoTransition) {
           await restartBackgroundLocationTracking(nextRecordingSession.recordingProfile);
         }
@@ -437,6 +537,9 @@ async function persistRecordedLocationSnapshots(
         for (const recoverySnapshot of snapshotsToReevaluate) {
           if (appendSnapshotIfUseful(recoverySnapshot)) {
             acceptedRecoverySnapshots.push(recoverySnapshot);
+            recoveredPointCount += 1;
+          } else {
+            rejectedPointCount += 1;
           }
         }
 
@@ -449,8 +552,12 @@ async function persistRecordedLocationSnapshots(
     if (lastRecordedAt !== snapshot.recordedAt) {
       const pointsWereAppended = appendSnapshotIfUseful(snapshot);
 
-      if (!pointsWereAppended && nextRecordingSession.recordingMode === "auto") {
-        rememberRejectedAutoSnapshot(recordingTrip.localId, snapshot);
+      if (!pointsWereAppended) {
+        rejectedPointCount += 1;
+
+        if (nextRecordingSession.recordingMode === "auto") {
+          rememberRejectedAutoSnapshot(recordingTrip.localId, snapshot);
+        }
       }
     }
 
@@ -458,6 +565,8 @@ async function persistRecordedLocationSnapshots(
   }
 
   await writePendingChanges();
+  activeProfile = nextRecordingSession.recordingProfile;
+  return buildPipelineResult();
   } finally {
     if (isBatch) {
       setBatchProcessing(false);
@@ -469,19 +578,20 @@ export function processRecordedLocationSnapshots(
   snapshots: CurrentLocationSnapshot[],
   callbackSource: LocationCallbackSource,
   options: PersistRecordedLocationOptions = {},
-): Promise<void> {
-  recordingPipelineWriteQueue = recordingPipelineWriteQueue
+): Promise<RecordingPipelineResult> {
+  const nextWrite = recordingPipelineWriteQueue
     .catch(() => undefined)
     .then(() => persistRecordedLocationSnapshots(snapshots, callbackSource, options));
 
-  return recordingPipelineWriteQueue;
+  recordingPipelineWriteQueue = nextWrite;
+  return nextWrite;
 }
 
 export function persistBackgroundRecordedLocations(
   locations: Location.LocationObject[],
   options: PersistRecordedLocationOptions = {},
 ): Promise<void> {
-  return processRecordedLocationSnapshots(locations.map(toSnapshot), "background", options);
+  return processRecordedLocationSnapshots(locations.map(toSnapshot), "background", options).then(() => undefined);
 }
 
 export function clearRecordingPipelineState(): void {

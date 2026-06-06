@@ -13,6 +13,7 @@ import {
   sortRawLocationEvents,
   type RecordingProcessorSegmentSummary,
 } from "./recording-processor.service";
+import type { RecordingProcessingTrace } from "./recording-processing-trace.service";
 import { applyRawEventReprocessingUnitOfWork } from "./recording-unit-of-work.service";
 
 export type ReprocessedSegmentSummary = RecordingProcessorSegmentSummary;
@@ -33,6 +34,7 @@ export interface ReprocessingPreview {
   oldPointCount: number;
   oldSegmentCount: number;
   oldSegments: ReprocessedSegmentSummary[];
+  processingTrace: RecordingProcessingTrace;
   rawEventCount: number;
   rejectedRawEventCount: number;
   tripLocalId: string;
@@ -221,6 +223,7 @@ async function buildReprocessingResult(tripLocalId: string): Promise<Reprocessin
       oldPointCount: oldTripPoints.length,
       oldSegmentCount: oldTripSegments.length,
       oldSegments: buildSegmentSummaries(oldTripSegments, oldTripPoints, tripLocalId),
+      processingTrace: replay.processingTrace,
       rawEventCount: sortedRawEvents.length,
       rejectedRawEventCount: replay.rejectedRawEventCount,
       tripLocalId,

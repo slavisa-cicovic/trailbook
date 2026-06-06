@@ -215,6 +215,17 @@ describe("raw event reprocessing", () => {
     expect(preview.oldPointCount).toBe(1);
     expect(preview.newPointCount).toBe(2);
     expect(preview.newSegmentCount).toBe(1);
+    expect(preview.processingTrace).toMatchObject({
+      acceptedPointCount: 2,
+      callbackSource: "reprocess",
+      inputSnapshotCount: 2,
+      origin: "device",
+      previousProfile: "walk",
+      processingMode: "reprocess",
+      rawInsertedCount: 2,
+      rejectedPointCount: 0,
+      tripLocalId: "trip-1",
+    });
     expect(saveTrips).not.toHaveBeenCalled();
     expect(saveTripSegments).not.toHaveBeenCalled();
     expect(replaceTripPointsForTrip).not.toHaveBeenCalled();

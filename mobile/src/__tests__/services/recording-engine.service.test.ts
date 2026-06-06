@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TripPoint } from "../../domain/trips";
 import { recordLocationSnapshots } from "../../services/recording/recording-engine.service";
 import { processRecordedLocationSnapshots } from "../../services/recording/recording-pipeline.service";
+import { appendDiagnosticEvent } from "../../repositories/diagnostic-events-repository";
 import { insertRawLocationEvents, updateRawLocationEventProcessingResults } from "../../storage/raw-location-events-storage";
 import {
   loadTripPointsForTrip,
@@ -39,11 +40,46 @@ vi.mock("../../storage/trip-points-storage", () => ({
 }));
 
 vi.mock("../../services/recording/recording-pipeline.service", () => ({
-  processRecordedLocationSnapshots: vi.fn().mockResolvedValue(undefined),
+  processRecordedLocationSnapshots: vi.fn().mockResolvedValue({
+    acceptedPointCount: 1,
+    duplicateRecordedAtCount: 1,
+    processingTrace: {
+      acceptedPointCount: 1,
+      activeProfile: "walk",
+      batchId: null,
+      callbackSource: "background",
+      duplicateRawEventCount: 0,
+      duplicateRecordedAtCount: 1,
+      firstRecordedAt: "2026-06-02T09:01:00.000Z",
+      inferredProfile: null,
+      inputSnapshotCount: 3,
+      lastRecordedAt: "2026-06-02T09:02:00.000Z",
+      maxAcceptedGapMs: 0,
+      maxRawGapMs: 60000,
+      origin: "device",
+      previousProfile: "walk",
+      processingMode: "live",
+      processedAt: "2026-06-02T09:02:01.000Z",
+      rawInsertedCount: 0,
+      recoveredPointCount: 0,
+      rejectedPointCount: 1,
+      rejectedRawEventCount: 0,
+      sortedSnapshotCount: 3,
+      transitionAt: null,
+      transitionChanged: false,
+      tripLocalId: "trip-1",
+    },
+    recoveredPointCount: 0,
+    rejectedPointCount: 1,
+  }),
 }));
 
 vi.mock("../../services/recording/recording-native-events.service", () => ({
   recordRecordingNativeEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../../repositories/diagnostic-events-repository", () => ({
+  appendDiagnosticEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 const acceptedTripPoint: TripPoint = {
@@ -146,6 +182,26 @@ describe("recording engine", () => {
     ]);
     expect(refreshTripSegmentStatsForTripLocalId).toHaveBeenCalledWith("trip-1");
     expect(refreshTripStatsForTripLocalId).toHaveBeenCalledWith("trip-1");
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(appendDiagnosticEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: "recording",
+        name: "processing_trace",
+        payload: expect.objectContaining({
+          acceptedPointCount: 1,
+          batchId: "batch-1",
+          duplicateRawEventCount: 0,
+          rawInsertedCount: 2,
+          rejectedPointCount: 1,
+          rejectedRawEventCount: 1,
+        }),
+        tripLocalId: "trip-1",
+      }),
+    );
   });
 
   it("does not update raw processing status for storage-ignored duplicate raw events", async () => {
