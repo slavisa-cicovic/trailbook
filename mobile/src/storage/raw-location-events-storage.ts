@@ -7,6 +7,11 @@ import type {
 } from "../domain/raw-location-event";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 
+// Intentional raw SQL hot path.
+// PLAN_52G benchmark selected "keep raw SQL" for raw_location_events on Android/iOS.
+// Do not migrate this file to Drizzle without rerunning the storage benchmark on an Android release build.
+// The repository wrapper remains the public boundary for callers.
+
 interface RawLocationEventRow {
   accepted_trip_point_local_id: string | null;
   accuracy: number | null;
@@ -42,7 +47,9 @@ export interface RawLocationEventTripSummary {
   tripLocalId: string;
 }
 
-function toRow(event: RawLocationEvent): RawLocationEventRow {
+// Mapping
+
+function toRawLocationEventRow(event: RawLocationEvent): RawLocationEventRow {
   return {
     accepted_trip_point_local_id: event.acceptedTripPointLocalId,
     accuracy: event.accuracy,
@@ -67,7 +74,7 @@ function toRow(event: RawLocationEvent): RawLocationEventRow {
   };
 }
 
-function fromRow(row: RawLocationEventRow): RawLocationEvent {
+function toRawLocationEvent(row: RawLocationEventRow): RawLocationEvent {
   return {
     acceptedTripPointLocalId: row.accepted_trip_point_local_id,
     accuracy: row.accuracy,
@@ -101,7 +108,7 @@ export async function insertRawLocationEvents(events: RawLocationEvent[]): Promi
 
   await runExclusiveDatabaseWrite(async (database) => {
     for (const event of events) {
-      const row = toRow(event);
+      const row = toRawLocationEventRow(event);
 
       const result = await database.runAsync(
         `INSERT OR IGNORE INTO raw_location_events (
@@ -194,7 +201,7 @@ export async function loadRawLocationEventsForTrip(tripLocalId: string): Promise
     tripLocalId,
   );
 
-  return rows.map(fromRow);
+  return rows.map(toRawLocationEvent);
 }
 
 export async function loadPendingRawLocationEventsForTrip(tripLocalId: string): Promise<RawLocationEvent[]> {
@@ -207,7 +214,7 @@ export async function loadPendingRawLocationEventsForTrip(tripLocalId: string): 
     tripLocalId,
   );
 
-  return rows.map(fromRow);
+  return rows.map(toRawLocationEvent);
 }
 
 export async function replaceRawLocationEventsForTrip(
@@ -229,7 +236,7 @@ export async function replaceRawLocationEventsForTrip(
 
       return left.batchIndex - right.batchIndex;
     })
-    .map(toRow);
+    .map(toRawLocationEventRow);
 
   if (rows.length !== events.length) {
     throw new Error("Cannot replace raw events with events from another trip.");

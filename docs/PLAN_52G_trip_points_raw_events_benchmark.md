@@ -297,6 +297,22 @@ Manual execution still required before choosing A/B/C:
 - at least 100-row and 500-row runs
 - optional follow-up with larger realistic restored trip data if Android timings are close to threshold
 
+## Observed Decision
+
+Manual benchmark was run on Android and iOS for 100-row and 500-row scenarios. Both devices returned:
+
+```text
+Recommendation: keep raw SQL for this hot path for now.
+```
+
+Decision:
+
+- choose Option A
+- keep `trip_points` and `raw_location_events` on optimized raw SQL
+- keep stats recomputation writes on optimized raw SQL
+- create `PLAN_52H_keep_hot_path_sql_hardening.md`
+- retain the benchmark debug tool for future Expo/Drizzle/SQLite upgrades
+
 ## Risks
 
 - Synthetic benchmarks can miss Android OS throttling behavior.

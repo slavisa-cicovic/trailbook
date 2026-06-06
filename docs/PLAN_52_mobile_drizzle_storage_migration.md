@@ -24,10 +24,10 @@ Completed in the first implementation pass:
 - Migrated `trips` and `trip_segments` storage to Drizzle behind the existing APIs, including segment stats refresh side effects.
 - Migrated `sync_outbox`, `diagnostic_events`, `trip_diagnostics` and `recording_native_events` storage to Drizzle behind the existing APIs.
 - Kept recording hot-path tables on existing optimized SQL.
+- Benchmarked `trip_points` and `raw_location_events` on Android/iOS and decided to keep them on optimized raw SQL for now.
 
 Still intentionally deferred:
 
-- Benchmarking and deciding on `trip_points` / `raw_location_events`.
 - Removing legacy SQL migrations.
 
 Subplans:
@@ -39,6 +39,7 @@ Subplans:
 - `PLAN_52E_drizzle_trips_segments_storage.md`: completed; migrate trips and trip segments storage to Drizzle while preserving stats refresh side effects.
 - `PLAN_52F_drizzle_sync_observability_storage.md`: completed; migrate sync outbox and observability storage while keeping recording hot-path tables on optimized SQL.
 - `PLAN_52G_trip_points_raw_events_benchmark.md`: benchmark and decide whether hot-path `trip_points` / `raw_location_events` should remain raw SQL, partially migrate, or fully migrate.
+- `PLAN_52H_keep_hot_path_sql_hardening.md`: harden the intentionally raw SQL hot path with documentation, clearer structure and contract tests.
 
 ## Context
 
@@ -111,6 +112,18 @@ Keep manual optimized SQL for:
 - stats recomputation hot paths
 
 Those can be migrated later only after profiling on Android.
+
+After `PLAN_52G`, the final current storage split is:
+
+```text
+Drizzle:
+  low/medium-volume app data, settings, waypoints, trip metadata, sync and diagnostics
+
+Raw SQL:
+  recording hot-path points/events and stats recomputation
+```
+
+`PLAN_52H` documents and tests this raw SQL exception instead of migrating it.
 
 ## Phase 1: Installation And Skeleton
 

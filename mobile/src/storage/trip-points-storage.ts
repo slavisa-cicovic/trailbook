@@ -5,6 +5,11 @@ import type { TripPoint } from "../domain/trips";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 import { migrateOnce } from "./sqlite/migrate-once";
 
+// Intentional raw SQL hot path.
+// PLAN_52G benchmark selected "keep raw SQL" for trip_points and stats recomputation on Android/iOS.
+// Do not migrate this file to Drizzle without rerunning the storage benchmark on an Android release build.
+// The repository wrapper remains the public boundary for callers.
+
 export interface TripStatsRow {
   distance_meters: number;
   point_count: number;
@@ -82,7 +87,7 @@ function toTripPointRow(tripPoint: TripPoint): TripPointRow {
   };
 }
 
-function toTripPointFromRow(row: TripPointRow): TripPoint {
+function toTripPoint(row: TripPointRow): TripPoint {
   return normalizeTripPoint({
     accuracy: row.accuracy,
     altitude: row.altitude,
@@ -295,7 +300,7 @@ async function updateTripSegmentStatsForTripLocalIds(
     ...segmentIds,
   );
   const tripPointsBySegmentLocalId = groupTripPointsBySegmentLocalId(
-    tripPointRows.map(toTripPointFromRow),
+    tripPointRows.map(toTripPoint),
   );
   const updatedAt = new Date().toISOString();
 
@@ -391,7 +396,7 @@ export async function refreshTripStatsForTripLocalIds(tripLocalIds: string[]): P
     `SELECT * FROM trip_points WHERE trip_local_id IN (${placeholders}) ORDER BY recorded_at ASC, local_id ASC`,
     ...uniqueTripLocalIds,
   );
-  const groupedTripPoints = groupTripPointsByTripLocalId(rows.map(toTripPointFromRow));
+  const groupedTripPoints = groupTripPointsByTripLocalId(rows.map(toTripPoint));
 
   await runExclusiveDatabaseWrite(async (database) => {
     await updateTripStatsForTripLocalIds(database, groupedTripPoints, uniqueTripLocalIds);
@@ -487,7 +492,7 @@ export async function loadTripPoints(): Promise<TripPoint[]> {
     "SELECT * FROM trip_points ORDER BY recorded_at ASC, local_id ASC",
   );
 
-  return rows.map(toTripPointFromRow);
+  return rows.map(toTripPoint);
 }
 
 export async function loadTripPointsForTrip(tripLocalId: string): Promise<TripPoint[]> {
@@ -499,7 +504,7 @@ export async function loadTripPointsForTrip(tripLocalId: string): Promise<TripPo
     tripLocalId,
   );
 
-  return rows.map(toTripPointFromRow);
+  return rows.map(toTripPoint);
 }
 
 export async function replaceTripPointsForTrip(
@@ -590,7 +595,7 @@ export async function loadTripStatsByTripLocalIds(tripLocalIds: string[]): Promi
       ...missingTripLocalIds,
     );
     const missingTripPointsByTripLocalId = groupTripPointsByTripLocalId(
-      missingPointRows.map(toTripPointFromRow),
+      missingPointRows.map(toTripPoint),
     );
 
     if (missingTripPointsByTripLocalId.size > 0) {
