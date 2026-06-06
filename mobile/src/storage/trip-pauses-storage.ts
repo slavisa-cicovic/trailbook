@@ -1,9 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { asc } from "drizzle-orm";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripPause } from "../domain/trips";
-import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
+import { getDrizzleDatabase, runExclusiveDrizzleWrite } from "./drizzle/db";
+import { tripPauses as tripPausesTable } from "./drizzle/schema";
 import { migrateOnce } from "./sqlite/migrate-once";
+
+type TripPauseRow = typeof tripPausesTable.$inferSelect;
+type TripPauseInsert = typeof tripPausesTable.$inferInsert;
 
 function normalizeTripPause(
   value: Partial<TripPause> & Pick<TripPause, "localId" | "tripLocalId" | "deviceId" | "userId">,
@@ -24,46 +29,33 @@ function normalizeTripPause(
   };
 }
 
-interface TripPauseRow {
-  created_at: string;
-  device_id: string;
-  ended_at: string | null;
-  local_id: string;
-  server_id: string | null;
-  started_at: string;
-  sync_status: TripPause["syncStatus"];
-  trip_local_id: string;
-  updated_at: string;
-  user_id: string;
-}
-
-function toTripPauseRow(tripPause: TripPause): TripPauseRow {
+function toTripPauseRow(tripPause: TripPause): TripPauseInsert {
   return {
-    created_at: tripPause.createdAt,
-    device_id: tripPause.deviceId,
-    ended_at: tripPause.endedAt,
-    local_id: tripPause.localId,
-    server_id: tripPause.serverId,
-    started_at: tripPause.startedAt,
-    sync_status: tripPause.syncStatus,
-    trip_local_id: tripPause.tripLocalId,
-    updated_at: tripPause.updatedAt,
-    user_id: tripPause.userId,
+    createdAt: tripPause.createdAt,
+    deviceId: tripPause.deviceId,
+    endedAt: tripPause.endedAt,
+    localId: tripPause.localId,
+    serverId: tripPause.serverId,
+    startedAt: tripPause.startedAt,
+    syncStatus: tripPause.syncStatus,
+    tripLocalId: tripPause.tripLocalId,
+    updatedAt: tripPause.updatedAt,
+    userId: tripPause.userId,
   };
 }
 
 function toTripPauseFromRow(row: TripPauseRow): TripPause {
   return normalizeTripPause({
-    createdAt: row.created_at,
-    deviceId: row.device_id,
-    endedAt: row.ended_at,
-    localId: row.local_id,
-    serverId: row.server_id,
-    startedAt: row.started_at,
-    syncStatus: row.sync_status,
-    tripLocalId: row.trip_local_id,
-    updatedAt: row.updated_at,
-    userId: row.user_id,
+    createdAt: row.createdAt,
+    deviceId: row.deviceId,
+    endedAt: row.endedAt,
+    localId: row.localId,
+    serverId: row.serverId,
+    startedAt: row.startedAt,
+    syncStatus: row.syncStatus as TripPause["syncStatus"],
+    tripLocalId: row.tripLocalId,
+    updatedAt: row.updatedAt,
+    userId: row.userId,
   });
 }
 
@@ -81,10 +73,10 @@ async function loadLegacyTripPausesFromAsyncStorage(): Promise<TripPause[]> {
 
 async function ensureTripPausesMigrated(): Promise<void> {
   await migrateOnce("async-storage/trip-pauses", async () => {
-    const database = await getDatabase();
-    const countRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM trip_pauses");
+    const database = await getDrizzleDatabase();
+    const existingRows = await database.select({ localId: tripPausesTable.localId }).from(tripPausesTable).limit(1);
 
-    if ((countRow?.count ?? 0) > 0) {
+    if (existingRows.length > 0) {
       return;
     }
 
@@ -94,34 +86,8 @@ async function ensureTripPausesMigrated(): Promise<void> {
       return;
     }
 
-    await runExclusiveDatabaseWrite(async (database) => {
-      for (const tripPause of legacyTripPauses) {
-        const row = toTripPauseRow(tripPause);
-        await database.runAsync(
-          `INSERT OR REPLACE INTO trip_pauses (
-            local_id,
-            server_id,
-            trip_local_id,
-            device_id,
-            user_id,
-            started_at,
-            ended_at,
-            created_at,
-            updated_at,
-            sync_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          row.local_id,
-          row.server_id,
-          row.trip_local_id,
-          row.device_id,
-          row.user_id,
-          row.started_at,
-          row.ended_at,
-          row.created_at,
-          row.updated_at,
-          row.sync_status,
-        );
-      }
+    await runExclusiveDrizzleWrite(async (database) => {
+      await database.insert(tripPausesTable).values(legacyTripPauses.map(toTripPauseRow));
     });
   });
 }
@@ -129,10 +95,11 @@ async function ensureTripPausesMigrated(): Promise<void> {
 export async function loadTripPauses(): Promise<TripPause[]> {
   await ensureTripPausesMigrated();
 
-  const database = await getDatabase();
-  const rows = await database.getAllAsync<TripPauseRow>(
-    "SELECT * FROM trip_pauses ORDER BY started_at ASC, local_id ASC",
-  );
+  const database = await getDrizzleDatabase();
+  const rows = await database
+    .select()
+    .from(tripPausesTable)
+    .orderBy(asc(tripPausesTable.startedAt), asc(tripPausesTable.localId));
 
   return rows.map(toTripPauseFromRow);
 }
@@ -140,35 +107,11 @@ export async function loadTripPauses(): Promise<TripPause[]> {
 export async function saveTripPauses(tripPauses: TripPause[]): Promise<void> {
   await ensureTripPausesMigrated();
 
-  await runExclusiveDatabaseWrite(async (database) => {
-    await database.runAsync("DELETE FROM trip_pauses");
+  await runExclusiveDrizzleWrite(async (database) => {
+    await database.delete(tripPausesTable);
 
-    for (const tripPause of tripPauses) {
-      const row = toTripPauseRow(tripPause);
-      await database.runAsync(
-        `INSERT INTO trip_pauses (
-          local_id,
-          server_id,
-          trip_local_id,
-          device_id,
-          user_id,
-          started_at,
-          ended_at,
-          created_at,
-          updated_at,
-          sync_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.local_id,
-        row.server_id,
-        row.trip_local_id,
-        row.device_id,
-        row.user_id,
-        row.started_at,
-        row.ended_at,
-        row.created_at,
-        row.updated_at,
-        row.sync_status,
-      );
+    if (tripPauses.length > 0) {
+      await database.insert(tripPausesTable).values(tripPauses.map(toTripPauseRow));
     }
   });
 }
