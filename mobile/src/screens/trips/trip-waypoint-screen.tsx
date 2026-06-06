@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
@@ -11,6 +11,10 @@ import {
 } from "../../constants/waypoint-categories";
 import type { WaypointAttachment } from "../../domain/trips";
 import {
+  getWaypointScreenModel,
+  type WaypointScreenModel,
+} from "../../repositories/waypoints-repository";
+import {
   DEMO_PHOTO_LIMIT_PER_TRIP,
   getRemainingDemoPhotoSlotsForTrip,
   isDemoSession,
@@ -22,9 +26,6 @@ import {
 } from "../../services/media/photo-picker.service";
 import { requestTrailbookPermissions } from "../../services/permissions/permission-manager.service";
 import {
-  getVisibleAttachmentsForWaypoints,
-  getVisibleTrips,
-  getVisibleWaypointsForTrip,
   markWaypointAttachmentDeleted,
   type WaypointUpdateInput,
   updateWaypointMetadata,
@@ -38,7 +39,6 @@ import {
   setWaypointAttachments,
   useWaypointAttachmentsStore,
 } from "../../state/waypoint-attachments-store";
-import { useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import WaypointEditModal from "./components/waypoint-edit-modal";
 
@@ -47,10 +47,11 @@ export default function TripWaypointScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const params = useLocalSearchParams<{ tripId?: string | string[]; waypointId?: string | string[] }>();
   const identitySession = useSessionStore((state) => state.identitySession);
-  const trips = useTripsStore((state) => state.trips);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
 
+  const [waypointModel, setWaypointModel] = useState<WaypointScreenModel | null>(null);
+  const [waypointModelLoading, setWaypointModelLoading] = useState(true);
   const [waypointEditVisible, setWaypointEditVisible] = useState(false);
   const [waypointDraft, setWaypointDraft] = useState<WaypointUpdateInput>({
     category: DEFAULT_WAYPOINT_CATEGORY,
@@ -63,9 +64,6 @@ export default function TripWaypointScreen() {
   const resolvedTripId = Array.isArray(params.tripId) ? params.tripId[0] : params.tripId;
   const resolvedWaypointId = Array.isArray(params.waypointId) ? params.waypointId[0] : params.waypointId;
 
-  const currentUserTrips = identitySession
-    ? trips.filter((trip) => trip.userId === identitySession.userId)
-    : [];
   const currentUserWaypoints = identitySession
     ? waypoints.filter((waypoint) => waypoint.userId === identitySession.userId)
     : [];
@@ -73,32 +71,53 @@ export default function TripWaypointScreen() {
     ? waypointAttachments.filter((attachment) => attachment.userId === identitySession.userId)
     : [];
 
-  const visibleTrips = getVisibleTrips(currentUserTrips);
-  const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
-  const tripWaypoints = selectedTrip ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTrip.localId) : [];
-  const selectedWaypoint = tripWaypoints.find((waypoint) => waypoint.localId === resolvedWaypointId) ?? null;
-  const waypointNavigationOrder = [...tripWaypoints].sort((left, right) =>
-    left.createdAt.localeCompare(right.createdAt),
-  );
-  const selectedWaypointIndex = selectedWaypoint
-    ? waypointNavigationOrder.findIndex((waypoint) => waypoint.localId === selectedWaypoint.localId)
-    : -1;
-  const previousWaypoint = selectedWaypointIndex > 0 ? waypointNavigationOrder[selectedWaypointIndex - 1] : null;
-  const nextWaypoint =
-    selectedWaypointIndex >= 0 && selectedWaypointIndex < waypointNavigationOrder.length - 1
-      ? waypointNavigationOrder[selectedWaypointIndex + 1]
-      : null;
-  const attachments = selectedWaypoint
-    ? getVisibleAttachmentsForWaypoints(currentUserWaypointAttachments, [selectedWaypoint.localId]).sort((left, right) =>
-        left.createdAt.localeCompare(right.createdAt),
-      )
-    : [];
+  const selectedTrip = waypointModel?.trip ?? null;
+  const selectedWaypoint = waypointModel?.waypoint ?? null;
+  const previousWaypointLocalId = waypointModel?.navigation.previousWaypointLocalId ?? null;
+  const nextWaypointLocalId = waypointModel?.navigation.nextWaypointLocalId ?? null;
+  const attachments = waypointModel?.attachments ?? [];
 
   const selectedPhotoSet = useMemo(() => new Set(selectedPhotoIds), [selectedPhotoIds]);
   const photoCarouselCardWidth = Math.min(Math.max(screenWidth * 0.74, 240), 340);
   const selectedWaypointCategory = selectedWaypoint
     ? getWaypointCategoryOption(selectedWaypoint.category)
     : null;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWaypointModel() {
+      if (!identitySession || !resolvedTripId || !resolvedWaypointId) {
+        setWaypointModel(null);
+        setWaypointModelLoading(false);
+        return;
+      }
+
+      setWaypointModelLoading(true);
+
+      try {
+        const nextWaypointModel = await getWaypointScreenModel({
+          tripLocalId: resolvedTripId,
+          userId: identitySession.userId,
+          waypointLocalId: resolvedWaypointId,
+        });
+
+        if (!cancelled) {
+          setWaypointModel(nextWaypointModel);
+        }
+      } finally {
+        if (!cancelled) {
+          setWaypointModelLoading(false);
+        }
+      }
+    }
+
+    void loadWaypointModel();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [identitySession, resolvedTripId, resolvedWaypointId, waypointAttachments, waypoints]);
 
   function handleOpenEdit() {
     if (!selectedWaypoint) {
@@ -280,6 +299,18 @@ export default function TripWaypointScreen() {
     return <Redirect href="/login" />;
   }
 
+  if (waypointModelLoading) {
+    return (
+      <ScreenLayout
+        accountEmail={identitySession.userEmail}
+        accountMode={identitySession.mode}
+        contentVariant="plain"
+        showBottomNavigation
+        title="Waypoint"
+      />
+    );
+  }
+
   if (!selectedTrip || !selectedWaypoint) {
     return (
       <ScreenLayout
@@ -334,12 +365,12 @@ export default function TripWaypointScreen() {
         <View style={styles.headerCardRow}>
           <IconButton
             accessibilityLabel="Previous waypoint"
-            disabled={!previousWaypoint}
+            disabled={!previousWaypointLocalId}
             disabledIconColor="#9da894"
             icon="chevron-left"
             iconSize={26}
-            onPress={() => handleNavigateWaypoint(previousWaypoint?.localId ?? null)}
-            style={!previousWaypoint && styles.waypointNavButtonDisabled}
+            onPress={() => handleNavigateWaypoint(previousWaypointLocalId)}
+            style={!previousWaypointLocalId && styles.waypointNavButtonDisabled}
           />
           <View style={styles.titleGroup}>
             <Text numberOfLines={2} style={styles.title}>{selectedWaypoint.title}</Text>
@@ -352,12 +383,12 @@ export default function TripWaypointScreen() {
           </View>
           <IconButton
             accessibilityLabel="Next waypoint"
-            disabled={!nextWaypoint}
+            disabled={!nextWaypointLocalId}
             disabledIconColor="#9da894"
             icon="chevron-right"
             iconSize={26}
-            onPress={() => handleNavigateWaypoint(nextWaypoint?.localId ?? null)}
-            style={!nextWaypoint && styles.waypointNavButtonDisabled}
+            onPress={() => handleNavigateWaypoint(nextWaypointLocalId)}
+            style={!nextWaypointLocalId && styles.waypointNavButtonDisabled}
           />
         </View>
         {selectedWaypoint.note ? <Text style={styles.note}>{selectedWaypoint.note}</Text> : null}

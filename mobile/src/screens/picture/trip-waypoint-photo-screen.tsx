@@ -1,12 +1,12 @@
 import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 
-import type { TripPoint, Waypoint, WaypointAttachment } from "../../domain/trips";
-import { loadTripPointsForTrip } from "../../repositories/trip-points-repository";
 import {
-  getVisibleAttachmentsForWaypoints,
-  getVisibleTrips,
-  getVisibleWaypointsForTrip,
+  getWaypointPhotoViewerModel,
+  type WaypointPhotoGroup,
+  type WaypointPhotoViewerModel,
+} from "../../repositories/waypoints-repository";
+import {
   markWaypointAttachmentDeleted,
 } from "../../services/trips/trips-management.service";
 import { useSessionStore } from "../../state/session-store";
@@ -14,8 +14,6 @@ import {
   setWaypointAttachments,
   useWaypointAttachmentsStore,
 } from "../../state/waypoint-attachments-store";
-import { useTripsStore } from "../../state/trips-store";
-import { useWaypointsStore } from "../../state/waypoints-store";
 import WaypointPhotoViewerScreen from "./components/waypoint-photo-viewer-screen";
 
 export default function TripWaypointPhotoScreen() {
@@ -27,11 +25,9 @@ export default function TripWaypointPhotoScreen() {
     waypointId?: string | string[];
   }>();
   const identitySession = useSessionStore((state) => state.identitySession);
-  const trips = useTripsStore((state) => state.trips);
-  const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
-  const [routeTripId, setRouteTripId] = useState<string | null>(null);
-  const [routePoints, setRoutePoints] = useState<TripPoint[]>([]);
+  const [viewerModel, setViewerModel] = useState<WaypointPhotoViewerModel | null>(null);
+  const [viewerModelLoading, setViewerModelLoading] = useState(true);
 
   const resolvedAttachmentId = Array.isArray(params.attachmentId) ? params.attachmentId[0] : params.attachmentId;
   const resolvedPhotoTransition = Array.isArray(params.photoTransition)
@@ -46,64 +42,57 @@ export default function TripWaypointPhotoScreen() {
         ? "slide_from_right"
         : "default";
 
-  const currentUserTrips = identitySession ? trips.filter((trip) => trip.userId === identitySession.userId) : [];
-  const currentUserWaypoints = identitySession ? waypoints.filter((waypoint) => waypoint.userId === identitySession.userId) : [];
-  const currentUserWaypointAttachments = identitySession
-    ? waypointAttachments.filter((attachment) => attachment.userId === identitySession.userId)
-    : [];
-  const selectedTrip = getVisibleTrips(currentUserTrips).find((trip) => trip.localId === resolvedTripId) ?? null;
-  const tripWaypoints = selectedTrip ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTrip.localId) : [];
-  const selectedWaypoint =
-    tripWaypoints.find((waypoint) => waypoint.localId === resolvedWaypointId) ?? null;
-  const attachments = selectedWaypoint
-    ? getVisibleAttachmentsForWaypoints(currentUserWaypointAttachments, [selectedWaypoint.localId]).sort((left, right) =>
-        left.createdAt.localeCompare(right.createdAt),
-      )
-    : [];
-  const selectedWaypointIndex = selectedWaypoint
-    ? tripWaypoints.findIndex((waypoint) => waypoint.localId === selectedWaypoint.localId)
-    : -1;
-  const nextPhotoWaypoint = findWaypointWithPhotos(
-    tripWaypoints.slice(0, selectedWaypointIndex).reverse(),
-    currentUserWaypointAttachments,
-  );
-  const previousPhotoWaypoint = findWaypointWithPhotos(
-    tripWaypoints.slice(selectedWaypointIndex + 1),
-    currentUserWaypointAttachments,
-  );
-
   useEffect(() => {
     let cancelled = false;
 
-    async function loadRoutePoints() {
-      if (!selectedTrip) {
-        setRouteTripId(null);
-        setRoutePoints([]);
+    async function loadViewerModel() {
+      if (!identitySession || !resolvedTripId || !resolvedWaypointId) {
+        setViewerModel(null);
+        setViewerModelLoading(false);
         return;
       }
 
-      const points = await loadTripPointsForTrip(selectedTrip.localId);
+      setViewerModelLoading(true);
 
-      if (!cancelled) {
-        setRouteTripId(selectedTrip.localId);
-        setRoutePoints(points);
+      try {
+        const nextViewerModel = await getWaypointPhotoViewerModel({
+          selectedAttachmentLocalId: resolvedAttachmentId ?? null,
+          tripLocalId: resolvedTripId,
+          userId: identitySession.userId,
+          waypointLocalId: resolvedWaypointId,
+        });
+
+        if (!cancelled) {
+          setViewerModel(nextViewerModel);
+        }
+      } finally {
+        if (!cancelled) {
+          setViewerModelLoading(false);
+        }
       }
     }
 
-    void loadRoutePoints();
+    void loadViewerModel();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedTrip?.localId]);
+  }, [identitySession, resolvedAttachmentId, resolvedTripId, resolvedWaypointId, waypointAttachments]);
 
   if (!identitySession) {
     return <Redirect href="/login" />;
   }
 
-  if (!selectedTrip || !selectedWaypoint || attachments.length === 0) {
+  if (viewerModelLoading) {
+    return null;
+  }
+
+  if (!viewerModel || viewerModel.attachments.length === 0) {
     return <Redirect href={`/trips/${resolvedTripId}/waypoints/${resolvedWaypointId}`} />;
   }
+
+  const loadedViewerModel = viewerModel;
+  const { attachments } = loadedViewerModel;
 
   async function handleRemoveCurrentPhoto(attachmentLocalId: string) {
     const currentIndex = attachments.findIndex((attachment) => attachment.localId === attachmentLocalId);
@@ -115,7 +104,7 @@ export default function TripWaypointPhotoScreen() {
 
     if (fallbackAttachment) {
       router.replace(
-        `/trips/${resolvedTripId}/waypoints/${resolvedWaypointId}/photos/${fallbackAttachment.localId}`,
+        `/trips/${loadedViewerModel.trip.localId}/waypoints/${loadedViewerModel.waypoint.localId}/photos/${fallbackAttachment.localId}`,
       );
       return;
     }
@@ -124,23 +113,15 @@ export default function TripWaypointPhotoScreen() {
   }
 
   function navigateToWaypointPhoto(
-    waypoint: Waypoint | null,
-    boundary: "first" | "last",
+    photoGroup: WaypointPhotoGroup | null,
     transition: "next" | "previous",
   ) {
-    if (!waypoint) {
-      return;
-    }
-
-    const waypointPhotos = getWaypointPhotos(currentUserWaypointAttachments, waypoint.localId);
-    const waypointPhoto = boundary === "first" ? waypointPhotos[0] : waypointPhotos[waypointPhotos.length - 1];
-
-    if (!waypointPhoto) {
+    if (!photoGroup) {
       return;
     }
 
     router.replace(
-      `/trips/${resolvedTripId}/waypoints/${waypoint.localId}/photos/${waypointPhoto.localId}?photoTransition=${transition}`,
+      `/trips/${loadedViewerModel.trip.localId}/waypoints/${photoGroup.waypointLocalId}/photos/${photoGroup.attachmentLocalId}?photoTransition=${transition}`,
     );
   }
 
@@ -149,43 +130,20 @@ export default function TripWaypointPhotoScreen() {
       <Stack.Screen options={{ animation: screenAnimation }} />
       <WaypointPhotoViewerScreen
         attachments={attachments}
-        hasNextGroup={nextPhotoWaypoint !== null}
-        hasPreviousGroup={previousPhotoWaypoint !== null}
-        nextGroupTitle={nextPhotoWaypoint?.title ?? null}
+        hasNextGroup={loadedViewerModel.nextPhotoWaypoint !== null}
+        hasPreviousGroup={loadedViewerModel.previousPhotoWaypoint !== null}
+        nextGroupTitle={loadedViewerModel.nextPhotoWaypoint?.title ?? null}
         onBack={() => router.back()}
         onRemoveCurrent={(attachmentLocalId) => void handleRemoveCurrentPhoto(attachmentLocalId)}
-        onScrollPastEnd={() => navigateToWaypointPhoto(nextPhotoWaypoint, "first", "next")}
-        onScrollPastStart={() => navigateToWaypointPhoto(previousPhotoWaypoint, "last", "previous")}
-        previousGroupTitle={previousPhotoWaypoint?.title ?? null}
-        routeCoordinates={
-          routeTripId === selectedTrip.localId
-            ? routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude }))
-            : []
-        }
+        onScrollPastEnd={() => navigateToWaypointPhoto(loadedViewerModel.nextPhotoWaypoint, "next")}
+        onScrollPastStart={() => navigateToWaypointPhoto(loadedViewerModel.previousPhotoWaypoint, "previous")}
+        previousGroupTitle={loadedViewerModel.previousPhotoWaypoint?.title ?? null}
+        routeCoordinates={loadedViewerModel.routeCoordinates}
         selectedAttachmentId={resolvedAttachmentId ?? null}
-        tripTitle={selectedTrip.title}
-        waypointCoordinate={{
-          latitude: selectedWaypoint.latitude,
-          longitude: selectedWaypoint.longitude,
-        }}
-        waypointTitle={selectedWaypoint.title}
+        tripTitle={loadedViewerModel.trip.title}
+        waypointCoordinate={loadedViewerModel.waypointCoordinate}
+        waypointTitle={loadedViewerModel.waypoint.title}
       />
     </>
-  );
-}
-
-function findWaypointWithPhotos(
-  waypoints: Waypoint[],
-  waypointAttachments: WaypointAttachment[],
-): Waypoint | null {
-  return waypoints.find((waypoint) => getWaypointPhotos(waypointAttachments, waypoint.localId).length > 0) ?? null;
-}
-
-function getWaypointPhotos(
-  waypointAttachments: WaypointAttachment[],
-  waypointLocalId: string,
-): WaypointAttachment[] {
-  return getVisibleAttachmentsForWaypoints(waypointAttachments, [waypointLocalId]).sort((left, right) =>
-    left.createdAt.localeCompare(right.createdAt),
   );
 }
