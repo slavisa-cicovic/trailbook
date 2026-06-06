@@ -1,3 +1,8 @@
+// Intentional raw SQL hot path.
+// PLAN_52G benchmark selected "keep raw SQL" for raw_location_events on Android/iOS.
+// Do not migrate this file to Drizzle without rerunning the storage benchmark on an Android release build.
+// The repository wrapper remains the public boundary for callers.
+
 import type {
   RawLocationEvent,
   RawLocationEventCallbackSource,
@@ -6,11 +11,6 @@ import type {
   RawLocationEventProcessingStatus,
 } from "../domain/raw-location-event";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
-
-// Intentional raw SQL hot path.
-// PLAN_52G benchmark selected "keep raw SQL" for raw_location_events on Android/iOS.
-// Do not migrate this file to Drizzle without rerunning the storage benchmark on an Android release build.
-// The repository wrapper remains the public boundary for callers.
 
 interface RawLocationEventRow {
   accepted_trip_point_local_id: string | null;

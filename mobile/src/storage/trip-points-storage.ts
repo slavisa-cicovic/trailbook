@@ -1,14 +1,14 @@
+// Intentional raw SQL hot path.
+// PLAN_52G benchmark selected "keep raw SQL" for trip_points and stats recomputation on Android/iOS.
+// Do not migrate this file to Drizzle without rerunning the storage benchmark on an Android release build.
+// The repository wrapper remains the public boundary for callers.
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "../constants/storage-keys";
 import type { TripPoint } from "../domain/trips";
 import { getDatabase, runExclusiveDatabaseWrite } from "./sqlite/db";
 import { migrateOnce } from "./sqlite/migrate-once";
-
-// Intentional raw SQL hot path.
-// PLAN_52G benchmark selected "keep raw SQL" for trip_points and stats recomputation on Android/iOS.
-// Do not migrate this file to Drizzle without rerunning the storage benchmark on an Android release build.
-// The repository wrapper remains the public boundary for callers.
 
 export interface TripStatsRow {
   distance_meters: number;

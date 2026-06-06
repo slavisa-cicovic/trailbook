@@ -25,6 +25,7 @@ Completed in the first implementation pass:
 - Migrated `sync_outbox`, `diagnostic_events`, `trip_diagnostics` and `recording_native_events` storage to Drizzle behind the existing APIs.
 - Kept recording hot-path tables on existing optimized SQL.
 - Benchmarked `trip_points` and `raw_location_events` on Android/iOS and decided to keep them on optimized raw SQL for now.
+- Completed post-migration cleanup in `PLAN_53`: removed obsolete `storage/schema.ts`, documented storage/repository boundaries and kept legacy migrations intentionally.
 
 Still intentionally deferred:
 
@@ -41,6 +42,7 @@ Subplans:
 - `PLAN_52G_trip_points_raw_events_benchmark.md`: benchmark and decide whether hot-path `trip_points` / `raw_location_events` should remain raw SQL, partially migrate, or fully migrate.
 - `PLAN_52H_keep_hot_path_sql_hardening.md`: harden the intentionally raw SQL hot path with documentation, clearer structure and contract tests.
 - `PLAN_52I_legacy_migrations_cleanup.md`: define legacy migration ownership, schema drift guardrails and criteria for any future migration cleanup.
+- `PLAN_53_storage_repository_cleanup.md`: cleanup after the Drizzle migration series and document the current storage/repository boundary.
 
 ## Context
 
