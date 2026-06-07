@@ -358,6 +358,42 @@ describe("buildAutoBatchProfileSections", () => {
     expect(sections[0]?.profile).toBe("walk");
     expect(sections[0]?.samples).toHaveLength(stationary.length);
   });
+
+  it("starts with drive profile when batch opens at drive speed (no walk prefix)", () => {
+    // 6 samples × 30 s = 150 s > AUTO_BATCH_MIN_DRIVE_RUN_MS (60 s)
+    const drive = Array.from({ length: 6 }, (_, index) => makeTimelineSample(index * 30, 13.9));
+
+    const sections = buildAutoBatchProfileSections(drive, "walk");
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.profile).toBe("drive");
+  });
+
+  it("merges two walk runs separated by a stationary gap into one section", () => {
+    // walkA: 4 samples × 15 s = 45 s > AUTO_BATCH_MIN_WALK_RUN_MS (30 s)
+    const walkA = Array.from({ length: 4 }, (_, index) => makeTimelineSample(index * 15, 1.1));
+    // stationary gap at t=60 — skipped by profile run builder
+    const gap = [makeTimelineSample(60, 0)];
+    // walkB: 4 samples × 15 s starting at t=70
+    const walkB = Array.from({ length: 4 }, (_, index) => makeTimelineSample(70 + index * 15, 1.1));
+
+    const sections = buildAutoBatchProfileSections([...walkA, ...gap, ...walkB], "walk");
+
+    // Both walk runs are merged into one section (same profile, no profile change)
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.profile).toBe("walk");
+    expect(sections[0]?.samples).toHaveLength(walkA.length + gap.length + walkB.length);
+  });
+
+  it("uses fallback profile when batch duration is below the minimum run threshold", () => {
+    // 2 samples × 5 s = 5 s span — well below AUTO_BATCH_MIN_BIKE_RUN_MS (45 s)
+    const shortBike = [makeTimelineSample(0, 3.0), makeTimelineSample(5, 3.0)];
+
+    const sections = buildAutoBatchProfileSections(shortBike, "walk");
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.profile).toBe("walk"); // fallback, not "bike"
+  });
 });
 
 // ── inferAutoRecordingProfile — drive→walk inference window ───────────────────
