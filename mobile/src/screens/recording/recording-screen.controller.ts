@@ -2,7 +2,8 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
-import type { RecordingSessionSummary, Trip, TripPause, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
+import type { RecordingSessionSummary, Trip, TripPause, TripSegment, Waypoint } from "../../domain/trips";
+import type { ActiveRecordingRouteModel } from "../../services/recording/active-recording-route-model";
 import {
   DEMO_MONTHLY_TRIP_LIMIT,
   getRemainingDemoTripSlots,
@@ -79,21 +80,17 @@ interface StartRecordingControllerInput {
 }
 
 interface PauseRecordingControllerInput {
-  activeTrip: Trip | null;
   backgroundRecordingSupported: boolean | null;
-  recordingSession: RecordingSessionSummary;
+  routeModel: ActiveRecordingRouteModel;
   tripPauses: TripPause[];
-  tripPoints: TripPoint[];
   tripSegments: TripSegment[];
   trips: Trip[];
   waypoints: Waypoint[];
 }
 
 interface StopRecordingControllerInput {
-  activeTrip: Trip | null;
   backgroundRecordingSupported: boolean | null;
-  recordingSession: RecordingSessionSummary;
-  tripPoints: TripPoint[];
+  routeModel: ActiveRecordingRouteModel;
   tripSegments: TripSegment[];
   trips: Trip[];
   waypoints: Waypoint[];
@@ -273,58 +270,62 @@ export async function startRecordingFromScreenController(
 export async function pauseRecordingFromScreenController(
   input: PauseRecordingControllerInput,
 ): Promise<RecordingScreenActionResult> {
-  if (!input.activeTrip || !input.recordingSession.activeSegmentId) {
+  const { activeTrip, activeTripPoints, session } = input.routeModel;
+
+  if (!activeTrip || !session.activeSegmentId) {
     return { ok: false, reason: "no_active_route" };
   }
 
   const pausedAt = new Date().toISOString();
 
   if (input.backgroundRecordingSupported !== false) {
-    await stopBackgroundLocationTracking(input.activeTrip.localId);
+    await stopBackgroundLocationTracking(activeTrip.localId);
   }
   await stopMotionActivityUpdates();
-  resetPendingTripPointContinuity(input.activeTrip.localId);
+  resetPendingTripPointContinuity(activeTrip.localId);
 
   const nextState = createPausedRecordingState(
-    input.activeTrip,
-    input.recordingSession,
+    activeTrip,
+    session,
     input.tripSegments,
     input.tripPauses,
     pausedAt,
   );
   const normalizedState =
-    input.recordingSession.recordingMode === "auto"
+    session.recordingMode === "auto"
       ? normalizeAutoClosedTripSegment(
           nextState.tripSegments,
-          input.tripPoints,
+          activeTripPoints,
           input.waypoints,
-          input.activeTrip.localId,
+          activeTrip.localId,
           pausedAt,
         )
       : {
           tripSegments: nextState.tripSegments,
-          tripPoints: input.tripPoints,
+          tripPoints: activeTripPoints,
           waypoints: input.waypoints,
         };
 
   await setTripSegments(normalizedState.tripSegments);
   await setWaypoints(normalizedState.waypoints);
-  if (normalizedState.tripPoints !== input.tripPoints) {
+  if (normalizedState.tripPoints !== activeTripPoints) {
     setTripPointsInMemory(normalizedState.tripPoints);
-    await replaceTripPointsForTrip(input.activeTrip.localId, normalizedState.tripPoints);
+    await replaceTripPointsForTrip(activeTrip.localId, normalizedState.tripPoints);
   }
   await setTripPauses(nextState.tripPauses);
-  await setTrips(pauseActiveTrip(input.trips, input.activeTrip.localId, pausedAt));
+  await setTrips(pauseActiveTrip(input.trips, activeTrip.localId, pausedAt));
   await setRecordingSession(nextState.session);
-  flushTripPointDiagnostics(input.activeTrip.localId);
+  flushTripPointDiagnostics(activeTrip.localId);
 
-  return { ok: true, tripLocalId: input.activeTrip.localId };
+  return { ok: true, tripLocalId: activeTrip.localId };
 }
 
 export async function stopRecordingFromScreenController(
   input: StopRecordingControllerInput,
 ): Promise<RecordingScreenActionResult> {
-  if (!input.recordingSession.activeTripId || !input.recordingSession.activeSegmentId) {
+  const { activeTrip, activeTripPoints, session } = input.routeModel;
+
+  if (!session.activeTripId || !session.activeSegmentId) {
     return { ok: false, reason: "no_active_route" };
   }
 
@@ -332,44 +333,44 @@ export async function stopRecordingFromScreenController(
   const batterySnapshot = await getBatterySnapshot();
 
   if (input.backgroundRecordingSupported !== false) {
-    await stopBackgroundLocationTracking(input.recordingSession.activeTripId);
+    await stopBackgroundLocationTracking(session.activeTripId);
   }
   await stopMotionActivityUpdates();
-  resetPendingTripPointContinuity(input.recordingSession.activeTripId);
+  resetPendingTripPointContinuity(session.activeTripId);
   const closedTripSegments = finalizeEndedTripSegments(
-    closeActiveTripSegment(input.tripSegments, input.recordingSession.activeSegmentId, endedAt),
-    input.tripPoints,
-    input.recordingSession.activeTripId,
+    closeActiveTripSegment(input.tripSegments, session.activeSegmentId, endedAt),
+    activeTripPoints,
+    session.activeTripId,
     endedAt,
   );
   const normalizedState =
-    input.recordingSession.recordingMode === "auto" && input.activeTrip
+    session.recordingMode === "auto" && activeTrip
       ? normalizeAutoClosedTripSegment(
           closedTripSegments,
-          input.tripPoints,
+          activeTripPoints,
           input.waypoints,
-          input.activeTrip.localId,
+          activeTrip.localId,
           endedAt,
         )
       : {
           tripSegments: closedTripSegments,
-          tripPoints: input.tripPoints,
+          tripPoints: activeTripPoints,
           waypoints: input.waypoints,
         };
 
   await setTripSegments(normalizedState.tripSegments);
   await setWaypoints(normalizedState.waypoints);
-  if (input.activeTrip && normalizedState.tripPoints !== input.tripPoints) {
+  if (activeTrip && normalizedState.tripPoints !== activeTripPoints) {
     setTripPointsInMemory(normalizedState.tripPoints);
-    await replaceTripPointsForTrip(input.activeTrip.localId, normalizedState.tripPoints);
+    await replaceTripPointsForTrip(activeTrip.localId, normalizedState.tripPoints);
   }
-  await setTrips(closeActiveTrip(input.trips, input.recordingSession.activeTripId, endedAt, batterySnapshot));
-  await refreshTripStatsForTripLocalId(input.recordingSession.activeTripId);
-  await setRecordingSession(stopRecordingSession(input.recordingSession));
-  clearAutoRecordingSamples(input.recordingSession.activeTripId);
-  flushTripPointDiagnostics(input.recordingSession.activeTripId);
+  await setTrips(closeActiveTrip(input.trips, session.activeTripId, endedAt, batterySnapshot));
+  await refreshTripStatsForTripLocalId(session.activeTripId);
+  await setRecordingSession(stopRecordingSession(session));
+  clearAutoRecordingSamples(session.activeTripId);
+  flushTripPointDiagnostics(session.activeTripId);
 
-  return { ok: true, tripLocalId: input.recordingSession.activeTripId };
+  return { ok: true, tripLocalId: session.activeTripId };
 }
 
 export async function resumePausedTripFromScreenController(

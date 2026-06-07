@@ -144,6 +144,7 @@ export default function RecordingScreen() {
     activeRecordingMode,
     activeRecordingProfile,
     activeRecordingProfileLabel,
+    activeRecordingRouteModel,
     activeSegment,
     activeTrip,
     activeTripCount,
@@ -178,7 +179,6 @@ export default function RecordingScreen() {
     selectedPhotoWaypointAttachments,
     sessionTriggerLabel,
     tripPauses,
-    tripPoints,
     tripSegments,
     trips,
     waypointAttachments,
@@ -567,11 +567,9 @@ export default function RecordingScreen() {
 
   async function handlePauseRecording() {
     const result = await pauseRecordingFromScreenController({
-      activeTrip,
       backgroundRecordingSupported,
-      recordingSession,
+      routeModel: activeRecordingRouteModel,
       tripPauses,
-      tripPoints,
       tripSegments,
       trips,
       waypoints,
@@ -584,10 +582,8 @@ export default function RecordingScreen() {
 
   async function handleStopRecording() {
     await stopRecordingFromScreenController({
-      activeTrip,
       backgroundRecordingSupported,
-      recordingSession,
-      tripPoints,
+      routeModel: activeRecordingRouteModel,
       tripSegments,
       trips,
       waypoints,
