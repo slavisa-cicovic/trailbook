@@ -186,3 +186,45 @@ Recommended order:
 4. active recording route model
 5. screen/controller cleanup
 
+## Implementation Notes
+
+Implemented:
+
+- Created `mobile/src/repositories/reprocessing-repository.ts` with `RawReprocessingInputModel` and
+  `loadRawReprocessingInputModel(tripLocalId)`. The repository owns all storage loading for reprocessing;
+  segments are filtered by trip, waypoints are kept full-set (unit of work needs all waypoints for saves).
+- Refactored `raw-event-reprocessing.service.ts`:
+  - Removed six direct storage/repository loader imports; replaced with single `loadRawReprocessingInputModel` call.
+  - Extracted `buildRawReprocessingPreview(inputModel)` as an exported pure synchronous function.
+  - Added `applyRawReprocessingResult(buildResult)` as a thin async wrapper over the existing unit of work.
+  - Validation (`trip not found`, `active trip`, `active session`) consolidated in `loadAndValidateReprocessingInput`.
+  - Public API (`previewRawEventReprocessing`, `applyRawEventReprocessing`) unchanged.
+- `recording-processor.service.ts` confirmed already pure — no storage imports, no change needed.
+- Created `mobile/src/services/recording/active-recording-route-model.ts` with `ActiveRecordingRouteModel`
+  and `buildActiveRecordingRouteModel`. Kept in a separate file (not co-located with the React hook) so it
+  remains testable without Zustand/SQLite deps.
+- Updated `recording-screen.model.ts` to import from the new service file and build the model in
+  `useRecordingScreenModel`; model is included in the hook return value.
+- Added tests:
+  - `mobile/src/__tests__/repositories/reprocessing-repository.test.ts` — loading, trip-not-found, soft-delete,
+    segment scoping, waypoints kept full-set.
+  - Updated `mobile/src/__tests__/services/raw-event-reprocessing.service.test.ts` — now mocks
+    `reprocessing-repository` directly instead of six storage modules; added tests for trip-not-found,
+    active-trip validation, active-session validation, `buildRawReprocessingPreview` pure path, zero-points apply throw.
+  - `mobile/src/__tests__/services/active-recording-route-model.test.ts` — pure function, no storage mocks needed;
+    covers idle, recording, segment scoping, point ordering, paused-trip guard.
+
+Verification:
+
+```bash
+npm run typecheck --workspace mobile
+npm test --workspace mobile
+npm run lint --workspace mobile
+```
+
+Result:
+
+- Typecheck passed.
+- Tests passed: 25 files, 148 tests.
+- Lint passed with existing warnings unrelated to this plan.
+

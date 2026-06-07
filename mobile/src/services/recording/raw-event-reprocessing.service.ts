@@ -1,11 +1,9 @@
 import type { RawLocationEvent } from "../../domain/raw-location-event";
 import type { Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
-import { loadRecordingSession } from "../../storage/recording-storage";
-import { loadRawLocationEventsForTrip } from "../../repositories/raw-location-events-repository";
-import { loadTripPointsForTrip } from "../../repositories/trip-points-repository";
-import { loadTripSegments } from "../../repositories/trip-segments-repository";
-import { loadTrips } from "../../repositories/trips-repository";
-import { loadWaypoints } from "../../repositories/waypoints-repository";
+import {
+  loadRawReprocessingInputModel,
+  type RawReprocessingInputModel,
+} from "../../repositories/reprocessing-repository";
 import {
   buildSegmentSummaries,
   getTripDistanceMeters,
@@ -41,7 +39,7 @@ export interface ReprocessingPreview {
   warnings: string[];
 }
 
-interface ReprocessingBuildResult {
+export interface RawReprocessingBuildResult {
   nextWaypoints: Waypoint[];
   preview: ReprocessingPreview;
   processingResults: ReturnType<typeof processRawLocationEventsForTrip>["processingResults"];
@@ -153,41 +151,17 @@ function buildWarnings(input: {
   return warnings;
 }
 
-async function buildReprocessingResult(tripLocalId: string): Promise<ReprocessingBuildResult> {
-  const [trips, allTripSegments, allWaypoints, oldTripPoints, rawEvents, recordingSession] = await Promise.all([
-    loadTrips(),
-    loadTripSegments(),
-    loadWaypoints(),
-    loadTripPointsForTrip(tripLocalId),
-    loadRawLocationEventsForTrip(tripLocalId),
-    loadRecordingSession(),
-  ]);
-  const trip = trips.find((candidate) => candidate.localId === tripLocalId && candidate.deletedAt === null) ?? null;
-
-  if (!trip) {
-    throw new Error("Trip was not found.");
-  }
-
-  if (
-    trip.status !== "ended" ||
-    trip.endedAt === null ||
-    (recordingSession?.status === "recording" && recordingSession.activeTripId === tripLocalId)
-  ) {
-    throw new Error("Only ended inactive trips can be reprocessed.");
-  }
+export function buildRawReprocessingPreview(inputModel: RawReprocessingInputModel): RawReprocessingBuildResult {
+  const { trip, tripSegments: oldTripSegments, waypoints, rawEvents, oldTripPoints } = inputModel;
 
   if (rawEvents.length === 0) {
     throw new Error("This trip has no local raw location events.");
   }
 
   const sortedRawEvents = sortRawLocationEvents(rawEvents);
-  const oldTripSegments = allTripSegments.filter((segment) => segment.tripLocalId === tripLocalId);
-  const replay = processRawLocationEventsForTrip({
-    rawEvents: sortedRawEvents,
-    trip,
-  });
-  const oldDistanceMeters = trip.distanceMeters ?? getTripDistanceMeters(oldTripPoints, oldTripSegments, tripLocalId);
-  const newDistanceMeters = getTripDistanceMeters(replay.tripPoints, replay.tripSegments, tripLocalId);
+  const replay = processRawLocationEventsForTrip({ rawEvents: sortedRawEvents, trip });
+  const oldDistanceMeters = trip.distanceMeters ?? getTripDistanceMeters(oldTripPoints, oldTripSegments, trip.localId);
+  const newDistanceMeters = getTripDistanceMeters(replay.tripPoints, replay.tripSegments, trip.localId);
   const firstAcceptedRecordedAt = replay.tripPoints[0]?.recordedAt ?? null;
   const lastAcceptedRecordedAt = replay.tripPoints[replay.tripPoints.length - 1]?.recordedAt ?? null;
   const warnings = buildWarnings({
@@ -203,7 +177,7 @@ async function buildReprocessingResult(tripLocalId: string): Promise<Reprocessin
     warnings.push("Reprocessing produced zero accepted points.");
   }
 
-  const nextWaypoints = remapWaypoints(allWaypoints, tripLocalId, replay.tripSegments);
+  const nextWaypoints = remapWaypoints(waypoints, trip.localId, replay.tripSegments);
 
   return {
     nextWaypoints,
@@ -218,15 +192,15 @@ async function buildReprocessingResult(tripLocalId: string): Promise<Reprocessin
       newDistanceMeters,
       newPointCount: replay.tripPoints.length,
       newSegmentCount: replay.tripSegments.length,
-      newSegments: buildSegmentSummaries(replay.tripSegments, replay.tripPoints, tripLocalId),
+      newSegments: buildSegmentSummaries(replay.tripSegments, replay.tripPoints, trip.localId),
       oldDistanceMeters,
       oldPointCount: oldTripPoints.length,
       oldSegmentCount: oldTripSegments.length,
-      oldSegments: buildSegmentSummaries(oldTripSegments, oldTripPoints, tripLocalId),
+      oldSegments: buildSegmentSummaries(oldTripSegments, oldTripPoints, trip.localId),
       processingTrace: replay.processingTrace,
       rawEventCount: sortedRawEvents.length,
       rejectedRawEventCount: replay.rejectedRawEventCount,
-      tripLocalId,
+      tripLocalId: trip.localId,
       warnings,
     },
     processingResults: replay.processingResults,
@@ -236,27 +210,53 @@ async function buildReprocessingResult(tripLocalId: string): Promise<Reprocessin
   };
 }
 
+export async function applyRawReprocessingResult(buildResult: RawReprocessingBuildResult): Promise<void> {
+  await applyRawEventReprocessingUnitOfWork({
+    distanceMeters: buildResult.preview.newDistanceMeters,
+    pointCount: buildResult.preview.newPointCount,
+    processingResults: buildResult.processingResults,
+    trip: buildResult.trip,
+    tripLocalId: buildResult.preview.tripLocalId,
+    tripPoints: buildResult.tripPoints,
+    tripSegments: buildResult.tripSegments,
+    waypoints: buildResult.nextWaypoints,
+  });
+}
+
+async function loadAndValidateReprocessingInput(tripLocalId: string): Promise<RawReprocessingInputModel> {
+  const inputModel = await loadRawReprocessingInputModel(tripLocalId);
+
+  if (!inputModel) {
+    throw new Error("Trip was not found.");
+  }
+
+  if (
+    inputModel.trip.status !== "ended" ||
+    inputModel.trip.endedAt === null ||
+    (inputModel.recordingSession?.status === "recording" &&
+      inputModel.recordingSession.activeTripId === tripLocalId)
+  ) {
+    throw new Error("Only ended inactive trips can be reprocessed.");
+  }
+
+  return inputModel;
+}
+
 export async function previewRawEventReprocessing(tripLocalId: string): Promise<ReprocessingPreview> {
-  return (await buildReprocessingResult(tripLocalId)).preview;
+  const inputModel = await loadAndValidateReprocessingInput(tripLocalId);
+
+  return buildRawReprocessingPreview(inputModel).preview;
 }
 
 export async function applyRawEventReprocessing(tripLocalId: string): Promise<ReprocessingPreview> {
-  const result = await buildReprocessingResult(tripLocalId);
+  const inputModel = await loadAndValidateReprocessingInput(tripLocalId);
+  const buildResult = buildRawReprocessingPreview(inputModel);
 
-  if (result.tripPoints.length === 0) {
+  if (buildResult.tripPoints.length === 0) {
     throw new Error("Reprocessing produced zero accepted points.");
   }
 
-  await applyRawEventReprocessingUnitOfWork({
-    distanceMeters: result.preview.newDistanceMeters,
-    pointCount: result.preview.newPointCount,
-    processingResults: result.processingResults,
-    trip: result.trip,
-    tripLocalId,
-    tripPoints: result.tripPoints,
-    tripSegments: result.tripSegments,
-    waypoints: result.nextWaypoints,
-  });
+  await applyRawReprocessingResult(buildResult);
 
-  return result.preview;
+  return buildResult.preview;
 }

@@ -4,7 +4,10 @@ import type { RecordingDraftInput } from "../../services/recording/recording.ser
 import type { WaypointDraftInput } from "../../services/waypoints/waypoints.service";
 import { useTrailbookPermissions } from "../../core/hooks/use-trailbook-permissions";
 import { getOpenTripSegmentForTrip } from "../../services/trip-segments/trip-segments.service";
-import { getVisibleTripPointsForTrip } from "../../services/trip-points/trip-points.service";
+import {
+  buildActiveRecordingRouteModel,
+  type ActiveRecordingRouteModel,
+} from "../../services/recording/active-recording-route-model";
 import { useRecordingStore } from "../../state/recording-store";
 import { useSessionStore } from "../../state/session-store";
 import { useTripPausesStore } from "../../state/trip-pauses-store";
@@ -13,6 +16,8 @@ import { useTripSegmentsStore } from "../../state/trip-segments-store";
 import { useTripsStore } from "../../state/trips-store";
 import { useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { useWaypointsStore } from "../../state/waypoints-store";
+
+export type { ActiveRecordingRouteModel };
 
 interface UseRecordingScreenModelInput {
   recordingDraft: RecordingDraftInput;
@@ -49,10 +54,13 @@ export function useRecordingScreenModel(input: UseRecordingScreenModelInput) {
     ? waypointAttachments.filter((attachment) => attachment.userId === activeIdentitySession.userId)
     : [];
 
-  const activeTrip =
-    currentUserTrips.find(
-      (trip) => trip.localId === recordingSession.activeTripId && trip.status === "active",
-    ) ?? null;
+  const activeRecordingRouteModel = buildActiveRecordingRouteModel({
+    recordingSession,
+    tripPoints,
+    tripSegments,
+    trips,
+  });
+  const { activeTrip, activeTripPoints } = activeRecordingRouteModel;
   const pausedTrips = currentUserTrips.filter((trip) => trip.status === "paused");
   const activeSegment = recordingSession.activeSegmentId
     ? currentUserTripSegments.find((segment) => segment.localId === recordingSession.activeSegmentId) ?? null
@@ -61,7 +69,6 @@ export function useRecordingScreenModel(input: UseRecordingScreenModelInput) {
       : null;
   const activeRecordingMode = recordingSession.recordingMode;
   const activeRecordingProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
-  const activeTripPoints = activeTrip ? getVisibleTripPointsForTrip(tripPoints, activeTrip.localId) : [];
   const activeRecordingProfileLabel =
     activeRecordingMode === "auto"
       ? `Auto • ${getRecordingProfileLabel(activeRecordingProfile)}`
@@ -126,6 +133,7 @@ export function useRecordingScreenModel(input: UseRecordingScreenModelInput) {
     ...permissions,
     activeIdentitySession,
     activeRecordingMode,
+    activeRecordingRouteModel,
     activeRecordingProfile,
     activeRecordingProfileLabel,
     activeSegment,
