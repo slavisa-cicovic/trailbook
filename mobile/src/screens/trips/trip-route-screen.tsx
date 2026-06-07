@@ -18,26 +18,15 @@ import ScreenLayout from "../../components/layout/screen-layout";
 import IconButton from "../../components/ui/icon-button";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
 import { useFeatureFlags } from "../../core/hooks/use-feature-flags";
-import type { Trip, TripPoint, TripSegment, Waypoint } from "../../domain/trips";
-import type { TripTimelineEntry } from "../../services/trip-pauses/trip-pauses.service";
+import type { Trip, TripPoint, Waypoint } from "../../domain/trips";
 import {
-  buildSegmentPolylines,
-  buildTripSegmentsSummary,
   finalizeEndedTripSegments,
   updateTripSegmentMode,
 } from "../../services/trip-segments/trip-segments.service";
-import { buildTripTimelineEntries } from "../../services/trip-pauses/trip-pauses.service";
 import {
-  getVisibleAttachmentsForWaypoints,
-  getVisibleTrips,
-  getVisibleWaypointsForTrip,
   type TripUpdateInput,
   updateTripMetadata,
 } from "../../services/trips/trips-management.service";
-import {
-  getVisibleTripGroupMembers,
-  getVisibleTripGroups,
-} from "../../services/trips/trip-groups.service";
 import {
   formatDistanceKm,
 } from "../../services/trip-points/trip-points.service";
@@ -48,19 +37,17 @@ import {
 } from "../../services/recording/raw-event-reprocessing.service";
 import {
   loadTripPointsForTrip,
-  loadTripSegmentStatsByTripLocalIds,
   replaceTripPointsForTrip,
-  type TripSegmentStatsRow,
 } from "../../repositories/trip-points-repository";
 import { loadTripSegments } from "../../repositories/trip-segments-repository";
-import { getTripRouteScreenModel, loadTrips } from "../../repositories/trips-repository";
+import {
+  getTripRouteScreenModel,
+  loadTrips,
+  type TripRouteScreenModel,
+} from "../../repositories/trips-repository";
 import { loadWaypoints } from "../../repositories/waypoints-repository";
 import { useSessionStore } from "../../state/session-store";
-import { useTripGroupMembersStore } from "../../state/trip-group-members-store";
-import { useTripGroupsStore } from "../../state/trip-groups-store";
-import { useTripPausesStore } from "../../state/trip-pauses-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
-import { useWaypointAttachmentsStore } from "../../state/waypoint-attachments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import { enqueueAndDrainTripSync } from "../../services/sync/sync-actions.service";
@@ -76,6 +63,8 @@ const mapTypeOptions: { label: string; value: TrailbookMapType }[] = [
   { label: "Satellite", value: "satellite" },
   { label: "Hybrid", value: "hybrid" },
 ];
+
+const EMPTY_TRIP_POINTS: TripPoint[] = [];
 
 type EditableMode = "bike" | "boat" | "drive" | "plane" | "walk";
 
@@ -165,21 +154,6 @@ function formatRawReprocessingPreview(preview: ReprocessingPreview): string {
   ].join("\n");
 }
 
-function getDisplayTripSegments(tripSegments: TripSegment[], selectedTrip: Trip | null): TripSegment[] {
-  if (!selectedTrip?.endedAt) {
-    return tripSegments;
-  }
-
-  return tripSegments.map((segment) =>
-    segment.tripLocalId === selectedTrip.localId && segment.endedAt === null
-      ? {
-          ...segment,
-          endedAt: selectedTrip.endedAt,
-        }
-      : segment,
-  );
-}
-
 function buildTripRoutePath(tripLocalId: string, groupLocalId: string | undefined): string {
   if (!groupLocalId) {
     return `/trips/${tripLocalId}`;
@@ -197,12 +171,8 @@ export default function TripRouteScreen() {
   const identitySession = useSessionStore((state) => state.identitySession);
   const featureFlags = useFeatureFlags();
   const trips = useTripsStore((state) => state.trips);
-  const tripGroups = useTripGroupsStore((state) => state.tripGroups);
-  const tripGroupMembers = useTripGroupMembersStore((state) => state.tripGroupMembers);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
-  const tripPauses = useTripPausesStore((state) => state.tripPauses);
   const waypoints = useWaypointsStore((state) => state.waypoints);
-  const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
   const currentUserId = identitySession?.userId ?? null;
 
   const [tripEditVisible, setTripEditVisible] = useState(false);
@@ -217,11 +187,7 @@ export default function TripRouteScreen() {
   const [syncIconRotation] = useState(() => new Animated.Value(0));
   const [rawReprocessBusy, setRawReprocessBusy] = useState(false);
   const [segmentEditSegmentId, setSegmentEditSegmentId] = useState<string | null>(null);
-  const [tripSegmentStatsBySegmentId, setTripSegmentStatsBySegmentId] = useState<
-    Map<string, TripSegmentStatsRow>
-  >(new Map());
-  const [selectedTripPoints, setSelectedTripPoints] = useState<TripPoint[]>([]);
-  const [selectedTripPointsTripId, setSelectedTripPointsTripId] = useState<string | null>(null);
+  const [routeModel, setRouteModel] = useState<TripRouteScreenModel | null>(null);
   const [routePointsLoading, setRoutePointsLoading] = useState(false);
   const [tripDraft, setTripDraft] = useState<TripUpdateInput>({
     title: "",
@@ -234,115 +200,33 @@ export default function TripRouteScreen() {
 
   const resolvedTripId = Array.isArray(tripId) ? tripId[0] : tripId;
   const resolvedGroupId = Array.isArray(groupId) ? groupId[0] : groupId;
-  const currentUserTrips = useMemo(
-    () => (currentUserId ? trips.filter((trip) => trip.userId === currentUserId) : []),
-    [currentUserId, trips],
-  );
-  const currentUserTripGroups = useMemo(
-    () => (currentUserId ? tripGroups.filter((group) => group.userId === currentUserId) : []),
-    [currentUserId, tripGroups],
-  );
-  const currentUserTripGroupMembers = useMemo(
-    () => (currentUserId ? tripGroupMembers.filter((member) => member.userId === currentUserId) : []),
-    [currentUserId, tripGroupMembers],
-  );
   const currentUserTripSegments = useMemo(
     () => (currentUserId ? tripSegments.filter((segment) => segment.userId === currentUserId) : []),
     [currentUserId, tripSegments],
-  );
-  const currentUserTripPauses = useMemo(
-    () => (currentUserId ? tripPauses.filter((tripPause) => tripPause.userId === currentUserId) : []),
-    [currentUserId, tripPauses],
   );
   const currentUserWaypoints = useMemo(
     () => (currentUserId ? waypoints.filter((waypoint) => waypoint.userId === currentUserId) : []),
     [currentUserId, waypoints],
   );
-  const currentUserWaypointAttachments = useMemo(
-    () => (currentUserId ? waypointAttachments.filter((attachment) => attachment.userId === currentUserId) : []),
-    [currentUserId, waypointAttachments],
-  );
-
-  const visibleTrips = getVisibleTrips(currentUserTrips);
-  const visibleTripGroups = getVisibleTripGroups(currentUserTripGroups);
-  const visibleTripGroupMembers = getVisibleTripGroupMembers(currentUserTripGroupMembers);
-  const selectedNavigationGroup = resolvedGroupId
-    ? visibleTripGroups.find((group) => group.localId === resolvedGroupId) ?? null
-    : null;
-  const tripNavigationOrder = selectedNavigationGroup
-    ? visibleTripGroupMembers
-        .filter((member) => member.groupLocalId === selectedNavigationGroup.localId)
-        .sort((left, right) => left.sortOrder - right.sortOrder)
-        .map((member) => visibleTrips.find((trip) => trip.localId === member.tripLocalId))
-        .filter((trip): trip is Trip => trip !== undefined)
-    : visibleTrips;
-  const selectedTrip = visibleTrips.find((trip) => trip.localId === resolvedTripId) ?? null;
-  const selectedTripNavigationIndex = selectedTrip
-    ? tripNavigationOrder.findIndex((trip) => trip.localId === selectedTrip.localId)
-    : -1;
-  const previousTrip =
-    selectedTripNavigationIndex > 0 ? tripNavigationOrder[selectedTripNavigationIndex - 1] : null;
-  const nextTrip =
-    selectedTripNavigationIndex >= 0 && selectedTripNavigationIndex < tripNavigationOrder.length - 1
-      ? tripNavigationOrder[selectedTripNavigationIndex + 1]
-      : null;
+  const selectedTrip = routeModel?.trip ?? null;
+  const previousTripLocalId = routeModel?.navigation.previousTripLocalId ?? null;
+  const nextTripLocalId = routeModel?.navigation.nextTripLocalId ?? null;
+  const navigationGroupLocalId = routeModel?.navigation.groupLocalId ?? null;
   const selectedTripLocalId = selectedTrip?.localId ?? null;
   const selectedTripEndedAt = selectedTrip?.endedAt ?? null;
-  const loadedSelectedTripPoints =
-    selectedTripLocalId && selectedTripPointsTripId === selectedTripLocalId ? selectedTripPoints : [];
-  const routeLoading = Boolean(selectedTrip && (routePointsLoading || selectedTripPointsTripId !== selectedTrip.localId));
-  const displayTripSegments = getDisplayTripSegments(currentUserTripSegments, selectedTrip);
-  const selectedTripSegments = selectedTrip
-    ? buildTripSegmentsSummary(
-        displayTripSegments,
-        loadedSelectedTripPoints,
-        selectedTrip.localId,
-        tripSegmentStatsBySegmentId,
-      )
-    : [];
-  const selectedTripPauses = selectedTrip
-    ? currentUserTripPauses.filter((tripPause) => tripPause.tripLocalId === selectedTrip.localId)
-    : [];
-  const selectedTripTimeline: TripTimelineEntry[] = selectedTrip
-    ? buildTripTimelineEntries(selectedTripSegments, selectedTripPauses, new Date().toISOString())
-    : [];
-  const selectedTripWaypoints = selectedTripLocalId
-    ? getVisibleWaypointsForTrip(currentUserWaypoints, selectedTripLocalId)
-    : [];
-  const selectedTripAttachments = selectedTripLocalId
-    ? getVisibleAttachmentsForWaypoints(
-        currentUserWaypointAttachments,
-        selectedTripWaypoints.map((waypoint) => waypoint.localId),
-      )
-    : [];
-  const routeCoordinates = loadedSelectedTripPoints.map((tripPoint) => ({
-    latitude: tripPoint.latitude,
-    longitude: tripPoint.longitude,
-  }));
-  const segmentPolylines = selectedTrip
-    ? buildSegmentPolylines(displayTripSegments, loadedSelectedTripPoints, selectedTrip.localId)
-    : [];
-  const fallbackCoordinates = selectedTripWaypoints.map((waypoint) => ({
-    latitude: waypoint.latitude,
-    longitude: waypoint.longitude,
-  }));
+  const loadedSelectedTripPoints = routeModel?.tripPoints ?? EMPTY_TRIP_POINTS;
+  const routeLoading = Boolean(resolvedTripId && (routePointsLoading || routeModel?.trip.localId !== resolvedTripId));
+  const selectedTripSegments = routeModel?.selectedTripSegments ?? [];
+  const selectedTripTimeline = routeModel?.selectedTripTimeline ?? [];
+  const selectedTripWaypoints = routeModel?.selectedTripWaypoints ?? [];
+  const selectedTripAttachments = routeModel?.selectedTripAttachments ?? [];
+  const routeCoordinates = routeModel?.routeCoordinates ?? [];
+  const segmentPolylines = routeModel?.segmentPolylines ?? [];
+  const fallbackCoordinates = routeModel?.fallbackCoordinates ?? [];
+  const waypointMarkers = routeModel?.waypointMarkers ?? [];
   const selectedTripMapRegion = buildTripMapRegion(
     routeCoordinates.length > 0 ? routeCoordinates : fallbackCoordinates,
   );
-
-  const firstPhotoUriByWaypointId = new Map<string, string>();
-
-  for (const attachment of selectedTripAttachments) {
-    if (!firstPhotoUriByWaypointId.has(attachment.waypointLocalId)) {
-      firstPhotoUriByWaypointId.set(attachment.waypointLocalId, attachment.localUri);
-    }
-  }
-
-  const waypointMarkers = selectedTripWaypoints.map((waypoint) => ({
-    firstPhotoUri: firstPhotoUriByWaypointId.get(waypoint.localId) ?? null,
-    waypoint,
-    hasPhotos: firstPhotoUriByWaypointId.has(waypoint.localId),
-  }));
 
   useEffect(() => {
     if (!syncBusy) {
@@ -381,33 +265,53 @@ export default function TripRouteScreen() {
     [syncIconRotation],
   );
 
+  async function refreshRouteModel(
+    tripLocalId: string,
+    options: { showLoading?: boolean } = {},
+  ): Promise<void> {
+    const showLoading = options.showLoading ?? false;
+
+    if (showLoading) {
+      setRoutePointsLoading(true);
+    }
+
+    try {
+      setRouteModel(
+        await getTripRouteScreenModel({
+          groupLocalId: resolvedGroupId ?? null,
+          tripLocalId,
+          userId: currentUserId,
+        }),
+      );
+    } finally {
+      if (showLoading) {
+        setRoutePointsLoading(false);
+      }
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
-    async function loadSelectedTripRouteModel() {
-      if (!selectedTripLocalId) {
-        setSelectedTripPoints([]);
-        setSelectedTripPointsTripId(null);
-        setTripSegmentStatsBySegmentId(new Map());
+    async function loadRouteModel() {
+      if (!resolvedTripId || !currentUserId) {
+        setRouteModel(null);
         setRoutePointsLoading(false);
         return;
       }
 
-      setSelectedTripPoints([]);
-      setSelectedTripPointsTripId(null);
+      setRouteModel(null);
       setRoutePointsLoading(true);
 
       try {
-        const routeModel = await getTripRouteScreenModel({
+        const nextRouteModel = await getTripRouteScreenModel({
           groupLocalId: resolvedGroupId ?? null,
-          tripLocalId: selectedTripLocalId,
+          tripLocalId: resolvedTripId,
           userId: currentUserId,
         });
 
         if (!cancelled) {
-          setSelectedTripPoints(routeModel?.tripPoints ?? []);
-          setSelectedTripPointsTripId(selectedTripLocalId);
-          setTripSegmentStatsBySegmentId(routeModel?.segmentStatsBySegmentId ?? new Map());
+          setRouteModel(nextRouteModel);
         }
       } finally {
         if (!cancelled) {
@@ -416,19 +320,18 @@ export default function TripRouteScreen() {
       }
     }
 
-    void loadSelectedTripRouteModel();
+    void loadRouteModel();
 
     return () => {
       cancelled = true;
     };
-  }, [currentUserId, resolvedGroupId, selectedTripLocalId]);
+  }, [currentUserId, resolvedGroupId, resolvedTripId]);
 
   useEffect(() => {
     if (
       !selectedTripLocalId ||
       !selectedTripEndedAt ||
       routePointsLoading ||
-      selectedTripPointsTripId !== selectedTripLocalId ||
       currentUserTripSegments.every(
         (segment) => segment.tripLocalId !== selectedTripLocalId || segment.endedAt !== null,
       )
@@ -436,11 +339,9 @@ export default function TripRouteScreen() {
       return;
     }
 
-    const tripPointsForFinalization =
-      selectedTripPointsTripId === selectedTripLocalId ? selectedTripPoints : [];
     const finalizedTripSegments = finalizeEndedTripSegments(
       tripSegments,
-      tripPointsForFinalization,
+      loadedSelectedTripPoints,
       selectedTripLocalId,
       selectedTripEndedAt,
     );
@@ -456,11 +357,10 @@ export default function TripRouteScreen() {
     }
   }, [
     currentUserTripSegments,
+    loadedSelectedTripPoints,
     routePointsLoading,
     selectedTripEndedAt,
     selectedTripLocalId,
-    selectedTripPoints,
-    selectedTripPointsTripId,
     tripSegments,
   ]);
 
@@ -494,19 +394,13 @@ export default function TripRouteScreen() {
       return [];
     }
 
-    if (selectedTripPointsTripId === selectedTrip.localId) {
+    if (routeModel?.trip.localId === selectedTrip.localId) {
       return loadedSelectedTripPoints;
     }
 
     const tripPoints = await loadTripPointsForTrip(selectedTrip.localId);
-    setSelectedTripPoints(tripPoints);
-    setSelectedTripPointsTripId(selectedTrip.localId);
 
     return tripPoints;
-  }
-
-  async function refreshSelectedTripSegmentStats(tripLocalId: string): Promise<void> {
-    setTripSegmentStatsBySegmentId(await loadTripSegmentStatsByTripLocalIds([tripLocalId]));
   }
 
   async function handleShareTrip() {
@@ -558,6 +452,7 @@ export default function TripRouteScreen() {
 
     await setTrips(updateTripMetadata(trips, selectedTrip.localId, tripDraft, new Date().toISOString()));
     setTripEditVisible(false);
+    await refreshRouteModel(selectedTrip.localId);
 
     if (
       identitySession?.mode === "authenticated" &&
@@ -612,9 +507,6 @@ export default function TripRouteScreen() {
 
       await setTripSegments(nextTripSegments);
       await replaceTripPointsForTrip(selectedTrip.localId, nextSelectedTripPoints);
-      setSelectedTripPoints(nextSelectedTripPoints);
-      setSelectedTripPointsTripId(selectedTrip.localId);
-      await refreshSelectedTripSegmentStats(selectedTrip.localId);
       await setWaypoints(nextWaypoints);
       await setTrips(
         trips.map((trip) =>
@@ -627,6 +519,7 @@ export default function TripRouteScreen() {
             : trip,
         ),
       );
+      await refreshRouteModel(selectedTrip.localId);
 
       setSegmentEditSegmentId(null);
     } catch (error) {
@@ -646,19 +539,16 @@ export default function TripRouteScreen() {
 
     try {
       const result = await applyRawEventReprocessing(selectedTrip.localId);
-      const [nextTrips, nextTripSegments, nextWaypoints, nextTripPoints] = await Promise.all([
+      const [nextTrips, nextTripSegments, nextWaypoints] = await Promise.all([
         loadTrips(),
         loadTripSegments(),
         loadWaypoints(),
-        loadTripPointsForTrip(selectedTrip.localId),
       ]);
 
       await setTrips(nextTrips);
       await setTripSegments(nextTripSegments);
       await setWaypoints(nextWaypoints);
-      setSelectedTripPoints(nextTripPoints);
-      setSelectedTripPointsTripId(selectedTrip.localId);
-      await refreshSelectedTripSegmentStats(selectedTrip.localId);
+      await refreshRouteModel(selectedTrip.localId);
       Alert.alert(
         "Route reprocessed",
         `Rebuilt route from raw events: ${result.newPointCount} points, ${formatDistanceKm(result.newDistanceMeters)}.`,
@@ -715,17 +605,35 @@ export default function TripRouteScreen() {
     router.push(`/trips/${selectedTrip.localId}/waypoints/${waypoint.localId}`);
   }
 
-  function handleNavigateTrip(trip: Trip | null) {
-    if (!trip) {
+  function handleNavigateTrip(tripLocalId: string | null) {
+    if (!tripLocalId) {
       return;
     }
 
     setDetailsSheetVisible(false);
-    router.replace(buildTripRoutePath(trip.localId, selectedNavigationGroup?.localId));
+    router.replace(buildTripRoutePath(tripLocalId, navigationGroupLocalId ?? undefined));
   }
 
   if (!identitySession) {
     return <Redirect href="/login" />;
+  }
+
+  if (!selectedTrip && routeLoading) {
+    return (
+      <ScreenLayout
+        accountEmail={identitySession.userEmail}
+        accountMode={identitySession.mode}
+        contentVariant="plain"
+        showBottomNavigation
+        title="Route"
+      >
+        <View style={styles.emptyState}>
+          <ActivityIndicator color="#355035" />
+          <Text style={styles.emptyTitle}>Loading route</Text>
+          <Text style={styles.emptyText}>Preparing map data for this trip.</Text>
+        </View>
+      </ScreenLayout>
+    );
   }
 
   if (!selectedTrip) {
@@ -1019,11 +927,11 @@ export default function TripRouteScreen() {
           <View style={styles.routeBottomBar}>
             <Pressable
               accessibilityLabel="Previous trip"
-              disabled={!previousTrip}
-              onPress={() => handleNavigateTrip(previousTrip)}
-              style={[styles.routeTripNavButton, !previousTrip && styles.routeTripNavButtonDisabled]}
+              disabled={!previousTripLocalId}
+              onPress={() => handleNavigateTrip(previousTripLocalId)}
+              style={[styles.routeTripNavButton, !previousTripLocalId && styles.routeTripNavButtonDisabled]}
             >
-              <MaterialIcons color={previousTrip ? "#243224" : "#9aa596"} name="chevron-left" size={24} />
+              <MaterialIcons color={previousTripLocalId ? "#243224" : "#9aa596"} name="chevron-left" size={24} />
             </Pressable>
             <Pressable
               onPress={() => setDetailsSheetVisible(true)}
@@ -1039,11 +947,11 @@ export default function TripRouteScreen() {
             </Pressable>
             <Pressable
               accessibilityLabel="Next trip"
-              disabled={!nextTrip}
-              onPress={() => handleNavigateTrip(nextTrip)}
-              style={[styles.routeTripNavButton, !nextTrip && styles.routeTripNavButtonDisabled]}
+              disabled={!nextTripLocalId}
+              onPress={() => handleNavigateTrip(nextTripLocalId)}
+              style={[styles.routeTripNavButton, !nextTripLocalId && styles.routeTripNavButtonDisabled]}
             >
-              <MaterialIcons color={nextTrip ? "#243224" : "#9aa596"} name="chevron-right" size={24} />
+              <MaterialIcons color={nextTripLocalId ? "#243224" : "#9aa596"} name="chevron-right" size={24} />
             </Pressable>
           </View>
         </View>

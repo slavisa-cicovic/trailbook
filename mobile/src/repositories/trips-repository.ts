@@ -2,20 +2,35 @@ import type {
   Trip,
   TripGroup,
   TripGroupMember,
+  TripPause,
   TripPoint,
   TripSegment,
   Waypoint,
+  WaypointAttachment,
 } from "../domain/trips";
 import {
-  loadTripSegmentStatsByTripLocalIds,
-  loadTripStatsByTripLocalIds,
-  loadTripPointsForTrip,
-  type TripSegmentStatsRow,
-} from "../storage/trip-points-storage";
-import { loadTrips as loadTripsFromStorage, saveTrips } from "../storage/trips-storage";
+  buildSegmentPolylines,
+  buildTripSegmentsSummary,
+  type SegmentPolyline,
+  type TripSegmentSummary,
+} from "../services/trip-segments/trip-segments.service";
+import {
+  buildTripTimelineEntries,
+  type TripTimelineEntry,
+} from "../services/trip-pauses/trip-pauses.service";
+import type { TripSegmentStatsRow } from "../storage/trip-points-storage";
 
-export { saveTrips };
-export const loadTrips = loadTripsFromStorage;
+export async function loadTrips(): Promise<Trip[]> {
+  const { loadTrips: loadTripsFromStorage } = await import("../storage/trips-storage");
+
+  return loadTripsFromStorage();
+}
+
+export async function saveTrips(trips: Trip[]): Promise<void> {
+  const { saveTrips: saveTripsToStorage } = await import("../storage/trips-storage");
+
+  return saveTripsToStorage(trips);
+}
 
 export interface TripSummaryStats {
   distanceMeters: number;
@@ -30,18 +45,40 @@ export interface TripRouteDetail {
 }
 
 export interface TripRouteNavigation {
+  groupLocalId: string | null;
   nextTripLocalId: string | null;
   previousTripLocalId: string | null;
 }
 
 export interface TripRouteScreenModel {
+  displayTripSegments: TripSegment[];
+  fallbackCoordinates: MapCoordinate[];
   navigation: TripRouteNavigation;
+  routeCoordinates: MapCoordinate[];
+  selectedTripAttachments: WaypointAttachment[];
+  selectedTripPauses: TripPause[];
+  selectedTripSegments: TripSegmentSummary[];
+  selectedTripTimeline: TripTimelineEntry[];
+  selectedTripWaypoints: Waypoint[];
   segmentStatsBySegmentId: Map<string, TripSegmentStatsRow>;
+  segmentPolylines: SegmentPolyline[];
   trip: Trip;
   tripPoints: TripPoint[];
   tripSegments: TripSegment[];
   tripStats: TripSummaryStats | null;
+  waypointMarkers: TripRouteWaypointMarker[];
   waypoints: Waypoint[];
+}
+
+export interface MapCoordinate {
+  latitude: number;
+  longitude: number;
+}
+
+export interface TripRouteWaypointMarker {
+  firstPhotoUri: string | null;
+  hasPhotos: boolean;
+  waypoint: Waypoint;
 }
 
 export interface TripsListItem {
@@ -75,45 +112,119 @@ function getVisibleGroupMembersForRepository(members: TripGroupMember[]): TripGr
   return members.filter((member) => member.deletedAt === null);
 }
 
-function buildTripNavigationOrder(input: {
+function buildTripNavigationContext(input: {
   groupLocalId: string | null | undefined;
   tripGroupMembers: TripGroupMember[];
   tripGroups: TripGroup[];
   trips: Trip[];
-}): Trip[] {
+}): { groupLocalId: string | null; navigationOrder: Trip[] } {
   if (!input.groupLocalId) {
-    return input.trips;
+    return {
+      groupLocalId: null,
+      navigationOrder: input.trips,
+    };
   }
 
   const selectedGroup = input.tripGroups.find((group) => group.localId === input.groupLocalId);
 
   if (!selectedGroup) {
-    return input.trips;
+    return {
+      groupLocalId: null,
+      navigationOrder: input.trips,
+    };
   }
 
   const tripsByLocalId = new Map(input.trips.map((trip) => [trip.localId, trip]));
 
-  return input.tripGroupMembers
-    .filter((member) => member.groupLocalId === selectedGroup.localId)
-    .sort((left, right) => left.sortOrder - right.sortOrder)
-    .map((member) => tripsByLocalId.get(member.tripLocalId))
-    .filter((trip): trip is Trip => trip !== undefined);
+  return {
+    groupLocalId: selectedGroup.localId,
+    navigationOrder: input.tripGroupMembers
+      .filter((member) => member.groupLocalId === selectedGroup.localId)
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((member) => tripsByLocalId.get(member.tripLocalId))
+      .filter((trip): trip is Trip => trip !== undefined),
+  };
 }
 
-function getTripRouteNavigation(tripLocalId: string, navigationOrder: Trip[]): TripRouteNavigation {
+function getTripRouteNavigation(
+  tripLocalId: string,
+  navigationOrder: Trip[],
+  groupLocalId: string | null,
+): TripRouteNavigation {
   const selectedTripIndex = navigationOrder.findIndex((trip) => trip.localId === tripLocalId);
 
   if (selectedTripIndex === -1) {
     return {
+      groupLocalId,
       nextTripLocalId: null,
       previousTripLocalId: null,
     };
   }
 
   return {
+    groupLocalId,
     nextTripLocalId: navigationOrder[selectedTripIndex + 1]?.localId ?? null,
     previousTripLocalId: navigationOrder[selectedTripIndex - 1]?.localId ?? null,
   };
+}
+
+function getDisplayTripSegmentsForRepository(tripSegments: TripSegment[], trip: Trip): TripSegment[] {
+  if (!trip.endedAt) {
+    return tripSegments;
+  }
+
+  return tripSegments.map((segment) =>
+    segment.tripLocalId === trip.localId && segment.endedAt === null
+      ? {
+          ...segment,
+          endedAt: trip.endedAt,
+        }
+      : segment,
+  );
+}
+
+function getVisibleAttachmentsForWaypoints(
+  attachments: WaypointAttachment[],
+  waypointLocalIds: string[],
+): WaypointAttachment[] {
+  const waypointLocalIdSet = new Set(waypointLocalIds);
+
+  return attachments
+    .filter((attachment) => attachment.deletedAt === null && waypointLocalIdSet.has(attachment.waypointLocalId))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.localId.localeCompare(right.localId));
+}
+
+function buildWaypointMarkers(
+  waypoints: Waypoint[],
+  attachments: WaypointAttachment[],
+): TripRouteWaypointMarker[] {
+  const firstPhotoUriByWaypointId = new Map<string, string>();
+
+  for (const attachment of attachments) {
+    if (!firstPhotoUriByWaypointId.has(attachment.waypointLocalId)) {
+      firstPhotoUriByWaypointId.set(attachment.waypointLocalId, attachment.localUri);
+    }
+  }
+
+  return waypoints.map((waypoint) => ({
+    firstPhotoUri: firstPhotoUriByWaypointId.get(waypoint.localId) ?? null,
+    hasPhotos: firstPhotoUriByWaypointId.has(waypoint.localId),
+    waypoint,
+  }));
+}
+
+function mapTripPointsToCoordinates(tripPoints: TripPoint[]): MapCoordinate[] {
+  return tripPoints.map((tripPoint) => ({
+    latitude: tripPoint.latitude,
+    longitude: tripPoint.longitude,
+  }));
+}
+
+function mapWaypointsToCoordinates(waypoints: Waypoint[]): MapCoordinate[] {
+  return waypoints.map((waypoint) => ({
+    latitude: waypoint.latitude,
+    longitude: waypoint.longitude,
+  }));
 }
 
 export async function listTripSummaryStats(
@@ -123,6 +234,7 @@ export async function listTripSummaryStats(
     return new Map();
   }
 
+  const { loadTripStatsByTripLocalIds } = await import("../storage/trip-points-storage");
   const rows = await loadTripStatsByTripLocalIds(tripLocalIds);
   const statsByTripLocalId = new Map<string, TripSummaryStats>();
 
@@ -139,6 +251,8 @@ export async function listTripSummaryStats(
 }
 
 export async function getTripRouteDetail(tripLocalId: string): Promise<TripRouteDetail> {
+  const { loadTripPointsForTrip } = await import("../storage/trip-points-storage");
+
   return {
     points: await loadTripPointsForTrip(tripLocalId),
     tripLocalId,
@@ -153,28 +267,38 @@ export async function getTripRouteScreenModel(input: {
   const [
     { loadTripGroupMembers },
     { loadTripGroups },
+    { loadTripPauses },
+    { loadTripPointsForTrip, loadTripSegmentStatsByTripLocalIds },
     { loadTripSegments },
+    { loadWaypointAttachments },
     { loadWaypoints },
   ] = await Promise.all([
     import("../storage/trip-group-members-storage"),
     import("../storage/trip-groups-storage"),
+    import("../storage/trip-pauses-storage"),
+    import("../storage/trip-points-storage"),
     import("../storage/trip-segments-storage"),
+    import("../storage/waypoint-attachments-storage"),
     import("../storage/waypoints-storage"),
   ]);
   const [
     allTrips,
     allTripGroups,
     allTripGroupMembers,
+    allTripPauses,
     allTripSegments,
+    allWaypointAttachments,
     allWaypoints,
     tripPoints,
     tripStatsByTripLocalId,
     segmentStatsBySegmentId,
   ] = await Promise.all([
-    loadTripsFromStorage(),
+    loadTrips(),
     loadTripGroups(),
     loadTripGroupMembers(),
+    loadTripPauses(),
     loadTripSegments(),
+    loadWaypointAttachments(),
     loadWaypoints(),
     loadTripPointsForTrip(input.tripLocalId),
     listTripSummaryStats([input.tripLocalId]),
@@ -192,7 +316,7 @@ export async function getTripRouteScreenModel(input: {
   const visibleTripGroupMembers = getVisibleGroupMembersForRepository(
     filterCurrentUserRows(allTripGroupMembers, input.userId),
   );
-  const navigationOrder = buildTripNavigationOrder({
+  const navigationContext = buildTripNavigationContext({
     groupLocalId: input.groupLocalId,
     tripGroupMembers: visibleTripGroupMembers,
     tripGroups: visibleTripGroups,
@@ -201,17 +325,52 @@ export async function getTripRouteScreenModel(input: {
   const tripSegments = filterCurrentUserRows(allTripSegments, input.userId)
     .filter((segment) => segment.tripLocalId === input.tripLocalId)
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt) || left.localId.localeCompare(right.localId));
+  const displayTripSegments = getDisplayTripSegmentsForRepository(tripSegments, trip);
+  const selectedTripSegments = buildTripSegmentsSummary(
+    displayTripSegments,
+    tripPoints,
+    input.tripLocalId,
+    segmentStatsBySegmentId,
+  );
+  const selectedTripPauses = filterCurrentUserRows(allTripPauses, input.userId)
+    .filter((tripPause) => tripPause.tripLocalId === input.tripLocalId)
+    .sort((left, right) => left.startedAt.localeCompare(right.startedAt) || left.localId.localeCompare(right.localId));
+  const selectedTripTimeline = buildTripTimelineEntries(
+    selectedTripSegments,
+    selectedTripPauses,
+    new Date().toISOString(),
+  );
   const waypoints = filterCurrentUserRows(allWaypoints, input.userId)
     .filter((waypoint) => waypoint.tripLocalId === input.tripLocalId && waypoint.deletedAt === null)
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.localId.localeCompare(right.localId));
+  const selectedTripAttachments = getVisibleAttachmentsForWaypoints(
+    filterCurrentUserRows(allWaypointAttachments, input.userId),
+    waypoints.map((waypoint) => waypoint.localId),
+  );
+  const routeCoordinates = mapTripPointsToCoordinates(tripPoints);
+  const fallbackCoordinates = mapWaypointsToCoordinates(waypoints);
 
   return {
-    navigation: getTripRouteNavigation(input.tripLocalId, navigationOrder),
+    displayTripSegments,
+    fallbackCoordinates,
+    navigation: getTripRouteNavigation(
+      input.tripLocalId,
+      navigationContext.navigationOrder,
+      navigationContext.groupLocalId,
+    ),
+    routeCoordinates,
+    selectedTripAttachments,
+    selectedTripPauses,
+    selectedTripSegments,
+    selectedTripTimeline,
+    selectedTripWaypoints: waypoints,
     segmentStatsBySegmentId,
+    segmentPolylines: buildSegmentPolylines(displayTripSegments, tripPoints, input.tripLocalId),
     trip,
     tripPoints,
     tripSegments,
     tripStats: tripStatsByTripLocalId.get(input.tripLocalId) ?? null,
+    waypointMarkers: buildWaypointMarkers(waypoints, selectedTripAttachments),
     waypoints,
   };
 }
@@ -228,7 +387,7 @@ export async function listTripsScreenItems(input: {
     import("../storage/trip-groups-storage"),
   ]);
   const [allTrips, allTripGroups, allTripGroupMembers] = await Promise.all([
-    loadTripsFromStorage(),
+    loadTrips(),
     loadTripGroups(),
     loadTripGroupMembers(),
   ]);

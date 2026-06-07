@@ -141,3 +141,29 @@ Migrate in small commits:
 4. add refresh-after-mutation helper
 5. remove now-unused screen imports/helpers
 
+## Implementation Notes
+
+Implemented:
+
+- Expanded `getTripRouteScreenModel` to return route coordinates, fallback coordinates, segment polylines, selected waypoints, selected attachments, waypoint markers, pauses, timeline entries and display-safe segments.
+- Moved group-aware prev/next navigation into the route read model, including the effective `groupLocalId` used by the screen URL builder.
+- Migrated `trip-route-screen.tsx` to render route read data from `TripRouteScreenModel` and keep stores only for mutation/reload flows.
+- Added `refreshRouteModel()` after trip edit, segment mode edit and raw reprocessing apply.
+- Changed `trips-repository` storage access to lazy wrappers/dynamic imports so importing repository read models does not eagerly load native SQLite modules.
+- Extended repository tests for selected waypoints, first photo marker selection, deleted attachment filtering, timeline ordering and group-aware navigation context.
+
+Verification:
+
+```bash
+npm run test --workspace mobile -- trips-repository
+npm run typecheck --workspace mobile
+npm run test --workspace mobile
+npm run lint --workspace mobile
+```
+
+Result:
+
+- Targeted repository test passed.
+- Typecheck passed.
+- Full test suite passed.
+- Lint passed with existing warnings in `_layout.tsx` and `waypoint-photo-viewer-screen.tsx`.
