@@ -392,11 +392,10 @@ describe("recording-native-events-storage", () => {
   });
 
   it("appends native events, loads recent events and summarizes by event type", async () => {
-    const {
-      appendRecordingNativeEvent,
-      loadRecentRecordingNativeEvents,
-      loadRecordingNativeEventSummary,
-    } = await import("../../storage/recording-native-events-storage");
+    const { loadRecentRecordingNativeEvents } = await import("../../storage/recording-native-events-storage");
+    const { appendRecordingNativeEvent, loadRecordingNativeEventSummary } = await import(
+      "../../repositories/recording-native-events-repository"
+    );
 
     const firstEvent = await appendRecordingNativeEvent({
       eventType: "native_service_started",
@@ -442,10 +441,10 @@ describe("sync-outbox-storage", () => {
 
   it("enqueues, reloads pending items and resets failed rows to pending", async () => {
     const {
-      enqueueSyncOutboxItem,
       loadPendingSyncOutboxItems,
       markSyncOutboxItemFailed,
     } = await import("../../storage/sync-outbox-storage");
+    const { enqueueSyncOutboxItem } = await import("../../repositories/sync-outbox-repository");
     const firstItem = await enqueueSyncOutboxItem({
       entityLocalId: "trip-1",
       entityType: "trip",
@@ -473,13 +472,14 @@ describe("sync-outbox-storage", () => {
 
   it("updates status, increments attempts and summarizes all outbox statuses", async () => {
     const {
-      enqueueSyncOutboxItem,
       loadPendingSyncOutboxItems,
-      loadSyncOutboxSummary,
       markSyncOutboxItemFailed,
       markSyncOutboxItemRunning,
       markSyncOutboxItemSucceeded,
     } = await import("../../storage/sync-outbox-storage");
+    const { enqueueSyncOutboxItem, loadSyncOutboxSummary } = await import(
+      "../../repositories/sync-outbox-repository"
+    );
     const runningItem = await enqueueSyncOutboxItem({
       entityLocalId: "trip-1",
       entityType: "trip",

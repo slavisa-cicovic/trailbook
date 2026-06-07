@@ -306,8 +306,9 @@ describe("trip-route-variants-storage", () => {
   });
 
   it("summarizes active and deleted variants", async () => {
-    const { loadTripRouteVariantSummary, saveTripRouteVariants } = await import(
-      "../../storage/trip-route-variants-storage"
+    const { saveTripRouteVariants } = await import("../../storage/trip-route-variants-storage");
+    const { loadTripRouteVariantSummary } = await import(
+      "../../repositories/trip-route-variants-repository"
     );
 
     await saveTripRouteVariants([

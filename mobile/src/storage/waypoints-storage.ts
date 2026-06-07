@@ -1,8 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { asc, eq } from "drizzle-orm";
 
-import { DEFAULT_WAYPOINT_CATEGORY, normalizeWaypointCategory } from "../constants/waypoint-categories";
 import { STORAGE_KEYS } from "../constants/storage-keys";
+import { normalizeWaypoint } from "../domain/normalize-waypoint";
 import type { Waypoint } from "../domain/trips";
 import { getDrizzleDatabase, runExclusiveDrizzleWrite } from "./drizzle/db";
 import { waypoints as waypointsTable } from "./drizzle/schema";
@@ -10,30 +10,6 @@ import { migrateOnce } from "./sqlite/migrate-once";
 
 type WaypointRow = typeof waypointsTable.$inferSelect;
 type WaypointInsert = typeof waypointsTable.$inferInsert;
-
-function normalizeWaypoint(
-  value: Partial<Waypoint> & Pick<Waypoint, "localId" | "tripLocalId" | "deviceId" | "userId">,
-): Waypoint {
-  const fallbackDate = new Date(0).toISOString();
-
-  return {
-    localId: value.localId,
-    serverId: value.serverId ?? null,
-    tripLocalId: value.tripLocalId,
-    segmentLocalId: value.segmentLocalId ?? null,
-    deviceId: value.deviceId,
-    userId: value.userId,
-    latitude: value.latitude ?? 0,
-    longitude: value.longitude ?? 0,
-    category: normalizeWaypointCategory(value.category ?? DEFAULT_WAYPOINT_CATEGORY),
-    title: value.title ?? value.localId,
-    note: value.note ?? null,
-    createdAt: value.createdAt ?? fallbackDate,
-    updatedAt: value.updatedAt ?? value.createdAt ?? fallbackDate,
-    deletedAt: value.deletedAt ?? null,
-    syncStatus: value.syncStatus ?? "local-only",
-  };
-}
 
 function toWaypointRow(waypoint: Waypoint): WaypointInsert {
   return {

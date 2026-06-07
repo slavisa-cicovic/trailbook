@@ -38,34 +38,25 @@ function toSyncOutboxItem<TPayload>(row: SyncOutboxRow): SyncOutboxItem<TPayload
   };
 }
 
-function createSyncOutboxId(input: {
+export async function insertOrRefreshSyncOutboxRow(input: {
   entityLocalId: string;
-  entityType: SyncOutboxEntityType;
-  operation: SyncOutboxOperation;
-}) {
-  return `sync-outbox-${input.entityType}-${input.entityLocalId}-${input.operation}`;
-}
-
-export async function enqueueSyncOutboxItem<TPayload>(input: {
-  entityLocalId: string;
-  entityType: SyncOutboxEntityType;
-  operation: SyncOutboxOperation;
-  payload: TPayload;
-}): Promise<SyncOutboxItem<TPayload>> {
-  const now = new Date().toISOString();
-  const id = createSyncOutboxId(input);
-  const payloadJson = JSON.stringify(input.payload ?? {});
+  entityType: string;
+  id: string;
+  now: string;
+  operation: string;
+  payloadJson: string;
+}): Promise<void> {
   const row: SyncOutboxInsert = {
     attemptCount: 0,
-    createdAt: now,
+    createdAt: input.now,
     entityLocalId: input.entityLocalId,
     entityType: input.entityType,
-    id,
+    id: input.id,
     lastError: null,
     operation: input.operation,
-    payloadJson,
+    payloadJson: input.payloadJson,
     status: "pending",
-    updatedAt: now,
+    updatedAt: input.now,
   };
 
   await runExclusiveDrizzleWrite(async (database) => {
@@ -76,25 +67,12 @@ export async function enqueueSyncOutboxItem<TPayload>(input: {
         target: syncOutboxTable.id,
         set: {
           lastError: null,
-          payloadJson,
+          payloadJson: input.payloadJson,
           status: "pending",
-          updatedAt: now,
+          updatedAt: input.now,
         },
       });
   });
-
-  return {
-    attemptCount: 0,
-    createdAt: now,
-    entityLocalId: input.entityLocalId,
-    entityType: input.entityType,
-    id,
-    lastError: null,
-    operation: input.operation,
-    payload: input.payload,
-    status: "pending",
-    updatedAt: now,
-  };
 }
 
 export async function loadPendingSyncOutboxItems(limit = 20): Promise<SyncOutboxItem[]> {
@@ -109,30 +87,9 @@ export async function loadPendingSyncOutboxItems(limit = 20): Promise<SyncOutbox
   return rows.map(toSyncOutboxItem);
 }
 
-export async function loadSyncOutboxSummary(): Promise<{
-  failed: number;
-  pending: number;
-  running: number;
-  succeeded: number;
-  total: number;
-}> {
+export async function loadSyncOutboxStatusRows(): Promise<{ status: string }[]> {
   const database = await getDrizzleDatabase();
-  const rows = await database.select({ status: syncOutboxTable.status }).from(syncOutboxTable);
-  const summary = {
-    failed: 0,
-    pending: 0,
-    running: 0,
-    succeeded: 0,
-    total: 0,
-  };
-
-  for (const row of rows) {
-    const status = row.status as SyncOutboxStatus;
-    summary[status] += 1;
-    summary.total += 1;
-  }
-
-  return summary;
+  return database.select({ status: syncOutboxTable.status }).from(syncOutboxTable);
 }
 
 export async function markSyncOutboxItemRunning(id: string): Promise<void> {

@@ -7,12 +7,6 @@ import { recordingNativeEvents as recordingNativeEventsTable } from "./drizzle/s
 type RecordingNativeEventRow = typeof recordingNativeEventsTable.$inferSelect;
 type RecordingNativeEventInsert = typeof recordingNativeEventsTable.$inferInsert;
 
-export interface RecordingNativeEventSummary {
-  count: number;
-  eventType: RecordingNativeEventType;
-  lastRecordedAt: string | null;
-}
-
 function toRecordingNativeEvent(row: RecordingNativeEventRow): RecordingNativeEvent {
   return {
     createdAt: row.createdAt,
@@ -35,31 +29,10 @@ function toRecordingNativeEventRow(event: RecordingNativeEvent): RecordingNative
   };
 }
 
-function createRecordingNativeEventLocalId(now: string): string {
-  return `recording-native-event-${encodeURIComponent(now)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-export async function appendRecordingNativeEvent(input: {
-  eventType: RecordingNativeEventType;
-  payload?: Record<string, unknown> | null;
-  recordedAt?: string;
-  tripLocalId?: string | null;
-}): Promise<RecordingNativeEvent> {
-  const now = new Date().toISOString();
-  const event: RecordingNativeEvent = {
-    createdAt: now,
-    eventType: input.eventType,
-    localId: createRecordingNativeEventLocalId(now),
-    payload: input.payload ?? null,
-    recordedAt: input.recordedAt ?? now,
-    tripLocalId: input.tripLocalId ?? null,
-  };
-
+export async function insertRecordingNativeEventRow(event: RecordingNativeEvent): Promise<void> {
   await runExclusiveDrizzleWrite(async (database) => {
     await database.insert(recordingNativeEventsTable).values(toRecordingNativeEventRow(event));
   });
-
-  return event;
 }
 
 export async function loadRecentRecordingNativeEvents(limit = 100): Promise<RecordingNativeEvent[]> {
@@ -73,40 +46,13 @@ export async function loadRecentRecordingNativeEvents(limit = 100): Promise<Reco
   return rows.map(toRecordingNativeEvent);
 }
 
-export async function loadRecordingNativeEventSummary(): Promise<RecordingNativeEventSummary[]> {
+export async function loadRecordingNativeEventProjection(): Promise<{ eventType: string; recordedAt: string }[]> {
   const database = await getDrizzleDatabase();
-  const rows = await database
+  return database
     .select({
       eventType: recordingNativeEventsTable.eventType,
       recordedAt: recordingNativeEventsTable.recordedAt,
     })
     .from(recordingNativeEventsTable)
     .orderBy(desc(recordingNativeEventsTable.recordedAt), asc(recordingNativeEventsTable.eventType));
-  const summariesByEventType = new Map<RecordingNativeEventType, RecordingNativeEventSummary>();
-
-  for (const row of rows) {
-    const eventType = row.eventType as RecordingNativeEventType;
-    const summary = summariesByEventType.get(eventType);
-
-    if (summary) {
-      summary.count += 1;
-      continue;
-    }
-
-    summariesByEventType.set(eventType, {
-      count: 1,
-      eventType,
-      lastRecordedAt: row.recordedAt,
-    });
-  }
-
-  return [...summariesByEventType.values()].sort((left, right) => {
-    const recordedAtComparison = String(right.lastRecordedAt ?? "").localeCompare(String(left.lastRecordedAt ?? ""));
-
-    if (recordedAtComparison !== 0) {
-      return recordedAtComparison;
-    }
-
-    return left.eventType.localeCompare(right.eventType);
-  });
 }

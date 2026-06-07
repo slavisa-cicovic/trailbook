@@ -7,14 +7,6 @@ import { tripRouteVariants as tripRouteVariantsTable } from "./drizzle/schema";
 type TripRouteVariantRow = typeof tripRouteVariantsTable.$inferSelect;
 type TripRouteVariantInsert = typeof tripRouteVariantsTable.$inferInsert;
 
-export interface TripRouteVariantSummary {
-  activeCount: number;
-  deletedCount: number;
-  providerCounts: Record<string, number>;
-  tripCount: number;
-  variantTypeCounts: Record<string, number>;
-}
-
 function toTripRouteVariantRow(variant: TripRouteVariant): TripRouteVariantInsert {
   return {
     createdAt: variant.createdAt,
@@ -66,9 +58,11 @@ export async function loadTripRouteVariantsForTrip(tripLocalId: string): Promise
   return rows.map(toTripRouteVariantFromRow);
 }
 
-export async function loadTripRouteVariantSummary(): Promise<TripRouteVariantSummary> {
+export async function loadTripRouteVariantSummaryRows(): Promise<
+  { deletedAt: string | null; provider: string; tripLocalId: string; variantType: string }[]
+> {
   const database = await getDrizzleDatabase();
-  const rows = await database
+  return database
     .select({
       deletedAt: tripRouteVariantsTable.deletedAt,
       provider: tripRouteVariantsTable.provider,
@@ -76,23 +70,6 @@ export async function loadTripRouteVariantSummary(): Promise<TripRouteVariantSum
       variantType: tripRouteVariantsTable.variantType,
     })
     .from(tripRouteVariantsTable);
-
-  const activeRows = rows.filter((row) => row.deletedAt === null);
-  const providerCounts: Record<string, number> = {};
-  const variantTypeCounts: Record<string, number> = {};
-
-  for (const row of activeRows) {
-    providerCounts[row.provider] = (providerCounts[row.provider] ?? 0) + 1;
-    variantTypeCounts[row.variantType] = (variantTypeCounts[row.variantType] ?? 0) + 1;
-  }
-
-  return {
-    activeCount: activeRows.length,
-    deletedCount: rows.length - activeRows.length,
-    providerCounts,
-    tripCount: new Set(activeRows.map((row) => row.tripLocalId)).size,
-    variantTypeCounts,
-  };
 }
 
 export async function saveTripRouteVariants(variants: TripRouteVariant[]): Promise<void> {
