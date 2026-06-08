@@ -451,6 +451,7 @@ export default function RecordingScreen() {
 
       if (
         Platform.OS !== "android" ||
+        AppState.currentState !== "active" ||
         lastSilentGapRecoveryBucketRef.current === gapBucket ||
         silentGapRecoveryRunningRef.current
       ) {
