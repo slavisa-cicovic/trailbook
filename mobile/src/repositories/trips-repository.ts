@@ -118,10 +118,14 @@ function buildTripNavigationContext(input: {
   tripGroups: TripGroup[];
   trips: Trip[];
 }): { groupLocalId: string | null; navigationOrder: Trip[] } {
+  const tripsAscending = [...input.trips].sort(
+    (left, right) => left.startedAt.localeCompare(right.startedAt) || left.localId.localeCompare(right.localId),
+  );
+
   if (!input.groupLocalId) {
     return {
       groupLocalId: null,
-      navigationOrder: input.trips,
+      navigationOrder: tripsAscending,
     };
   }
 
@@ -130,7 +134,7 @@ function buildTripNavigationContext(input: {
   if (!selectedGroup) {
     return {
       groupLocalId: null,
-      navigationOrder: input.trips,
+      navigationOrder: tripsAscending,
     };
   }
 
