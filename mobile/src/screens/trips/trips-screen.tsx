@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 
@@ -81,6 +82,57 @@ const TRIP_DATE_FILTER_OPTIONS: { label: string; value: TripDateFilter }[] = [
   { value: "last_year", label: "Last year" },
 ];
 
+type TripSortBy = "newest" | "oldest" | "distance" | "duration";
+
+const ACTIVITY_FILTER_OPTIONS: { label: string; value: string }[] = [
+  { value: "walk", label: "Walk" },
+  { value: "bike", label: "Bike" },
+  { value: "drive", label: "Drive" },
+  { value: "boat", label: "Boat" },
+  { value: "plane", label: "Plane" },
+];
+
+const TRIP_SORT_OPTIONS: { label: string; value: TripSortBy }[] = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "distance", label: "Distance" },
+  { value: "duration", label: "Duration" },
+];
+
+function applyTripSort(
+  trips: Trip[],
+  sortBy: TripSortBy,
+  statsByTripId: Map<string, TripSummaryStats>,
+): Trip[] {
+  const copy = [...trips];
+
+  if (sortBy === "oldest") {
+    return copy.sort(
+      (a, b) => a.startedAt.localeCompare(b.startedAt) || a.localId.localeCompare(b.localId),
+    );
+  }
+
+  if (sortBy === "distance") {
+    return copy.sort(
+      (a, b) =>
+        (statsByTripId.get(b.localId)?.distanceMeters ?? 0) -
+        (statsByTripId.get(a.localId)?.distanceMeters ?? 0),
+    );
+  }
+
+  if (sortBy === "duration") {
+    return copy.sort((a, b) => {
+      const dA = a.endedAt ? new Date(a.endedAt).getTime() - new Date(a.startedAt).getTime() : 0;
+      const dB = b.endedAt ? new Date(b.endedAt).getTime() - new Date(b.startedAt).getTime() : 0;
+      return dB - dA;
+    });
+  }
+
+  return copy.sort(
+    (a, b) => b.startedAt.localeCompare(a.startedAt) || b.localId.localeCompare(a.localId),
+  );
+}
+
 export default function TripsScreen() {
   const router = useRouter();
   const suppressTapAfterSwipeRef = useRef(false);
@@ -98,6 +150,10 @@ export default function TripsScreen() {
 
   const [pendingUndo, setPendingUndo] = useState<PendingUndoState | null>(null);
   const [dateFilter, setDateFilter] = useState<TripDateFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activityFilters, setActivityFilters] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<TripSortBy>("newest");
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [listMode, setListMode] = useState<TripListMode>("owned");
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const {
@@ -167,11 +223,25 @@ export default function TripsScreen() {
   const filteredTripIdsKey = filteredTripIds.join("|");
   const hasMissingTripStats = filteredTripIds.some((tripLocalId) => !tripStatsByTripId.has(tripLocalId));
   const showTripStatsSkeleton = filteredTripIds.length > 0 && (tripStatsLoading || hasMissingTripStats);
-  const tripSummaries = filteredTrips.map((trip) => ({
+  const searchLower = searchQuery.trim().toLowerCase();
+  const searchedTrips = searchLower
+    ? filteredTrips.filter((trip) => trip.title.toLowerCase().includes(searchLower))
+    : filteredTrips;
+  const activityFilteredTrips =
+    activityFilters.length === 0
+      ? searchedTrips
+      : searchedTrips.filter((trip) => activityFilters.includes(trip.recordingProfile));
+  const displayTrips = applyTripSort(activityFilteredTrips, sortBy, tripStatsByTripId);
+  const activeFilterCount =
+    (dateFilter !== "all" ? 1 : 0) +
+    (searchQuery.trim().length > 0 ? 1 : 0) +
+    (activityFilters.length > 0 ? 1 : 0) +
+    (sortBy !== "newest" ? 1 : 0);
+  const tripSummaries = displayTrips.map((trip) => ({
     ...buildTripSummaryWithPoints(trip, [], currentUserWaypoints, currentUserWaypointAttachments),
     distanceMeters: tripStatsByTripId.get(trip.localId)?.distanceMeters ?? null,
   }));
-  const tripsAggregateSummary = filteredTrips.reduce(
+  const tripsAggregateSummary = displayTrips.reduce(
     (summary, trip) => {
       const distanceMeters = tripStatsByTripId.get(trip.localId)?.distanceMeters ?? 0;
       const durationMs = Math.max(
@@ -411,6 +481,12 @@ export default function TripsScreen() {
     } finally {
       setSyncingGroups(false);
     }
+  }
+
+  function handleToggleActivityFilter(profile: string) {
+    setActivityFilters((current) =>
+      current.includes(profile) ? current.filter((p) => p !== profile) : [...current, profile],
+    );
   }
 
   function handleEnterTripSelection(tripLocalId: string) {
@@ -828,28 +904,147 @@ export default function TripsScreen() {
 
         {listMode === "owned" ? (
           <>
-            <ScrollView
-              contentContainerStyle={styles.filterRow}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.filterScroll}
-            >
-              {TRIP_DATE_FILTER_OPTIONS.map((option) => {
-                const selected = option.value === dateFilter;
+            <View style={styles.filterToggleRow}>
+              <Pressable
+                onPress={() => setFilterPanelOpen((v) => !v)}
+                style={[styles.filterToggleButton, filterPanelOpen && styles.filterToggleButtonOpen]}
+              >
+                <MaterialIcons
+                  color={filterPanelOpen ? "#fffdf8" : "#355035"}
+                  name="tune"
+                  size={16}
+                />
+                <Text style={[styles.filterToggleText, filterPanelOpen && styles.filterToggleTextOpen]}>
+                  Filters
+                </Text>
+                {activeFilterCount > 0 ? (
+                  <View style={styles.filterBadge}>
+                    <Text style={styles.filterBadgeText}>{String(activeFilterCount)}</Text>
+                  </View>
+                ) : null}
+                <MaterialIcons
+                  color={filterPanelOpen ? "#fffdf8" : "#355035"}
+                  name={filterPanelOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+                  size={16}
+                />
+              </Pressable>
+            </View>
 
-                return (
-                  <Pressable
-                    key={option.value}
-                    onPress={() => setDateFilter(option.value)}
-                    style={[styles.filterChip, selected && styles.filterChipSelected]}
+            {filterPanelOpen ? (
+              <View style={styles.filterPanel}>
+                <View style={styles.filterPanelSection}>
+                  <Text style={styles.filterPanelLabel}>Search</Text>
+                  <View style={styles.searchRow}>
+                    <MaterialIcons color="#76856f" name="search" size={18} />
+                    <TextInput
+                      placeholder="Search trips..."
+                      placeholderTextColor="#9aa691"
+                      style={styles.searchInput}
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                    />
+                    {searchQuery.length > 0 ? (
+                      <Pressable hitSlop={8} onPress={() => setSearchQuery("")}>
+                        <MaterialIcons color="#76856f" name="close" size={16} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={styles.filterPanelSection}>
+                  <Text style={styles.filterPanelLabel}>Period</Text>
+                  <ScrollView
+                    contentContainerStyle={styles.filterRow}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.filterPanelScroll}
                   >
-                    <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
-                      {option.label}
-                    </Text>
+                    {TRIP_DATE_FILTER_OPTIONS.map((option) => {
+                      const selected = option.value === dateFilter;
+
+                      return (
+                        <Pressable
+                          key={option.value}
+                          onPress={() => setDateFilter(option.value)}
+                          style={[styles.filterChip, selected && styles.filterChipSelected]}
+                        >
+                          <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+
+                <View style={styles.filterPanelSection}>
+                  <Text style={styles.filterPanelLabel}>Activity</Text>
+                  <ScrollView
+                    contentContainerStyle={styles.filterRow}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.filterPanelScroll}
+                  >
+                    {ACTIVITY_FILTER_OPTIONS.map((option) => {
+                      const selected = activityFilters.includes(option.value);
+
+                      return (
+                        <Pressable
+                          key={option.value}
+                          onPress={() => handleToggleActivityFilter(option.value)}
+                          style={[styles.filterChip, selected && styles.filterChipSelected]}
+                        >
+                          <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+
+                <View style={styles.filterPanelSection}>
+                  <Text style={styles.filterPanelLabel}>Sort</Text>
+                  <ScrollView
+                    contentContainerStyle={styles.filterRow}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.filterPanelScroll}
+                  >
+                    {TRIP_SORT_OPTIONS.map((option) => {
+                      const selected = option.value === sortBy;
+
+                      return (
+                        <Pressable
+                          key={option.value}
+                          onPress={() => setSortBy(option.value)}
+                          style={[styles.sortChip, selected && styles.sortChipSelected]}
+                        >
+                          <Text style={[styles.sortChipText, selected && styles.sortChipTextSelected]}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+
+                {activeFilterCount > 0 ? (
+                  <Pressable
+                    onPress={() => {
+                      setSearchQuery("");
+                      setDateFilter("all");
+                      setActivityFilters([]);
+                      setSortBy("newest");
+                    }}
+                    style={styles.filterResetButton}
+                  >
+                    <MaterialIcons color="#9f3f31" name="restart-alt" size={15} />
+                    <Text style={styles.filterResetText}>Reset filters</Text>
                   </Pressable>
-                );
-              })}
-            </ScrollView>
+                ) : null}
+              </View>
+            ) : null}
 
             <View style={styles.summaryTable}>
               <Pressable
@@ -931,7 +1126,7 @@ export default function TripsScreen() {
 
             <ScrollView contentContainerStyle={styles.listScrollContent} style={styles.listScroll}>
               {tripSummaries.length === 0 ? (
-                <Text style={styles.empty}>No trips match the selected date filter.</Text>
+                <Text style={styles.empty}>No trips match the selected filters.</Text>
               ) : (
                 <View style={styles.list}>
                   {tripSummaries.map(({ trip, waypointCount, photoCount, distanceMeters }) => (
@@ -1375,18 +1570,90 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#fffdf8",
   },
-  filterRow: {
-    alignItems: "center",
-    gap: 10,
-    minHeight: 38,
-  },
-  filterScroll: {
-    flexGrow: 0,
-    height: 38,
+  filterToggleRow: {
     marginBottom: 8,
   },
+  filterToggleButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: "#e8ede2",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  filterToggleButtonOpen: {
+    backgroundColor: "#243224",
+  },
+  filterToggleText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  filterToggleTextOpen: {
+    color: "#fffdf8",
+  },
+  filterBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: "#587a55",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  filterBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#fffdf8",
+  },
+  filterResetButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: "#f7e0db",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 2,
+  },
+  filterResetText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#9f3f31",
+  },
+  filterPanel: {
+    borderRadius: 18,
+    backgroundColor: "#f6f1e5",
+    borderWidth: 1,
+    borderColor: "#ebe1cf",
+    padding: 14,
+    gap: 14,
+    marginBottom: 10,
+  },
+  filterPanelSection: {
+    gap: 7,
+  },
+  filterPanelLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    color: "#76856f",
+  },
+  filterPanelScroll: {
+    flexGrow: 0,
+    height: 36,
+  },
+  filterRow: {
+    alignItems: "center",
+    gap: 8,
+    minHeight: 36,
+  },
   filterChip: {
-    height: 38,
+    height: 36,
     alignItems: "center",
     borderRadius: 999,
     backgroundColor: "#e8ede2",
@@ -1402,6 +1669,43 @@ const styles = StyleSheet.create({
     color: "#355035",
   },
   filterChipTextSelected: {
+    color: "#fffdf8",
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    backgroundColor: "#ece7dc",
+    borderWidth: 1,
+    borderColor: "#ddd5c4",
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+    height: 40,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#243224",
+    paddingVertical: 0,
+  },
+  sortChip: {
+    height: 36,
+    alignItems: "center",
+    borderRadius: 999,
+    backgroundColor: "#e0e8de",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  sortChipSelected: {
+    backgroundColor: "#355035",
+  },
+  sortChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#355035",
+  },
+  sortChipTextSelected: {
     color: "#fffdf8",
   },
   summaryTable: {
