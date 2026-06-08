@@ -137,9 +137,26 @@ export default function TripWaypointScreen() {
       return;
     }
 
+    const updatedAt = new Date().toISOString();
+
     await setWaypoints(
-      updateWaypointMetadata(waypoints, selectedWaypoint.localId, waypointDraft, new Date().toISOString()),
+      updateWaypointMetadata(waypoints, selectedWaypoint.localId, waypointDraft, updatedAt),
     );
+
+    if (waypointModel) {
+      setWaypointModel({
+        ...waypointModel,
+        waypoint: {
+          ...waypointModel.waypoint,
+          category: waypointDraft.category,
+          title: waypointDraft.title.trim(),
+          note: waypointDraft.note.trim() || null,
+          updatedAt,
+          syncStatus: "pending-sync",
+        },
+      });
+    }
+
     setWaypointEditVisible(false);
   }
 
@@ -329,14 +346,15 @@ export default function TripWaypointScreen() {
   }
 
   return (
-      <ScreenLayout
-        accountEmail={identitySession.userEmail}
-        accountMode={identitySession.mode}
-        contentStyle={styles.screenContent}
-        contentVariant="plain"
-        onBack={() => router.back()}
-        showBottomNavigation
-        title="Waypoint"
+    <ScreenLayout
+      accountEmail={identitySession.userEmail}
+      accountMode={identitySession.mode}
+      contentStyle={styles.screenContent}
+      contentVariant="plain"
+      onBack={() => router.back()}
+      scrollEnabled={false}
+      showBottomNavigation
+      title="Waypoint"
     >
       <WaypointEditModal
         draft={waypointDraft}
@@ -348,136 +366,181 @@ export default function TripWaypointScreen() {
         visible={waypointEditVisible}
       />
 
-      {selectedWaypointCategory ? (
-        <View style={styles.categoryRow}>
-          <View style={[styles.categoryBadge, { backgroundColor: selectedWaypointCategory.color }]}>
-            <MaterialIcons
-              color="#fffdf8"
-              name={selectedWaypointCategory.iconName}
-              size={16}
-            />
-            <Text style={styles.categoryBadgeText}>{selectedWaypointCategory.label}</Text>
-          </View>
-        </View>
-      ) : null}
-
-      <View style={styles.headerCard}>
-        <View style={styles.headerCardRow}>
-          <IconButton
-            accessibilityLabel="Previous waypoint"
-            disabled={!previousWaypointLocalId}
-            disabledIconColor="#9da894"
-            icon="chevron-left"
-            iconSize={26}
-            onPress={() => handleNavigateWaypoint(previousWaypointLocalId)}
-            style={!previousWaypointLocalId && styles.waypointNavButtonDisabled}
-          />
-          <View style={styles.titleGroup}>
-            <Text numberOfLines={2} style={styles.title}>{selectedWaypoint.title}</Text>
-            <IconButton
-              accessibilityLabel="Edit waypoint"
-              icon="edit"
-              onPress={handleOpenEdit}
-              size="sm"
-            />
-          </View>
-          <IconButton
-            accessibilityLabel="Next waypoint"
-            disabled={!nextWaypointLocalId}
-            disabledIconColor="#9da894"
-            icon="chevron-right"
-            iconSize={26}
-            onPress={() => handleNavigateWaypoint(nextWaypointLocalId)}
-            style={!nextWaypointLocalId && styles.waypointNavButtonDisabled}
-          />
-        </View>
-        {selectedWaypoint.note ? <Text style={styles.note}>{selectedWaypoint.note}</Text> : null}
-      </View>
-
-      <View style={styles.photoHeader}>
-        <Text style={styles.sectionTitle}>Photos</Text>
-        <Pressable onPress={handlePromptAddPhotos} style={styles.secondaryAction}>
-          <Text style={styles.secondaryActionText}>Add photo(s)</Text>
-        </Pressable>
-      </View>
-
-      {selectionMode ? (
-        <View style={styles.selectionBar}>
-          <Text style={styles.selectionText}>{selectedPhotoIds.length} selected</Text>
-          <View style={styles.selectionActions}>
-            <Pressable
-              onPress={() => {
-                setSelectionMode(false);
-                setSelectedPhotoIds([]);
-              }}
-              style={styles.selectionSecondary}
-            >
-              <Text style={styles.selectionSecondaryText}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              disabled={selectedPhotoIds.length === 0}
-              onPress={() => void handleRemoveSelectedPhotos()}
-              style={[
-                styles.selectionPrimary,
-                selectedPhotoIds.length === 0 && styles.selectionPrimaryDisabled,
-              ]}
-            >
-              <Text style={styles.selectionPrimaryText}>Remove selected</Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        <Text style={styles.helperText}>
-          Tap a photo to open full screen. Long press to enter selection mode.
-        </Text>
-      )}
-
-      {attachments.length === 0 ? (
-        <View style={styles.emptyPhotos}>
-          <Text style={styles.emptyText}>No photos saved for this waypoint.</Text>
-        </View>
-      ) : (
+      <View style={styles.waypointShell}>
         <ScrollView
-          contentContainerStyle={styles.photoCarouselContent}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToAlignment="start"
-          snapToInterval={photoCarouselCardWidth + 12}
-          decelerationRate="fast"
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          {attachments.map((attachment) => {
-            const selected = selectedPhotoSet.has(attachment.localId);
+          <View style={styles.photoHeader}>
+            <Text style={styles.sectionTitle}>Photos</Text>
+            <Pressable onPress={handlePromptAddPhotos} style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>Add photo(s)</Text>
+            </Pressable>
+          </View>
 
-            return (
-              <Pressable
-                key={attachment.localId}
-                onLongPress={() => enterSelectionMode(attachment.localId)}
-                onPress={() => handlePhotoPress(attachment.localId)}
-                style={[
-                  styles.photoCarouselCard,
-                  { width: photoCarouselCardWidth },
-                  selected && styles.photoCardSelected,
-                ]}
-              >
-                <Image source={{ uri: attachment.localUri }} style={styles.photoCarouselImage} />
-                {selectionMode ? (
-                  <View style={styles.photoSelectionBadge}>
-                    <Text style={styles.photoSelectionBadgeText}>{selected ? "Selected" : "Tap"}</Text>
+          {selectionMode ? (
+            <View style={styles.selectionBar}>
+              <Text style={styles.selectionText}>{selectedPhotoIds.length} selected</Text>
+              <View style={styles.selectionActions}>
+                <Pressable
+                  onPress={() => {
+                    setSelectionMode(false);
+                    setSelectedPhotoIds([]);
+                  }}
+                  style={styles.selectionSecondary}
+                >
+                  <Text style={styles.selectionSecondaryText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  disabled={selectedPhotoIds.length === 0}
+                  onPress={() => void handleRemoveSelectedPhotos()}
+                  style={[
+                    styles.selectionPrimary,
+                    selectedPhotoIds.length === 0 && styles.selectionPrimaryDisabled,
+                  ]}
+                >
+                  <Text style={styles.selectionPrimaryText}>Remove selected</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.helperText}>
+              Tap a photo to open full screen. Long press to enter selection mode.
+            </Text>
+          )}
+
+          {attachments.length === 0 ? (
+            <View style={styles.emptyPhotos}>
+              <Text style={styles.emptyText}>No photos saved for this waypoint.</Text>
+            </View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={styles.photoCarouselContent}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToAlignment="start"
+              snapToInterval={photoCarouselCardWidth + 12}
+              decelerationRate="fast"
+            >
+              {attachments.map((attachment) => {
+                const selected = selectedPhotoSet.has(attachment.localId);
+
+                return (
+                  <Pressable
+                    key={attachment.localId}
+                    onLongPress={() => enterSelectionMode(attachment.localId)}
+                    onPress={() => handlePhotoPress(attachment.localId)}
+                    style={[
+                      styles.photoCarouselCard,
+                      { width: photoCarouselCardWidth },
+                      selected && styles.photoCardSelected,
+                    ]}
+                  >
+                    <Image source={{ uri: attachment.localUri }} style={styles.photoCarouselImage} />
+                    {selectionMode ? (
+                      <View style={styles.photoSelectionBadge}>
+                        <Text style={styles.photoSelectionBadgeText}>{selected ? "Selected" : "Tap"}</Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
+        </ScrollView>
+
+        <View pointerEvents="box-none" style={styles.waypointBottomBarWrap}>
+          <View style={styles.waypointBottomBar}>
+            <IconButton
+              accessibilityLabel="Previous waypoint"
+              disabled={!previousWaypointLocalId}
+              disabledIconColor="#9aa596"
+              icon="chevron-left"
+              iconSize={24}
+              onPress={() => handleNavigateWaypoint(previousWaypointLocalId)}
+              style={[styles.waypointNavButton, !previousWaypointLocalId && styles.waypointNavButtonDisabled]}
+            />
+            <Pressable onPress={handleOpenEdit} style={styles.waypointBottomCenter}>
+              <View style={styles.titleRow}>
+                {selectedWaypointCategory ? (
+                  <View style={[styles.categoryIconBadge, { backgroundColor: selectedWaypointCategory.color }]}>
+                    <MaterialIcons color="#fffdf8" name={selectedWaypointCategory.iconName} size={14} />
                   </View>
                 ) : null}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      )}
+                <Text numberOfLines={1} style={styles.title}>{selectedWaypoint.title}</Text>
+              </View>
+            </Pressable>
+            <IconButton
+              accessibilityLabel="Next waypoint"
+              disabled={!nextWaypointLocalId}
+              disabledIconColor="#9aa596"
+              icon="chevron-right"
+              iconSize={24}
+              onPress={() => handleNavigateWaypoint(nextWaypointLocalId)}
+              style={[styles.waypointNavButton, !nextWaypointLocalId && styles.waypointNavButtonDisabled]}
+            />
+          </View>
+        </View>
+
+      </View>
     </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
   screenContent: {
+    flex: 1,
+  },
+  waypointShell: {
+    flex: 1,
+    position: "relative",
+  },
+  scrollContent: {
     gap: 16,
-    paddingBottom: 28,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 120,
+  },
+  waypointBottomBarWrap: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    bottom: 16,
+  },
+  waypointBottomBar: {
+    minHeight: 64,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 253, 248, 0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(235, 225, 207, 0.9)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#142014",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 7,
+  },
+  waypointNavButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(230, 236, 225, 0.9)",
+  },
+  waypointBottomCenter: {
+    flex: 1,
+    gap: 4,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   emptyState: {
     flex: 1,
@@ -495,25 +558,13 @@ const styles = StyleSheet.create({
     color: "#52624f",
     textAlign: "center",
   },
-  categoryRow: {
-    flexDirection: "row",
-    marginTop: -6,
-    marginBottom: 6,
-  },
-  categoryBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+  categoryIconBadge: {
+    width: 26,
+    height: 26,
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  categoryBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#fffdf8",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   primaryAction: {
     flex: 1,
@@ -541,37 +592,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#243224",
   },
-  headerCard: {
-    borderRadius: 20,
-    backgroundColor: "#f6f1e5",
-    borderWidth: 1,
-    borderColor: "#ebe1cf",
-    padding: 18,
-    gap: 6,
-    marginBottom: 8,
-  },
-  headerCardRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
+  waypointNavButtonDisabled: {
+    opacity: 0.42,
   },
   title: {
-    fontSize: 22,
+    flex: 1,
+    fontSize: 17,
     fontWeight: "700",
     color: "#243224",
-    flexShrink: 1,
-  },
-  titleGroup: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    minWidth: 0,
-  },
-  waypointNavButtonDisabled: {
-    opacity: 0.45,
   },
   note: {
     fontSize: 15,
@@ -682,5 +710,55 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: "#fffdf8",
+  },
+  detailsOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(20, 28, 20, 0.28)",
+  },
+  detailsBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  detailsSheet: {
+    width: "100%",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    backgroundColor: "rgba(248, 244, 234, 0.98)",
+    borderWidth: 1,
+    borderColor: "rgba(235, 225, 207, 0.92)",
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 28,
+    gap: 12,
+    shadowColor: "#142014",
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  detailsHandle: {
+    alignSelf: "center",
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(82, 98, 79, 0.35)",
+    marginBottom: 4,
+  },
+  detailsHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  detailsTitle: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  detailsNote: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#4f5f4f",
   },
 });
