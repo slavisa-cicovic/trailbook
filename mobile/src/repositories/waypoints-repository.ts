@@ -13,6 +13,7 @@ export interface WaypointNavigation {
 export interface WaypointScreenModel {
   attachments: WaypointAttachment[];
   navigation: WaypointNavigation;
+  routeCoordinates: { latitude: number; longitude: number }[];
   trip: Trip;
   waypoint: Waypoint;
   waypointOrder: Waypoint[];
@@ -99,17 +100,20 @@ export async function getWaypointScreenModel(input: {
 }): Promise<WaypointScreenModel | null> {
   const [
     { loadTrips },
+    { loadTripPointsForTrip },
     { loadWaypointAttachments },
     { loadWaypoints },
   ] = await Promise.all([
     import("../storage/trips-storage"),
+    import("../storage/trip-points-storage"),
     import("../storage/waypoint-attachments-storage"),
     import("../storage/waypoints-storage"),
   ]);
-  const [trips, waypoints, waypointAttachments] = await Promise.all([
+  const [trips, waypoints, waypointAttachments, routePoints] = await Promise.all([
     loadTrips(),
     loadWaypoints(),
     loadWaypointAttachments(),
+    loadTripPointsForTrip(input.tripLocalId),
   ]);
   const trip =
     filterCurrentUserRows(trips, input.userId).find(
@@ -133,6 +137,10 @@ export async function getWaypointScreenModel(input: {
       waypoint.localId,
     ),
     navigation: getWaypointNavigation(waypoint.localId, waypointOrder),
+    routeCoordinates: routePoints.map((point: TripPoint) => ({
+      latitude: point.latitude,
+      longitude: point.longitude,
+    })),
     trip,
     waypoint,
     waypointOrder,
@@ -145,16 +153,9 @@ export async function getWaypointPhotoViewerModel(input: {
   userId?: string | null;
   waypointLocalId: string;
 }): Promise<WaypointPhotoViewerModel | null> {
-  const [
-    { loadTripPointsForTrip },
-    { loadWaypointAttachments },
-  ] = await Promise.all([
-    import("../storage/trip-points-storage"),
-    import("../storage/waypoint-attachments-storage"),
-  ]);
-  const [waypointModel, routePoints, allWaypointAttachments] = await Promise.all([
+  const { loadWaypointAttachments } = await import("../storage/waypoint-attachments-storage");
+  const [waypointModel, allWaypointAttachments] = await Promise.all([
     getWaypointScreenModel(input),
-    loadTripPointsForTrip(input.tripLocalId),
     loadWaypointAttachments(),
   ]);
 
@@ -179,10 +180,6 @@ export async function getWaypointPhotoViewerModel(input: {
       currentUserAttachments,
       "last",
     ),
-    routeCoordinates: routePoints.map((point: TripPoint) => ({
-      latitude: point.latitude,
-      longitude: point.longitude,
-    })),
     selectedAttachment:
       waypointModel.attachments.find((attachment) => attachment.localId === input.selectedAttachmentLocalId) ??
       null,

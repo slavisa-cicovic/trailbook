@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import MapView, { Marker, Polyline } from "react-native-maps";
 
 import ScreenLayout from "../../components/layout/screen-layout";
 import IconButton from "../../components/ui/icon-button";
@@ -42,6 +43,49 @@ import {
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
 import WaypointEditModal from "./components/waypoint-edit-modal";
 
+const WAYPOINT_MAP_ROUTE_COLOR = "#4a8c4a";
+const MAX_ROUTE_POINTS = 240;
+
+interface MapCoordinate {
+  latitude: number;
+  longitude: number;
+}
+
+function buildWaypointMapRegion(
+  routeCoordinates: MapCoordinate[],
+  waypointCoordinate: MapCoordinate,
+): { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } {
+  const all = routeCoordinates.length > 0 ? [...routeCoordinates, waypointCoordinate] : [waypointCoordinate];
+  let minLat = all[0].latitude;
+  let maxLat = all[0].latitude;
+  let minLon = all[0].longitude;
+  let maxLon = all[0].longitude;
+
+  for (const c of all) {
+    if (c.latitude < minLat) minLat = c.latitude;
+    if (c.latitude > maxLat) maxLat = c.latitude;
+    if (c.longitude < minLon) minLon = c.longitude;
+    if (c.longitude > maxLon) maxLon = c.longitude;
+  }
+
+  return {
+    latitude: (minLat + maxLat) / 2,
+    longitude: (minLon + maxLon) / 2,
+    latitudeDelta: Math.max((maxLat - minLat) * 1.4, 0.004),
+    longitudeDelta: Math.max((maxLon - minLon) * 1.4, 0.004),
+  };
+}
+
+function downsampleRoute(coordinates: MapCoordinate[]): MapCoordinate[] {
+  if (coordinates.length <= MAX_ROUTE_POINTS) {
+    return coordinates;
+  }
+
+  const step = Math.ceil(coordinates.length / MAX_ROUTE_POINTS);
+
+  return coordinates.filter((_, i) => i % step === 0 || i === coordinates.length - 1);
+}
+
 export default function TripWaypointScreen() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
@@ -78,10 +122,24 @@ export default function TripWaypointScreen() {
   const attachments = waypointModel?.attachments ?? [];
 
   const selectedPhotoSet = useMemo(() => new Set(selectedPhotoIds), [selectedPhotoIds]);
-  const photoCarouselCardWidth = Math.min(Math.max(screenWidth * 0.74, 240), 340);
+  const photoCarouselCardWidth = Math.min(Math.max(screenWidth * 0.72, 240), 340);
   const selectedWaypointCategory = selectedWaypoint
     ? getWaypointCategoryOption(selectedWaypoint.category)
     : null;
+  const displayRouteCoordinates = useMemo(
+    () => downsampleRoute(waypointModel?.routeCoordinates ?? []),
+    [waypointModel?.routeCoordinates],
+  );
+  const waypointMapRegion = useMemo(
+    () =>
+      selectedWaypoint
+        ? buildWaypointMapRegion(displayRouteCoordinates, {
+            latitude: selectedWaypoint.latitude,
+            longitude: selectedWaypoint.longitude,
+          })
+        : null,
+    [selectedWaypoint, displayRouteCoordinates],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -447,6 +505,40 @@ export default function TripWaypointScreen() {
               })}
             </ScrollView>
           )}
+
+          {waypointMapRegion && selectedWaypoint ? (
+            <View style={styles.waypointMapSection}>
+              <Text style={styles.sectionTitle}>Location</Text>
+              <View style={styles.waypointMapCard}>
+                <MapView
+                  key={`${waypointMapRegion.latitude}:${waypointMapRegion.longitude}`}
+                  liteMode={Platform.OS === "android"}
+                  mapType="standard"
+                  pitchEnabled={false}
+                  pointerEvents="none"
+                  region={waypointMapRegion}
+                  rotateEnabled={false}
+                  scrollEnabled={false}
+                  style={styles.waypointMap}
+                  toolbarEnabled={false}
+                  zoomEnabled={false}
+                >
+                  {displayRouteCoordinates.length > 1 ? (
+                    <Polyline
+                      coordinates={displayRouteCoordinates}
+                      strokeColor={WAYPOINT_MAP_ROUTE_COLOR}
+                      strokeWidth={3}
+                    />
+                  ) : null}
+                  <Marker
+                    coordinate={{ latitude: selectedWaypoint.latitude, longitude: selectedWaypoint.longitude }}
+                    pinColor="#e53935"
+                    tracksViewChanges={false}
+                  />
+                </MapView>
+              </View>
+            </View>
+          ) : null}
         </ScrollView>
 
         <View pointerEvents="box-none" style={styles.waypointBottomBarWrap}>
@@ -496,16 +588,16 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   scrollContent: {
-    gap: 16,
+    gap: 2,
     paddingHorizontal: 18,
-    paddingTop: 16,
+    paddingTop: 2,
     paddingBottom: 120,
   },
   waypointBottomBarWrap: {
     position: "absolute",
     left: 14,
     right: 14,
-    bottom: 16,
+    bottom: 4,
   },
   waypointBottomBar: {
     minHeight: 64,
@@ -760,5 +852,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: "#4f5f4f",
+  },
+  waypointMapSection: {
+    gap: 8,
+  },
+  waypointMapCard: {
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#ddd5c4",
+    height: 130,
+  },
+  waypointMap: {
+    flex: 1,
   },
 });
