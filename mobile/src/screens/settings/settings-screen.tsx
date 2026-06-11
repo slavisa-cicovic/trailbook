@@ -157,6 +157,7 @@ export default function SettingsScreen() {
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
   const recordingStatus = useRecordingStore((state) => state.session.status);
   const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
+  const activeRecordingMode = useRecordingStore((state) => state.session.recordingMode);
   const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
   const themeMode = useThemeStore((state) => state.mode);
   const systemColorScheme = useColorScheme();
@@ -274,6 +275,7 @@ export default function SettingsScreen() {
         recordingStatus,
         activeRecordingTripId,
         activeRecordingProfile,
+        activeRecordingMode,
       );
       setRecordingConfigMessage("Recording config updated.");
     } catch (error) {

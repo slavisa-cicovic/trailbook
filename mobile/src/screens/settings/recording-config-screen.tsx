@@ -49,6 +49,7 @@ export default function RecordingConfigScreen() {
   const theme = getAppTheme(resolveAppThemeMode(themeMode, systemColorScheme));
   const recordingStatus = useRecordingStore((state) => state.session.status);
   const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
+  const activeRecordingMode = useRecordingStore((state) => state.session.recordingMode);
   const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
   const [record, setRecord] = useState<CachedMobileRecordingConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,7 +80,12 @@ export default function RecordingConfigScreen() {
 
     try {
       await resetRecordingConfigToServerDefaults(identitySession);
-      await syncBackgroundLocationTracking(recordingStatus, activeRecordingTripId, activeRecordingProfile);
+      await syncBackgroundLocationTracking(
+        recordingStatus,
+        activeRecordingTripId,
+        activeRecordingProfile,
+        activeRecordingMode,
+      );
       await reloadConfig();
       Alert.alert("Recording config", "Recording config reset to server defaults.");
     } catch (error) {

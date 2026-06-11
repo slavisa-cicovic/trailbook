@@ -1,6 +1,11 @@
 import * as Location from "expo-location";
 
-import { restartBackgroundLocationTracking, toSnapshot, type CurrentLocationSnapshot } from "../location/location.service";
+import {
+  getBackgroundTrackingProfile,
+  restartBackgroundLocationTracking,
+  toSnapshot,
+  type CurrentLocationSnapshot,
+} from "../location/location.service";
 import { getLatestMotionActivityAsync } from "../motion/motion-activity.service";
 import {
   appendTripPointIfUseful,
@@ -51,6 +56,7 @@ let recordingPipelineWriteQueue: Promise<unknown> = Promise.resolve();
 
 export interface PersistRecordedLocationOptions {
   origin?: "device" | "simulation";
+  // AUTO transitions change Trailbook segments/filtering. Native tracking should stay stable unless explicitly requested.
   restartTrackingOnAutoTransition?: boolean;
 }
 
@@ -193,7 +199,7 @@ async function persistRecordedLocationSnapshots(
   }
 
   try {
-  const restartTrackingOnAutoTransition = options.restartTrackingOnAutoTransition ?? true;
+  const restartTrackingOnAutoTransition = options.restartTrackingOnAutoTransition ?? false;
   const recordingSession = await loadRecordingSession();
 
   if (
@@ -525,7 +531,9 @@ async function persistRecordedLocationSnapshots(
         activeProfile = nextRecordingSession.recordingProfile;
 
         if (restartTrackingOnAutoTransition) {
-          await restartBackgroundLocationTracking(nextRecordingSession.recordingProfile);
+          await restartBackgroundLocationTracking(
+            getBackgroundTrackingProfile(nextRecordingSession.recordingMode, nextRecordingSession.recordingProfile),
+          );
         }
 
         const recoverySnapshots = getRejectedAutoRecoverySnapshots(recordingTrip.localId, snapshot.recordedAt);

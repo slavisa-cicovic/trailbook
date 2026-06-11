@@ -104,6 +104,7 @@ export default function RecordingConfigProfileScreen() {
   const theme = getAppTheme(resolveAppThemeMode(themeMode, systemColorScheme));
   const recordingStatus = useRecordingStore((state) => state.session.status);
   const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
+  const activeRecordingMode = useRecordingStore((state) => state.session.recordingMode);
   const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
   const [config, setConfig] = useState<MobileRecordingConfig | null>(null);
   const [accuracy, setAccuracy] = useState<RecordingConfigAccuracy>("high");
@@ -186,7 +187,12 @@ export default function RecordingConfigProfileScreen() {
       };
 
       await saveLocalRecordingConfigOverride(identitySession, nextConfig);
-      await syncBackgroundLocationTracking(recordingStatus, activeRecordingTripId, activeRecordingProfile);
+      await syncBackgroundLocationTracking(
+        recordingStatus,
+        activeRecordingTripId,
+        activeRecordingProfile,
+        activeRecordingMode,
+      );
       router.back();
     } catch (error) {
       Alert.alert("Recording config", error instanceof Error ? error.message : "Save failed.");
@@ -230,7 +236,12 @@ export default function RecordingConfigProfileScreen() {
       };
 
       await saveLocalRecordingConfigOverride(identitySession, nextConfig);
-      await syncBackgroundLocationTracking(recordingStatus, activeRecordingTripId, activeRecordingProfile);
+      await syncBackgroundLocationTracking(
+        recordingStatus,
+        activeRecordingTripId,
+        activeRecordingProfile,
+        activeRecordingMode,
+      );
       setConfig(nextConfig);
       setAccuracy(remoteTrackingProfile.accuracy);
       setDistanceInterval(String(remoteTrackingProfile.distanceInterval));

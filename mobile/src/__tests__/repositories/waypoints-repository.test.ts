@@ -150,6 +150,7 @@ describe("waypoints repository read models", () => {
         waypointLocalId: "waypoint-2",
       }),
     ]);
+    vi.mocked(loadTripPointsForTrip).mockResolvedValue([]);
 
     const model = await getWaypointScreenModel({
       tripLocalId: "trip-1",

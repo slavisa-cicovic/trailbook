@@ -10,9 +10,13 @@ import { recordRecordingNativeEvent } from "../recording/recording-native-events
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "./background-location.constants";
 
 export function getBackgroundTrackingProfile(
-  _recordingMode: RecordingMode,
+  recordingMode: RecordingMode,
   recordingProfile: RecordingProfile,
 ): RecordingProfile {
+  if (recordingMode === "auto") {
+    return DEFAULT_RECORDING_PROFILE;
+  }
+
   return recordingProfile;
 }
 
@@ -417,6 +421,7 @@ export async function syncBackgroundLocationTracking(
   status: "idle" | "recording" | "interrupted",
   activeTripId: string | null,
   profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
+  recordingMode: RecordingMode = profile,
 ): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
@@ -437,11 +442,12 @@ export async function syncBackgroundLocationTracking(
     return;
   }
 
-  const nextOptions = buildBackgroundTrackingOptions(profile);
+  const backgroundTrackingProfile = getBackgroundTrackingProfile(recordingMode, profile);
+  const nextOptions = buildBackgroundTrackingOptions(backgroundTrackingProfile);
 
   if (!started) {
-    console.warn("[Trailbook][background-sync] starting", { activeTripId, profile });
-    await startBackgroundLocationTrackingWithRetry(profile, undefined, activeTripId);
+    console.warn("[Trailbook][background-sync] starting", { activeTripId, profile: backgroundTrackingProfile });
+    await startBackgroundLocationTrackingWithRetry(backgroundTrackingProfile, undefined, activeTripId);
     return;
   }
 
@@ -451,14 +457,14 @@ export async function syncBackgroundLocationTracking(
     );
 
   if (!backgroundTrackingOptionsMatch(currentOptions, nextOptions)) {
-    console.warn("[Trailbook][background-sync] restarting-options", { activeTripId, profile });
+    console.warn("[Trailbook][background-sync] restarting-options", { activeTripId, profile: backgroundTrackingProfile });
     await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
     void recordRecordingNativeEvent({
       eventType: "background_tracking_restart_requested",
-      payload: { profile, reason: "options-changed" },
+      payload: { profile: backgroundTrackingProfile, reason: "options-changed" },
       tripLocalId: activeTripId,
     });
-    await startBackgroundLocationTrackingWithRetry(profile, undefined, activeTripId);
+    await startBackgroundLocationTrackingWithRetry(backgroundTrackingProfile, undefined, activeTripId);
   }
 }
 
