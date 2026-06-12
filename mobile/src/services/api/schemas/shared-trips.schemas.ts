@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const RecordingProfileSchema = z.enum(["walk", "bike", "drive", "boat", "plane"]);
+const RecordingProfileSchema = z.enum(["walk", "bike", "drive", "boat", "plane", "stationary"]);
 
 const WaypointCategorySchema = z.enum([
   "generic", "departure", "fuel", "border", "port", "ferry",

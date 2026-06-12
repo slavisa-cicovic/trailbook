@@ -130,6 +130,10 @@ function formatDateTime(value: string | null) {
 }
 
 function ProfileLabel({ profile }: { profile: UserTripOverview["trips"][number]["recordingProfile"] }) {
+  if (profile === "stationary") {
+    return <>Pause</>;
+  }
+
   return <>{profile.charAt(0).toUpperCase() + profile.slice(1)}</>;
 }
 

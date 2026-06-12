@@ -8,6 +8,9 @@ export const PLANE_PEAK_KMH = 250;
 export const BOAT_MIN_KMH = 12;
 export const BOAT_MAX_KMH = 35;
 export const STATIONARY_MAX_KMH = 2;
+export const STATIONARY_STABILITY_MS = 2 * 60 * 1000;
+export const STATIONARY_MAX_DISPLACEMENT_METERS = 35;
+export const STATIONARY_MAX_TRAVEL_DISTANCE_METERS = 60;
 
 // Stability windows (ms)
 export const WALK_STABILITY_MS = 60_000;

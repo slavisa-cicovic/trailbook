@@ -55,7 +55,7 @@ export interface UserTripOverview {
   trips: Array<{
     id: string;
     title: string;
-    recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+    recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane" | "stationary";
     startedAt: string;
     endedAt: string | null;
     updatedAt: string;
@@ -69,7 +69,7 @@ export interface UserTripDetail {
     id: string;
     title: string;
     description: string | null;
-    recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+    recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane" | "stationary";
     startedAt: string;
     endedAt: string | null;
     updatedAt: string;
@@ -93,7 +93,7 @@ export interface UserTripDetail {
   }>;
   segments: Array<{
     localId: string;
-    recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+    recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane" | "stationary";
     startedAt: string;
     endedAt: string | null;
     distanceMeters: number;

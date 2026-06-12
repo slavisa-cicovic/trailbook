@@ -5,8 +5,12 @@ import {
   AUTO_BATCH_MIN_WALK_RUN_MS,
   BOAT_STABILITY_MS,
   PLANE_STABILITY_MS,
+  STATIONARY_MAX_DISPLACEMENT_METERS,
   STATIONARY_MAX_KMH,
+  STATIONARY_MAX_TRAVEL_DISTANCE_METERS,
+  STATIONARY_STABILITY_MS,
   type AutoLocationPoint,
+  distanceMetersBetweenPoints,
   getPointTimeMs,
   getSpeedKmh,
 } from "./auto-recording.utils";
@@ -39,6 +43,8 @@ function getAutoBatchProfileMinRunMs(profile: RecordingProfile): number {
       return BOAT_STABILITY_MS;
     case "plane":
       return PLANE_STABILITY_MS;
+    case "stationary":
+      return STATIONARY_STABILITY_MS;
     default:
       return AUTO_BATCH_MIN_DRIVE_RUN_MS;
   }
@@ -50,8 +56,12 @@ function inferAutoBatchSampleProfile(
 ): RecordingProfile | null {
   const speedKmh = getSpeedKmh(previousPoint, point);
 
-  if (speedKmh === null || !Number.isFinite(speedKmh) || speedKmh <= STATIONARY_MAX_KMH) {
+  if (speedKmh === null || !Number.isFinite(speedKmh)) {
     return null;
+  }
+
+  if (speedKmh <= STATIONARY_MAX_KMH) {
+    return "stationary";
   }
 
   if (speedKmh >= 180) {
@@ -82,7 +92,38 @@ function isStableAutoBatchProfileRun(run: AutoBatchProfileRun): boolean {
     return false;
   }
 
-  return getRunDurationMs(run) >= getAutoBatchProfileMinRunMs(run.profile);
+  if (getRunDurationMs(run) < getAutoBatchProfileMinRunMs(run.profile)) {
+    return false;
+  }
+
+  if (run.profile !== "stationary") {
+    return true;
+  }
+
+  if (run.samples.length < 4) {
+    return false;
+  }
+
+  const firstSample = run.samples[0];
+  const lastSample = run.samples[run.samples.length - 1];
+
+  if (!firstSample || !lastSample) {
+    return false;
+  }
+
+  const displacementMeters = distanceMetersBetweenPoints(firstSample, lastSample);
+  const travelDistanceMeters = run.samples.reduce((distance, sample, index) => {
+    if (index === 0) {
+      return distance;
+    }
+
+    return distance + distanceMetersBetweenPoints(run.samples[index - 1]!, sample);
+  }, 0);
+
+  return (
+    displacementMeters <= STATIONARY_MAX_DISPLACEMENT_METERS &&
+    travelDistanceMeters <= STATIONARY_MAX_TRAVEL_DISTANCE_METERS
+  );
 }
 
 function buildAutoBatchProfileRuns(sortedSamples: AutoLocationPoint[]): AutoBatchProfileRun[] {

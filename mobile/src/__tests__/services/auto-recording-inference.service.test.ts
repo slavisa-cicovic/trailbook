@@ -33,6 +33,10 @@ function makePointsFromSpeeds(speedMsValues: number[]): AutoLocationPoint[] {
   return speedMsValues.map((speedMs, index) => pt(index * stepS, speedMs));
 }
 
+function makeStationaryPoints(speedMs = 0.4): AutoLocationPoint[] {
+  return Array.from({ length: 6 }, (_, index) => pt(index * 30, speedMs));
+}
+
 function freshMotion(
   type: MotionActivity["type"],
   confidence: MotionActivity["confidence"],
@@ -50,9 +54,9 @@ describe("inferAutoRecordingProfile", () => {
     expect(inferAutoRecordingProfile([pt(0, 1.2), pt(20, 1.2)], null)).toBeNull();
   });
 
-  it("returns null for stationary-only samples", () => {
-    // 0.4 m/s = 1.44 km/h ≤ STATIONARY_MAX_KMH (2) → not moving → all windows empty
-    expect(inferAutoRecordingProfile(makePoints(0.4), null)).toBeNull();
+  it("detects stationary from stable stationary-only samples", () => {
+    // 0.4 m/s = 1.44 km/h ≤ STATIONARY_MAX_KMH (2), stable for more than 2 min.
+    expect(inferAutoRecordingProfile(makeStationaryPoints(), null)).toBe("stationary");
   });
 
   it("detects walk from walk-speed samples", () => {
@@ -79,6 +83,12 @@ describe("inferAutoRecordingProfile", () => {
     const points = makePoints(1.2);
     const motion = freshMotion("drive", "high", points[points.length - 1]!);
     expect(inferAutoRecordingProfile(points, motion)).toBe("drive");
+  });
+
+  it("stationary GPS overrides stale or incorrect motion activity", () => {
+    const points = makeStationaryPoints();
+    const motion = freshMotion("drive", "high", points[points.length - 1]!);
+    expect(inferAutoRecordingProfile(points, motion)).toBe("stationary");
   });
 
   it("motion bike high confidence overrides walk-speed GPS", () => {

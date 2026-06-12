@@ -50,6 +50,7 @@ function normalizeRecordingMode(value: string | undefined): RecordingMode {
     case "drive":
     case "boat":
     case "plane":
+    case "stationary":
     case "auto":
       return value;
     default:

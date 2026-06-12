@@ -4,7 +4,7 @@ export interface SyncTripSegmentDto {
   createdAt: string;
   endedAt: string | null;
   localId: string;
-  recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+  recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane" | "stationary";
   startedAt: string;
   updatedAt: string;
 }
@@ -146,7 +146,7 @@ export interface SyncTripDiagnosticsDto {
   maxSilentGapMs?: number;
   platform: "android" | "ios" | "web" | "unknown";
   recentEvents: SyncTripDiagnosticsRecentEventDto[];
-  recordingMode: "walk" | "bike" | "drive" | "boat" | "plane" | "auto";
+  recordingMode: "walk" | "bike" | "drive" | "boat" | "plane" | "stationary" | "auto";
   rejectedByAccuracy: number;
   rejectedByImpliedSpeed: number;
   rejectedByJumpDistance: number;
@@ -166,7 +166,7 @@ export interface SyncTripDto {
   endedAt: string | null;
   localId: string;
   recordingConfig?: MobileRecordingConfigResponse | null;
-  recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+  recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane" | "stationary";
   batteryStartLevelPercent?: number | null;
   batteryStartState?: string | null;
   batteryEndLevelPercent?: number | null;

@@ -7,8 +7,16 @@ import {
   MOTION_ASSISTED_BIKE_STABILITY_MS,
   MOTION_ASSISTED_DRIVE_STABILITY_MS,
   PLANE_STABILITY_MS,
+  STATIONARY_MAX_DISPLACEMENT_METERS,
+  STATIONARY_MAX_KMH,
+  STATIONARY_MAX_TRAVEL_DISTANCE_METERS,
+  STATIONARY_STABILITY_MS,
   WALK_STABILITY_MS,
   type AutoLocationPoint,
+  distanceMetersBetweenPoints,
+  getPointTimeMs,
+  getSpeedKmh,
+  median,
 } from "./auto-recording.utils";
 import {
   inferAutoRecordingProfile,
@@ -45,6 +53,8 @@ function getAutoStabilityThresholdMs(recordingProfile: RecordingProfile): number
       return BOAT_STABILITY_MS;
     case "plane":
       return PLANE_STABILITY_MS;
+    case "stationary":
+      return STATIONARY_STABILITY_MS;
     default:
       return DRIVE_STABILITY_MS;
   }
@@ -84,6 +94,65 @@ function getNextEntitySyncStatus<T extends { syncStatus: "local-only" | "pending
   entity: T,
 ): T["syncStatus"] {
   return entity.syncStatus === "local-only" ? "local-only" : "pending-sync";
+}
+
+function getStationaryCandidateSince(
+  samples: AutoLocationPoint[],
+  fallbackRecordedAt: string,
+): string | null {
+  const sortedSamples = [...samples].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  const lastSample = sortedSamples[sortedSamples.length - 1] ?? null;
+
+  if (!lastSample) {
+    return null;
+  }
+
+  const lastRecordedAtMs = getPointTimeMs(lastSample);
+
+  if (!Number.isFinite(lastRecordedAtMs)) {
+    return null;
+  }
+
+  const windowStartMs = lastRecordedAtMs - STATIONARY_STABILITY_MS;
+  const windowSamples = sortedSamples.filter((sample) => getPointTimeMs(sample) >= windowStartMs);
+
+  if (windowSamples.length < 4) {
+    return null;
+  }
+
+  const speedSamples = windowSamples.reduce<number[]>((values, sample, index) => {
+    const previousSample = index > 0 ? windowSamples[index - 1] ?? null : null;
+    const speedKmh = getSpeedKmh(previousSample, sample);
+
+    if (speedKmh !== null && Number.isFinite(speedKmh)) {
+      values.push(speedKmh);
+    }
+
+    return values;
+  }, []);
+
+  if (speedSamples.length < 4 || median(speedSamples) > STATIONARY_MAX_KMH) {
+    return null;
+  }
+
+  const firstSample = windowSamples[0];
+  const displacementMeters = distanceMetersBetweenPoints(firstSample, lastSample);
+  const travelDistanceMeters = windowSamples.reduce((distance, sample, index) => {
+    if (index === 0) {
+      return distance;
+    }
+
+    return distance + distanceMetersBetweenPoints(windowSamples[index - 1], sample);
+  }, 0);
+
+  if (
+    displacementMeters > STATIONARY_MAX_DISPLACEMENT_METERS ||
+    travelDistanceMeters > STATIONARY_MAX_TRAVEL_DISTANCE_METERS
+  ) {
+    return null;
+  }
+
+  return firstSample?.recordedAt ?? fallbackRecordedAt;
 }
 
 function reassignAutoCandidateWindowToNextSegment(
@@ -206,18 +275,33 @@ export function applyAutoRecordingTransition(
     };
   }
 
-  if (recordingSession.autoCandidateProfile !== inferredProfile) {
+  const candidateSince =
+    inferredProfile === "stationary"
+      ? getStationaryCandidateSince(
+          rawTripPoints && rawTripPoints.length > 0 ? rawTripPoints : acceptedTripPoints,
+          recordedAt,
+        ) ?? recordedAt
+      : recordedAt;
+  const candidateSession =
+    recordingSession.autoCandidateProfile === inferredProfile
+      ? recordingSession
+      : updateRecordingAutoCandidate(recordingSession, inferredProfile, candidateSince);
+
+  if (
+    recordingSession.autoCandidateProfile !== inferredProfile &&
+    inferredProfile !== "stationary"
+  ) {
     return {
       changed: false,
-      session: updateRecordingAutoCandidate(recordingSession, inferredProfile, recordedAt),
+      session: candidateSession,
       tripPoints,
       tripSegments,
       waypoints,
     };
   }
 
-  const candidateSinceMs = recordingSession.autoCandidateSince
-    ? new Date(recordingSession.autoCandidateSince).getTime()
+  const candidateSinceMs = candidateSession.autoCandidateSince
+    ? new Date(candidateSession.autoCandidateSince).getTime()
     : Number.NaN;
   const recordedAtMs = new Date(recordedAt).getTime();
 
@@ -228,14 +312,14 @@ export function applyAutoRecordingTransition(
   ) {
     return {
       changed: false,
-      session: recordingSession,
+      session: candidateSession,
       tripPoints,
       tripSegments,
       waypoints,
     };
   }
 
-  const transitionAt = getClampedAutoTransitionAt(activeSegment, recordingSession.autoCandidateSince ?? recordedAt);
+  const transitionAt = getClampedAutoTransitionAt(activeSegment, candidateSession.autoCandidateSince ?? recordedAt);
   const closedSegments = closeActiveTripSegment(tripSegments, activeSegment.localId, transitionAt);
   const { nextSegment, tripSegments: stagedTripSegments } = startNextTripSegment(
     trip,
@@ -269,7 +353,7 @@ export function applyAutoRecordingTransition(
 
   return {
     changed: true,
-    session: updateRecordingSegment(recordingSession, nextSegment.localId, inferredProfile),
+    session: updateRecordingSegment(candidateSession, nextSegment.localId, inferredProfile),
     tripPoints: prunedState.tripPoints,
     tripSegments: prunedState.tripSegments,
     waypoints: prunedState.waypoints,

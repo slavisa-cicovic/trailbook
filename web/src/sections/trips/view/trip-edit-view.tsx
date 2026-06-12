@@ -30,7 +30,7 @@ import {
 } from "./trip-edit-helpers";
 import { TripEditMap } from "./trip-edit-map";
 
-const PROFILE_OPTIONS: UserTripDetail["trip"]["recordingProfile"][] = ["walk", "bike", "drive", "boat", "plane"];
+const PROFILE_OPTIONS: UserTripDetail["trip"]["recordingProfile"][] = ["walk", "bike", "drive", "boat", "plane", "stationary"];
 const WAYPOINT_CATEGORY_OPTIONS: UserTripDetail["waypoints"][number]["category"][] = [
   "generic",
   "departure",
@@ -50,6 +50,10 @@ function formatDistanceKm(distanceMeters: number) {
 }
 
 function formatProfile(value: UserTripDetail["trip"]["recordingProfile"]) {
+  if (value === "stationary") {
+    return "Pause";
+  }
+
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 

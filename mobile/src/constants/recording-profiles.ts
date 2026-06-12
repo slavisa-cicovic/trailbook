@@ -54,11 +54,19 @@ export const RECORDING_PROFILE_OPTIONS: RecordingProfileOption[] = [
     description: "Air travel",
     hint: "Best for flights and long-distance air segments.",
   },
+  {
+    value: "stationary",
+    label: "Pause",
+    description: "Stationary",
+    hint: "Automatically detected stop during an active recording.",
+  },
 ];
 
-export const CONFIGURABLE_RECORDING_PROFILE_OPTIONS: (RecordingProfileOption & { value: RecordingProfile })[] = RECORDING_PROFILE_OPTIONS.filter(
-  (option): option is RecordingProfileOption & { value: RecordingProfile } => option.value !== "auto",
-);
+export const CONFIGURABLE_RECORDING_PROFILE_OPTIONS: (RecordingProfileOption & { value: RecordingProfile })[] =
+  RECORDING_PROFILE_OPTIONS.filter(
+    (option): option is RecordingProfileOption & { value: RecordingProfile } =>
+      option.value !== "auto" && option.value !== "stationary",
+  );
 
 export function normalizeRecordingProfile(
   profile: RecordingProfile | LegacyRecordingProfile | null | undefined,
@@ -69,6 +77,7 @@ export function normalizeRecordingProfile(
     case "drive":
     case "boat":
     case "plane":
+    case "stationary":
       return profile;
     case "drive_city":
     case "drive_highway":
@@ -112,6 +121,8 @@ export function getRecordingProfileColor(profile: RecordingProfile): string {
       return "#1f8aa5";
     case "plane":
       return "#7b5bd6";
+    case "stationary":
+      return "#8a8173";
     default:
       return "#355035";
   }

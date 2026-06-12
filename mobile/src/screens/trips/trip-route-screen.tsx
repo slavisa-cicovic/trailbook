@@ -18,7 +18,7 @@ import ScreenLayout from "../../components/layout/screen-layout";
 import IconButton from "../../components/ui/icon-button";
 import { getRecordingProfileLabel } from "../../constants/recording-profiles";
 import { useFeatureFlags } from "../../core/hooks/use-feature-flags";
-import type { Trip, TripPoint, Waypoint } from "../../domain/trips";
+import type { RecordingProfile, Trip, TripPoint, Waypoint } from "../../domain/trips";
 import {
   finalizeEndedTripSegments,
   updateTripSegmentMode,
@@ -66,7 +66,7 @@ const mapTypeOptions: { label: string; value: TrailbookMapType }[] = [
 
 const EMPTY_TRIP_POINTS: TripPoint[] = [];
 
-type EditableMode = "bike" | "boat" | "drive" | "plane" | "walk";
+type EditableMode = RecordingProfile;
 
 function buildTripMapRegion(
   coordinates: { latitude: number; longitude: number }[],

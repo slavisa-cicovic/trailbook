@@ -68,6 +68,10 @@ function formatDistanceKm(distanceMeters: number) {
 }
 
 function formatProfile(value: UserTripDetail["trip"]["recordingProfile"]) {
+  if (value === "stationary") {
+    return "Pause";
+  }
+
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 

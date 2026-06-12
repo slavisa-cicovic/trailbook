@@ -146,6 +146,8 @@ function getMaxAccuracyMeters(recordingMode: RecordingProfile) {
       return 120;
     case "plane":
       return Number.POSITIVE_INFINITY;
+    case "stationary":
+      return Platform.OS === "android" ? 80 : 60;
     default:
       return 45;
   }
@@ -169,6 +171,8 @@ function getMaxJumpDistanceMeters(recordingMode: RecordingProfile) {
       return 5000;
     case "plane":
       return Number.POSITIVE_INFINITY;
+    case "stationary":
+      return 120;
     default:
       return 180;
   }
@@ -192,6 +196,8 @@ function getMaxImpliedSpeedKmh(recordingMode: RecordingProfile) {
       return 90;
     case "plane":
       return Number.POSITIVE_INFINITY;
+    case "stationary":
+      return 12;
     default:
       return 70;
   }
@@ -215,6 +221,8 @@ function getMinMovementMeters(recordingMode: RecordingProfile) {
       return 40;
     case "plane":
       return 150;
+    case "stationary":
+      return 35;
     default:
       return 10;
   }
@@ -659,4 +667,3 @@ export {
   recordTripPointDiagnostic,
   resetTripPointDiagnostics,
 } from "./trip-point-diagnostics.service";
-

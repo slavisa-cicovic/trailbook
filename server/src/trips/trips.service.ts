@@ -121,7 +121,7 @@ export class TripsService {
       id: string;
       title: string;
       description: string | null;
-      recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+      recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane" | "stationary";
       startedAt: Date;
       endedAt: Date | null;
       updatedAt: Date;
@@ -159,7 +159,7 @@ export class TripsService {
       createdAt: Date;
       description: string | null;
       endedAt: Date | null;
-      recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+      recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane" | "stationary";
       startedAt: Date;
       title: string;
       updatedAt: Date;
@@ -220,7 +220,7 @@ export class TripsService {
       segments: Array<{
         id: string;
         localSourceId: string;
-        recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane";
+        recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane" | "stationary";
         startedAt: Date;
         endedAt: Date | null;
         pointCount: number | null;

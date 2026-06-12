@@ -9,7 +9,9 @@ import {
   DRIVE_STABILITY_MS,
   MOTION_ASSISTED_BIKE_STABILITY_MS,
   MOTION_ASSISTED_DRIVE_STABILITY_MS,
+  STATIONARY_STABILITY_MS,
   WALK_STABILITY_MS,
+  type AutoLocationPoint,
 } from "../../services/recording/auto-recording.utils";
 
 vi.mock("../../services/recording/auto-recording-inference.service", () => ({
@@ -183,6 +185,16 @@ function makePoint(localId: string, segmentLocalId: string, recordedAt: string):
     syncStatus: "local-only",
     tripLocalId: "trip-1",
     userId: "user-1",
+  };
+}
+
+function makeRawPoint(offsetMs: number, speedMs: number): AutoLocationPoint {
+  return {
+    accuracy: 5,
+    latitude: 45 + (offsetMs / 1000) * 0.000001,
+    longitude: 19,
+    recordedAt: iso(offsetMs),
+    speed: speedMs,
   };
 }
 
@@ -368,6 +380,28 @@ describe("applyAutoRecordingTransition — transitions", () => {
     );
     expect(result.changed).toBe(true);
     expect(result.session.recordingProfile).toBe("walk");
+  });
+
+  it("transitions movement→stationary at the beginning of the stable stationary window", () => {
+    vi.mocked(inferAutoRecordingProfile).mockReturnValue("stationary");
+    const rawTripPoints = Array.from({ length: 6 }, (_, index) => makeRawPoint(index * 30_000, 0.4));
+    const session = makeSession({ recordingProfile: "bike" });
+
+    const result = applyAutoRecordingTransition(
+      session,
+      trip,
+      [makeSegment("bike")],
+      [],
+      [],
+      iso(STATIONARY_STABILITY_MS + 30_000),
+      null,
+      rawTripPoints,
+    );
+
+    expect(result.changed).toBe(true);
+    expect(result.session.recordingProfile).toBe("stationary");
+    expect(result.tripSegments.find((segment) => segment.localId === "seg-1")?.endedAt).toBe(iso(30_000));
+    expect(result.tripSegments.find((segment) => segment.localId === "segment-2")?.startedAt).toBe(iso(30_000));
   });
 
   it("does not transition when elapsed time is 1 ms below threshold", () => {

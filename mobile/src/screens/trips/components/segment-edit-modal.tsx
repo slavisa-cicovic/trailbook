@@ -4,7 +4,7 @@ import type { TripSegment } from "../../../domain/trips";
 import { getRecordingProfileLabel } from "../../../constants/recording-profiles";
 import Card from "../../../components/ui/card";
 
-const EDITABLE_MODES = ["walk", "bike", "drive", "boat", "plane"] as const;
+const EDITABLE_MODES = ["walk", "bike", "drive", "boat", "plane", "stationary"] as const;
 type EditableMode = (typeof EDITABLE_MODES)[number];
 
 interface Props {

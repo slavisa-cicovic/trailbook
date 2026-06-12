@@ -12,7 +12,10 @@ import {
   PLANE_MIN_KMH,
   PLANE_PEAK_KMH,
   PLANE_STABILITY_MS,
+  STATIONARY_MAX_DISPLACEMENT_METERS,
   STATIONARY_MAX_KMH,
+  STATIONARY_MAX_TRAVEL_DISTANCE_METERS,
+  STATIONARY_STABILITY_MS,
   WALK_MAX_KMH,
   type AutoLocationPoint,
   distanceMetersBetweenPoints,
@@ -135,12 +138,57 @@ function inferBoatFromTripPoints(tripPoints: AutoLocationPoint[]): boolean {
   );
 }
 
+function inferStationaryFromTripPoints(tripPoints: AutoLocationPoint[], speedSamples: TimedSpeedSample[]): boolean {
+  if (tripPoints.length < 4 || speedSamples.length < 4) {
+    return false;
+  }
+
+  const stationaryWindow = getStableWindow(speedSamples, STATIONARY_STABILITY_MS);
+
+  if (stationaryWindow.length < 4 || getWindowDurationMs(stationaryWindow) < STATIONARY_STABILITY_MS) {
+    return false;
+  }
+
+  const medianSpeed = median(stationaryWindow.map((sample) => sample.speedKmh));
+
+  if (medianSpeed > STATIONARY_MAX_KMH) {
+    return false;
+  }
+
+  const windowStartMs = stationaryWindow[0]?.recordedAtMs ?? Number.POSITIVE_INFINITY;
+  const windowPoints = tripPoints.filter((point) => getPointTimeMs(point) >= windowStartMs);
+  const firstPoint = windowPoints[0] ?? null;
+  const lastPoint = windowPoints[windowPoints.length - 1] ?? null;
+
+  if (!firstPoint || !lastPoint || windowPoints.length < 4) {
+    return false;
+  }
+
+  const displacementMeters = distanceMetersBetweenPoints(firstPoint, lastPoint);
+  const travelDistanceMeters = windowPoints.reduce((distance, point, index) => {
+    if (index === 0) {
+      return distance;
+    }
+
+    return distance + distanceMetersBetweenPoints(windowPoints[index - 1], point);
+  }, 0);
+
+  return (
+    displacementMeters <= STATIONARY_MAX_DISPLACEMENT_METERS &&
+    travelDistanceMeters <= STATIONARY_MAX_TRAVEL_DISTANCE_METERS
+  );
+}
+
 function inferLocationOnlyAutoRecordingProfile(tripPoints: AutoLocationPoint[]): RecordingProfile | null {
   const visibleTripPoints = [...tripPoints].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
   const speedSamples = buildTimedSpeedSamples(visibleTripPoints);
 
   if (speedSamples.length < 3) {
     return null;
+  }
+
+  if (inferStationaryFromTripPoints(visibleTripPoints, speedSamples)) {
+    return "stationary";
   }
 
   const walkWindow = getMovingStableWindow(speedSamples, ACTIVITY_INFERENCE_WINDOW_MS);
@@ -281,6 +329,10 @@ export function inferAutoRecordingProfile(
 
   if (locationProfile === "plane" || locationProfile === "boat") {
     return locationProfile;
+  }
+
+  if (locationProfile === "stationary") {
+    return "stationary";
   }
 
   const motionProfile = inferMotionGuidedProfile(tripPoints, motionActivity);

@@ -22,7 +22,7 @@ import {
   inferAutoRecordingProfile,
   type AutoLocationPoint,
 } from "../../services/recording/auto-recording.service";
-import type { RecordingSessionSummary, Trip, TripSegment } from "../../domain/trips";
+import type { RecordingProfile, RecordingSessionSummary, Trip, TripSegment } from "../../domain/trips";
 
 vi.mock("../../services/recording/recording-config.service", () => ({
   getRuntimePointFilterProfileConfig: vi.fn().mockReturnValue(null),
@@ -121,7 +121,7 @@ function makeSample(offsetSeconds: number, speedMs: number, lat: number): AutoLo
   };
 }
 
-function makeSession(profile: "walk" | "bike" | "drive" = "walk"): RecordingSessionSummary {
+function makeSession(profile: RecordingProfile = "walk"): RecordingSessionSummary {
   return {
     status: "recording",
     activeTripId: "trip-1",
@@ -170,7 +170,7 @@ function makeTrip(): Trip {
   };
 }
 
-function makeSegment(profile: "walk" | "bike" | "drive" = "walk"): TripSegment {
+function makeSegment(profile: RecordingProfile = "walk"): TripSegment {
   return {
     localId: "segment-1",
     serverId: null,
@@ -336,6 +336,16 @@ describe("buildAutoBatchProfileSections", () => {
     };
   }
 
+  function makeStationaryTimelineSample(offsetSeconds: number): AutoLocationPoint {
+    return {
+      accuracy: 5,
+      latitude: 45.014,
+      longitude: 19.811,
+      recordedAt: iso(offsetSeconds),
+      speed: 0,
+    };
+  }
+
   it("splits one offline batch into chronological profile sections", () => {
     const walkOut = Array.from({ length: 5 }, (_, index) => makeTimelineSample(index * 30, 1.4));
     const drive = Array.from({ length: 6 }, (_, index) => makeTimelineSample(150 + index * 30, 13.9));
@@ -349,14 +359,31 @@ describe("buildAutoBatchProfileSections", () => {
     expect(sections[2]?.startedAt).toBe(walkBack[0]?.recordedAt);
   });
 
-  it("keeps fallback profile when the batch has no stable movement run", () => {
-    const stationary = Array.from({ length: 8 }, (_, index) => makeTimelineSample(index * 30, 0));
+  it("detects stationary when the batch has a stable low-movement run", () => {
+    const stationary = Array.from({ length: 8 }, (_, index) => makeStationaryTimelineSample(index * 30));
 
     const sections = buildAutoBatchProfileSections(stationary, "walk");
 
     expect(sections).toHaveLength(1);
-    expect(sections[0]?.profile).toBe("walk");
+    expect(sections[0]?.profile).toBe("stationary");
     expect(sections[0]?.samples).toHaveLength(stationary.length);
+  });
+
+  it("splits walk-bike-stationary-walk into chronological sections", () => {
+    const walkOut = Array.from({ length: 5 }, (_, index) => makeTimelineSample(index * 30, 1.3));
+    const bike = Array.from({ length: 5 }, (_, index) => makeTimelineSample(150 + index * 30, 3.5));
+    const stationary = Array.from({ length: 6 }, (_, index) => makeStationaryTimelineSample(300 + index * 30));
+    const walkBack = Array.from({ length: 5 }, (_, index) => makeTimelineSample(480 + index * 30, 1.2));
+
+    const sections = buildAutoBatchProfileSections(
+      [...walkOut, ...bike, ...stationary, ...walkBack],
+      "walk",
+    );
+
+    expect(sections.map((section) => section.profile)).toEqual(["walk", "bike", "stationary", "walk"]);
+    expect(sections.map((section) => section.samples.length)).toEqual([5, 5, 6, 5]);
+    expect(sections[2]?.startedAt).toBe(stationary[0]?.recordedAt);
+    expect(sections[3]?.startedAt).toBe(walkBack[0]?.recordedAt);
   });
 
   it("starts with drive profile when batch opens at drive speed (no walk prefix)", () => {

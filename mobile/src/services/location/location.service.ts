@@ -102,6 +102,7 @@ export function getTrackingOptionsForProfile(profile: RecordingProfile): Trackin
 function getFallbackTrackingOptionsForProfile(profile: RecordingProfile): TrackingOptions {
   switch (profile) {
     case "walk":
+    case "stationary":
       return {
         accuracy: Location.Accuracy.High,
         distanceInterval: Platform.OS === "android" ? 5 : 12,
@@ -177,6 +178,7 @@ function getBackgroundActivityTypeForProfile(profile: RecordingProfile): Locatio
     case "bike":
       return Location.LocationActivityType.OtherNavigation;
     case "walk":
+    case "stationary":
     default:
       return Location.LocationActivityType.Fitness;
   }

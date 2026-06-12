@@ -9,7 +9,7 @@ export type SyncStatus = "local-only" | "pending-sync" | "synced" | "sync-error"
 export type RecordingStatus = "idle" | "recording" | "interrupted";
 export type TripStatus = "active" | "paused" | "ended";
 export type WaypointAttachmentType = "photo";
-export type RecordingProfile = "walk" | "bike" | "drive" | "boat" | "plane";
+export type RecordingProfile = "walk" | "bike" | "drive" | "boat" | "plane" | "stationary";
 export type RecordingMode = RecordingProfile | "auto";
 export type WaypointCategory =
   | "generic"

@@ -126,6 +126,8 @@ function getNextProfileColor(profile: DraftTripEdit["trip"]["recordingProfile"])
       return "#138d75";
     case "plane":
       return "#7d3c98";
+    case "stationary":
+      return "#8a8173";
     default:
       return "#275f3b";
   }
