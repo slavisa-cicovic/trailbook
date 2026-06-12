@@ -34,10 +34,6 @@ vi.mock("expo-task-manager", () => ({
   isAvailableAsync: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock("../../services/recording/recording-config.service", () => ({
-  getRuntimeTrackingProfileConfig: vi.fn().mockReturnValue(null),
-}));
-
 vi.mock("../../services/recording/recording-native-events.service", () => ({
   recordRecordingNativeEvent: vi.fn().mockResolvedValue(undefined),
 }));

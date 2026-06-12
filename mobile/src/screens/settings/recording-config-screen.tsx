@@ -11,12 +11,10 @@ import {
 } from "../../constants/recording-profiles";
 import type { CachedMobileRecordingConfig, MobileRecordingConfig, RecordingConfigPlatform } from "../../domain/recording-config";
 import type { RecordingProfile } from "../../domain/trips";
-import { syncBackgroundLocationTracking } from "../../services/location/location.service";
 import {
   loadEditableRecordingConfig,
   resetRecordingConfigToServerDefaults,
 } from "../../services/recording/recording-config.service";
-import { useRecordingStore } from "../../state/recording-store";
 import { useSessionStore } from "../../state/session-store";
 import { useThemeStore } from "../../state/theme-store";
 
@@ -47,10 +45,6 @@ export default function RecordingConfigScreen() {
   const themeMode = useThemeStore((state) => state.mode);
   const systemColorScheme = useColorScheme();
   const theme = getAppTheme(resolveAppThemeMode(themeMode, systemColorScheme));
-  const recordingStatus = useRecordingStore((state) => state.session.status);
-  const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
-  const activeRecordingMode = useRecordingStore((state) => state.session.recordingMode);
-  const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
   const [record, setRecord] = useState<CachedMobileRecordingConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [resetBusy, setResetBusy] = useState(false);
@@ -80,12 +74,6 @@ export default function RecordingConfigScreen() {
 
     try {
       await resetRecordingConfigToServerDefaults(identitySession);
-      await syncBackgroundLocationTracking(
-        recordingStatus,
-        activeRecordingTripId,
-        activeRecordingProfile,
-        activeRecordingMode,
-      );
       await reloadConfig();
       Alert.alert("Recording config", "Recording config reset to server defaults.");
     } catch (error) {

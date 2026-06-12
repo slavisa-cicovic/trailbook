@@ -26,7 +26,6 @@ import type { RecordingProfile, RecordingSessionSummary, Trip, TripSegment } fro
 
 vi.mock("../../services/recording/recording-config.service", () => ({
   getRuntimePointFilterProfileConfig: vi.fn().mockReturnValue(null),
-  getRuntimeTrackingProfileConfig: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("../../services/trip-points/trip-point-diagnostics.service", () => ({

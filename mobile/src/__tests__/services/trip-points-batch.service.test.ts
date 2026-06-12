@@ -5,7 +5,6 @@ import { appendTripPointIfUseful } from "../../services/trip-points/trip-points.
 
 vi.mock("../../services/recording/recording-config.service", () => ({
   getRuntimePointFilterProfileConfig: vi.fn().mockReturnValue(null),
-  getRuntimeTrackingProfileConfig: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("../../services/trip-points/trip-point-diagnostics.service", () => ({

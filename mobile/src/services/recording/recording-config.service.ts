@@ -128,20 +128,6 @@ export function getActiveRecordingConfigSnapshot(): MobileRecordingConfig | null
   return activeRecordingConfig ? sanitizeMobileRecordingConfig(activeRecordingConfig) : null;
 }
 
-export function getRuntimeTrackingProfileConfig(
-  profile: RecordingProfile,
-  platform: RecordingConfigPlatform = Platform.OS === "ios" ? "ios" : "android",
-): TrackingProfileConfig | null {
-  if (!activeRecordingConfig) {
-    return null;
-  }
-
-  const platformProfiles = activeRecordingConfig.profiles[platform];
-  const defaultProfiles = activeRecordingConfig.profiles.default;
-
-  return platformProfiles?.[profile] ?? defaultProfiles?.[profile] ?? null;
-}
-
 export function getRuntimePointFilterProfileConfig(
   profile: RecordingProfile,
   platform: RecordingConfigPlatform = Platform.OS === "ios" ? "ios" : "android",

@@ -9,12 +9,10 @@ import { useFeatureFlags } from "../../core/hooks/use-feature-flags";
 import ScreenLayout from "../../components/layout/screen-layout";
 import { showDemoModeInfoDialog } from "../../services/demo/demo-mode.service";
 import { logoutFromBackend } from "../../services/auth/mobile-auth.service";
-import { syncBackgroundLocationTracking } from "../../services/location/location.service";
 import { syncResolvedRecordingConfig } from "../../services/recording/recording-config.service";
 import { restoreOwnedTripsFromServer } from "../../services/trips/trip-restore.service";
 import { syncTripStatsToServer } from "../../services/trips/server-trip-sharing.service";
 import { recoverSegmentlessTripSections } from "../../services/trip-segments/trip-segments.service";
-import { useRecordingStore } from "../../state/recording-store";
 import { setTripPauses } from "../../state/trip-pauses-store";
 import { setTripPointsInMemory } from "../../state/trip-points-store";
 import { setTripGroupMembers, useTripGroupMembersStore } from "../../state/trip-group-members-store";
@@ -155,10 +153,6 @@ export default function SettingsScreen() {
   const tripGroupMembers = useTripGroupMembersStore((state) => state.tripGroupMembers);
   const waypoints = useWaypointsStore((state) => state.waypoints);
   const waypointAttachments = useWaypointAttachmentsStore((state) => state.attachments);
-  const recordingStatus = useRecordingStore((state) => state.session.status);
-  const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
-  const activeRecordingMode = useRecordingStore((state) => state.session.recordingMode);
-  const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
   const themeMode = useThemeStore((state) => state.mode);
   const systemColorScheme = useColorScheme();
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
@@ -271,12 +265,6 @@ export default function SettingsScreen() {
 
     try {
       await syncResolvedRecordingConfig(identitySession);
-      await syncBackgroundLocationTracking(
-        recordingStatus,
-        activeRecordingTripId,
-        activeRecordingProfile,
-        activeRecordingMode,
-      );
       setRecordingConfigMessage("Recording config updated.");
     } catch (error) {
       setRecordingConfigMessage(getRecordingConfigErrorMessage(error));
