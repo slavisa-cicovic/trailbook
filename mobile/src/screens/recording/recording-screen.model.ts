@@ -91,7 +91,6 @@ export function useRecordingScreenModel(input: UseRecordingScreenModelInput) {
         attachment.type === "photo",
     ),
   }));
-  const canChangeMode = recordingSession.activeTripId !== null;
   const canStartRecording = input.recordingDraft.title.trim().length > 0 && permissions.permissionsReady;
   const canSaveWaypoint = input.waypointDraft.title.trim().length > 0;
   const draftPhotoCardWidth = Math.min(Math.max(input.screenWidth * 0.5, 170), 230);
@@ -140,7 +139,6 @@ export function useRecordingScreenModel(input: UseRecordingScreenModelInput) {
     activeTrip,
     activeTripCount,
     activeTripPoints,
-    canChangeMode,
     canSaveWaypoint,
     canStartRecording,
     currentUserTripPauses,

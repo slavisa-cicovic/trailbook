@@ -139,10 +139,15 @@ export async function startRecordingFromScreenController(
     return { ok: false, reason: "no_identity" };
   }
 
+  const recordingDraft: RecordingDraftInput = {
+    ...input.recordingDraft,
+    recordingMode: "auto",
+  };
+
   logStep("pressed", {
     backgroundLocationPermissionGranted: input.backgroundLocationPermissionGranted,
     backgroundRecordingSupported: input.backgroundRecordingSupported,
-    recordingMode: input.recordingDraft.recordingMode,
+    recordingMode: recordingDraft.recordingMode,
   });
 
   if (isDemoSession(input.activeIdentitySession)) {
@@ -184,14 +189,14 @@ export async function startRecordingFromScreenController(
   }
 
   const startedAt = new Date().toISOString();
-  const concreteRecordingProfile = getConcreteRecordingProfileForMode(input.recordingDraft.recordingMode);
+  const concreteRecordingProfile = getConcreteRecordingProfileForMode(recordingDraft.recordingMode);
   const batterySnapshot = await getBatterySnapshot();
 
   logStep("pre-create", { concreteRecordingProfile });
   const nextTrip = createTripForRecording(
     input.activeIdentitySession,
     startedAt,
-    input.recordingDraft,
+    recordingDraft,
     batterySnapshot,
   );
   resetPendingTripPointContinuity(nextTrip.localId);
@@ -203,7 +208,7 @@ export async function startRecordingFromScreenController(
     nextTrip.localId,
     nextSegment.localId,
     startedAt,
-    input.recordingDraft.recordingMode,
+    recordingDraft.recordingMode,
     concreteRecordingProfile,
   );
 
@@ -217,7 +222,7 @@ export async function startRecordingFromScreenController(
 
     try {
       const backgroundTrackingProfile = getBackgroundTrackingProfile(
-        input.recordingDraft.recordingMode,
+        recordingDraft.recordingMode,
         concreteRecordingProfile,
       );
 
@@ -248,9 +253,7 @@ export async function startRecordingFromScreenController(
       throw error;
     }
 
-    if (input.recordingDraft.recordingMode === "auto") {
-      void ensureMotionActivityUpdatesForAutoMode();
-    }
+    void ensureMotionActivityUpdatesForAutoMode();
 
     logStep("done", { tripLocalId: nextTrip.localId });
     return { ok: true, tripLocalId: nextTrip.localId };

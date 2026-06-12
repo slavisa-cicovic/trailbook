@@ -29,7 +29,6 @@ import WaypointPhotoDraftCarousel from "../../components/waypoints/waypoint-phot
 import {
   DEFAULT_WAYPOINT_CATEGORY,
 } from "../../constants/waypoint-categories";
-import type { RecordingMode } from "../../domain/trips";
 import type { TrailbookMapType } from "../trips/components/trip-route-map";
 import {
   getBackgroundLocationTrackingDiagnosticState,
@@ -47,12 +46,9 @@ import {
 } from "../../services/motion/motion-activity.service";
 import {
   type RecordingDraftInput,
-  updateRecordingSegment,
 } from "../../services/recording/recording.service";
 import {
-  closeActiveTripSegment,
   getOpenTripSegmentForTrip,
-  startNextTripSegment,
 } from "../../services/trip-segments/trip-segments.service";
 import { getVisibleTripPausesForTrip } from "../../services/trip-pauses/trip-pauses.service";
 import {
@@ -83,10 +79,6 @@ import {
   type WaypointDraftInput,
 } from "../../services/waypoints/waypoints.service";
 import {
-  setRecordingSession,
-} from "../../state/recording-store";
-import { setTripSegments } from "../../state/trip-segments-store";
-import {
   mergeTripPointsInMemory,
   setTripPointsInMemory,
 } from "../../state/trip-points-store";
@@ -104,7 +96,6 @@ import {
   stopRecordingFromScreenController,
 } from "./recording-screen.controller";
 import RecordingPhotoViewerModal from "./components/recording-photo-viewer-modal";
-import RecordingProfileModal from "./components/recording-profile-modal";
 import RecordingStartModal from "./components/recording-start-modal";
 
 const LOCATION_SILENT_GAP_WARNING_MS = 2 * 60 * 1000;
@@ -122,7 +113,6 @@ export default function RecordingScreen() {
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
   const [startModalVisible, setStartModalVisible] = useState(false);
   const [startRecordingBusy, setStartRecordingBusy] = useState(false);
-  const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [waypointModalVisible, setWaypointModalVisible] = useState(false);
   const [sessionMenuVisible, setSessionMenuVisible] = useState(false);
   const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
@@ -141,7 +131,6 @@ export default function RecordingScreen() {
   });
   const {
     activeIdentitySession,
-    activeRecordingMode,
     activeRecordingProfile,
     activeRecordingProfileLabel,
     activeRecordingRouteModel,
@@ -153,7 +142,6 @@ export default function RecordingScreen() {
     backgroundRecordingSupported,
     batteryOptimizationIgnored,
     batteryOptimizationSupported,
-    canChangeMode,
     canSaveWaypoint,
     canStartRecording,
     currentUserTripPauses,
@@ -631,77 +619,6 @@ export default function RecordingScreen() {
     }
   }
 
-  async function handleSelectRecordingProfile(mode: RecordingMode) {
-    if (!recordingSession.activeTripId || !activeTrip) {
-      setRecordingDraft((current) => ({
-        ...current,
-        recordingMode: mode,
-      }));
-      setProfileModalVisible(false);
-      return;
-    }
-
-    if (!recordingSession.activeSegmentId) {
-      return;
-    }
-
-    if (mode === "auto") {
-      await setRecordingSession({
-        ...recordingSession,
-        recordingMode: "auto",
-        autoCandidateProfile: null,
-        autoCandidateSince: null,
-      });
-      await ensureMotionActivityUpdatesForAutoMode();
-      if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
-        await restartBackgroundLocationTracking(
-          getBackgroundTrackingProfile("auto", recordingSession.recordingProfile),
-        );
-      }
-      setProfileModalVisible(false);
-      return;
-    }
-
-    if (recordingSession.recordingMode === "auto" && recordingSession.recordingProfile === mode) {
-      await setRecordingSession({
-        ...recordingSession,
-        recordingMode: mode,
-        autoCandidateProfile: null,
-        autoCandidateSince: null,
-      });
-      await stopMotionActivityUpdates();
-      if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
-        await restartBackgroundLocationTracking(mode);
-      }
-      setProfileModalVisible(false);
-      return;
-    }
-
-    const changedAt = new Date().toISOString();
-    const closedSegments = closeActiveTripSegment(
-      tripSegments,
-      recordingSession.activeSegmentId,
-      changedAt,
-    );
-    const { nextSegment, tripSegments: nextTripSegments } = startNextTripSegment(
-      activeTrip,
-      closedSegments,
-      mode,
-      changedAt,
-    );
-
-    await setTripSegments(nextTripSegments);
-    await setRecordingSession({
-      ...updateRecordingSegment(recordingSession, nextSegment.localId, mode),
-      recordingMode: mode,
-    });
-    await stopMotionActivityUpdates();
-    if (backgroundRecordingSupported === true && backgroundLocationPermissionGranted === true) {
-      await restartBackgroundLocationTracking(mode);
-    }
-    setProfileModalVisible(false);
-  }
-
   async function handleSaveWaypoint() {
     if (!activeTrip) {
       Alert.alert("No active route", "Start recording before adding a note to the route.");
@@ -1141,20 +1058,12 @@ export default function RecordingScreen() {
         onRemove={(localId) => void handleRemoveWaypointPhoto(localId)}
       />
 
-      <RecordingProfileModal
-        activeMode={activeRecordingMode}
-        visible={profileModalVisible}
-        onClose={() => setProfileModalVisible(false)}
-        onSelectMode={(mode) => void handleSelectRecordingProfile(mode)}
-      />
-
       <RecordingStartModal
         canStart={canStartRecording}
         draft={recordingDraft}
         starting={startRecordingBusy}
         visible={startModalVisible}
         onChangeDraftDescription={(description) => setRecordingDraft((current) => ({ ...current, description }))}
-        onChangeDraftMode={(mode) => setRecordingDraft((current) => ({ ...current, recordingMode: mode }))}
         onChangeDraftTitle={(title) => setRecordingDraft((current) => ({ ...current, title }))}
         onClose={() => setStartModalVisible(false)}
         onStart={() => void handleStartRecording()}
@@ -1298,17 +1207,6 @@ export default function RecordingScreen() {
                   <Text style={styles.metaLine}>Active trips: {String(activeTripCount)}</Text>
                   <Text style={styles.metaLine}>Paused trips: {String(pausedTrips.length)}</Text>
                   <View style={styles.inlineActions}>
-                    {canChangeMode ? (
-                      <Pressable
-                        onPress={() => {
-                          closeSessionMenu();
-                          setProfileModalVisible(true);
-                        }}
-                        style={styles.modeButton}
-                      >
-                        <Text style={styles.modeButtonText}>Change mode</Text>
-                      </Pressable>
-                    ) : null}
                     {activeTrip && recordingSession.status === "recording" ? (
                       <Pressable
                         onPress={() => void handlePauseRecording()}
@@ -1846,17 +1744,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
     marginTop: 6,
-  },
-  modeButton: {
-    borderRadius: 999,
-    backgroundColor: "#243224",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  modeButtonText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#fffdf8",
   },
   noteButton: {
     borderRadius: 999,
