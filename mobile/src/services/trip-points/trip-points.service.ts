@@ -24,6 +24,12 @@ interface PendingContinuityCandidate {
   recoveryAcceptanceReason: "accepted-early-session" | "accepted-after-resume" | null;
 }
 
+export interface RouteGapBreakCandidate {
+  distanceMeters: number;
+  elapsedMs: number;
+  previousPoint: TripPoint;
+}
+
 const pendingContinuityByTripLocalId = new Map<string, PendingContinuityCandidate>();
 
 function toRadians(value: number): number {
@@ -446,6 +452,32 @@ export function getVisibleTripPointsForTrip(tripPoints: TripPoint[], tripLocalId
   return tripPoints
     .filter((tripPoint) => tripPoint.tripLocalId === tripLocalId)
     .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+}
+
+export function getRouteGapBreakCandidate(
+  tripPoints: TripPoint[],
+  nextTripPoint: TripPoint,
+  recordingMode: RecordingProfile,
+): RouteGapBreakCandidate | null {
+  const previousPoint = [...tripPoints]
+    .reverse()
+    .find((tripPoint) => tripPoint.tripLocalId === nextTripPoint.tripLocalId);
+
+  if (!previousPoint || !isLongGap(previousPoint, nextTripPoint)) {
+    return null;
+  }
+
+  const distanceMeters = calculateDistanceBetweenPoints(previousPoint, nextTripPoint);
+
+  if (distanceMeters <= getMaxJumpDistanceMeters(recordingMode)) {
+    return null;
+  }
+
+  return {
+    distanceMeters,
+    elapsedMs: getElapsedMs(previousPoint, nextTripPoint),
+    previousPoint,
+  };
 }
 
 export function groupVisibleTripPointsByTripId(tripPoints: TripPoint[]): Map<string, TripPoint[]> {

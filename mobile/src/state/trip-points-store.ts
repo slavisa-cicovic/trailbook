@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import type { TripPoint } from "../domain/trips";
-import { replaceTripPointsForTrip } from "../storage/trip-points-storage";
+import { saveTripPoints } from "../storage/trip-points-storage";
 
 interface TripPointsState {
   hydrated: boolean;
@@ -59,5 +59,5 @@ export async function mergeTripPoints(tripPoints: TripPoint[]): Promise<void> {
   );
 
   useTripPointsStore.setState({ hydrated: true, tripPoints: nextTripPoints });
-  await replaceTripPointsForTrip(tripLocalId, nextTripPoints);
+  await saveTripPoints(nextTripPoints, previousTripPoints);
 }

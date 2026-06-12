@@ -5,6 +5,7 @@ import type { LocationCallbackSource } from "../trip-points/trip-point-diagnosti
 import {
   appendTripPointIfUseful,
   createTripPointForLocation,
+  getRouteGapBreakCandidate,
   resetPendingTripPointContinuity,
 } from "../trip-points/trip-points.service";
 import { calculateTripDistanceMeters } from "../trips/trip-distance.service";
@@ -66,6 +67,35 @@ function toSnapshot(rawEvent: RawLocationEvent): CurrentLocationSnapshot {
 
 function getSegmentLocalId(tripLocalId: string, segmentLocalIdPrefix: string, index: number) {
   return `${segmentLocalIdPrefix}-${tripLocalId}-${index + 1}`;
+}
+
+function createReplaySegment(input: {
+  endedAt: string | null;
+  index: number;
+  outputSyncStatus: TripPoint["syncStatus"];
+  profile: RecordingProfile;
+  segmentLocalIdPrefix: string;
+  startedAt: string;
+  trip: Trip;
+  updatedAt: string;
+}): TripSegment {
+  return {
+    createdAt: input.startedAt,
+    deviceId: input.trip.deviceId,
+    distanceMeters: 0,
+    durationMs: 0,
+    endedAt: input.endedAt,
+    localId: getSegmentLocalId(input.trip.localId, input.segmentLocalIdPrefix, input.index),
+    pointCount: 0,
+    recordingProfile: input.profile,
+    serverId: null,
+    startedAt: input.startedAt,
+    statsUpdatedAt: input.startedAt,
+    syncStatus: input.outputSyncStatus,
+    tripLocalId: input.trip.localId,
+    updatedAt: input.updatedAt,
+    userId: input.trip.userId,
+  };
 }
 
 function getElapsedMs(startedAt: string, endedAt: string | null): number {
@@ -191,32 +221,57 @@ export function processRawLocationEventsForTrip(
   let nextTripPoints: TripPoint[] = [];
   let lastSequentialTripPoint: TripPoint | null = null;
   const nextTripSegments: TripSegment[] = [];
+  let nextSegmentIndex = 0;
 
   resetPendingTripPointContinuity(input.trip.localId);
 
   try {
     sections.forEach((section, index) => {
-      const segment: TripSegment = {
-        createdAt: section.startedAt,
-        deviceId: input.trip.deviceId,
-        distanceMeters: 0,
-        durationMs: 0,
+      let segment = createReplaySegment({
         endedAt: index === sections.length - 1 ? input.trip.endedAt ?? section.endedAt : section.endedAt,
-        localId: getSegmentLocalId(input.trip.localId, segmentLocalIdPrefix, index),
-        pointCount: 0,
-        recordingProfile: section.profile,
-        serverId: null,
+        index: nextSegmentIndex,
+        outputSyncStatus,
+        profile: section.profile,
+        segmentLocalIdPrefix,
         startedAt: index === 0 ? firstRawRecordedAt ?? section.startedAt : section.startedAt,
-        statsUpdatedAt: section.startedAt,
-        syncStatus: outputSyncStatus,
-        tripLocalId: input.trip.localId,
+        trip: input.trip,
         updatedAt: section.endedAt,
-        userId: input.trip.userId,
-      };
+      });
+      nextSegmentIndex += 1;
 
       nextTripSegments.push(segment);
 
       for (const snapshot of section.samples) {
+        const routeGapCandidate = createTripPointForLocation(input.trip, segment.localId, snapshot);
+        const routeGap = getRouteGapBreakCandidate(nextTripPoints, routeGapCandidate, section.profile);
+
+        if (routeGap) {
+          const currentSegmentIndex = nextTripSegments.findIndex(
+            (candidateSegment) => candidateSegment.localId === segment.localId,
+          );
+
+          if (currentSegmentIndex !== -1) {
+            nextTripSegments[currentSegmentIndex] = {
+              ...nextTripSegments[currentSegmentIndex],
+              endedAt: routeGap.previousPoint.recordedAt,
+              updatedAt: routeGap.previousPoint.recordedAt,
+            };
+          }
+
+          segment = createReplaySegment({
+            endedAt: index === sections.length - 1 ? input.trip.endedAt ?? section.endedAt : section.endedAt,
+            index: nextSegmentIndex,
+            outputSyncStatus,
+            profile: section.profile,
+            segmentLocalIdPrefix,
+            startedAt: snapshot.recordedAt,
+            trip: input.trip,
+            updatedAt: section.endedAt,
+          });
+          nextSegmentIndex += 1;
+          nextTripSegments.push(segment);
+        }
+
         const candidateTripPoint = createTripPointForLocation(input.trip, segment.localId, snapshot);
         const appendedTripPoints = appendTripPointIfUseful(
           nextTripPoints,

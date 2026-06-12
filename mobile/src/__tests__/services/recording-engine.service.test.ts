@@ -7,8 +7,6 @@ import { appendDiagnosticEvent } from "../../repositories/diagnostic-events-repo
 import { insertRawLocationEvents, updateRawLocationEventProcessingResults } from "../../storage/raw-location-events-storage";
 import {
   loadTripPointsForTrip,
-  refreshTripSegmentStatsForTripLocalId,
-  refreshTripStatsForTripLocalId,
 } from "../../storage/trip-points-storage";
 
 vi.mock("expo-crypto", () => ({
@@ -139,6 +137,7 @@ describe("recording engine", () => {
 
     expect(insertRawLocationEvents).toHaveBeenCalledTimes(1);
     expect(processRecordedLocationSnapshots).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(processRecordedLocationSnapshots).mock.calls[0]?.[0]).toHaveLength(2);
     expect(updateRawLocationEventProcessingResults).toHaveBeenCalledTimes(1);
     expect(vi.mocked(insertRawLocationEvents).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(processRecordedLocationSnapshots).mock.invocationCallOrder[0],
@@ -180,9 +179,6 @@ describe("recording engine", () => {
         segmentLocalId: null,
       },
     ]);
-    expect(refreshTripSegmentStatsForTripLocalId).toHaveBeenCalledWith("trip-1");
-    expect(refreshTripStatsForTripLocalId).toHaveBeenCalledWith("trip-1");
-
     await new Promise((resolve) => {
       setTimeout(resolve, 0);
     });
@@ -225,7 +221,5 @@ describe("recording engine", () => {
 
     expect(processRecordedLocationSnapshots).toHaveBeenCalledTimes(1);
     expect(updateRawLocationEventProcessingResults).not.toHaveBeenCalled();
-    expect(refreshTripSegmentStatsForTripLocalId).not.toHaveBeenCalled();
-    expect(refreshTripStatsForTripLocalId).not.toHaveBeenCalled();
   });
 });

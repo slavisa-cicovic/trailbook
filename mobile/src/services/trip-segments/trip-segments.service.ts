@@ -49,7 +49,9 @@ const AUTO_MIN_DRIVE_SEGMENT_MS = 5 * 60 * 1000;
 const AUTO_SHORT_DRIVE_KEEP_MIN_DISTANCE_METERS = 500;
 const AUTO_SHORT_DRIVE_KEEP_MIN_DURATION_MS = 90 * 1000;
 const AUTO_SHORT_DRIVE_KEEP_MIN_POINT_COUNT = 4;
-const AUTO_BOOTSTRAP_WALK_MAX_DISTANCE_METERS = 5;
+const AUTO_BOOTSTRAP_WALK_MAX_DISTANCE_METERS = 120;
+const AUTO_BOOTSTRAP_WALK_MAX_DURATION_MS = 2.5 * 60 * 1000;
+const AUTO_BOOTSTRAP_WALK_MAX_POINT_COUNT = 2;
 
 function getNextSyncStatus(currentStatus: TripSegment["syncStatus"]): TripSegment["syncStatus"] {
   return currentStatus === "local-only" ? "local-only" : "pending-sync";
@@ -740,8 +742,20 @@ export function removeInitialAutoBootstrapWalkSegment(
     firstSegmentPoints.length > 1
       ? calculateTripDistanceMeters(firstSegmentPoints)
       : firstSegment.distanceMeters ?? 0;
+  const firstSegmentDurationMs = getSegmentDurationMs(firstSegment);
+  const hasFirstSegmentWaypoint = waypoints.some(
+    (waypoint) =>
+      waypoint.tripLocalId === tripLocalId &&
+      waypoint.deletedAt === null &&
+      waypoint.segmentLocalId === firstSegment.localId,
+  );
 
-  if (firstSegmentDistanceMeters > AUTO_BOOTSTRAP_WALK_MAX_DISTANCE_METERS) {
+  if (
+    hasFirstSegmentWaypoint ||
+    firstSegmentPoints.length > AUTO_BOOTSTRAP_WALK_MAX_POINT_COUNT ||
+    firstSegmentDurationMs > AUTO_BOOTSTRAP_WALK_MAX_DURATION_MS ||
+    firstSegmentDistanceMeters > AUTO_BOOTSTRAP_WALK_MAX_DISTANCE_METERS
+  ) {
     return {
       tripSegments,
       tripPoints,

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { TripPoint, TripSegment } from "../../domain/trips";
+import type { TripPoint, TripSegment, Waypoint } from "../../domain/trips";
 
 vi.mock("../../services/trip-points/trip-points.service", () => ({
   getVisibleTripPointsForTrip: vi.fn(
@@ -27,9 +27,14 @@ vi.mock("../../services/trips/trips-management.service", () => ({
 let normalizeAutoClosedTripSegment: typeof import(
   "../../services/trip-segments/trip-segments.service"
 ).normalizeAutoClosedTripSegment;
+let removeInitialAutoBootstrapWalkSegment: typeof import(
+  "../../services/trip-segments/trip-segments.service"
+).removeInitialAutoBootstrapWalkSegment;
 
 beforeAll(async () => {
-  ({ normalizeAutoClosedTripSegment } = await import("../../services/trip-segments/trip-segments.service"));
+  ({ normalizeAutoClosedTripSegment, removeInitialAutoBootstrapWalkSegment } = await import(
+    "../../services/trip-segments/trip-segments.service"
+  ));
 });
 
 const BASE_MS = Date.UTC(2026, 5, 12, 8, 0, 0);
@@ -81,6 +86,26 @@ function point(localId: string, segmentLocalId: string, minutes: number, latitud
   };
 }
 
+function waypoint(localId: string, segmentLocalId: string, minutes: number): Waypoint {
+  return {
+    category: "generic",
+    createdAt: iso(minutes),
+    deletedAt: null,
+    deviceId: "device-1",
+    latitude: 45,
+    localId,
+    longitude: 19,
+    note: null,
+    segmentLocalId,
+    serverId: null,
+    syncStatus: "local-only",
+    title: "Waypoint",
+    tripLocalId: "trip-1",
+    updatedAt: iso(minutes),
+    userId: "user-1",
+  };
+}
+
 describe("normalizeAutoClosedTripSegment", () => {
   it("keeps short drive segments when actual points contain enough distance evidence", () => {
     const tripSegments = [
@@ -113,5 +138,48 @@ describe("normalizeAutoClosedTripSegment", () => {
     const result = normalizeAutoClosedTripSegment(tripSegments, tripPoints, [], "trip-1", iso(12));
 
     expect(result.tripSegments.some((candidate) => candidate.recordingProfile === "drive")).toBe(false);
+  });
+});
+
+describe("removeInitialAutoBootstrapWalkSegment", () => {
+  it("removes a tiny initial auto walk segment before the first inferred non-walk segment", () => {
+    const tripSegments = [
+      segment("walk-1", "walk", 0, 2),
+      segment("drive-1", "drive", 2, null),
+    ];
+    const tripPoints = [
+      point("walk-point-1", "walk-1", 1, 45.01),
+      point("walk-point-2", "walk-1", 2, 45.0105),
+      point("drive-point-1", "drive-1", 3, 45.02),
+    ];
+
+    const result = removeInitialAutoBootstrapWalkSegment(tripSegments, tripPoints, [], "trip-1", "drive-1", iso(10));
+
+    expect(result.tripSegments.some((candidate) => candidate.localId === "walk-1")).toBe(false);
+    expect(result.tripSegments.find((candidate) => candidate.localId === "drive-1")?.startedAt).toBe(iso(0));
+    expect(result.tripPoints.filter((candidate) => candidate.segmentLocalId === "walk-1")).toHaveLength(0);
+    expect(result.tripPoints.filter((candidate) => candidate.segmentLocalId === "drive-1")).toHaveLength(3);
+  });
+
+  it("keeps the initial walk segment when a waypoint belongs to it", () => {
+    const tripSegments = [
+      segment("walk-1", "walk", 0, 2),
+      segment("drive-1", "drive", 2, null),
+    ];
+    const tripPoints = [point("walk-point-1", "walk-1", 1, 45.01)];
+    const waypoints = [waypoint("waypoint-1", "walk-1", 1)];
+
+    const result = removeInitialAutoBootstrapWalkSegment(
+      tripSegments,
+      tripPoints,
+      waypoints,
+      "trip-1",
+      "drive-1",
+      iso(10),
+    );
+
+    expect(result.tripSegments).toBe(tripSegments);
+    expect(result.tripPoints).toBe(tripPoints);
+    expect(result.waypoints).toBe(waypoints);
   });
 });

@@ -40,6 +40,7 @@ import {
   createInitialTripSegment,
   finalizeEndedTripSegments,
   normalizeAutoClosedTripSegment,
+  removeInitialAutoBootstrapWalkSegment,
 } from "../../services/trip-segments/trip-segments.service";
 import {
   flushTripPointDiagnostics,
@@ -360,12 +361,29 @@ export async function stopRecordingFromScreenController(
           tripPoints: activeTripPoints,
           waypoints: input.waypoints,
         };
+  const orderedNormalizedSegments = normalizedState.tripSegments
+    .filter((segment) => segment.tripLocalId === session.activeTripId)
+    .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+  const firstNonWalkSegment = orderedNormalizedSegments.find((segment, index) =>
+    index > 0 && segment.recordingProfile !== "walk",
+  );
+  const prunedState =
+    session.recordingMode === "auto" && activeTrip && firstNonWalkSegment
+      ? removeInitialAutoBootstrapWalkSegment(
+          normalizedState.tripSegments,
+          normalizedState.tripPoints,
+          normalizedState.waypoints,
+          activeTrip.localId,
+          firstNonWalkSegment.localId,
+          endedAt,
+        )
+      : normalizedState;
 
-  await setTripSegments(normalizedState.tripSegments);
-  await setWaypoints(normalizedState.waypoints);
-  if (activeTrip && normalizedState.tripPoints !== activeTripPoints) {
-    setTripPointsInMemory(normalizedState.tripPoints);
-    await replaceTripPointsForTrip(activeTrip.localId, normalizedState.tripPoints);
+  await setTripSegments(prunedState.tripSegments);
+  await setWaypoints(prunedState.waypoints);
+  if (activeTrip && prunedState.tripPoints !== activeTripPoints) {
+    setTripPointsInMemory(prunedState.tripPoints);
+    await replaceTripPointsForTrip(activeTrip.localId, prunedState.tripPoints);
   }
   await setTrips(closeActiveTrip(input.trips, session.activeTripId, endedAt, batterySnapshot));
   await refreshTripStatsForTripLocalId(session.activeTripId);

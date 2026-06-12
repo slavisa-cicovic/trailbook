@@ -69,6 +69,10 @@ vi.mock("../../services/trip-points/trip-points.service", () => ({
     tripLocalId: trip.localId,
     userId: trip.userId,
   })),
+  getRouteGapBreakCandidate: vi.fn(() => null),
+  getVisibleTripPointsForTrip: vi.fn((tripPoints: TripPoint[], tripLocalId: string) =>
+    tripPoints.filter((tripPoint) => tripPoint.tripLocalId === tripLocalId),
+  ),
   resetPendingTripPointContinuity: vi.fn(),
 }));
 
@@ -234,12 +238,15 @@ describe("raw event reprocessing", () => {
     vi.clearAllMocks();
 
     const { loadRawReprocessingInputModel } = await import("../../repositories/reprocessing-repository");
-    const { appendTripPointIfUseful } = await import("../../services/trip-points/trip-points.service");
+    const { appendTripPointIfUseful, getRouteGapBreakCandidate } = await import(
+      "../../services/trip-points/trip-points.service"
+    );
 
     vi.mocked(loadRawReprocessingInputModel).mockResolvedValue(validInputModel);
     vi.mocked(appendTripPointIfUseful).mockImplementation(
       (tripPoints, nextTripPoint) => [...tripPoints, nextTripPoint],
     );
+    vi.mocked(getRouteGapBreakCandidate).mockImplementation(() => null);
 
     vi.mocked(loadTrips).mockResolvedValue([trip]);
     vi.mocked(loadTripSegments).mockResolvedValue([oldSegment]);
@@ -335,6 +342,72 @@ describe("raw event reprocessing", () => {
 
       expect(remappedWaypoint?.segmentLocalId).toBe("reprocessed-segment-trip-1-1");
       expect(remappedWaypoint?.syncStatus).toBe("pending-sync");
+    });
+
+    it("splits a replay segment when a route gap would otherwise bridge unknown road", async () => {
+      const { getRouteGapBreakCandidate } = await import("../../services/trip-points/trip-points.service");
+
+      vi.mocked(getRouteGapBreakCandidate).mockImplementation((tripPoints) => {
+        const previousPoint = tripPoints[tripPoints.length - 1] ?? null;
+
+        return previousPoint
+          ? {
+              distanceMeters: 9000,
+              elapsedMs: 5 * 60 * 1000,
+              previousPoint,
+            }
+          : null;
+      });
+
+      const result = buildRawReprocessingPreview(validInputModel);
+
+      expect(result.preview.newSegmentCount).toBe(2);
+      expect(result.tripSegments).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            endedAt: "2026-06-02T09:01:00.000Z",
+            localId: "reprocessed-segment-trip-1-1",
+            recordingProfile: "drive",
+          }),
+          expect.objectContaining({
+            localId: "reprocessed-segment-trip-1-2",
+            recordingProfile: "drive",
+            startedAt: "2026-06-02T09:02:00.000Z",
+          }),
+        ]),
+      );
+      expect(result.tripPoints[1]?.segmentLocalId).toBe("reprocessed-segment-trip-1-2");
+    });
+
+    it("removes a replayed initial auto bootstrap walk segment before a non-walk segment", async () => {
+      const { buildAutoBatchProfileSections } = await import("../../services/recording/auto-recording.service");
+
+      vi.mocked(buildAutoBatchProfileSections).mockImplementationOnce((samples) => [
+        {
+          endedAt: samples[0]?.recordedAt ?? "2026-06-02T09:01:00.000Z",
+          profile: "walk",
+          samples: samples[0] ? [samples[0]] : [],
+          startedAt: samples[0]?.recordedAt ?? "2026-06-02T09:01:00.000Z",
+        },
+        {
+          endedAt: samples[1]?.recordedAt ?? "2026-06-02T09:02:00.000Z",
+          profile: "drive",
+          samples: samples[1] ? [samples[1]] : [],
+          startedAt: samples[1]?.recordedAt ?? "2026-06-02T09:02:00.000Z",
+        },
+      ]);
+
+      const result = buildRawReprocessingPreview({ ...validInputModel, waypoints: [] });
+
+      expect(result.preview.newSegmentCount).toBe(1);
+      expect(result.tripSegments[0]).toMatchObject({
+        localId: "reprocessed-segment-trip-1-2",
+        recordingProfile: "drive",
+        startedAt: "2026-06-02T09:01:00.000Z",
+      });
+      expect(result.tripPoints).toHaveLength(2);
+      expect(result.tripPoints.every((tripPoint) => tripPoint.segmentLocalId === "reprocessed-segment-trip-1-2"))
+        .toBe(true);
     });
   });
 

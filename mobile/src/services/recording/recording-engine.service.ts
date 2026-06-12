@@ -14,8 +14,6 @@ import {
 } from "../../repositories/raw-location-events-repository";
 import {
   loadTripPointsForTrip,
-  refreshTripSegmentStatsForTripLocalId,
-  refreshTripStatsForTripLocalId,
 } from "../../repositories/trip-points-repository";
 import { toSnapshot, type CurrentLocationSnapshot } from "../location/location.service";
 import type { LocationCallbackSource } from "../trip-points/trip-point-diagnostics.service";
@@ -56,6 +54,7 @@ function getRawLocationEventLocalId(input: {
 function buildRawLocationEvents(input: {
   activeSegmentLocalId: string | null;
   batchId: string;
+  batchIndexes?: number[];
   callbackSource: LocationCallbackSource;
   origin: RawLocationEventOrigin;
   receivedAt: string;
@@ -84,7 +83,7 @@ function buildRawLocationEvents(input: {
       activeSegmentLocalId: input.activeSegmentLocalId,
       altitude: snapshot.altitude,
       batchId: input.batchId,
-      batchIndex: index,
+      batchIndex: input.batchIndexes?.[index] ?? index,
       callbackSource: input.callbackSource,
       latitude: snapshot.latitude,
       localId,
@@ -105,18 +104,35 @@ function buildRawLocationEvents(input: {
   return rawEvents;
 }
 
-async function refreshAcceptedTripStats(
-  tripLocalId: string,
-  processingResults: RawLocationEventProcessingResult[],
-) {
-  const acceptedCount = processingResults.filter((result) => result.processingStatus === "accepted").length;
+function dedupeLocationSnapshotsForTrip(input: {
+  origin: RawLocationEventOrigin;
+  snapshots: CurrentLocationSnapshot[];
+  tripLocalId: string;
+}): { batchIndexes: number[]; snapshots: CurrentLocationSnapshot[] } {
+  const seenLocalIds = new Set<string>();
+  const dedupedSnapshots: CurrentLocationSnapshot[] = [];
+  const batchIndexes: number[] = [];
 
-  if (acceptedCount === 0) {
-    return;
-  }
+  input.snapshots.forEach((snapshot, index) => {
+    const localId = getRawLocationEventLocalId({
+      origin: input.origin,
+      snapshot,
+      tripLocalId: input.tripLocalId,
+    });
 
-  await refreshTripSegmentStatsForTripLocalId(tripLocalId);
-  await refreshTripStatsForTripLocalId(tripLocalId);
+    if (seenLocalIds.has(localId)) {
+      return;
+    }
+
+    seenLocalIds.add(localId);
+    dedupedSnapshots.push(snapshot);
+    batchIndexes.push(index);
+  });
+
+  return {
+    batchIndexes,
+    snapshots: dedupedSnapshots,
+  };
 }
 
 function withRawProcessingTrace(input: {
@@ -162,19 +178,27 @@ export async function recordLocationSnapshots(
   let batchId: string | null = null;
   let rawEvents: RawLocationEvent[] = [];
   let beforeTripPoints: TripPoint[] = [];
+  let pipelineSnapshots = snapshots;
 
   if (activeTripId) {
     batchId = Crypto.randomUUID();
     const receivedAt = new Date().toISOString();
+    const dedupedLocationSnapshots = dedupeLocationSnapshotsForTrip({
+      origin,
+      snapshots,
+      tripLocalId: activeTripId,
+    });
+    pipelineSnapshots = dedupedLocationSnapshots.snapshots;
 
     rawEvents = buildRawLocationEvents({
       activeSegmentLocalId: recordingSession?.activeSegmentId ?? null,
       batchId,
+      batchIndexes: dedupedLocationSnapshots.batchIndexes,
       callbackSource,
       origin,
       receivedAt,
       sessionStartedAt: recordingSession?.startedAt ?? null,
-      snapshots,
+      snapshots: pipelineSnapshots,
       tripLocalId: activeTripId,
     });
     void recordRecordingNativeEvent({
@@ -183,6 +207,7 @@ export async function recordLocationSnapshots(
         activeSegmentLocalId: recordingSession?.activeSegmentId ?? null,
         batchId,
         callbackSource,
+        dedupedLocationCount: pipelineSnapshots.length,
         firstRecordedAt: snapshots[0]?.recordedAt ?? null,
         lastRecordedAt: snapshots[snapshots.length - 1]?.recordedAt ?? null,
         locationCount: snapshots.length,
@@ -203,7 +228,7 @@ export async function recordLocationSnapshots(
     });
   }
 
-  const pipelineResult = await processRecordedLocationSnapshots(snapshots, callbackSource, options);
+  const pipelineResult = await processRecordedLocationSnapshots(pipelineSnapshots, callbackSource, options);
 
   if (!activeTripId) {
     return;
@@ -236,13 +261,6 @@ export async function recordLocationSnapshots(
     console.warn("[Trailbook][recording-engine]", {
       error: error instanceof Error ? error.message : String(error),
       step: "raw-status-update-failed",
-      tripLocalId: activeTripId,
-    });
-  });
-  await refreshAcceptedTripStats(activeTripId, processingResults).catch((error) => {
-    console.warn("[Trailbook][recording-engine]", {
-      error: error instanceof Error ? error.message : String(error),
-      step: "stats-refresh-failed",
       tripLocalId: activeTripId,
     });
   });

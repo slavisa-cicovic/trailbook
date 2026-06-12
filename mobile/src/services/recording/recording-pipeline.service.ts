@@ -10,6 +10,7 @@ import { getLatestMotionActivityAsync } from "../motion/motion-activity.service"
 import {
   appendTripPointIfUseful,
   createTripPointForLocation,
+  getRouteGapBreakCandidate,
   recordLocationCallback,
   recordTripPointDiagnostic,
 } from "../trip-points/trip-points.service";
@@ -256,7 +257,11 @@ async function persistRecordedLocationSnapshots(
 
   function appendSnapshotIfUseful(snapshot: CurrentLocationSnapshot): boolean {
     const fallbackOpenSegment = getOpenTripSegmentForTrip(nextTripSegments, recordingTrip.localId);
-    const activeSegmentLocalId = nextRecordingSession.activeSegmentId ?? fallbackOpenSegment?.localId ?? null;
+    const activeSegmentLocalId = ensureRouteGapSegment(
+      snapshot,
+      nextRecordingSession.recordingProfile,
+      nextRecordingSession.activeSegmentId ?? fallbackOpenSegment?.localId ?? null,
+    );
     const candidateTripPoint = createTripPointForLocation(recordingTrip, activeSegmentLocalId, snapshot);
     const appendedTripPoints = appendTripPointIfUseful(
       nextTripPoints,
@@ -289,7 +294,8 @@ async function persistRecordedLocationSnapshots(
     recordingProfile: AutoBatchProfileSection["profile"],
     segmentLocalId: string | null,
   ): boolean {
-    const candidateTripPoint = createTripPointForLocation(recordingTrip, segmentLocalId, snapshot);
+    const activeSegmentLocalId = ensureRouteGapSegment(snapshot, recordingProfile, segmentLocalId);
+    const candidateTripPoint = createTripPointForLocation(recordingTrip, activeSegmentLocalId, snapshot);
     const appendedTripPoints = appendTripPointIfUseful(
       nextTripPoints,
       candidateTripPoint,
@@ -382,6 +388,50 @@ async function persistRecordedLocationSnapshots(
     nextTripSegments = prunedState.tripSegments;
     nextWaypoints = prunedState.waypoints;
     nextRecordingSession = updateRecordingSegment(nextRecordingSession, nextSegment.localId, section.profile);
+
+    return nextSegment.localId;
+  }
+
+  function ensureRouteGapSegment(
+    snapshot: CurrentLocationSnapshot,
+    recordingProfile: AutoBatchProfileSection["profile"],
+    preferredSegmentLocalId: string | null,
+  ): string | null {
+    const candidateTripPoint = createTripPointForLocation(recordingTrip, preferredSegmentLocalId, snapshot);
+    const routeGap = getRouteGapBreakCandidate(nextTripPoints, candidateTripPoint, recordingProfile);
+
+    if (!routeGap) {
+      return preferredSegmentLocalId;
+    }
+
+    const segmentToClose =
+      (routeGap.previousPoint.segmentLocalId
+        ? nextTripSegments.find((segment) => segment.localId === routeGap.previousPoint.segmentLocalId)
+        : null) ??
+      (preferredSegmentLocalId
+        ? nextTripSegments.find((segment) => segment.localId === preferredSegmentLocalId)
+        : null) ??
+      getOpenTripSegmentForTrip(nextTripSegments, recordingTrip.localId);
+
+    if (!segmentToClose || segmentToClose.endedAt !== null) {
+      return preferredSegmentLocalId;
+    }
+
+    const closedSegments = closeActiveTripSegment(
+      nextTripSegments,
+      segmentToClose.localId,
+      routeGap.previousPoint.recordedAt,
+    );
+    const { nextSegment, tripSegments: stagedTripSegments } = startNextTripSegment(
+      recordingTrip,
+      closedSegments,
+      recordingProfile,
+      snapshot.recordedAt,
+    );
+
+    nextTripSegments = stagedTripSegments;
+    nextRecordingSession = updateRecordingSegment(nextRecordingSession, nextSegment.localId, recordingProfile);
+    activeProfile = recordingProfile;
 
     return nextSegment.localId;
   }

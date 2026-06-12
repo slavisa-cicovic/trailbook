@@ -13,6 +13,7 @@ import {
 } from "./recording-processor.service";
 import type { RecordingProcessingTrace } from "./recording-processing-trace.service";
 import { applyRawEventReprocessingUnitOfWork } from "./recording-unit-of-work.service";
+import { removeInitialAutoBootstrapWalkSegment } from "../trip-segments/trip-segments.service";
 
 export type ReprocessedSegmentSummary = RecordingProcessorSegmentSummary;
 
@@ -160,24 +161,47 @@ export function buildRawReprocessingPreview(inputModel: RawReprocessingInputMode
 
   const sortedRawEvents = sortRawLocationEvents(rawEvents);
   const replay = processRawLocationEventsForTrip({ rawEvents: sortedRawEvents, trip });
+  let replayTripPoints = replay.tripPoints;
+  let replayTripSegments = replay.tripSegments;
+  let nextWaypoints = remapWaypoints(waypoints, trip.localId, replayTripSegments);
+  const orderedReplaySegments = replayTripSegments
+    .filter((segment) => segment.tripLocalId === trip.localId)
+    .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+  const firstNonWalkSegment = orderedReplaySegments.find((segment, index) =>
+    index > 0 && segment.recordingProfile !== "walk",
+  );
+
+  if (firstNonWalkSegment) {
+    const prunedState = removeInitialAutoBootstrapWalkSegment(
+      replayTripSegments,
+      replayTripPoints,
+      nextWaypoints,
+      trip.localId,
+      firstNonWalkSegment.localId,
+      new Date().toISOString(),
+    );
+
+    replayTripPoints = prunedState.tripPoints;
+    replayTripSegments = prunedState.tripSegments;
+    nextWaypoints = prunedState.waypoints;
+  }
+
   const oldDistanceMeters = trip.distanceMeters ?? getTripDistanceMeters(oldTripPoints, oldTripSegments, trip.localId);
-  const newDistanceMeters = getTripDistanceMeters(replay.tripPoints, replay.tripSegments, trip.localId);
-  const firstAcceptedRecordedAt = replay.tripPoints[0]?.recordedAt ?? null;
-  const lastAcceptedRecordedAt = replay.tripPoints[replay.tripPoints.length - 1]?.recordedAt ?? null;
+  const newDistanceMeters = getTripDistanceMeters(replayTripPoints, replayTripSegments, trip.localId);
+  const firstAcceptedRecordedAt = replayTripPoints[0]?.recordedAt ?? null;
+  const lastAcceptedRecordedAt = replayTripPoints[replayTripPoints.length - 1]?.recordedAt ?? null;
   const warnings = buildWarnings({
     newDistanceMeters,
-    newPointCount: replay.tripPoints.length,
+    newPointCount: replayTripPoints.length,
     oldDistanceMeters,
     oldPointCount: oldTripPoints.length,
     rawEvents: sortedRawEvents,
     trip,
   });
 
-  if (replay.tripPoints.length === 0 && oldTripPoints.length > 0) {
+  if (replayTripPoints.length === 0 && oldTripPoints.length > 0) {
     warnings.push("Reprocessing produced zero accepted points.");
   }
-
-  const nextWaypoints = remapWaypoints(waypoints, trip.localId, replay.tripSegments);
 
   return {
     nextWaypoints,
@@ -190,9 +214,9 @@ export function buildRawReprocessingPreview(inputModel: RawReprocessingInputMode
       maxAcceptedGapMs: replay.maxAcceptedGapMs,
       maxRawGapMs: replay.maxRawGapMs,
       newDistanceMeters,
-      newPointCount: replay.tripPoints.length,
-      newSegmentCount: replay.tripSegments.length,
-      newSegments: buildSegmentSummaries(replay.tripSegments, replay.tripPoints, trip.localId),
+      newPointCount: replayTripPoints.length,
+      newSegmentCount: replayTripSegments.length,
+      newSegments: buildSegmentSummaries(replayTripSegments, replayTripPoints, trip.localId),
       oldDistanceMeters,
       oldPointCount: oldTripPoints.length,
       oldSegmentCount: oldTripSegments.length,
@@ -205,8 +229,8 @@ export function buildRawReprocessingPreview(inputModel: RawReprocessingInputMode
     },
     processingResults: replay.processingResults,
     trip,
-    tripPoints: replay.tripPoints,
-    tripSegments: replay.tripSegments,
+    tripPoints: replayTripPoints,
+    tripSegments: replayTripSegments,
   };
 }
 
