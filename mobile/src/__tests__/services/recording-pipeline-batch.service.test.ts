@@ -1,9 +1,9 @@
-// Integration test: batch pipeline exception resilience.
+// Integration test: batch pipeline native-service isolation.
 //
-// Verifies that when restartBackgroundLocationTracking throws during the
-// batch pre-loop, the pipeline continues and still saves trip points.
-// This guards against the Andr test 29 3 regression where an unhandled
-// exception inside the pre-loop caused 0 diagnostics and 0 saved points.
+// Verifies that batch AUTO processing changes Trailbook segments/filtering only,
+// without touching native background location updates. This guards against Android
+// regressions where restarting location updates while processing a sleep-recovery
+// batch can leave FusedLocation silent until the app wakes again.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

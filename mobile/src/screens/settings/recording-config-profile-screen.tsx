@@ -11,34 +11,15 @@ import {
 import type {
   MobileRecordingConfig,
   PointFilterProfileConfig,
-  RecordingConfigAccuracy,
   RecordingConfigPlatform,
-  TrackingProfileConfig,
 } from "../../domain/recording-config";
 import type { RecordingProfile } from "../../domain/trips";
-import { syncBackgroundLocationTracking } from "../../services/location/location.service";
 import {
   loadEditableRecordingConfig,
   saveLocalRecordingConfigOverride,
 } from "../../services/recording/recording-config.service";
-import { useRecordingStore } from "../../state/recording-store";
 import { useSessionStore } from "../../state/session-store";
 import { useThemeStore } from "../../state/theme-store";
-
-const ACCURACY_OPTIONS: RecordingConfigAccuracy[] = [
-  "lowest",
-  "low",
-  "balanced",
-  "high",
-  "highest",
-  "bestForNavigation",
-];
-
-const EMPTY_TRACKING_PROFILE: TrackingProfileConfig = {
-  accuracy: "high",
-  distanceInterval: 0,
-  timeIntervalMs: 0,
-};
 
 const EMPTY_POINT_FILTER_PROFILE: PointFilterProfileConfig = {
   maxAccuracyMeters: 0,
@@ -102,14 +83,7 @@ export default function RecordingConfigProfileScreen() {
   const themeMode = useThemeStore((state) => state.mode);
   const systemColorScheme = useColorScheme();
   const theme = getAppTheme(resolveAppThemeMode(themeMode, systemColorScheme));
-  const recordingStatus = useRecordingStore((state) => state.session.status);
-  const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
-  const activeRecordingMode = useRecordingStore((state) => state.session.recordingMode);
-  const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
   const [config, setConfig] = useState<MobileRecordingConfig | null>(null);
-  const [accuracy, setAccuracy] = useState<RecordingConfigAccuracy>("high");
-  const [distanceInterval, setDistanceInterval] = useState("0");
-  const [timeIntervalSeconds, setTimeIntervalSeconds] = useState("0");
   const [maxAccuracyMeters, setMaxAccuracyMeters] = useState("0");
   const [maxJumpDistanceMeters, setMaxJumpDistanceMeters] = useState("0");
   const [maxImpliedSpeedKmh, setMaxImpliedSpeedKmh] = useState("0");
@@ -127,19 +101,12 @@ export default function RecordingConfigProfileScreen() {
     setLoading(true);
     const record = await loadEditableRecordingConfig(identitySession);
     const nextConfig = record?.config ?? null;
-    const trackingProfile =
-      nextConfig?.profiles[parsedTarget.platform]?.[parsedTarget.mode] ??
-      nextConfig?.profiles.default?.[parsedTarget.mode] ??
-      EMPTY_TRACKING_PROFILE;
     const pointFilterProfile =
       nextConfig?.pointFilters?.[parsedTarget.platform]?.[parsedTarget.mode] ??
       nextConfig?.pointFilters?.default?.[parsedTarget.mode] ??
       EMPTY_POINT_FILTER_PROFILE;
 
     setConfig(nextConfig);
-    setAccuracy(trackingProfile.accuracy);
-    setDistanceInterval(String(trackingProfile.distanceInterval));
-    setTimeIntervalSeconds(String(Math.round(trackingProfile.timeIntervalMs / 1000)));
     setMaxAccuracyMeters(String(pointFilterProfile.maxAccuracyMeters));
     setMaxJumpDistanceMeters(String(pointFilterProfile.maxJumpDistanceMeters));
     setMaxImpliedSpeedKmh(String(pointFilterProfile.maxImpliedSpeedKmh));
@@ -162,11 +129,6 @@ export default function RecordingConfigProfileScreen() {
 
     try {
       const nextConfig = cloneConfig(config);
-      const trackingProfile: TrackingProfileConfig = {
-        accuracy,
-        distanceInterval: toNumber(distanceInterval, "Distance interval"),
-        timeIntervalMs: toNumber(timeIntervalSeconds, "Time interval") * 1000,
-      };
       const pointFilterProfile: PointFilterProfileConfig = {
         maxAccuracyMeters: toNumber(maxAccuracyMeters, "Max accuracy"),
         maxJumpDistanceMeters: toNumber(maxJumpDistanceMeters, "Max jump distance"),
@@ -174,10 +136,6 @@ export default function RecordingConfigProfileScreen() {
         minMovementMeters: toNumber(minMovementMeters, "Min movement"),
       };
 
-      nextConfig.profiles[parsedTarget.platform] = {
-        ...(nextConfig.profiles[parsedTarget.platform] ?? {}),
-        [parsedTarget.mode]: trackingProfile,
-      };
       nextConfig.pointFilters = {
         ...(nextConfig.pointFilters ?? {}),
         [parsedTarget.platform]: {
@@ -187,12 +145,6 @@ export default function RecordingConfigProfileScreen() {
       };
 
       await saveLocalRecordingConfigOverride(identitySession, nextConfig);
-      await syncBackgroundLocationTracking(
-        recordingStatus,
-        activeRecordingTripId,
-        activeRecordingProfile,
-        activeRecordingMode,
-      );
       router.back();
     } catch (error) {
       Alert.alert("Recording config", error instanceof Error ? error.message : "Save failed.");
@@ -211,22 +163,15 @@ export default function RecordingConfigProfileScreen() {
     try {
       const record = await loadEditableRecordingConfig(identitySession);
       const remoteConfig = record?.remoteConfig;
-      const remoteTrackingProfile =
-        remoteConfig?.profiles[parsedTarget.platform]?.[parsedTarget.mode] ??
-        remoteConfig?.profiles.default?.[parsedTarget.mode];
       const remotePointFilterProfile =
         remoteConfig?.pointFilters?.[parsedTarget.platform]?.[parsedTarget.mode] ??
         remoteConfig?.pointFilters?.default?.[parsedTarget.mode];
 
-      if (!remoteConfig || !remoteTrackingProfile || !remotePointFilterProfile) {
+      if (!remoteConfig || !remotePointFilterProfile) {
         throw new Error("Server default is not available for this profile.");
       }
 
       const nextConfig = cloneConfig(config);
-      nextConfig.profiles[parsedTarget.platform] = {
-        ...(nextConfig.profiles[parsedTarget.platform] ?? {}),
-        [parsedTarget.mode]: remoteTrackingProfile,
-      };
       nextConfig.pointFilters = {
         ...(nextConfig.pointFilters ?? {}),
         [parsedTarget.platform]: {
@@ -236,16 +181,7 @@ export default function RecordingConfigProfileScreen() {
       };
 
       await saveLocalRecordingConfigOverride(identitySession, nextConfig);
-      await syncBackgroundLocationTracking(
-        recordingStatus,
-        activeRecordingTripId,
-        activeRecordingProfile,
-        activeRecordingMode,
-      );
       setConfig(nextConfig);
-      setAccuracy(remoteTrackingProfile.accuracy);
-      setDistanceInterval(String(remoteTrackingProfile.distanceInterval));
-      setTimeIntervalSeconds(String(Math.round(remoteTrackingProfile.timeIntervalMs / 1000)));
       setMaxAccuracyMeters(String(remotePointFilterProfile.maxAccuracyMeters));
       setMaxJumpDistanceMeters(String(remotePointFilterProfile.maxJumpDistanceMeters));
       setMaxImpliedSpeedKmh(String(remotePointFilterProfile.maxImpliedSpeedKmh));
@@ -273,40 +209,10 @@ export default function RecordingConfigProfileScreen() {
     >
       <View style={styles.root}>
         <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.sectionTitle, { color: theme.mutedText }]}>Tracking</Text>
-          <Text style={[styles.label, { color: theme.primaryText }]}>Accuracy</Text>
-          <View style={styles.accuracyGrid}>
-            {ACCURACY_OPTIONS.map((option) => {
-              const active = accuracy === option;
-
-              return (
-                <Pressable
-                  key={option}
-                  onPress={() => setAccuracy(option)}
-                  style={[
-                    styles.accuracyChip,
-                    { backgroundColor: theme.accentMuted },
-                    active && { backgroundColor: theme.accent },
-                  ]}
-                >
-                  <Text style={[styles.accuracyText, { color: active ? theme.surface : theme.accent }]}>
-                    {option}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <NumberField label="Distance interval (m)" value={distanceInterval} onChange={setDistanceInterval} theme={theme} />
-          <NumberField
-            label="Time interval (sec)"
-            value={timeIntervalSeconds}
-            onChange={setTimeIntervalSeconds}
-            theme={theme}
-          />
-        </View>
-
-        <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Text style={[styles.sectionTitle, { color: theme.mutedText }]}>Point filters</Text>
+          <Text style={[styles.description, { color: theme.mutedText }]}>
+            Native background tracking stays on the AUTO baseline. These values only control how accepted points are filtered and segmented for this profile.
+          </Text>
           <NumberField label="Max accuracy (m)" value={maxAccuracyMeters} onChange={setMaxAccuracyMeters} theme={theme} />
           <NumberField label="Max jump distance (m)" value={maxJumpDistanceMeters} onChange={setMaxJumpDistanceMeters} theme={theme} />
           <NumberField label="Max implied speed (km/h)" value={maxImpliedSpeedKmh} onChange={setMaxImpliedSpeedKmh} theme={theme} />
@@ -389,22 +295,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
   },
+  description: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
   label: {
     fontSize: 14,
-    fontWeight: "800",
-  },
-  accuracyGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  accuracyChip: {
-    borderRadius: 12,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-  },
-  accuracyText: {
-    fontSize: 12,
     fontWeight: "800",
   },
   field: {

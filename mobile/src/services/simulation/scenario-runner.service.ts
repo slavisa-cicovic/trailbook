@@ -241,7 +241,7 @@ async function persistScenarioLocations(
   onProgress: (processed: number, total: number) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const persistOptions = { origin: "simulation" as const, restartTrackingOnAutoTransition: false };
+  const persistOptions = { origin: "simulation" as const };
 
   if (scenario.strategy === "sleep") {
     await persistBackgroundRecordedLocations(locations, persistOptions);

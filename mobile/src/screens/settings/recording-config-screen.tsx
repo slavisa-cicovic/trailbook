@@ -32,13 +32,13 @@ function formatPlatform(platform: Exclude<RecordingConfigPlatform, "default">) {
 }
 
 function describeProfile(config: MobileRecordingConfig, platform: Exclude<RecordingConfigPlatform, "default">, mode: RecordingProfile) {
-  const profile = config.profiles[platform]?.[mode] ?? config.profiles.default?.[mode];
+  const pointFilter = config.pointFilters?.[platform]?.[mode] ?? config.pointFilters?.default?.[mode];
 
-  if (!profile) {
+  if (!pointFilter) {
     return "Not configured";
   }
 
-  return `${profile.accuracy}, ${profile.distanceInterval}m, ${Math.round(profile.timeIntervalMs / 1000)}s`;
+  return `Filters: ${pointFilter.minMovementMeters}m min, ${pointFilter.maxJumpDistanceMeters}m jump, ${pointFilter.maxImpliedSpeedKmh}km/h`;
 }
 
 export default function RecordingConfigScreen() {
@@ -112,7 +112,7 @@ export default function RecordingConfigScreen() {
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Text style={[styles.title, { color: theme.primaryText }]}>Local device override</Text>
           <Text style={[styles.description, { color: theme.mutedText }]}>
-            These values control location tracking and point filtering on this device. Reset restores the config returned by the server database.
+            AUTO recording keeps native background tracking stable. These overrides tune point filtering and segment classification on this device. Reset restores the config returned by the server database.
           </Text>
           <Pressable
             disabled={resetBusy || loading}
@@ -143,7 +143,7 @@ export default function RecordingConfigScreen() {
                     style={styles.row}
                   >
                     <View style={[styles.icon, { backgroundColor: theme.accentMuted }]}>
-                      <MaterialIcons color={theme.accent} name="tune" size={18} />
+                      <MaterialIcons color={theme.accent} name="filter-alt" size={18} />
                     </View>
                     <View style={styles.rowBody}>
                       <Text style={[styles.rowTitle, { color: theme.primaryText }]}>{formatMode(mode)}</Text>
