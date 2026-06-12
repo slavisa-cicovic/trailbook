@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MotionActivity } from "../../domain/motion-activity";
-import type { RecordingSessionSummary, Trip, TripSegment } from "../../domain/trips";
+import type { RecordingSessionSummary, Trip, TripPoint, TripSegment } from "../../domain/trips";
 import { inferAutoRecordingProfile } from "../../services/recording/auto-recording-inference.service";
 import { applyAutoRecordingTransition } from "../../services/recording/auto-recording-transition.service";
 import {
@@ -168,6 +168,24 @@ function makeSegment(profile: TripSegment["recordingProfile"] = "walk"): TripSeg
   };
 }
 
+function makePoint(localId: string, segmentLocalId: string, recordedAt: string): TripPoint {
+  return {
+    accuracy: 5,
+    altitude: null,
+    deviceId: "dev-1",
+    latitude: 45,
+    localId,
+    longitude: 19,
+    recordedAt,
+    segmentLocalId,
+    serverId: null,
+    speed: 10,
+    syncStatus: "local-only",
+    tripLocalId: "trip-1",
+    userId: "user-1",
+  };
+}
+
 const trip = makeTrip();
 
 // ── no-op cases ───────────────────────────────────────────────────────────────
@@ -301,6 +319,35 @@ describe("applyAutoRecordingTransition — transitions", () => {
     expect(newSeg?.endedAt).toBeNull();
     const oldSeg = result.tripSegments.find((s) => s.localId === "seg-1");
     expect(oldSeg?.endedAt).toBeTruthy();
+  });
+
+  it("starts the new segment at candidateSince and reassigns accepted points in the candidate window", () => {
+    vi.mocked(inferAutoRecordingProfile).mockReturnValue("drive");
+    const candidateSince = iso(10_000);
+    const session = makeSession({
+      autoCandidateProfile: "drive",
+      autoCandidateSince: candidateSince,
+      recordingProfile: "walk",
+    });
+    const tripPoints = [
+      makePoint("before-candidate", "seg-1", iso(5_000)),
+      makePoint("after-candidate", "seg-1", iso(20_000)),
+    ];
+
+    const result = applyAutoRecordingTransition(
+      session,
+      trip,
+      [makeSegment("walk")],
+      tripPoints,
+      [],
+      iso(10_000 + DRIVE_STABILITY_MS),
+    );
+
+    expect(result.changed).toBe(true);
+    expect(result.tripSegments.find((s) => s.localId === "seg-1")?.endedAt).toBe(candidateSince);
+    expect(result.tripSegments.find((s) => s.localId === "segment-2")?.startedAt).toBe(candidateSince);
+    expect(result.tripPoints.find((point) => point.localId === "before-candidate")?.segmentLocalId).toBe("seg-1");
+    expect(result.tripPoints.find((point) => point.localId === "after-candidate")?.segmentLocalId).toBe("segment-2");
   });
 
   it("transitions walk→bike after BIKE_STABILITY_MS", () => {

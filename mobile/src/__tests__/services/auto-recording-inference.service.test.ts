@@ -28,6 +28,11 @@ function makePoints(speedMs: number, count = 5): AutoLocationPoint[] {
   return Array.from({ length: count }, (_, i) => pt(i * stepS, speedMs));
 }
 
+function makePointsFromSpeeds(speedMsValues: number[]): AutoLocationPoint[] {
+  const stepS = Math.floor(ACTIVITY_INFERENCE_WINDOW_MS / 1000 / (speedMsValues.length + 1));
+  return speedMsValues.map((speedMs, index) => pt(index * stepS, speedMs));
+}
+
 function freshMotion(
   type: MotionActivity["type"],
   confidence: MotionActivity["confidence"],
@@ -63,6 +68,11 @@ describe("inferAutoRecordingProfile", () => {
   it("detects drive from drive-speed samples", () => {
     // 10.0 m/s = 36 km/h: ≥ DRIVE_MIN_KMH (28) and > BIKE_MAX_KMH (35)
     expect(inferAutoRecordingProfile(makePoints(10.0), null)).toBe("drive");
+  });
+
+  it("detects drive from stop-and-go city samples when upper speeds are clearly automotive", () => {
+    // Median is in bike range, but p75/peak speed indicate car traffic rather than cycling.
+    expect(inferAutoRecordingProfile(makePointsFromSpeeds([2.5, 3, 4, 9, 12]), null)).toBe("drive");
   });
 
   it("motion drive high confidence overrides walk-speed GPS", () => {

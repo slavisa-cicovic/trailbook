@@ -21,7 +21,11 @@ import {
   headingDegreesBetweenPoints,
   headingDeltaDegrees,
   median,
+  percentile,
 } from "./auto-recording.utils";
+
+const DRIVE_STRONG_P75_KMH = 28;
+const DRIVE_STRONG_PEAK_KMH = 40;
 
 interface TimedSpeedSample {
   moving: boolean;
@@ -160,9 +164,15 @@ function inferLocationOnlyAutoRecordingProfile(tripPoints: AutoLocationPoint[]):
   }
 
   if (driveWindow.length >= 4) {
-    const driveMedian = median(driveWindow.map((sample) => sample.speedKmh));
+    const driveSpeeds = driveWindow.map((sample) => sample.speedKmh);
+    const driveMedian = median(driveSpeeds);
+    const driveP75 = percentile(driveSpeeds, 0.75);
+    const driveMax = Math.max(...driveSpeeds);
 
-    if (driveMedian >= DRIVE_MIN_KMH) {
+    if (
+      driveMedian >= DRIVE_MIN_KMH ||
+      (driveP75 >= DRIVE_STRONG_P75_KMH && driveMax >= DRIVE_STRONG_PEAK_KMH)
+    ) {
       return "drive";
     }
   }

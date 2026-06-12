@@ -65,6 +65,90 @@ function getAutoTransitionStabilityThresholdMs(
   return getAutoStabilityThresholdMs(recordingProfile);
 }
 
+function getClampedAutoTransitionAt(activeSegment: TripSegment, requestedTransitionAt: string): string {
+  const activeSegmentStartedAtMs = new Date(activeSegment.startedAt).getTime();
+  const requestedTransitionAtMs = new Date(requestedTransitionAt).getTime();
+
+  if (
+    Number.isFinite(activeSegmentStartedAtMs) &&
+    Number.isFinite(requestedTransitionAtMs) &&
+    requestedTransitionAtMs < activeSegmentStartedAtMs
+  ) {
+    return activeSegment.startedAt;
+  }
+
+  return requestedTransitionAt;
+}
+
+function getNextEntitySyncStatus<T extends { syncStatus: "local-only" | "pending-sync" | "synced" | "sync-error" }>(
+  entity: T,
+): T["syncStatus"] {
+  return entity.syncStatus === "local-only" ? "local-only" : "pending-sync";
+}
+
+function reassignAutoCandidateWindowToNextSegment(
+  tripPoints: TripPoint[],
+  waypoints: Waypoint[],
+  tripLocalId: string,
+  previousSegmentLocalId: string,
+  nextSegmentLocalId: string,
+  transitionAt: string,
+): { tripPoints: TripPoint[]; waypoints: Waypoint[] } {
+  const transitionAtMs = new Date(transitionAt).getTime();
+
+  if (!Number.isFinite(transitionAtMs)) {
+    return { tripPoints, waypoints };
+  }
+
+  let pointsChanged = false;
+  const nextTripPoints = tripPoints.map((tripPoint) => {
+    const recordedAtMs = new Date(tripPoint.recordedAt).getTime();
+
+    if (
+      tripPoint.tripLocalId !== tripLocalId ||
+      tripPoint.segmentLocalId !== previousSegmentLocalId ||
+      !Number.isFinite(recordedAtMs) ||
+      recordedAtMs < transitionAtMs
+    ) {
+      return tripPoint;
+    }
+
+    pointsChanged = true;
+    return {
+      ...tripPoint,
+      segmentLocalId: nextSegmentLocalId,
+      syncStatus: getNextEntitySyncStatus(tripPoint),
+    };
+  });
+
+  let waypointsChanged = false;
+  const nextWaypoints = waypoints.map((waypoint) => {
+    const createdAtMs = new Date(waypoint.createdAt).getTime();
+
+    if (
+      waypoint.tripLocalId !== tripLocalId ||
+      waypoint.segmentLocalId !== previousSegmentLocalId ||
+      !Number.isFinite(createdAtMs) ||
+      createdAtMs < transitionAtMs
+    ) {
+      return waypoint;
+    }
+
+    waypointsChanged = true;
+    return {
+      ...waypoint,
+      segmentLocalId: nextSegmentLocalId,
+      syncStatus: getNextEntitySyncStatus(waypoint),
+      updatedAt: transitionAt,
+    };
+  });
+
+  return {
+    tripPoints: pointsChanged ? nextTripPoints : tripPoints,
+    waypoints: waypointsChanged ? nextWaypoints : waypoints,
+  };
+}
+
 export function applyAutoRecordingTransition(
   recordingSession: RecordingSessionSummary,
   trip: Trip,
@@ -151,19 +235,28 @@ export function applyAutoRecordingTransition(
     };
   }
 
-  const closedSegments = closeActiveTripSegment(tripSegments, activeSegment.localId, recordedAt);
+  const transitionAt = getClampedAutoTransitionAt(activeSegment, recordingSession.autoCandidateSince ?? recordedAt);
+  const closedSegments = closeActiveTripSegment(tripSegments, activeSegment.localId, transitionAt);
   const { nextSegment, tripSegments: stagedTripSegments } = startNextTripSegment(
     trip,
     closedSegments,
     inferredProfile,
-    recordedAt,
+    transitionAt,
   );
-  const normalizedState = normalizeAutoClosedTripSegment(
-    stagedTripSegments,
+  const reassignedState = reassignAutoCandidateWindowToNextSegment(
     tripPoints,
     waypoints,
     trip.localId,
-    recordedAt,
+    activeSegment.localId,
+    nextSegment.localId,
+    transitionAt,
+  );
+  const normalizedState = normalizeAutoClosedTripSegment(
+    stagedTripSegments,
+    reassignedState.tripPoints,
+    reassignedState.waypoints,
+    trip.localId,
+    transitionAt,
   );
   const prunedState = removeInitialAutoBootstrapWalkSegment(
     normalizedState.tripSegments,
@@ -171,7 +264,7 @@ export function applyAutoRecordingTransition(
     normalizedState.waypoints,
     trip.localId,
     nextSegment.localId,
-    recordedAt,
+    transitionAt,
   );
 
   return {

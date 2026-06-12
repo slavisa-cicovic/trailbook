@@ -106,6 +106,19 @@ export function median(values: number[]): number {
   return ((ordered[middleIndex - 1] as number) + (ordered[middleIndex] as number)) / 2;
 }
 
+export function percentile(values: number[], percentileValue: number): number {
+  const ordered = [...values].sort((left, right) => left - right);
+
+  if (ordered.length === 0) {
+    return 0;
+  }
+
+  const clampedPercentile = Math.min(1, Math.max(0, percentileValue));
+  const index = Math.ceil(clampedPercentile * ordered.length) - 1;
+
+  return ordered[Math.max(0, Math.min(index, ordered.length - 1))] as number;
+}
+
 export function getPointTimeMs(point: AutoLocationPoint): number {
   return new Date(point.recordedAt).getTime();
 }

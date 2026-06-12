@@ -12,6 +12,7 @@ export interface TripSegmentSummary {
   distanceMeters: number;
   durationLabel: string;
   durationMs: number;
+  pointCount: number;
   segment: TripSegment;
 }
 
@@ -45,6 +46,9 @@ export interface UpdateTripSegmentModeResult {
 
 const AUTO_MIN_PLANE_SEGMENT_MS = 30 * 60 * 1000;
 const AUTO_MIN_DRIVE_SEGMENT_MS = 5 * 60 * 1000;
+const AUTO_SHORT_DRIVE_KEEP_MIN_DISTANCE_METERS = 500;
+const AUTO_SHORT_DRIVE_KEEP_MIN_DURATION_MS = 90 * 1000;
+const AUTO_SHORT_DRIVE_KEEP_MIN_POINT_COUNT = 4;
 const AUTO_BOOTSTRAP_WALK_MAX_DISTANCE_METERS = 5;
 
 function getNextSyncStatus(currentStatus: TripSegment["syncStatus"]): TripSegment["syncStatus"] {
@@ -96,6 +100,31 @@ function resolveShortDriveFallback(
   }
 
   return null;
+}
+
+function hasShortDriveEvidence(
+  targetSummary: TripSegmentSummary,
+  tripPoints: TripPoint[],
+  tripLocalId: string,
+): boolean {
+  const targetSegmentPoints = getVisibleTripPointsForTrip(tripPoints, tripLocalId).filter(
+    (tripPoint) => tripPoint.segmentLocalId === targetSummary.segment.localId,
+  );
+  const distanceMeters =
+    targetSummary.distanceMeters > 0
+      ? targetSummary.distanceMeters
+      : calculateTripDistanceMeters(targetSegmentPoints);
+  const pointCount = Math.max(targetSummary.pointCount, targetSegmentPoints.length);
+
+  if (distanceMeters >= AUTO_SHORT_DRIVE_KEEP_MIN_DISTANCE_METERS) {
+    return true;
+  }
+
+  return (
+    targetSummary.durationMs >= AUTO_SHORT_DRIVE_KEEP_MIN_DURATION_MS &&
+    pointCount >= AUTO_SHORT_DRIVE_KEEP_MIN_POINT_COUNT &&
+    distanceMeters >= AUTO_SHORT_DRIVE_KEEP_MIN_DISTANCE_METERS / 2
+  );
 }
 
 export function createInitialTripSegment(trip: Trip, startedAt: string): TripSegment {
@@ -269,6 +298,7 @@ export function buildTripSegmentsSummary(
         calculateTripDistanceMeters(segmentTripPoints),
       durationMs,
       durationLabel: formatDurationSummary(durationMs),
+      pointCount: segment.pointCount && segment.pointCount > 0 ? segment.pointCount : segmentTripPoints.length,
     };
   });
 }
@@ -649,7 +679,11 @@ export function normalizeAutoClosedTripSegment(
     );
   }
 
-  if (targetSegment.recordingProfile === "drive" && targetSummary.durationMs < AUTO_MIN_DRIVE_SEGMENT_MS) {
+  if (
+    targetSegment.recordingProfile === "drive" &&
+    targetSummary.durationMs < AUTO_MIN_DRIVE_SEGMENT_MS &&
+    !hasShortDriveEvidence(targetSummary, tripPoints, tripLocalId)
+  ) {
     const fallbackProfile = resolveShortDriveFallback(orderedTripSegments, targetIndex);
 
     if (fallbackProfile && fallbackProfile !== "drive") {
