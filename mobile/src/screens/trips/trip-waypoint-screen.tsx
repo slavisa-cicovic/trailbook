@@ -10,7 +10,7 @@ import {
   DEFAULT_WAYPOINT_CATEGORY,
   getWaypointCategoryOption,
 } from "../../constants/waypoint-categories";
-import type { WaypointAttachment } from "../../domain/trips";
+import type { Waypoint, WaypointAttachment } from "../../domain/trips";
 import {
   getWaypointScreenModel,
   type WaypointScreenModel,
@@ -86,6 +86,59 @@ function downsampleRoute(coordinates: MapCoordinate[]): MapCoordinate[] {
   return coordinates.filter((_, i) => i % step === 0 || i === coordinates.length - 1);
 }
 
+function sortWaypointsByCreatedAt(left: Waypoint, right: Waypoint): number {
+  return left.createdAt.localeCompare(right.createdAt) || left.localId.localeCompare(right.localId);
+}
+
+function sortAttachmentsByCreatedAt(left: WaypointAttachment, right: WaypointAttachment): number {
+  return left.createdAt.localeCompare(right.createdAt) || left.localId.localeCompare(right.localId);
+}
+
+function getWaypointNavigation(
+  waypointLocalId: string,
+  waypointOrder: Waypoint[],
+): { nextWaypointLocalId: string | null; previousWaypointLocalId: string | null } {
+  const waypointIndex = waypointOrder.findIndex((waypoint) => waypoint.localId === waypointLocalId);
+
+  if (waypointIndex === -1) {
+    return {
+      nextWaypointLocalId: null,
+      previousWaypointLocalId: null,
+    };
+  }
+
+  return {
+    nextWaypointLocalId: waypointOrder[waypointIndex + 1]?.localId ?? null,
+    previousWaypointLocalId: waypointOrder[waypointIndex - 1]?.localId ?? null,
+  };
+}
+
+function buildLocalWaypointModel(
+  currentModel: WaypointScreenModel,
+  waypointLocalId: string,
+  waypoints: Waypoint[],
+  waypointAttachments: WaypointAttachment[],
+): WaypointScreenModel | null {
+  const waypointOrder = waypoints
+    .filter((waypoint) => waypoint.tripLocalId === currentModel.trip.localId && waypoint.deletedAt === null)
+    .sort(sortWaypointsByCreatedAt);
+  const waypoint = waypointOrder.find((candidate) => candidate.localId === waypointLocalId) ?? null;
+
+  if (!waypoint) {
+    return null;
+  }
+
+  return {
+    ...currentModel,
+    attachments: waypointAttachments
+      .filter((attachment) => attachment.waypointLocalId === waypoint.localId && attachment.deletedAt === null)
+      .sort(sortAttachmentsByCreatedAt),
+    navigation: getWaypointNavigation(waypoint.localId, waypointOrder),
+    waypoint,
+    waypointOrder,
+  };
+}
+
 export default function TripWaypointScreen() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
@@ -117,6 +170,8 @@ export default function TripWaypointScreen() {
 
   const selectedTrip = waypointModel?.trip ?? null;
   const selectedWaypoint = waypointModel?.waypoint ?? null;
+  const hasResolvedWaypointModel =
+    waypointModel?.trip.localId === resolvedTripId && waypointModel?.waypoint.localId === resolvedWaypointId;
   const previousWaypointLocalId = waypointModel?.navigation.previousWaypointLocalId ?? null;
   const nextWaypointLocalId = waypointModel?.navigation.nextWaypointLocalId ?? null;
   const attachments = waypointModel?.attachments ?? [];
@@ -237,7 +292,9 @@ export default function TripWaypointScreen() {
       return;
     }
 
-    router.push(`/trips/${resolvedTripId}/waypoints/${resolvedWaypointId}/photos/${attachmentLocalId}`);
+    router.push(
+      `/trips/${resolvedTripId}/waypoints/${selectedWaypoint?.localId ?? resolvedWaypointId}/photos/${attachmentLocalId}`,
+    );
   }
 
   async function handleRemoveSelectedPhotos() {
@@ -367,14 +424,29 @@ export default function TripWaypointScreen() {
 
     setSelectionMode(false);
     setSelectedPhotoIds([]);
-    router.replace(`/trips/${resolvedTripId}/waypoints/${waypointLocalId}`);
+
+    if (waypointModel) {
+      const nextModel = buildLocalWaypointModel(
+        waypointModel,
+        waypointLocalId,
+        currentUserWaypoints,
+        currentUserWaypointAttachments,
+      );
+
+      if (nextModel) {
+        setWaypointModel(nextModel);
+        setWaypointModelLoading(false);
+      }
+    }
+
+    router.setParams({ waypointId: waypointLocalId });
   }
 
   if (!identitySession) {
     return <Redirect href="/login" />;
   }
 
-  if (waypointModelLoading) {
+  if (waypointModelLoading && !hasResolvedWaypointModel) {
     return (
       <ScreenLayout
         accountEmail={identitySession.userEmail}
@@ -511,7 +583,6 @@ export default function TripWaypointScreen() {
               <Text style={styles.sectionTitle}>Location</Text>
               <View style={styles.waypointMapCard}>
                 <MapView
-                  key={`${waypointMapRegion.latitude}:${waypointMapRegion.longitude}`}
                   liteMode={Platform.OS === "android"}
                   mapType="standard"
                   pitchEnabled={false}
