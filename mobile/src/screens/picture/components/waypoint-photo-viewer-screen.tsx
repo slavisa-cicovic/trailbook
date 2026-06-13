@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Image,
@@ -134,7 +134,7 @@ function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps)
   };
   const zoomed = currentScale > 1.01;
 
-  function clampTranslate(x: number, y: number, scale: number) {
+  const clampTranslate = useCallback((x: number, y: number, scale: number) => {
     const maxX = (width * (scale - 1)) / 2;
     const maxY = (height * (scale - 1)) / 2;
 
@@ -142,15 +142,15 @@ function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps)
       x: clamp(x, -maxX, maxX),
       y: clamp(y, -maxY, maxY),
     };
-  }
+  }, [height, width]);
 
-  function resetZoom() {
+  const resetZoom = useCallback(() => {
     setBaseScale(1);
     setPinchScale(1);
     setBaseTranslate({ x: 0, y: 0 });
     setPanTranslate({ x: 0, y: 0 });
     onZoomChange(false);
-  }
+  }, [onZoomChange]);
 
   const imageGesture = useMemo(() => {
     const pinchGesture = Gesture.Pinch()
@@ -213,10 +213,10 @@ function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps)
     baseScale,
     baseTranslate.x,
     baseTranslate.y,
+    clampTranslate,
     currentScale,
-    height,
     onZoomChange,
-    width,
+    resetZoom,
     zoomed,
   ]);
 
