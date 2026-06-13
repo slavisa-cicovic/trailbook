@@ -59,7 +59,7 @@ import { useTripShares, useShareRecipients } from "../../features/sharing/hooks/
 import TripEditModal from "./components/trip-edit-modal";
 import TripShareModal from "./components/trip-share-modal";
 import SegmentEditModal from "./components/segment-edit-modal";
-import TripRouteMap, { type TrailbookMapType } from "./components/trip-route-map";
+import TripRouteMap, { type RoutePointInfo, type TrailbookMapType } from "./components/trip-route-map";
 
 const mapTypeOptions: { label: string; value: TrailbookMapType }[] = [
   { label: "Map", value: "standard" },
@@ -214,6 +214,28 @@ export default function TripRouteScreen() {
   const segmentPolylines = routeModel?.segmentPolylines ?? [];
   const fallbackCoordinates = routeModel?.fallbackCoordinates ?? [];
   const waypointMarkers = routeModel?.waypointMarkers ?? [];
+  const routePointInfos: RoutePointInfo[] = useMemo(() => {
+    if (!selectedTrip) {
+      return [];
+    }
+
+    const selectedTripSegmentsForPoints = routeModel?.selectedTripSegments ?? [];
+    const segmentProfileByLocalId = new Map(
+      selectedTripSegmentsForPoints.map(({ segment }) => [segment.localId, segment.recordingProfile]),
+    );
+
+    return loadedSelectedTripPoints.map((point) => ({
+      accuracy: point.accuracy,
+      latitude: point.latitude,
+      localId: point.localId,
+      longitude: point.longitude,
+      recordedAt: point.recordedAt,
+      recordingProfile: point.segmentLocalId
+        ? segmentProfileByLocalId.get(point.segmentLocalId) ?? selectedTrip.recordingProfile
+        : selectedTrip.recordingProfile,
+      speed: point.speed,
+    }));
+  }, [loadedSelectedTripPoints, routeModel?.selectedTripSegments, selectedTrip]);
   const selectedTripMapRegion = buildTripMapRegion(
     routeCoordinates.length > 0 ? routeCoordinates : fallbackCoordinates,
   );
@@ -951,6 +973,7 @@ export default function TripRouteScreen() {
             mapType={mapType}
             onSelectWaypoint={handleSelectWaypoint}
             region={selectedTripMapRegion}
+            routePointInfos={routePointInfos}
             segmentPolylines={segmentPolylines}
             waypointMarkers={waypointMarkers}
           />
