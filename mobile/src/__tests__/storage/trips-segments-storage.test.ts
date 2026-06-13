@@ -180,15 +180,6 @@ function makeRecordingConfig(): MobileRecordingConfig {
         },
       },
     },
-    profiles: {
-      default: {
-        walk: {
-          accuracy: "high",
-          distanceInterval: 5,
-          timeIntervalMs: 1000,
-        },
-      },
-    },
     updatedAt: "2026-01-01T10:00:00.000Z",
     version: 1,
   };

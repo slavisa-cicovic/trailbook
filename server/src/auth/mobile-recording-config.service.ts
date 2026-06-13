@@ -7,12 +7,9 @@ import type {
   MobileRecordingConfigOverrides,
   MobileRecordingConfigResponse,
   PartialPlatformPointFilterProfiles,
-  PartialPlatformTrackingProfiles,
   PlatformPointFilterProfilesResponse,
-  PlatformTrackingProfilesResponse,
   PointFilterProfileConfigResponse,
   RecordingProfileConfigName,
-  TrackingProfileConfigResponse,
 } from "./mobile-recording-config.types";
 
 const RECORDING_CONFIG_PROFILE_KEYS: RecordingProfileConfigName[] = ["walk", "bike", "drive", "boat", "plane"];
@@ -20,22 +17,6 @@ const RECORDING_CONFIG_PROFILE_KEYS: RecordingProfileConfigName[] = ["walk", "bi
 const BUILT_IN_RECORDING_CONFIG: MobileRecordingConfigResponse = {
   version: 3,
   updatedAt: "2026-06-03T00:00:00.000Z",
-  profiles: {
-    ios: {
-      walk: { accuracy: "high", distanceInterval: 12, timeIntervalMs: 15_000 },
-      bike: { accuracy: "high", distanceInterval: 15, timeIntervalMs: 15_000 },
-      drive: { accuracy: "high", distanceInterval: 10, timeIntervalMs: 5_000 },
-      boat: { accuracy: "balanced", distanceInterval: 180, timeIntervalMs: 240_000 },
-      plane: { accuracy: "low", distanceInterval: 1000, timeIntervalMs: 600_000 },
-    },
-    android: {
-      walk: { accuracy: "high", distanceInterval: 5, timeIntervalMs: 5_000 },
-      bike: { accuracy: "bestForNavigation", distanceInterval: 10, timeIntervalMs: 5_000 },
-      drive: { accuracy: "bestForNavigation", distanceInterval: 10, timeIntervalMs: 5_000 },
-      boat: { accuracy: "balanced", distanceInterval: 180, timeIntervalMs: 240_000 },
-      plane: { accuracy: "low", distanceInterval: 1000, timeIntervalMs: 600_000 },
-    },
-  },
   pointFilters: {
     ios: {
       walk: { maxAccuracyMeters: 35, maxJumpDistanceMeters: 120, maxImpliedSpeedKmh: 12, minMovementMeters: 8 },
@@ -74,18 +55,6 @@ export class MobileRecordingConfigService {
 
   async getResolvedConfigForUser(user: AuthUserResponse | null): Promise<MobileRecordingConfigResponse> {
     const baseConfig = await this.getBaseConfig();
-    const defaultProfiles = this.mergeProfiles(
-      this.cloneProfiles(baseConfig.profiles.default),
-      this.envOverrides.defaults?.default,
-    );
-    const iosProfiles = this.mergeProfiles(
-      this.cloneProfiles(baseConfig.profiles.ios),
-      this.envOverrides.defaults?.ios,
-    );
-    const androidProfiles = this.mergeProfiles(
-      this.cloneProfiles(baseConfig.profiles.android),
-      this.envOverrides.defaults?.android,
-    );
     const defaultPointFilters = this.mergePointFilters(
       this.clonePointFilters(baseConfig.pointFilters?.default),
       this.envOverrides.pointFilters?.default,
@@ -101,25 +70,16 @@ export class MobileRecordingConfigService {
 
     if (user) {
       const roleOverrides = this.envOverrides.roleOverrides?.[user.role];
-      this.mergeProfiles(iosProfiles, roleOverrides?.ios);
-      this.mergeProfiles(androidProfiles, roleOverrides?.android);
-      this.mergeProfiles(defaultProfiles, roleOverrides?.default);
       this.mergePointFilters(iosPointFilters, roleOverrides?.pointFilters?.ios);
       this.mergePointFilters(androidPointFilters, roleOverrides?.pointFilters?.android);
       this.mergePointFilters(defaultPointFilters, roleOverrides?.pointFilters?.default);
 
       const userOverrides = this.envOverrides.userOverrides?.[user.id];
-      this.mergeProfiles(iosProfiles, userOverrides?.ios);
-      this.mergeProfiles(androidProfiles, userOverrides?.android);
-      this.mergeProfiles(defaultProfiles, userOverrides?.default);
       this.mergePointFilters(iosPointFilters, userOverrides?.pointFilters?.ios);
       this.mergePointFilters(androidPointFilters, userOverrides?.pointFilters?.android);
       this.mergePointFilters(defaultPointFilters, userOverrides?.pointFilters?.default);
 
       const emailOverrides = this.envOverrides.emailOverrides?.[user.email.trim().toLowerCase()];
-      this.mergeProfiles(iosProfiles, emailOverrides?.ios);
-      this.mergeProfiles(androidProfiles, emailOverrides?.android);
-      this.mergeProfiles(defaultProfiles, emailOverrides?.default);
       this.mergePointFilters(iosPointFilters, emailOverrides?.pointFilters?.ios);
       this.mergePointFilters(androidPointFilters, emailOverrides?.pointFilters?.android);
       this.mergePointFilters(defaultPointFilters, emailOverrides?.pointFilters?.default);
@@ -131,10 +91,6 @@ export class MobileRecordingConfigService {
         this.envOverrides.updatedAt ?? baseConfig.updatedAt,
         baseConfig.updatedAt,
       ),
-      profiles: {
-        ios: this.mergeProfiles(iosProfiles, defaultProfiles),
-        android: this.mergeProfiles(androidProfiles, defaultProfiles),
-      },
       pointFilters: {
         ios: this.mergePointFilters(iosPointFilters, defaultPointFilters),
         android: this.mergePointFilters(androidPointFilters, defaultPointFilters),
@@ -181,8 +137,8 @@ export class MobileRecordingConfigService {
       candidate.version < 1 ||
       typeof candidate.updatedAt !== "string" ||
       Number.isNaN(Date.parse(candidate.updatedAt)) ||
-      !candidate.profiles ||
-      typeof candidate.profiles !== "object"
+      !candidate.pointFilters ||
+      typeof candidate.pointFilters !== "object"
     ) {
       return null;
     }
@@ -190,59 +146,12 @@ export class MobileRecordingConfigService {
     return {
       version: candidate.version,
       updatedAt: this.normalizeUpdatedAt(candidate.updatedAt, BUILT_IN_RECORDING_CONFIG.updatedAt),
-      profiles: {
-        default: this.mergeProfiles({}, candidate.profiles.default),
-        ios: this.mergeProfiles({}, candidate.profiles.ios),
-        android: this.mergeProfiles({}, candidate.profiles.android),
-      },
       pointFilters: {
         default: this.mergePointFilters({}, candidate.pointFilters?.default),
         ios: this.mergePointFilters({}, candidate.pointFilters?.ios),
         android: this.mergePointFilters({}, candidate.pointFilters?.android),
       },
     };
-  }
-
-  private cloneProfiles(
-    profiles: PlatformTrackingProfilesResponse | undefined,
-  ): PlatformTrackingProfilesResponse {
-    if (!profiles) {
-      return {};
-    }
-
-    return Object.fromEntries(
-      RECORDING_CONFIG_PROFILE_KEYS.flatMap((mode) => {
-        const config = profiles[mode];
-
-        return config ? [[mode, { ...config }]] : [];
-      }),
-    ) as PlatformTrackingProfilesResponse;
-  }
-
-  private mergeProfiles(
-    baseProfiles: PlatformTrackingProfilesResponse,
-    overrides: PartialPlatformTrackingProfiles | undefined,
-  ): PlatformTrackingProfilesResponse {
-    if (!overrides) {
-      return baseProfiles;
-    }
-
-    for (const mode of RECORDING_CONFIG_PROFILE_KEYS) {
-      const override = overrides[mode];
-
-      if (!override) {
-        continue;
-      }
-
-      const existing = baseProfiles[mode];
-      const normalized = this.normalizeTrackingProfile(override as Partial<TrackingProfileConfigResponse>, existing);
-
-      if (normalized) {
-        baseProfiles[mode] = normalized;
-      }
-    }
-
-    return baseProfiles;
   }
 
   private clonePointFilters(
@@ -290,25 +199,6 @@ export class MobileRecordingConfigService {
     return basePointFilters;
   }
 
-  private normalizeTrackingProfile(
-    config: Partial<TrackingProfileConfigResponse>,
-    fallback: TrackingProfileConfigResponse | undefined,
-  ): TrackingProfileConfigResponse | null {
-    const accuracy = this.normalizeAccuracy(config.accuracy, fallback?.accuracy);
-    const distanceInterval = this.normalizeInterval(config.distanceInterval, fallback?.distanceInterval);
-    const timeIntervalMs = this.normalizeInterval(config.timeIntervalMs, fallback?.timeIntervalMs);
-
-    if (!accuracy || distanceInterval === null || timeIntervalMs === null) {
-      return fallback ? { ...fallback } : null;
-    }
-
-    return {
-      accuracy,
-      distanceInterval,
-      timeIntervalMs,
-    };
-  }
-
   private normalizePointFilterProfile(
     config: Partial<PointFilterProfileConfigResponse>,
     fallback: PointFilterProfileConfigResponse | undefined,
@@ -339,31 +229,6 @@ export class MobileRecordingConfigService {
       maxImpliedSpeedKmh,
       minMovementMeters,
     };
-  }
-
-  private normalizeAccuracy(
-    value: string | undefined,
-    fallback: TrackingProfileConfigResponse["accuracy"] | undefined,
-  ): TrackingProfileConfigResponse["accuracy"] | null {
-    switch (value) {
-      case "lowest":
-      case "low":
-      case "balanced":
-      case "high":
-      case "highest":
-      case "bestForNavigation":
-        return value;
-      default:
-        return fallback ?? null;
-    }
-  }
-
-  private normalizeInterval(value: number | undefined, fallback: number | undefined): number | null {
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-      return value;
-    }
-
-    return typeof fallback === "number" && Number.isFinite(fallback) && fallback >= 0 ? fallback : null;
   }
 
   private normalizeNonNegativeNumber(value: number | undefined, fallback: number | undefined): number | null {

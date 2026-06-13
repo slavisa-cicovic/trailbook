@@ -75,9 +75,9 @@ export default function RecordingConfigScreen() {
     try {
       await resetRecordingConfigToServerDefaults(identitySession);
       await reloadConfig();
-      Alert.alert("Recording config", "Recording config reset to server defaults.");
+      Alert.alert("Point filters", "Point filters reset to server defaults.");
     } catch (error) {
-      Alert.alert("Recording config", error instanceof Error ? error.message : "Reset failed.");
+      Alert.alert("Point filters", error instanceof Error ? error.message : "Reset failed.");
     } finally {
       setResetBusy(false);
     }
@@ -93,14 +93,14 @@ export default function RecordingConfigScreen() {
     <ScreenLayout
       onBack={() => router.back()}
       showBottomNavigation
-      title="Recording config"
+      title="Point filters"
       contentVariant="plain"
     >
       <View style={styles.root}>
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Text style={[styles.title, { color: theme.primaryText }]}>Local device override</Text>
           <Text style={[styles.description, { color: theme.mutedText }]}>
-            AUTO recording keeps native background tracking stable. These overrides tune point filtering and segment classification on this device. Reset restores the config returned by the server database.
+            AUTO recording keeps native background tracking stable. These overrides only tune point filtering and segment classification on this device. Reset restores the filters returned by the server database.
           </Text>
           <Pressable
             disabled={resetBusy || loading}
@@ -115,7 +115,7 @@ export default function RecordingConfigScreen() {
         </View>
 
         {loading ? (
-          <Text style={[styles.loadingText, { color: theme.mutedText }]}>Loading recording config...</Text>
+          <Text style={[styles.loadingText, { color: theme.mutedText }]}>Loading point filters...</Text>
         ) : null}
 
         {config ? (

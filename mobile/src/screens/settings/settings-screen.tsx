@@ -135,7 +135,7 @@ function formatProvider(provider: string): string {
 }
 
 function getRecordingConfigErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : "Recording config update failed.";
+  const message = error instanceof Error ? error.message : "Point filters update failed.";
 
   if (message.includes("UIBackgroundModes")) {
     return "This iOS build is missing background location support. Rebuild and reinstall Trailbook with UIBackgroundModes=location.";
@@ -265,7 +265,7 @@ export default function SettingsScreen() {
 
     try {
       await syncResolvedRecordingConfig(identitySession);
-      setRecordingConfigMessage("Recording config updated.");
+      setRecordingConfigMessage("Point filters updated.");
     } catch (error) {
       setRecordingConfigMessage(getRecordingConfigErrorMessage(error));
     } finally {
@@ -505,23 +505,23 @@ export default function SettingsScreen() {
         {testSettingsEnabled ? (
           <SettingsSection theme={theme} title="Recording">
             <SettingsRow
-              description="Pulls the latest resolved recording profile config from the server and applies it immediately."
+              description="Pulls the latest resolved point filters from the server and applies them immediately."
               disabled={recordingConfigBusy}
               iconName="tune"
               message={recordingConfigMessage}
-              messageTone={recordingConfigMessage === "Recording config updated." ? "success" : "danger"}
+              messageTone={recordingConfigMessage === "Point filters updated." ? "success" : "danger"}
               onPress={() => void handleUpdateRecordingConfig()}
               theme={theme}
-              title="Recording config"
+              title="Point filters"
               value={recordingConfigBusy ? "Updating..." : "Update"}
             />
             <SettingsDivider theme={theme} />
             <SettingsRow
-              description="Edit the local recording config used by this device."
+              description="Edit the local point filtering override used by this device."
               iconName="settings"
               onPress={() => router.push("/settings/recording-config")}
               theme={theme}
-              title="Recording config editor"
+              title="Point filter editor"
               value="Open"
             />
             <SettingsDivider theme={theme} />

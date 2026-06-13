@@ -147,7 +147,7 @@ export default function RecordingConfigProfileScreen() {
       await saveLocalRecordingConfigOverride(identitySession, nextConfig);
       router.back();
     } catch (error) {
-      Alert.alert("Recording config", error instanceof Error ? error.message : "Save failed.");
+      Alert.alert("Point filters", error instanceof Error ? error.message : "Save failed.");
     } finally {
       setSaving(false);
     }
@@ -187,7 +187,7 @@ export default function RecordingConfigProfileScreen() {
       setMaxImpliedSpeedKmh(String(remotePointFilterProfile.maxImpliedSpeedKmh));
       setMinMovementMeters(String(remotePointFilterProfile.minMovementMeters));
     } catch (error) {
-      Alert.alert("Recording config", error instanceof Error ? error.message : "Reset failed.");
+      Alert.alert("Point filters", error instanceof Error ? error.message : "Reset failed.");
     } finally {
       setResetting(false);
     }

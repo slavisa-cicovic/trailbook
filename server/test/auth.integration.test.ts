@@ -203,7 +203,7 @@ describe("auth integration", () => {
     assert.equal(accessTokens[0]?.revokedAt, null);
   });
 
-  test("mobile recording config returns resolved tracking profiles for the authenticated user", async () => {
+  test("mobile recording config returns resolved point filters for the authenticated user", async () => {
     await request(app.getHttpServer()).post("/api/auth/register").send({
       displayName: "Slavisa",
       email: "slavisa@example.com",
@@ -232,11 +232,12 @@ describe("auth integration", () => {
 
     assert.equal(configResponse.status, 200);
     assert.equal(configResponse.body.version, 3);
-    assert.equal(configResponse.body.profiles.ios.auto, undefined);
-    assert.equal(configResponse.body.profiles.android.auto, undefined);
-    assert.equal(configResponse.body.profiles.ios.walk.distanceInterval, 12);
-    assert.equal(configResponse.body.profiles.android.walk.distanceInterval, 5);
-    assert.equal(configResponse.body.profiles.ios.drive.timeIntervalMs, 5000);
+    assert.equal(configResponse.body.profiles, undefined);
+    assert.equal(configResponse.body.pointFilters.ios.auto, undefined);
+    assert.equal(configResponse.body.pointFilters.android.auto, undefined);
+    assert.equal(configResponse.body.pointFilters.ios.walk.maxAccuracyMeters, 35);
+    assert.equal(configResponse.body.pointFilters.android.walk.minMovementMeters, 4);
+    assert.equal(configResponse.body.pointFilters.ios.drive.maxImpliedSpeedKmh, 180);
   });
 
   test("logout revokes the current session", async () => {
