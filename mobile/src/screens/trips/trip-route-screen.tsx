@@ -543,7 +543,7 @@ export default function TripRouteScreen() {
   }
 
   async function handleApplyRawReprocessing() {
-    if (!selectedTrip || !currentUserId || selectedTrip.status !== "ended") {
+    if (!selectedTrip || !currentUserId || selectedTrip.status !== "ended" || rawReprocessUndoAvailable) {
       return;
     }
 
@@ -760,7 +760,16 @@ export default function TripRouteScreen() {
                 {selectedTrip.status === "ended" &&
                 identitySession.mode === "authenticated" &&
                 featureFlags.rawEventReprocessingEnabled ? (
-                  <>
+                  rawReprocessUndoAvailable ? (
+                    <IconButton
+                      accessibilityLabel="Undo raw reprocessing"
+                      disabled={rawReprocessBusy}
+                      disabledIconColor="#6b7280"
+                      icon="undo"
+                      onPress={handleUndoRawReprocessing}
+                      style={[styles.reprocessUndoButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
+                    />
+                  ) : (
                     <IconButton
                       accessibilityLabel={rawReprocessBusy ? "Reprocessing route" : "Reprocess route"}
                       disabled={rawReprocessBusy}
@@ -769,17 +778,7 @@ export default function TripRouteScreen() {
                       onPress={() => void handleApplyRawReprocessing()}
                       style={[styles.reprocessButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
                     />
-                    {rawReprocessUndoAvailable ? (
-                      <IconButton
-                        accessibilityLabel="Undo raw reprocessing"
-                        disabled={rawReprocessBusy}
-                        disabledIconColor="#6b7280"
-                        icon="undo"
-                        onPress={handleUndoRawReprocessing}
-                        style={[styles.reprocessUndoButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
-                      />
-                    ) : null}
-                  </>
+                  )
                 ) : null}
                 {identitySession.mode === "authenticated" ? (
                   <>
