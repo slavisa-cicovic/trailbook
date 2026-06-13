@@ -9,6 +9,9 @@ import {
   previewRawEventReprocessing,
 } from "../../services/recording/raw-event-reprocessing.service";
 import {
+  saveRawEventReprocessingUndoSnapshotForTrip,
+} from "../../services/recording/raw-event-reprocessing-undo.service";
+import {
   updateRawLocationEventProcessingResults,
 } from "../../storage/raw-location-events-storage";
 import { replaceTripPointsForTrip } from "../../storage/trip-points-storage";
@@ -18,6 +21,10 @@ import { loadWaypoints, saveWaypoints } from "../../storage/waypoints-storage";
 
 vi.mock("../../repositories/reprocessing-repository", () => ({
   loadRawReprocessingInputModel: vi.fn(),
+}));
+
+vi.mock("../../services/recording/raw-event-reprocessing-undo.service", () => ({
+  saveRawEventReprocessingUndoSnapshotForTrip: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../storage/raw-location-events-storage", () => ({
@@ -415,6 +422,7 @@ describe("raw event reprocessing", () => {
     it("applies raw replay to trip recording data", async () => {
       await applyRawEventReprocessing("trip-1");
 
+      expect(saveRawEventReprocessingUndoSnapshotForTrip).toHaveBeenCalledWith("trip-1");
       expect(saveTrips).toHaveBeenCalled();
       expect(saveTripSegments).toHaveBeenCalled();
       expect(replaceTripPointsForTrip).toHaveBeenCalledWith(

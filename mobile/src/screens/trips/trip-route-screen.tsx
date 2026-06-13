@@ -32,9 +32,11 @@ import {
 } from "../../services/trip-points/trip-points.service";
 import {
   applyRawEventReprocessing,
-  previewRawEventReprocessing,
-  type ReprocessingPreview,
 } from "../../services/recording/raw-event-reprocessing.service";
+import {
+  hasRawEventReprocessingUndoSnapshot,
+  restoreRawEventReprocessingUndoSnapshot,
+} from "../../services/recording/raw-event-reprocessing-undo.service";
 import {
   loadTripPointsForTrip,
   replaceTripPointsForTrip,
@@ -139,21 +141,6 @@ function formatBatteryConsumption(startLevelPercent: number | null, endLevelPerc
   return `${consumed}%`;
 }
 
-function formatRawReprocessingPreview(preview: ReprocessingPreview): string {
-  const warnings = preview.warnings.length > 0
-    ? `\n\nWarnings:\n${preview.warnings.map((warning) => `- ${warning}`).join("\n")}`
-    : "";
-
-  return [
-    `Raw events: ${preview.rawEventCount}`,
-    `Old: ${preview.oldPointCount} points, ${formatDistanceKm(preview.oldDistanceMeters)}, ${preview.oldSegmentCount} segments`,
-    `New: ${preview.newPointCount} points, ${formatDistanceKm(preview.newDistanceMeters)}, ${preview.newSegmentCount} segments`,
-    `Rejected raw: ${preview.rejectedRawEventCount}`,
-    `Duplicate raw: ${preview.duplicateRawEventCount}`,
-    warnings,
-  ].join("\n");
-}
-
 function buildTripRoutePath(tripLocalId: string, groupLocalId: string | undefined): string {
   if (!groupLocalId) {
     return `/trips/${tripLocalId}`;
@@ -186,6 +173,8 @@ export default function TripRouteScreen() {
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncIconRotation] = useState(() => new Animated.Value(0));
   const [rawReprocessBusy, setRawReprocessBusy] = useState(false);
+  const [rawReprocessUndoAvailable, setRawReprocessUndoAvailable] = useState(false);
+  const [rawReprocessUndoBannerVisible, setRawReprocessUndoBannerVisible] = useState(false);
   const [segmentEditSegmentId, setSegmentEditSegmentId] = useState<string | null>(null);
   const [routeModel, setRouteModel] = useState<TripRouteScreenModel | null>(null);
   const [routePointsLoading, setRoutePointsLoading] = useState(false);
@@ -326,6 +315,29 @@ export default function TripRouteScreen() {
       cancelled = true;
     };
   }, [currentUserId, resolvedGroupId, resolvedTripId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadUndoAvailability() {
+      if (!selectedTripLocalId) {
+        setRawReprocessUndoAvailable(false);
+        return;
+      }
+
+      const undoAvailable = await hasRawEventReprocessingUndoSnapshot(selectedTripLocalId);
+
+      if (!cancelled) {
+        setRawReprocessUndoAvailable(undoAvailable);
+      }
+    }
+
+    void loadUndoAvailability();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTripLocalId]);
 
   useEffect(() => {
     if (
@@ -536,9 +548,10 @@ export default function TripRouteScreen() {
     }
 
     setRawReprocessBusy(true);
+    setDetailsSheetVisible(false);
 
     try {
-      const result = await applyRawEventReprocessing(selectedTrip.localId);
+      await applyRawEventReprocessing(selectedTrip.localId);
       const [nextTrips, nextTripSegments, nextWaypoints] = await Promise.all([
         loadTrips(),
         loadTripSegments(),
@@ -549,10 +562,9 @@ export default function TripRouteScreen() {
       await setTripSegments(nextTripSegments);
       await setWaypoints(nextWaypoints);
       await refreshRouteModel(selectedTrip.localId);
-      Alert.alert(
-        "Route reprocessed",
-        `Rebuilt route from raw events: ${result.newPointCount} points, ${formatDistanceKm(result.newDistanceMeters)}.`,
-      );
+      setRawReprocessUndoAvailable(true);
+      setRawReprocessUndoBannerVisible(true);
+      setDetailsSheetVisible(false);
     } catch (error) {
       Alert.alert(
         "Raw reprocessing failed",
@@ -563,38 +575,45 @@ export default function TripRouteScreen() {
     }
   }
 
-  async function handlePreviewRawReprocessing() {
-    if (!selectedTrip || !currentUserId || selectedTrip.status !== "ended") {
+  async function applyRawReprocessingUndo() {
+    if (!selectedTrip || rawReprocessBusy) {
       return;
     }
 
     setRawReprocessBusy(true);
 
     try {
-      const preview = await previewRawEventReprocessing(selectedTrip.localId);
+      await restoreRawEventReprocessingUndoSnapshot(selectedTrip.localId);
 
-      Alert.alert(
-        "Reprocess route from raw GPS",
-        formatRawReprocessingPreview(preview),
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Apply",
-            style: "destructive",
-            onPress: () => {
-              void handleApplyRawReprocessing();
-            },
-          },
-        ],
-      );
+      const [nextTrips, nextTripSegments, nextWaypoints] = await Promise.all([
+        loadTrips(),
+        loadTripSegments(),
+        loadWaypoints(),
+      ]);
+
+      await setTrips(nextTrips);
+      await setTripSegments(nextTripSegments);
+      await setWaypoints(nextWaypoints);
+      await refreshRouteModel(selectedTrip.localId);
+      setRawReprocessUndoAvailable(false);
+      setRawReprocessUndoBannerVisible(false);
+      setDetailsSheetVisible(false);
     } catch (error) {
       Alert.alert(
-        "Raw reprocessing unavailable",
-        error instanceof Error ? error.message : "Unable to preview raw reprocessing for this route.",
+        "Undo failed",
+        error instanceof Error ? error.message : "Unable to restore the previous route data.",
       );
     } finally {
       setRawReprocessBusy(false);
     }
+  }
+
+  function handleUndoRawReprocessing() {
+    if (!selectedTrip || !rawReprocessUndoAvailable) {
+      return;
+    }
+
+    void applyRawReprocessingUndo();
   }
 
   function handleSelectWaypoint(waypoint: Waypoint) {
@@ -741,14 +760,26 @@ export default function TripRouteScreen() {
                 {selectedTrip.status === "ended" &&
                 identitySession.mode === "authenticated" &&
                 featureFlags.rawEventReprocessingEnabled ? (
-                  <IconButton
-                    accessibilityLabel={rawReprocessBusy ? "Reprocessing route" : "Reprocess route"}
-                    disabled={rawReprocessBusy}
-                    disabledIconColor="#6b7280"
-                    icon="replay"
-                    onPress={() => void handlePreviewRawReprocessing()}
-                    style={[styles.reprocessButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
-                  />
+                  <>
+                    <IconButton
+                      accessibilityLabel={rawReprocessBusy ? "Reprocessing route" : "Reprocess route"}
+                      disabled={rawReprocessBusy}
+                      disabledIconColor="#6b7280"
+                      icon="replay"
+                      onPress={() => void handleApplyRawReprocessing()}
+                      style={[styles.reprocessButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
+                    />
+                    {rawReprocessUndoAvailable ? (
+                      <IconButton
+                        accessibilityLabel="Undo raw reprocessing"
+                        disabled={rawReprocessBusy}
+                        disabledIconColor="#6b7280"
+                        icon="undo"
+                        onPress={handleUndoRawReprocessing}
+                        style={[styles.reprocessUndoButton, rawReprocessBusy && styles.headerIconButtonDisabled]}
+                      />
+                    ) : null}
+                  </>
                 ) : null}
                 {identitySession.mode === "authenticated" ? (
                   <>
@@ -955,6 +986,30 @@ export default function TripRouteScreen() {
             </Pressable>
           </View>
         </View>
+        {rawReprocessUndoBannerVisible && rawReprocessUndoAvailable ? (
+          <View style={styles.rawReprocessUndoBanner}>
+            <View style={styles.rawReprocessUndoTextBlock}>
+              <Text style={styles.rawReprocessUndoTitle}>Route reprocessed</Text>
+              <Text numberOfLines={1} style={styles.rawReprocessUndoText}>
+                Review the map and undo if the result is worse.
+              </Text>
+            </View>
+            <Pressable
+              disabled={rawReprocessBusy}
+              onPress={handleUndoRawReprocessing}
+              style={[styles.rawReprocessUndoButton, rawReprocessBusy && styles.rawReprocessUndoButtonDisabled]}
+            >
+              <Text style={styles.rawReprocessUndoButtonText}>Undo</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Dismiss raw reprocessing undo"
+              onPress={() => setRawReprocessUndoBannerVisible(false)}
+              style={styles.rawReprocessDismissButton}
+            >
+              <MaterialIcons color="#dbe6d5" name="close" size={18} />
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     </ScreenLayout>
   );
@@ -1129,6 +1184,62 @@ const styles = StyleSheet.create({
   },
   reprocessButton: {
     backgroundColor: "#e8edf5",
+  },
+  reprocessUndoButton: {
+    backgroundColor: "#f4ead8",
+  },
+  rawReprocessUndoBanner: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: 92,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 18,
+    backgroundColor: "#243224",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#142014",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  rawReprocessUndoTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  rawReprocessUndoTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fffdf8",
+  },
+  rawReprocessUndoText: {
+    fontSize: 13,
+    color: "#dbe6d5",
+  },
+  rawReprocessUndoButton: {
+    borderRadius: 999,
+    backgroundColor: "#fffdf8",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  rawReprocessUndoButtonDisabled: {
+    opacity: 0.6,
+  },
+  rawReprocessUndoButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#243224",
+  },
+  rawReprocessDismissButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 253, 248, 0.12)",
   },
   demoHint: {
     fontSize: 13,

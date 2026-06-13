@@ -607,15 +607,6 @@ export default function SettingsScreen() {
             />
             <SettingsDivider theme={theme} />
             <SettingsRow
-              description="Debug helper that previews and applies route rebuilds from locally stored raw location events."
-              iconName="replay"
-              onPress={() => router.push("/settings/raw-reprocessing")}
-              theme={theme}
-              title="Reprocess raw route"
-              value="Open"
-            />
-            <SettingsDivider theme={theme} />
-            <SettingsRow
               description="Benchmark raw SQL vs Drizzle for trip points and raw location events using synthetic local rows."
               iconName="speed"
               onPress={() => router.push("/settings/storage-benchmark")}

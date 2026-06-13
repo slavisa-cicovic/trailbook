@@ -330,6 +330,20 @@ describe("buildAutoBatchProfileSections", () => {
     };
   }
 
+  function makeCityDriveTimelineSample(
+    offsetSeconds: number,
+    speedMs: number,
+    index: number,
+  ): AutoLocationPoint {
+    return {
+      accuracy: 5,
+      latitude: 45.02 + index * 0.00016,
+      longitude: 19.811,
+      recordedAt: iso(offsetSeconds),
+      speed: speedMs,
+    };
+  }
+
   it("splits one offline batch into chronological profile sections", () => {
     const walkOut = Array.from({ length: 5 }, (_, index) => makeTimelineSample(index * 30, 1.4));
     const drive = Array.from({ length: 6 }, (_, index) => makeTimelineSample(150 + index * 30, 13.9));
@@ -378,6 +392,52 @@ describe("buildAutoBatchProfileSections", () => {
 
     expect(sections).toHaveLength(1);
     expect(sections[0]?.profile).toBe("drive");
+  });
+
+  it("detects city drive when speeds oscillate between bike and drive samples", () => {
+    const walkOut = Array.from({ length: 5 }, (_, index) => makeTimelineSample(index * 30, 1.2));
+    const cityDriveSpeedsMs = [
+      4.23,
+      5.07,
+      7.17,
+      7.13,
+      2.93,
+      8.55,
+      3.6,
+      9.3,
+      12.02,
+      11.69,
+      2.66,
+      3.19,
+      9.13,
+      8.54,
+      3.18,
+      8.11,
+      9.33,
+      1.42,
+      3.15,
+      8.94,
+      9.44,
+      9.68,
+      8.41,
+      6.18,
+      6.86,
+      5.74,
+      5.67,
+    ];
+    const cityDrive = cityDriveSpeedsMs.map((speedMs, index) =>
+      makeCityDriveTimelineSample(150 + index * 5, speedMs, index),
+    );
+    const walkBackStartSeconds = 150 + cityDriveSpeedsMs.length * 5 + 30;
+    const walkBack = Array.from({ length: 5 }, (_, index) =>
+      makeTimelineSample(walkBackStartSeconds + index * 30, 1.2),
+    );
+
+    const sections = buildAutoBatchProfileSections([...walkOut, ...cityDrive, ...walkBack], "walk");
+
+    expect(sections.map((section) => section.profile)).toEqual(["walk", "drive", "walk"]);
+    expect(sections[1]?.startedAt).toBe(cityDrive[0]?.recordedAt);
+    expect(sections[1]?.samples).toHaveLength(cityDrive.length);
   });
 
   it("merges two walk runs separated by a stationary gap into one section", () => {

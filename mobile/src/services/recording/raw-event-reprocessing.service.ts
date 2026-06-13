@@ -13,6 +13,7 @@ import {
 } from "./recording-processor.service";
 import type { RecordingProcessingTrace } from "./recording-processing-trace.service";
 import { applyRawEventReprocessingUnitOfWork } from "./recording-unit-of-work.service";
+import { saveRawEventReprocessingUndoSnapshotForTrip } from "./raw-event-reprocessing-undo.service";
 import { removeInitialAutoBootstrapWalkSegment } from "../trip-segments/trip-segments.service";
 
 export type ReprocessedSegmentSummary = RecordingProcessorSegmentSummary;
@@ -280,6 +281,7 @@ export async function applyRawEventReprocessing(tripLocalId: string): Promise<Re
     throw new Error("Reprocessing produced zero accepted points.");
   }
 
+  await saveRawEventReprocessingUndoSnapshotForTrip(tripLocalId);
   await applyRawReprocessingResult(buildResult);
 
   return buildResult.preview;

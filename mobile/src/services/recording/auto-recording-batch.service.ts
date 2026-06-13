@@ -3,7 +3,9 @@ import {
   AUTO_BATCH_MIN_BIKE_RUN_MS,
   AUTO_BATCH_MIN_DRIVE_RUN_MS,
   AUTO_BATCH_MIN_WALK_RUN_MS,
+  BIKE_MIN_KMH,
   BOAT_STABILITY_MS,
+  DRIVE_MIN_KMH,
   PLANE_STABILITY_MS,
   STATIONARY_MAX_DISPLACEMENT_METERS,
   STATIONARY_MAX_KMH,
@@ -13,9 +15,17 @@ import {
   distanceMetersBetweenPoints,
   getPointTimeMs,
   getSpeedKmh,
+  percentile,
 } from "./auto-recording.utils";
 
 export type { AutoLocationPoint };
+
+const CITY_DRIVE_MIN_DISPLACEMENT_METERS = 250;
+const CITY_DRIVE_MIN_FAST_SAMPLE_COUNT = 4;
+const CITY_DRIVE_MIN_SAMPLE_COUNT = 6;
+const CITY_DRIVE_STRONG_P75_KMH = 28;
+const CITY_DRIVE_STRONG_PEAK_KMH = 40;
+const VEHICLE_RUN_MAX_SAMPLE_GAP_MS = 90 * 1000;
 
 export interface AutoBatchProfileSection<TSample extends AutoLocationPoint = AutoLocationPoint> {
   endedAt: string;
@@ -28,6 +38,13 @@ interface AutoBatchProfileRun {
   endedAt: string;
   profile: RecordingProfile;
   samples: AutoLocationPoint[];
+  startedAt: string;
+}
+
+interface AutoBatchSpeedRun {
+  endedAt: string;
+  samples: AutoLocationPoint[];
+  speedsKmh: number[];
   startedAt: string;
 }
 
@@ -84,6 +101,10 @@ function inferAutoBatchSampleProfile(
 }
 
 function getRunDurationMs(run: Pick<AutoBatchProfileRun, "endedAt" | "startedAt">): number {
+  return new Date(run.endedAt).getTime() - new Date(run.startedAt).getTime();
+}
+
+function getSpeedRunDurationMs(run: Pick<AutoBatchSpeedRun, "endedAt" | "startedAt">): number {
   return new Date(run.endedAt).getTime() - new Date(run.startedAt).getTime();
 }
 
@@ -152,7 +173,161 @@ function buildAutoBatchProfileRuns(sortedSamples: AutoLocationPoint[]): AutoBatc
     }
   }
 
-  return runs.filter(isStableAutoBatchProfileRun);
+  return mergeAutoBatchProfileRuns(
+    runs.filter(isStableAutoBatchProfileRun),
+    buildSmoothedCityDriveRuns(sortedSamples),
+  );
+}
+
+function buildVehicleSpeedRuns(sortedSamples: AutoLocationPoint[]): AutoBatchSpeedRun[] {
+  const runs: AutoBatchSpeedRun[] = [];
+  let currentRun: AutoBatchSpeedRun | null = null;
+  let previousIncludedSample: AutoLocationPoint | null = null;
+
+  for (let index = 0; index < sortedSamples.length; index += 1) {
+    const sample = sortedSamples[index];
+    const speedKmh = getSpeedKmh(index > 0 ? sortedSamples[index - 1] ?? null : null, sample);
+
+    if (speedKmh === null || !Number.isFinite(speedKmh) || speedKmh < BIKE_MIN_KMH) {
+      if (currentRun) {
+        runs.push(currentRun);
+      }
+      currentRun = null;
+      previousIncludedSample = null;
+      continue;
+    }
+
+    const previousIncludedSampleMs = previousIncludedSample ? getPointTimeMs(previousIncludedSample) : null;
+    const sampleMs = getPointTimeMs(sample);
+
+    if (
+      currentRun &&
+      previousIncludedSampleMs !== null &&
+      Number.isFinite(previousIncludedSampleMs) &&
+      Number.isFinite(sampleMs) &&
+      sampleMs - previousIncludedSampleMs > VEHICLE_RUN_MAX_SAMPLE_GAP_MS
+    ) {
+      runs.push(currentRun);
+      currentRun = null;
+    }
+
+    if (!currentRun) {
+      currentRun = {
+        endedAt: sample.recordedAt,
+        samples: [sample],
+        speedsKmh: [speedKmh],
+        startedAt: sample.recordedAt,
+      };
+    } else {
+      currentRun.samples.push(sample);
+      currentRun.speedsKmh.push(speedKmh);
+      currentRun.endedAt = sample.recordedAt;
+    }
+
+    previousIncludedSample = sample;
+  }
+
+  if (currentRun) {
+    runs.push(currentRun);
+  }
+
+  return runs;
+}
+
+function getRunDisplacementMeters(run: AutoBatchSpeedRun): number {
+  const firstSample = run.samples[0] ?? null;
+  const lastSample = run.samples[run.samples.length - 1] ?? null;
+
+  if (!firstSample || !lastSample) {
+    return 0;
+  }
+
+  return distanceMetersBetweenPoints(firstSample, lastSample);
+}
+
+function isSmoothedCityDriveRun(run: AutoBatchSpeedRun): boolean {
+  if (run.samples.length < CITY_DRIVE_MIN_SAMPLE_COUNT) {
+    return false;
+  }
+
+  if (getSpeedRunDurationMs(run) < AUTO_BATCH_MIN_DRIVE_RUN_MS) {
+    return false;
+  }
+
+  if (getRunDisplacementMeters(run) < CITY_DRIVE_MIN_DISPLACEMENT_METERS) {
+    return false;
+  }
+
+  const fastSampleCount = run.speedsKmh.filter((speedKmh) => speedKmh >= DRIVE_MIN_KMH).length;
+  const peakSpeedKmh = Math.max(...run.speedsKmh);
+  const p75SpeedKmh = percentile(run.speedsKmh, 0.75);
+
+  return (
+    fastSampleCount >= CITY_DRIVE_MIN_FAST_SAMPLE_COUNT &&
+    (peakSpeedKmh >= CITY_DRIVE_STRONG_PEAK_KMH || p75SpeedKmh >= CITY_DRIVE_STRONG_P75_KMH)
+  );
+}
+
+function buildSmoothedCityDriveRuns(sortedSamples: AutoLocationPoint[]): AutoBatchProfileRun[] {
+  return buildVehicleSpeedRuns(sortedSamples)
+    .filter(isSmoothedCityDriveRun)
+    .map((run) => ({
+      endedAt: run.endedAt,
+      profile: "drive",
+      samples: run.samples,
+      startedAt: run.startedAt,
+    }));
+}
+
+function doRunsOverlap(left: AutoBatchProfileRun, right: AutoBatchProfileRun): boolean {
+  const leftStartedAtMs = new Date(left.startedAt).getTime();
+  const leftEndedAtMs = new Date(left.endedAt).getTime();
+  const rightStartedAtMs = new Date(right.startedAt).getTime();
+  const rightEndedAtMs = new Date(right.endedAt).getTime();
+
+  return leftStartedAtMs <= rightEndedAtMs && rightStartedAtMs <= leftEndedAtMs;
+}
+
+function mergeDriveRuns(runs: AutoBatchProfileRun[]): AutoBatchProfileRun[] {
+  const sortedRuns = [...runs].sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+  const mergedRuns: AutoBatchProfileRun[] = [];
+
+  for (const run of sortedRuns) {
+    const previousRun = mergedRuns[mergedRuns.length - 1] ?? null;
+
+    if (!previousRun || !doRunsOverlap(previousRun, run)) {
+      mergedRuns.push({ ...run, samples: [...run.samples] });
+      continue;
+    }
+
+    previousRun.endedAt = previousRun.endedAt.localeCompare(run.endedAt) >= 0 ? previousRun.endedAt : run.endedAt;
+    previousRun.startedAt =
+      previousRun.startedAt.localeCompare(run.startedAt) <= 0 ? previousRun.startedAt : run.startedAt;
+    previousRun.samples = [...previousRun.samples, ...run.samples]
+      .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  }
+
+  return mergedRuns;
+}
+
+function mergeAutoBatchProfileRuns(
+  exactRuns: AutoBatchProfileRun[],
+  smoothedDriveRuns: AutoBatchProfileRun[],
+): AutoBatchProfileRun[] {
+  if (smoothedDriveRuns.length === 0) {
+    return exactRuns;
+  }
+
+  const driveRuns = mergeDriveRuns([
+    ...exactRuns.filter((run) => run.profile === "drive"),
+    ...smoothedDriveRuns,
+  ]);
+  const nonDriveRuns = exactRuns.filter(
+    (run) => run.profile !== "drive" && !driveRuns.some((driveRun) => doRunsOverlap(run, driveRun)),
+  );
+
+  return [...nonDriveRuns, ...driveRuns]
+    .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
 }
 
 function findAutoBatchSectionIndex<TSample extends AutoLocationPoint>(
