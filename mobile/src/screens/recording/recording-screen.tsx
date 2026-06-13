@@ -132,7 +132,6 @@ export default function RecordingScreen() {
   const {
     activeIdentitySession,
     activeRecordingProfile,
-    activeRecordingProfileLabel,
     activeRecordingRouteModel,
     activeSegment,
     activeTrip,
@@ -1198,7 +1197,6 @@ export default function RecordingScreen() {
                 <View style={styles.metaPanel}>
                   <Text style={styles.metaLine}>Active user: {activeIdentitySession.userEmail}</Text>
                   <Text style={styles.metaLine}>Route: {activeTrip?.title ?? "n/a"}</Text>
-                  <Text style={styles.metaLine}>Mode: {activeRecordingProfileLabel}</Text>
                   <Text style={styles.metaLine}>Last point: {lastPoint}</Text>
                   <Text style={styles.metaLine}>Active trips: {String(activeTripCount)}</Text>
                   <Text style={styles.metaLine}>Paused trips: {String(pausedTrips.length)}</Text>

@@ -121,7 +121,7 @@ export function useRecordingScreenModel(input: UseRecordingScreenModelInput) {
   const hasNextPhoto =
     selectedPhotoIndex !== -1 && selectedPhotoIndex < selectedPhotoWaypointAttachments.length - 1;
   const sessionTriggerLabel = activeTrip
-    ? `${activeTrip.title} • ${activeRecordingProfileLabel}`
+    ? activeTrip.title
     : pausedTrips.length > 0
       ? `${pausedTrips.length} paused trip${pausedTrips.length === 1 ? "" : "s"}`
       : recordingSession.status === "idle"
