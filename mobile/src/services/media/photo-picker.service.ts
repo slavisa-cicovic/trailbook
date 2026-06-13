@@ -149,8 +149,21 @@ export async function downloadPhotoToLocalStorage(input: {
 
   const safeFileNameSeed = input.fileNameSeed.replace(/[^a-zA-Z0-9_-]/g, "-");
   const destination = buildPhotoStorageUri(`${safeFileNameSeed}${resolvePhotoExtensionFromMimeType(input.mimeType)}`);
+  await FileSystem.deleteAsync(destination, { idempotent: true });
+
   const result = await FileSystem.downloadAsync(input.sourceUrl, destination);
+
+  if (result.status < 200 || result.status >= 300) {
+    await FileSystem.deleteAsync(destination, { idempotent: true });
+    throw new Error(`Photo download failed with status ${result.status}`);
+  }
+
   const fileInfo = await FileSystem.getInfoAsync(result.uri);
+
+  if (!fileInfo.exists || fileInfo.isDirectory || fileInfo.size <= 512) {
+    await FileSystem.deleteAsync(destination, { idempotent: true });
+    throw new Error("Downloaded photo file is invalid.");
+  }
 
   return {
     localUri: result.uri,

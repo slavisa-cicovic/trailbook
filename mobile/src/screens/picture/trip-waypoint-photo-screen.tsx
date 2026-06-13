@@ -6,9 +6,11 @@ import {
   type WaypointPhotoGroup,
   type WaypointPhotoViewerModel,
 } from "../../repositories/waypoints-repository";
+import { loadWaypointAttachments } from "../../repositories/waypoint-attachments-repository";
 import {
   markWaypointAttachmentDeleted,
 } from "../../services/trips/trips-management.service";
+import { repairMissingWaypointPhotos } from "../../services/media/photo-recovery.service";
 import { useSessionStore } from "../../state/session-store";
 import {
   setWaypointAttachments,
@@ -55,12 +57,42 @@ export default function TripWaypointPhotoScreen() {
       setViewerModelLoading(true);
 
       try {
-        const nextViewerModel = await getWaypointPhotoViewerModel({
+        let nextViewerModel = await getWaypointPhotoViewerModel({
           selectedAttachmentLocalId: resolvedAttachmentId ?? null,
           tripLocalId: resolvedTripId,
           userId: identitySession.userId,
           waypointLocalId: resolvedWaypointId,
         });
+
+        if (nextViewerModel) {
+          const repairedPhotos = await repairMissingWaypointPhotos({
+            allAttachments: waypointAttachments,
+            attachments: nextViewerModel.attachments,
+            sessionToken: identitySession.sessionToken,
+            tripServerId: nextViewerModel.trip.serverId,
+          });
+
+          if (repairedPhotos.repairedCount > 0 && !cancelled) {
+            const latestAttachments = await loadWaypointAttachments();
+            const repairedPhotosById = new Map(
+              repairedPhotos.attachments.map((attachment) => [attachment.localId, attachment]),
+            );
+            const nextAttachments = latestAttachments.map(
+              (attachment) => repairedPhotosById.get(attachment.localId) ?? attachment,
+            );
+
+            await setWaypointAttachments(nextAttachments);
+            nextViewerModel = {
+              ...nextViewerModel,
+              attachments: repairedPhotos.attachments,
+              selectedAttachment: nextViewerModel.selectedAttachment
+                ? repairedPhotos.attachments.find(
+                    (attachment) => attachment.localId === nextViewerModel?.selectedAttachment?.localId,
+                  ) ?? nextViewerModel.selectedAttachment
+                : null,
+            };
+          }
+        }
 
         if (!cancelled) {
           setViewerModel(nextViewerModel);
@@ -117,6 +149,13 @@ export default function TripWaypointPhotoScreen() {
     transition: "next" | "previous",
   ) {
     if (!photoGroup) {
+      return;
+    }
+
+    if (!photoGroup.attachmentLocalId) {
+      router.replace(
+        `/trips/${loadedViewerModel.trip.localId}/waypoints/${photoGroup.waypointLocalId}`,
+      );
       return;
     }
 

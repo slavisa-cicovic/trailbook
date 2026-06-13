@@ -20,7 +20,7 @@ export interface WaypointScreenModel {
 }
 
 export interface WaypointPhotoGroup {
-  attachmentLocalId: string;
+  attachmentLocalId: string | null;
   title: string;
   waypointLocalId: string;
 }
@@ -77,20 +77,20 @@ function getWaypointPhotoGroup(
   attachments: WaypointAttachment[],
   boundary: "first" | "last",
 ): WaypointPhotoGroup | null {
-  for (const waypoint of waypoints) {
-    const waypointPhotos = getVisibleAttachmentsForWaypoint(attachments, waypoint.localId);
-    const attachment = boundary === "first" ? waypointPhotos[0] : waypointPhotos[waypointPhotos.length - 1];
+  const waypoint = waypoints[0];
 
-    if (attachment) {
-      return {
-        attachmentLocalId: attachment.localId,
-        title: waypoint.title,
-        waypointLocalId: waypoint.localId,
-      };
-    }
+  if (!waypoint) {
+    return null;
   }
 
-  return null;
+  const waypointPhotos = getVisibleAttachmentsForWaypoint(attachments, waypoint.localId);
+  const attachment = boundary === "first" ? waypointPhotos[0] : waypointPhotos[waypointPhotos.length - 1];
+
+  return {
+    attachmentLocalId: attachment?.localId ?? null,
+    title: waypoint.title,
+    waypointLocalId: waypoint.localId,
+  };
 }
 
 export async function getWaypointScreenModel(input: {

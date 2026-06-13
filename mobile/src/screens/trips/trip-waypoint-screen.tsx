@@ -15,6 +15,7 @@ import {
   getWaypointScreenModel,
   type WaypointScreenModel,
 } from "../../repositories/waypoints-repository";
+import { loadWaypointAttachments } from "../../repositories/waypoint-attachments-repository";
 import {
   DEMO_PHOTO_LIMIT_PER_TRIP,
   getRemainingDemoPhotoSlotsForTrip,
@@ -25,6 +26,7 @@ import {
   isCameraPermissionDeniedError,
   pickPhotosFromLibrary,
 } from "../../services/media/photo-picker.service";
+import { repairMissingWaypointPhotos } from "../../services/media/photo-recovery.service";
 import { requestTrailbookPermissions } from "../../services/permissions/permission-manager.service";
 import {
   markWaypointAttachmentDeleted,
@@ -209,11 +211,36 @@ export default function TripWaypointScreen() {
       setWaypointModelLoading(true);
 
       try {
-        const nextWaypointModel = await getWaypointScreenModel({
+        let nextWaypointModel = await getWaypointScreenModel({
           tripLocalId: resolvedTripId,
           userId: identitySession.userId,
           waypointLocalId: resolvedWaypointId,
         });
+
+        if (nextWaypointModel) {
+          const repairedPhotos = await repairMissingWaypointPhotos({
+            allAttachments: waypointAttachments,
+            attachments: nextWaypointModel.attachments,
+            sessionToken: identitySession.sessionToken,
+            tripServerId: nextWaypointModel.trip.serverId,
+          });
+
+          if (repairedPhotos.repairedCount > 0 && !cancelled) {
+            const latestAttachments = await loadWaypointAttachments();
+            const repairedPhotosById = new Map(
+              repairedPhotos.attachments.map((attachment) => [attachment.localId, attachment]),
+            );
+            const nextAttachments = latestAttachments.map(
+              (attachment) => repairedPhotosById.get(attachment.localId) ?? attachment,
+            );
+
+            await setWaypointAttachments(nextAttachments);
+            nextWaypointModel = {
+              ...nextWaypointModel,
+              attachments: repairedPhotos.attachments,
+            };
+          }
+        }
 
         if (!cancelled) {
           setWaypointModel(nextWaypointModel);
