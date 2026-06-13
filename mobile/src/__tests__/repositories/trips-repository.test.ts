@@ -419,8 +419,8 @@ describe("trips repository read models", () => {
     expect(model?.segmentStatsBySegmentId).toBe(segmentStats);
     expect(model?.navigation).toEqual({
       groupLocalId: "group-1",
-      nextTripLocalId: "trip-3",
-      previousTripLocalId: "trip-1",
+      nextTripLocalId: "trip-1",
+      previousTripLocalId: "trip-3",
     });
   });
 

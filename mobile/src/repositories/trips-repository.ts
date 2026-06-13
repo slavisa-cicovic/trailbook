@@ -165,6 +165,14 @@ function getTripRouteNavigation(
     };
   }
 
+  if (groupLocalId) {
+    return {
+      groupLocalId,
+      nextTripLocalId: navigationOrder[selectedTripIndex - 1]?.localId ?? null,
+      previousTripLocalId: navigationOrder[selectedTripIndex + 1]?.localId ?? null,
+    };
+  }
+
   return {
     groupLocalId,
     nextTripLocalId: navigationOrder[selectedTripIndex + 1]?.localId ?? null,
