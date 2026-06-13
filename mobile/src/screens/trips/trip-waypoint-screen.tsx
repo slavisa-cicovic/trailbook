@@ -547,6 +547,7 @@ export default function TripWaypointScreen() {
             <ScrollView
               contentContainerStyle={styles.photoCarouselContent}
               horizontal
+              key={selectedWaypoint.localId}
               showsHorizontalScrollIndicator={false}
               snapToAlignment="start"
               snapToInterval={photoCarouselCardWidth + 12}
