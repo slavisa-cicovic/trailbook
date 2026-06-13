@@ -263,7 +263,7 @@ export default function WaypointPhotoViewerScreen({
 }: WaypointPhotoViewerScreenProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
-  const transitionOpacity = useRef(new Animated.Value(0)).current;
+  const [transitionOpacity] = useState(() => new Animated.Value(0));
   const scrollRef = useRef<ScrollView | null>(null);
   const initialIndex = useMemo(
     () => attachments.findIndex((attachment) => attachment.localId === selectedAttachmentId),
@@ -286,16 +286,19 @@ export default function WaypointPhotoViewerScreen({
 
   useEffect(() => {
     const nextIndex = initialIndex >= 0 ? initialIndex : 0;
-    setCurrentIndex(nextIndex);
-    setZoomedAttachmentId(null);
-    setRouteExpanded(false);
-
-    requestAnimationFrame(() => {
+    const frame = requestAnimationFrame(() => {
+      setCurrentIndex(nextIndex);
+      setZoomedAttachmentId(null);
+      setRouteExpanded(false);
       scrollRef.current?.scrollTo({
         x: (nextIndex + leadingPageCount) * screenWidth,
         animated: false,
       });
     });
+
+    return () => {
+      cancelAnimationFrame(frame);
+    };
   }, [initialIndex, leadingPageCount, screenWidth]);
 
   function handleMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
