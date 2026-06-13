@@ -34,6 +34,7 @@ import {
   applyRawEventReprocessing,
 } from "../../services/recording/raw-event-reprocessing.service";
 import {
+  discardRawEventReprocessingUndoSnapshot,
   hasRawEventReprocessingUndoSnapshot,
   restoreRawEventReprocessingUndoSnapshot,
 } from "../../services/recording/raw-event-reprocessing-undo.service";
@@ -619,6 +620,23 @@ export default function TripRouteScreen() {
     void applyRawReprocessingUndo();
   }
 
+  async function handleKeepRawReprocessing() {
+    if (!selectedTrip || !rawReprocessUndoAvailable) {
+      return;
+    }
+
+    try {
+      await discardRawEventReprocessingUndoSnapshot(selectedTrip.localId);
+      setRawReprocessUndoAvailable(false);
+      setRawReprocessUndoBannerVisible(false);
+    } catch (error) {
+      Alert.alert(
+        "Keep route failed",
+        error instanceof Error ? error.message : "Unable to discard the raw reprocessing undo snapshot.",
+      );
+    }
+  }
+
   function handleSelectWaypoint(waypoint: Waypoint) {
     if (!selectedTrip) {
       return;
@@ -1017,11 +1035,11 @@ export default function TripRouteScreen() {
               <Text style={styles.rawReprocessUndoButtonText}>Undo</Text>
             </Pressable>
             <Pressable
-              accessibilityLabel="Dismiss raw reprocessing undo"
-              onPress={() => setRawReprocessUndoBannerVisible(false)}
-              style={styles.rawReprocessDismissButton}
+              disabled={rawReprocessBusy}
+              onPress={() => void handleKeepRawReprocessing()}
+              style={[styles.rawReprocessKeepButton, rawReprocessBusy && styles.rawReprocessUndoButtonDisabled]}
             >
-              <MaterialIcons color="#dbe6d5" name="close" size={18} />
+              <Text style={styles.rawReprocessKeepButtonText}>Keep</Text>
             </Pressable>
           </View>
         ) : null}
@@ -1284,13 +1302,18 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#243224",
   },
-  rawReprocessDismissButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  rawReprocessKeepButton: {
+    borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 253, 248, 0.12)",
+    backgroundColor: "rgba(255, 253, 248, 0.14)",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  rawReprocessKeepButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fffdf8",
   },
   demoHint: {
     fontSize: 13,
