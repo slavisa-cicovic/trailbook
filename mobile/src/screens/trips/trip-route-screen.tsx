@@ -988,6 +988,19 @@ export default function TripRouteScreen() {
             </Pressable>
           </View>
         </View>
+        {rawReprocessBusy ? (
+          <View style={styles.rawReprocessProcessingOverlay}>
+            <View style={styles.rawReprocessProcessingCard}>
+              <ActivityIndicator color="#fffdf8" size="small" />
+              <View style={styles.rawReprocessProcessingTextBlock}>
+                <Text style={styles.rawReprocessProcessingTitle}>
+                  {rawReprocessUndoAvailable ? "Restoring route" : "Reprocessing route"}
+                </Text>
+                <Text style={styles.rawReprocessProcessingText}>Processing, please wait...</Text>
+              </View>
+            </View>
+          </View>
+        ) : null}
         {rawReprocessUndoBannerVisible && rawReprocessUndoAvailable ? (
           <View style={styles.rawReprocessUndoBanner}>
             <View style={styles.rawReprocessUndoTextBlock}>
@@ -1226,6 +1239,42 @@ const styles = StyleSheet.create({
     backgroundColor: "#fffdf8",
     paddingHorizontal: 14,
     paddingVertical: 9,
+  },
+  rawReprocessProcessingOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(20, 32, 20, 0.18)",
+  },
+  rawReprocessProcessingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 18,
+    backgroundColor: "rgba(36, 50, 36, 0.94)",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: "#142014",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  rawReprocessProcessingTextBlock: {
+    gap: 2,
+  },
+  rawReprocessProcessingTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#fffdf8",
+  },
+  rawReprocessProcessingText: {
+    fontSize: 13,
+    color: "#dbe6d5",
   },
   rawReprocessUndoButtonDisabled: {
     opacity: 0.6,

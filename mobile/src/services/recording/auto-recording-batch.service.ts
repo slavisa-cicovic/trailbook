@@ -11,6 +11,7 @@ import {
   STATIONARY_MAX_KMH,
   STATIONARY_MAX_TRAVEL_DISTANCE_METERS,
   STATIONARY_STABILITY_MS,
+  WALK_MAX_KMH,
   type AutoLocationPoint,
   distanceMetersBetweenPoints,
   getPointTimeMs,
@@ -25,6 +26,7 @@ const CITY_DRIVE_MIN_FAST_SAMPLE_COUNT = 4;
 const CITY_DRIVE_MIN_SAMPLE_COUNT = 6;
 const CITY_DRIVE_STRONG_P75_KMH = 28;
 const CITY_DRIVE_STRONG_PEAK_KMH = 40;
+const VEHICLE_RUN_MAX_SLOW_BRIDGE_MS = 15 * 1000;
 const VEHICLE_RUN_MAX_SAMPLE_GAP_MS = 90 * 1000;
 
 export interface AutoBatchProfileSection<TSample extends AutoLocationPoint = AutoLocationPoint> {
@@ -189,6 +191,14 @@ function buildVehicleSpeedRuns(sortedSamples: AutoLocationPoint[]): AutoBatchSpe
     const speedKmh = getSpeedKmh(index > 0 ? sortedSamples[index - 1] ?? null : null, sample);
 
     if (speedKmh === null || !Number.isFinite(speedKmh) || speedKmh < BIKE_MIN_KMH) {
+      if (currentRun && isBridgeableVehicleSlowDip(sortedSamples, index, speedKmh)) {
+        currentRun.samples.push(sample);
+        currentRun.speedsKmh.push(speedKmh ?? 0);
+        currentRun.endedAt = sample.recordedAt;
+        previousIncludedSample = sample;
+        continue;
+      }
+
       if (currentRun) {
         runs.push(currentRun);
       }
@@ -232,6 +242,38 @@ function buildVehicleSpeedRuns(sortedSamples: AutoLocationPoint[]): AutoBatchSpe
   }
 
   return runs;
+}
+
+function isBridgeableVehicleSlowDip(
+  sortedSamples: AutoLocationPoint[],
+  sampleIndex: number,
+  speedKmh: number | null,
+): boolean {
+  if (speedKmh === null || !Number.isFinite(speedKmh) || speedKmh <= WALK_MAX_KMH) {
+    return false;
+  }
+
+  const sample = sortedSamples[sampleIndex] ?? null;
+  const nextSample = sortedSamples[sampleIndex + 1] ?? null;
+
+  if (!sample || !nextSample) {
+    return false;
+  }
+
+  const sampleMs = getPointTimeMs(sample);
+  const nextSampleMs = getPointTimeMs(nextSample);
+
+  if (
+    !Number.isFinite(sampleMs) ||
+    !Number.isFinite(nextSampleMs) ||
+    nextSampleMs - sampleMs > VEHICLE_RUN_MAX_SLOW_BRIDGE_MS
+  ) {
+    return false;
+  }
+
+  const nextSpeedKmh = getSpeedKmh(sample, nextSample);
+
+  return nextSpeedKmh !== null && Number.isFinite(nextSpeedKmh) && nextSpeedKmh >= BIKE_MIN_KMH;
 }
 
 function getRunDisplacementMeters(run: AutoBatchSpeedRun): number {

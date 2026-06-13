@@ -440,6 +440,42 @@ describe("buildAutoBatchProfileSections", () => {
     expect(sections[1]?.samples).toHaveLength(cityDrive.length);
   });
 
+  it("bridges a short slow dip between vehicle-speed bursts", () => {
+    const walkOut = Array.from({ length: 5 }, (_, index) => makeTimelineSample(index * 30, 1.2));
+    const vehicleSpeedsMs = [
+      5,
+      4.27,
+      7.61,
+      9.06,
+      10.33,
+      10.94,
+      9.58,
+      2.37,
+      1.72,
+      7.28,
+      10.77,
+      11.72,
+      10.72,
+      7.63,
+      6.03,
+      9.78,
+      11.89,
+    ];
+    const vehicle = vehicleSpeedsMs.map((speedMs, index) =>
+      makeCityDriveTimelineSample(150 + index * 5, speedMs, index),
+    );
+    const walkBackStartSeconds = 150 + vehicleSpeedsMs.length * 5 + 60;
+    const walkBack = Array.from({ length: 5 }, (_, index) =>
+      makeTimelineSample(walkBackStartSeconds + index * 30, 1.2),
+    );
+
+    const sections = buildAutoBatchProfileSections([...walkOut, ...vehicle, ...walkBack], "walk");
+
+    expect(sections.map((section) => section.profile)).toEqual(["walk", "drive", "walk"]);
+    expect(sections[1]?.startedAt).toBe(vehicle[0]?.recordedAt);
+    expect(sections[1]?.samples).toHaveLength(vehicle.length);
+  });
+
   it("merges two walk runs separated by a stationary gap into one section", () => {
     // walkA: 4 samples × 15 s = 45 s > AUTO_BATCH_MIN_WALK_RUN_MS (30 s)
     const walkA = Array.from({ length: 4 }, (_, index) => makeTimelineSample(index * 15, 1.1));
