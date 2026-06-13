@@ -18,7 +18,13 @@ import {
 import { loadRawLocationEventTripSummaries } from "../../repositories/raw-location-events-repository";
 import { loadSyncOutboxSummary } from "../../repositories/sync-outbox-repository";
 import { loadTripDiagnostics } from "../../repositories/trip-diagnostics-repository";
+import {
+  buildAndroidRecordingDiagnostics,
+  type AndroidRecordingDiagnosticsBundle,
+} from "./android-recording-diagnostics.service";
 import { scrubSupportBundleValue } from "./support-bundle-scrubber.service";
+
+const SUPPORT_BUNDLE_RECENT_EVENT_LIMIT = 100;
 
 export interface SupportBundleV1 {
   apiBaseUrl: string;
@@ -29,6 +35,7 @@ export interface SupportBundleV1 {
     version: string;
   };
   androidRecordingEnvironment: Awaited<ReturnType<typeof getAndroidRecordingEnvironmentStatusAsync>>;
+  androidRecordingDiagnostics: AndroidRecordingDiagnosticsBundle;
   bundleId: string;
   featureFlags: ReturnType<typeof resolveSessionFlags>;
   generatedAt: string;
@@ -137,16 +144,26 @@ export async function buildTrailbookSupportBundle(input: {
       getAndroidRecordingEnvironmentStatusAsync(),
       getTrailbookPermissionStatus(),
       loadRecordingNativeEventSummary(),
-      loadRecentRecordingNativeEvents(50),
+      loadRecentRecordingNativeEvents(SUPPORT_BUNDLE_RECENT_EVENT_LIMIT),
       loadRecordingSession(),
       loadRawLocationEventTripSummaries(),
       loadTripRouteVariantSummary(),
       loadSyncOutboxSummary(),
       loadTripDiagnostics(),
       loadWaypointAttachments(),
-      loadRecentDiagnosticEvents(50),
+      loadRecentDiagnosticEvents(SUPPORT_BUNDLE_RECENT_EVENT_LIMIT),
     ]);
   const generatedAt = new Date().toISOString();
+  const androidRecordingDiagnostics = buildAndroidRecordingDiagnostics({
+    androidRecordingEnvironment,
+    diagnosticEvents: recentDiagnosticEvents,
+    generatedAt,
+    nativeEvents: recentRecordingNativeEvents,
+    permissionStatus,
+    rawLocationEventTrips,
+    recordingSession,
+    tripDiagnostics: diagnostics,
+  });
 
   return {
     apiBaseUrl: getApiBaseUrl(),
@@ -157,6 +174,7 @@ export async function buildTrailbookSupportBundle(input: {
       version: Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "1.0.0",
     },
     androidRecordingEnvironment,
+    androidRecordingDiagnostics,
     bundleId: createSupportBundleId(generatedAt),
     featureFlags: resolveSessionFlags(input.identitySession),
     generatedAt,
