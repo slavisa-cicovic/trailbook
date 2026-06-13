@@ -207,13 +207,6 @@ describe("applyAutoRecordingTransition — no-op cases", () => {
     vi.clearAllMocks();
   });
 
-  it("returns changed=false when recordingMode is not auto", () => {
-    const session = makeSession({ recordingMode: "walk" });
-    const result = applyAutoRecordingTransition(session, trip, [makeSegment()], [], [], iso(1000));
-    expect(result.changed).toBe(false);
-    expect(result.session).toBe(session);
-  });
-
   it("returns changed=false when activeSegmentId is null", () => {
     const session = makeSession({ activeSegmentId: null });
     const result = applyAutoRecordingTransition(session, trip, [], [], [], iso(1000));

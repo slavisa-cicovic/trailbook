@@ -67,12 +67,8 @@ export function useRecordingScreenModel(input: UseRecordingScreenModelInput) {
     : activeTrip
       ? getOpenTripSegmentForTrip(currentUserTripSegments, activeTrip.localId)
       : null;
-  const activeRecordingMode = recordingSession.recordingMode;
   const activeRecordingProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
-  const activeRecordingProfileLabel =
-    activeRecordingMode === "auto"
-      ? `Auto • ${getRecordingProfileLabel(activeRecordingProfile)}`
-      : getRecordingProfileLabel(activeRecordingProfile);
+  const activeRecordingProfileLabel = `Auto • ${getRecordingProfileLabel(activeRecordingProfile)}`;
   const lastPoint = recordingSession.lastPointRecordedAt ?? "n/a";
   const activeTripCount = currentUserTrips.filter((trip) => trip.status === "active").length;
   const recentWaypoints = activeTrip
@@ -131,7 +127,6 @@ export function useRecordingScreenModel(input: UseRecordingScreenModelInput) {
   return {
     ...permissions,
     activeIdentitySession,
-    activeRecordingMode,
     activeRecordingRouteModel,
     activeRecordingProfile,
     activeRecordingProfileLabel,

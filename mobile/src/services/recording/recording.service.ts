@@ -3,7 +3,6 @@ import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
 import type { MotionActivity } from "../../domain/motion-activity";
 import type { BatterySnapshot } from "../device/battery.service";
 import type {
-  RecordingMode,
   RecordingProfile,
   RecordingSessionSummary,
   Trip,
@@ -24,12 +23,7 @@ import { getActiveRecordingConfigSnapshot } from "./recording-config.service";
 
 export interface RecordingDraftInput {
   description: string;
-  recordingMode: RecordingMode;
   title: string;
-}
-
-export function getConcreteRecordingProfileForMode(recordingMode: RecordingMode): RecordingProfile {
-  return recordingMode === "auto" ? DEFAULT_RECORDING_PROFILE : recordingMode;
 }
 
 export function createRecordingSession(
@@ -37,7 +31,6 @@ export function createRecordingSession(
   activeTripId: string,
   activeSegmentId: string,
   startedAt: string,
-  recordingMode: RecordingMode,
   recordingProfile: RecordingProfile,
 ): RecordingSessionSummary {
   return {
@@ -50,7 +43,7 @@ export function createRecordingSession(
     userId: identitySession.userId,
     userEmail: identitySession.userEmail,
     deviceId: identitySession.deviceId,
-    recordingMode,
+    recordingMode: "auto",
     recordingProfile,
     autoCandidateProfile: null,
     autoCandidateSince: null,
@@ -67,8 +60,6 @@ export function createTripForRecording(
   draft: RecordingDraftInput,
   batterySnapshot: BatterySnapshot | null = null,
 ): Trip {
-  const concreteRecordingProfile = getConcreteRecordingProfileForMode(draft.recordingMode);
-
   return {
     localId: `trip-${startedAt}`,
     serverId: null,
@@ -76,7 +67,7 @@ export function createTripForRecording(
     userId: identitySession.userId,
     title: draft.title.trim(),
     description: draft.description.trim() || null,
-    recordingProfile: concreteRecordingProfile,
+    recordingProfile: DEFAULT_RECORDING_PROFILE,
     recordingConfig: getActiveRecordingConfigSnapshot(),
     batteryStartLevelPercent: batterySnapshot?.levelPercent ?? null,
     batteryStartState: batterySnapshot?.state ?? null,
@@ -103,6 +94,10 @@ export function stopRecordingSession(session: RecordingSessionSummary): Recordin
     activeSegmentId: null,
     startedAt: null,
     interruptedAt: null,
+    recordingMode: "auto",
+    recordingProfile: DEFAULT_RECORDING_PROFILE,
+    autoCandidateProfile: null,
+    autoCandidateSince: null,
     motionActivityType: null,
     motionActivityConfidence: null,
     motionActivityRecordedAt: null,
@@ -160,7 +155,7 @@ export function reconcileRecordingSessionWithTrips(
         activeSegmentId: null,
         startedAt: null,
         interruptedAt: null,
-        recordingMode: DEFAULT_RECORDING_PROFILE,
+        recordingMode: "auto",
         recordingProfile: DEFAULT_RECORDING_PROFILE,
         autoCandidateProfile: null,
         autoCandidateSince: null,
@@ -186,7 +181,7 @@ export function reconcileRecordingSessionWithTrips(
       interruptedAt: null,
       userId: session.userId ?? activeTrip.userId,
       deviceId: session.deviceId ?? activeTrip.deviceId,
-      recordingMode: session.recordingMode ?? (openSegment?.recordingProfile ?? activeTrip.recordingProfile),
+      recordingMode: "auto",
       recordingProfile:
         session.recordingProfile ?? openSegment?.recordingProfile ?? activeTrip.recordingProfile,
     };
@@ -201,7 +196,7 @@ export function reconcileRecordingSessionWithTrips(
       interruptedAt: session.interruptedAt ?? now,
       userId: session.userId ?? activeTrip.userId,
       deviceId: session.deviceId ?? activeTrip.deviceId,
-      recordingMode: session.recordingMode ?? (openSegment?.recordingProfile ?? activeTrip.recordingProfile),
+      recordingMode: "auto",
       recordingProfile:
         session.recordingProfile ?? openSegment?.recordingProfile ?? activeTrip.recordingProfile,
     };
@@ -216,7 +211,7 @@ export function reconcileRecordingSessionWithTrips(
     interruptedAt: now,
     userId: session.userId ?? activeTrip.userId,
     deviceId: session.deviceId ?? activeTrip.deviceId,
-    recordingMode: openSegment?.recordingProfile ?? activeTrip.recordingProfile,
+    recordingMode: "auto",
     recordingProfile: openSegment?.recordingProfile ?? activeTrip.recordingProfile,
     autoCandidateProfile: null,
     autoCandidateSince: null,
@@ -298,7 +293,6 @@ export function createResumedRecordingState(
   tripSegments: TripSegment[],
   tripPauses: TripPause[],
   resumedAt: string,
-  recordingMode?: RecordingMode,
 ): {
   recordingProfile: RecordingProfile;
   session: RecordingSessionSummary;
@@ -338,7 +332,6 @@ export function createResumedRecordingState(
       trip.localId,
       nextSegment.localId,
       resumedAt,
-      recordingMode ?? nextRecordingProfile,
       nextRecordingProfile,
     ),
   };
@@ -359,12 +352,11 @@ export function resumePausedTrip(trips: Trip[], tripLocalId: string, resumedAt: 
 
 export function updateRecordingProfile(
   session: RecordingSessionSummary,
-  recordingMode: RecordingMode,
   recordingProfile: RecordingProfile,
 ): RecordingSessionSummary {
   return {
     ...session,
-    recordingMode,
+    recordingMode: "auto",
     recordingProfile,
     autoCandidateProfile: null,
     autoCandidateSince: null,
@@ -379,6 +371,7 @@ export function updateRecordingSegment(
   return {
     ...session,
     activeSegmentId,
+    recordingMode: "auto",
     recordingProfile,
     autoCandidateProfile: null,
     autoCandidateSince: null,
@@ -392,6 +385,7 @@ export function updateRecordingAutoCandidate(
 ): RecordingSessionSummary {
   return {
     ...session,
+    recordingMode: "auto",
     autoCandidateProfile,
     autoCandidateSince,
   };

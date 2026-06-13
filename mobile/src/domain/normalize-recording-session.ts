@@ -1,6 +1,5 @@
 import {
   DEFAULT_RECORDING_PROFILE,
-  normalizeRecordingMode,
   normalizeRecordingProfile,
 } from "../constants/recording-profiles";
 import {
@@ -16,6 +15,7 @@ export function normalizeRecordingSession(
   const inferredStatus =
     value.status ??
     (value.isRecording ? "recording" : "idle");
+  const legacyProfileFallback = value.recordingProfile ?? value.recordingMode ?? DEFAULT_RECORDING_PROFILE;
 
   return {
     status: inferredStatus,
@@ -27,8 +27,8 @@ export function normalizeRecordingSession(
     userId: value.userId ?? null,
     userEmail: value.userEmail ?? null,
     deviceId: value.deviceId ?? null,
-    recordingMode: normalizeRecordingMode(value.recordingMode ?? value.recordingProfile ?? DEFAULT_RECORDING_PROFILE),
-    recordingProfile: normalizeRecordingProfile(value.recordingProfile ?? DEFAULT_RECORDING_PROFILE),
+    recordingMode: "auto",
+    recordingProfile: normalizeRecordingProfile(legacyProfileFallback),
     autoCandidateProfile:
       value.autoCandidateProfile ? normalizeRecordingProfile(value.autoCandidateProfile) : null,
     autoCandidateSince: value.autoCandidateSince ?? null,

@@ -11,7 +11,6 @@ import {
   closeActiveTrip,
   createRecordingSession,
   createTripForRecording,
-  getConcreteRecordingProfileForMode,
   stopRecordingSession,
 } from "../recording/recording.service";
 import { clearAutoRecordingSamples } from "../recording/auto-recording.service";
@@ -325,7 +324,6 @@ export async function startSimulationRecording(): Promise<void> {
   const nextTrip = createTripForRecording(identitySession, startedAt, {
     title: "Simulation trip",
     description: "",
-    recordingMode: "auto",
   });
 
   resetPendingTripPointContinuity(nextTrip.localId);
@@ -337,8 +335,7 @@ export async function startSimulationRecording(): Promise<void> {
     nextTrip.localId,
     nextSegment.localId,
     startedAt,
-    "auto",
-    getConcreteRecordingProfileForMode("auto"),
+    nextTrip.recordingProfile,
   );
 
   await setTrips([...trips, nextTrip]);

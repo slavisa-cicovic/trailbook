@@ -228,7 +228,7 @@ export function applyAutoRecordingTransition(
   motionActivity: MotionActivity | null = null,
   rawTripPoints: AutoLocationPoint[] | null = null,
 ): AutoRecordingTransitionResult {
-  if (recordingSession.recordingMode !== "auto" || !recordingSession.activeSegmentId) {
+  if (!recordingSession.activeSegmentId) {
     return {
       changed: false,
       session: recordingSession,
@@ -369,11 +369,7 @@ export function applyBatchAutoTransitionIfNeeded(
   batchSamples: AutoLocationPoint[],
   motionActivity: MotionActivity | null = null,
 ): AutoRecordingTransitionResult {
-  if (
-    recordingSession.recordingMode !== "auto" ||
-    batchSamples.length < 2 ||
-    !recordingSession.activeSegmentId
-  ) {
+  if (batchSamples.length < 2 || !recordingSession.activeSegmentId) {
     return { changed: false, session: recordingSession, tripPoints, tripSegments, waypoints };
   }
 

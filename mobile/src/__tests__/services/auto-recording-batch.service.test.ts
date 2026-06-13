@@ -282,21 +282,6 @@ describe("applyBatchAutoTransitionIfNeeded", () => {
     expect(result.changed).toBe(false);
   });
 
-  it("does nothing when recordingMode is not auto", () => {
-    const session: RecordingSessionSummary = {
-      ...makeSession("walk"),
-      recordingMode: "walk",
-    };
-    const trip = makeTrip();
-    const segments = [makeSegment("walk")];
-
-    const result = applyBatchAutoTransitionIfNeeded(
-      session, trip, segments, [], [], bikeBatch, null,
-    );
-
-    expect(result.changed).toBe(false);
-  });
-
   it("does nothing when there is no active segment", () => {
     const session: RecordingSessionSummary = {
       ...makeSession("walk"),

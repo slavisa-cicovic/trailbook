@@ -429,7 +429,7 @@ async function persistRecordedLocationSnapshots(
   }
 
   async function processAutoBatchSnapshots(): Promise<boolean> {
-    if (nextRecordingSession.recordingMode !== "auto" || !isBatch) {
+    if (!isBatch) {
       return false;
     }
 
@@ -524,10 +524,7 @@ async function persistRecordedLocationSnapshots(
 
   for (const snapshot of snapshots) {
     recordLocationCallback(recordingTrip.localId, nextRecordingSession.recordingProfile, callbackSource, snapshot);
-    const rawAutoSamples =
-      nextRecordingSession.recordingMode === "auto"
-        ? recordAutoRecordingSample(recordingTrip.localId, snapshot)
-        : null;
+    const rawAutoSamples = recordAutoRecordingSample(recordingTrip.localId, snapshot);
 
     if (lastRecordedAt === snapshot.recordedAt) {
       recordTripPointDiagnostic(
@@ -543,54 +540,52 @@ async function persistRecordedLocationSnapshots(
       continue;
     }
 
-    if (nextRecordingSession.recordingMode === "auto") {
-      const motionActivity = await getLatestMotionActivityAsync(snapshot.recordedAt);
+    const motionActivity = await getLatestMotionActivityAsync(snapshot.recordedAt);
 
-      nextRecordingSession = updateRecordingMotionActivity(nextRecordingSession, motionActivity);
-      inferredProfile = inferAutoRecordingProfile(rawAutoSamples ?? [], motionActivity) ?? inferredProfile;
-      const autoTransition = applyAutoRecordingTransition(
-        nextRecordingSession,
-        recordingTrip,
-        nextTripSegments,
-        nextTripPoints,
-        nextWaypoints,
-        snapshot.recordedAt,
-        motionActivity,
-        rawAutoSamples,
-      );
+    nextRecordingSession = updateRecordingMotionActivity(nextRecordingSession, motionActivity);
+    inferredProfile = inferAutoRecordingProfile(rawAutoSamples, motionActivity) ?? inferredProfile;
+    const autoTransition = applyAutoRecordingTransition(
+      nextRecordingSession,
+      recordingTrip,
+      nextTripSegments,
+      nextTripPoints,
+      nextWaypoints,
+      snapshot.recordedAt,
+      motionActivity,
+      rawAutoSamples,
+    );
 
-      nextRecordingSession = autoTransition.session;
-      if (autoTransition.tripPoints !== nextTripPoints) {
-        nextTripPoints = autoTransition.tripPoints;
-        pointsChanged = true;
-      }
-      nextTripSegments = autoTransition.tripSegments;
-      nextWaypoints = autoTransition.waypoints;
+    nextRecordingSession = autoTransition.session;
+    if (autoTransition.tripPoints !== nextTripPoints) {
+      nextTripPoints = autoTransition.tripPoints;
+      pointsChanged = true;
+    }
+    nextTripSegments = autoTransition.tripSegments;
+    nextWaypoints = autoTransition.waypoints;
 
-      if (autoTransition.changed) {
-        transitionChanged = true;
-        transitionAt = transitionAt ?? snapshot.recordedAt;
-        activeProfile = nextRecordingSession.recordingProfile;
+    if (autoTransition.changed) {
+      transitionChanged = true;
+      transitionAt = transitionAt ?? snapshot.recordedAt;
+      activeProfile = nextRecordingSession.recordingProfile;
 
-        const recoverySnapshots = getRejectedAutoRecoverySnapshots(recordingTrip.localId, snapshot.recordedAt);
-        const snapshotsToReevaluate = lastRecordedAt === snapshot.recordedAt
-          ? recoverySnapshots
-          : [...recoverySnapshots, snapshot];
-        const acceptedRecoverySnapshots: CurrentLocationSnapshot[] = [];
+      const recoverySnapshots = getRejectedAutoRecoverySnapshots(recordingTrip.localId, snapshot.recordedAt);
+      const snapshotsToReevaluate = lastRecordedAt === snapshot.recordedAt
+        ? recoverySnapshots
+        : [...recoverySnapshots, snapshot];
+      const acceptedRecoverySnapshots: CurrentLocationSnapshot[] = [];
 
-        for (const recoverySnapshot of snapshotsToReevaluate) {
-          if (appendSnapshotIfUseful(recoverySnapshot)) {
-            acceptedRecoverySnapshots.push(recoverySnapshot);
-            recoveredPointCount += 1;
-          } else {
-            rejectedPointCount += 1;
-          }
+      for (const recoverySnapshot of snapshotsToReevaluate) {
+        if (appendSnapshotIfUseful(recoverySnapshot)) {
+          acceptedRecoverySnapshots.push(recoverySnapshot);
+          recoveredPointCount += 1;
+        } else {
+          rejectedPointCount += 1;
         }
-
-        forgetRejectedAutoSnapshots(recordingTrip.localId, acceptedRecoverySnapshots);
-        lastRecordedAt = snapshot.recordedAt;
-        continue;
       }
+
+      forgetRejectedAutoSnapshots(recordingTrip.localId, acceptedRecoverySnapshots);
+      lastRecordedAt = snapshot.recordedAt;
+      continue;
     }
 
     if (lastRecordedAt !== snapshot.recordedAt) {
@@ -598,10 +593,7 @@ async function persistRecordedLocationSnapshots(
 
       if (!pointsWereAppended) {
         rejectedPointCount += 1;
-
-        if (nextRecordingSession.recordingMode === "auto") {
-          rememberRejectedAutoSnapshot(recordingTrip.localId, snapshot);
-        }
+        rememberRejectedAutoSnapshot(recordingTrip.localId, snapshot);
       }
     }
 

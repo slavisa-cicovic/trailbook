@@ -784,7 +784,7 @@ export default function TripsScreen() {
       userId: trip.userId,
       userEmail: identitySession.userEmail,
       deviceId: trip.deviceId,
-      recordingMode: activeSegment?.recordingProfile ?? trip.recordingProfile,
+      recordingMode: "auto",
       recordingProfile: activeSegment?.recordingProfile ?? trip.recordingProfile,
       autoCandidateProfile: null,
       autoCandidateSince: null,

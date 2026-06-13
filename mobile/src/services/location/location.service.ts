@@ -3,19 +3,12 @@ import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 
 import { DEFAULT_RECORDING_PROFILE } from "../../constants/recording-profiles";
-import type { RecordingMode, RecordingProfile } from "../../domain/trips";
+import type { RecordingProfile } from "../../domain/trips";
 import { recordRecordingNativeEvent } from "../recording/recording-native-events.service";
 import { BACKGROUND_RECORDING_LOCATION_TASK_NAME } from "./background-location.constants";
 
-export function getBackgroundTrackingProfile(
-  recordingMode: RecordingMode,
-  recordingProfile: RecordingProfile,
-): RecordingProfile {
-  if (recordingMode === "auto") {
-    return DEFAULT_RECORDING_PROFILE;
-  }
-
-  return recordingProfile;
+export function getUnifiedAutoTrackingProfile(): RecordingProfile {
+  return DEFAULT_RECORDING_PROFILE;
 }
 
 export interface CurrentLocationSnapshot {
@@ -387,8 +380,7 @@ export async function restartBackgroundLocationTracking(
 export async function syncBackgroundLocationTracking(
   status: "idle" | "recording" | "interrupted",
   activeTripId: string | null,
-  profile: RecordingProfile = DEFAULT_RECORDING_PROFILE,
-  recordingMode: RecordingMode = profile,
+  _profile: RecordingProfile = getUnifiedAutoTrackingProfile(),
 ): Promise<void> {
   if (!(await isBackgroundLocationTrackingSupported())) {
     return;
@@ -409,7 +401,7 @@ export async function syncBackgroundLocationTracking(
     return;
   }
 
-  const backgroundTrackingProfile = getBackgroundTrackingProfile(recordingMode, profile);
+  const backgroundTrackingProfile = getUnifiedAutoTrackingProfile();
   const nextOptions = buildBackgroundTrackingOptions(backgroundTrackingProfile);
 
   if (!started) {

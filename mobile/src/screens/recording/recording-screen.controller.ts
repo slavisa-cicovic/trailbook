@@ -11,7 +11,7 @@ import {
 } from "../../services/demo/demo-mode.service";
 import { getBatterySnapshot } from "../../services/device/battery.service";
 import {
-  getBackgroundTrackingProfile,
+  getUnifiedAutoTrackingProfile,
   startBackgroundLocationTracking,
   startBackgroundLocationTrackingWithRetry,
   stopBackgroundLocationTracking,
@@ -27,7 +27,6 @@ import {
   createPausedRecordingState,
   createResumedRecordingState,
   createTripForRecording,
-  getConcreteRecordingProfileForMode,
   pauseActiveTrip,
   resumePausedTrip,
   stopRecordingSession,
@@ -127,7 +126,6 @@ export function getEmptyRecordingDraft(): RecordingDraftInput {
   return {
     title: "",
     description: "",
-    recordingMode: "auto",
   };
 }
 
@@ -140,15 +138,12 @@ export async function startRecordingFromScreenController(
     return { ok: false, reason: "no_identity" };
   }
 
-  const recordingDraft: RecordingDraftInput = {
-    ...input.recordingDraft,
-    recordingMode: "auto",
-  };
+  const recordingDraft = input.recordingDraft;
 
   logStep("pressed", {
     backgroundLocationPermissionGranted: input.backgroundLocationPermissionGranted,
     backgroundRecordingSupported: input.backgroundRecordingSupported,
-    recordingMode: recordingDraft.recordingMode,
+    recordingMode: "auto",
   });
 
   if (isDemoSession(input.activeIdentitySession)) {
@@ -190,7 +185,7 @@ export async function startRecordingFromScreenController(
   }
 
   const startedAt = new Date().toISOString();
-  const concreteRecordingProfile = getConcreteRecordingProfileForMode(recordingDraft.recordingMode);
+  const concreteRecordingProfile = getUnifiedAutoTrackingProfile();
   const batterySnapshot = await getBatterySnapshot();
 
   logStep("pre-create", { concreteRecordingProfile });
@@ -209,7 +204,6 @@ export async function startRecordingFromScreenController(
     nextTrip.localId,
     nextSegment.localId,
     startedAt,
-    recordingDraft.recordingMode,
     concreteRecordingProfile,
   );
 
@@ -222,10 +216,7 @@ export async function startRecordingFromScreenController(
     logStep("session-written", { status: nextSession.status });
 
     try {
-      const backgroundTrackingProfile = getBackgroundTrackingProfile(
-        recordingDraft.recordingMode,
-        concreteRecordingProfile,
-      );
+      const backgroundTrackingProfile = getUnifiedAutoTrackingProfile();
 
       if (shouldUseIosExpoGoUiRecordingFallback()) {
         logStep("background-start-skipped-expo-go-ios-ui-preview", {
@@ -295,20 +286,13 @@ export async function pauseRecordingFromScreenController(
     input.tripPauses,
     pausedAt,
   );
-  const normalizedState =
-    session.recordingMode === "auto"
-      ? normalizeAutoClosedTripSegment(
-          nextState.tripSegments,
-          activeTripPoints,
-          input.waypoints,
-          activeTrip.localId,
-          pausedAt,
-        )
-      : {
-          tripSegments: nextState.tripSegments,
-          tripPoints: activeTripPoints,
-          waypoints: input.waypoints,
-        };
+  const normalizedState = normalizeAutoClosedTripSegment(
+    nextState.tripSegments,
+    activeTripPoints,
+    input.waypoints,
+    activeTrip.localId,
+    pausedAt,
+  );
 
   await setTripSegments(normalizedState.tripSegments);
   await setWaypoints(normalizedState.waypoints);
@@ -348,7 +332,7 @@ export async function stopRecordingFromScreenController(
     endedAt,
   );
   const normalizedState =
-    session.recordingMode === "auto" && activeTrip
+    activeTrip
       ? normalizeAutoClosedTripSegment(
           closedTripSegments,
           activeTripPoints,
@@ -368,7 +352,7 @@ export async function stopRecordingFromScreenController(
     index > 0 && segment.recordingProfile !== "walk",
   );
   const prunedState =
-    session.recordingMode === "auto" && activeTrip && firstNonWalkSegment
+    activeTrip && firstNonWalkSegment
       ? removeInitialAutoBootstrapWalkSegment(
           normalizedState.tripSegments,
           normalizedState.tripPoints,
@@ -428,7 +412,6 @@ export async function resumePausedTripFromScreenController(
     input.tripSegments,
     input.tripPauses,
     resumedAt,
-    input.recordingSession.recordingMode === "auto" ? "auto" : undefined,
   );
 
   await setTripSegments(nextState.tripSegments);
@@ -439,17 +422,12 @@ export async function resumePausedTripFromScreenController(
 
   if (input.backgroundRecordingSupported === true && input.backgroundLocationPermissionGranted === true) {
     await startBackgroundLocationTracking(
-      getBackgroundTrackingProfile(
-        nextState.session.recordingMode,
-        nextState.session.recordingProfile,
-      ),
+      getUnifiedAutoTrackingProfile(),
       tripToResume.localId,
     );
   }
 
-  if (nextState.session.recordingMode === "auto") {
-    await ensureMotionActivityUpdatesForAutoMode();
-  }
+  await ensureMotionActivityUpdatesForAutoMode();
 
   return { ok: true, tripLocalId: tripToResume.localId };
 }
@@ -463,16 +441,11 @@ export async function continueInterruptedRecordingFromScreenController(
     await setRecordingSession(nextSession);
     if (input.backgroundRecordingSupported === true && input.backgroundLocationPermissionGranted === true) {
       await startBackgroundLocationTracking(
-        getBackgroundTrackingProfile(
-          nextSession.recordingMode,
-          nextSession.recordingProfile,
-        ),
+        getUnifiedAutoTrackingProfile(),
         nextSession.activeTripId,
       );
     }
-    if (nextSession.recordingMode === "auto") {
-      await ensureMotionActivityUpdatesForAutoMode();
-    }
+    await ensureMotionActivityUpdatesForAutoMode();
     return { ok: true, tripLocalId: nextSession.activeTripId ?? "" };
   } catch {
     await setRecordingSession(input.recordingSession);

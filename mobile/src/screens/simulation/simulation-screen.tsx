@@ -106,7 +106,6 @@ export default function SimulationScreen() {
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
   const theme = getAppTheme(resolvedThemeMode);
   const recordingStatus = useRecordingStore((state) => state.session.status);
-  const recordingMode = useRecordingStore((state) => state.session.recordingMode);
 
   const [runningId, setRunningId] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ScenarioRunResult>>({});
@@ -116,7 +115,6 @@ export default function SimulationScreen() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const isRecording = recordingStatus === "recording";
-  const isAutoMode = recordingMode === "auto";
 
   async function handleRun(scenario: PredefinedScenario) {
     const controller = new AbortController();
@@ -232,11 +230,6 @@ export default function SimulationScreen() {
               <Text style={[styles.errorText, { color: theme.danger }]}>{simRecordingError}</Text>
             )}
 
-            {isRecording && !isAutoMode && (
-              <Text style={[styles.errorText, { color: theme.danger }]}>
-                Not in AUTO mode — profile transitions won&apos;t be detected.
-              </Text>
-            )}
           </View>
         </View>
 

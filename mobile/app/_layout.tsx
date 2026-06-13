@@ -14,7 +14,7 @@ import { ErrorBoundary } from "../src/core/error-boundary";
 import { setupGlobalErrorHandler } from "../src/core/global-error-handler";
 import { initSentry } from "../src/core/sentry";
 import { useAppHydration } from "../src/core/hooks/use-app-hydration";
-import { getBackgroundTrackingProfile, syncBackgroundLocationTracking } from "../src/services/location/location.service";
+import { syncBackgroundLocationTracking } from "../src/services/location/location.service";
 import { syncResolvedRecordingConfig } from "../src/services/recording/recording-config.service";
 import { useRecordingStore } from "../src/state/recording-store";
 import { useSessionStore } from "../src/state/session-store";
@@ -29,9 +29,6 @@ export default function RootLayout() {
   const systemColorScheme = useColorScheme();
   const recordingStatus = useRecordingStore((state) => state.session.status);
   const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
-  const activeRecordingMode = useRecordingStore((state) => state.session.recordingMode);
-  const activeRecordingProfile = useRecordingStore((state) => state.session.recordingProfile);
-  const activeBackgroundProfile = getBackgroundTrackingProfile(activeRecordingMode, activeRecordingProfile);
   const isBatchProcessing = useBatchProcessing();
 
   const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
@@ -50,10 +47,8 @@ export default function RootLayout() {
     void syncBackgroundLocationTracking(
       recordingStatus,
       activeRecordingTripId,
-      activeBackgroundProfile,
     ).catch(() => undefined);
   }, [
-    activeBackgroundProfile,
     activeRecordingTripId,
     recordingHydrated,
     recordingStatus,
@@ -76,7 +71,6 @@ export default function RootLayout() {
       void syncBackgroundLocationTracking(
         recordingStatus,
         activeRecordingTripId,
-        activeBackgroundProfile,
       ).catch((error) => {
         console.warn("[Trailbook][background-watchdog] sync failed", error);
       });
@@ -84,7 +78,6 @@ export default function RootLayout() {
 
     return () => clearInterval(intervalId);
   }, [
-    activeBackgroundProfile,
     activeRecordingTripId,
     recordingHydrated,
     recordingStatus,
@@ -109,16 +102,12 @@ export default function RootLayout() {
         syncBackgroundLocationTracking(
           recordingStatus,
           activeRecordingTripId,
-          activeBackgroundProfile,
         ),
       )
       .catch(() => undefined);
   }, [
-    activeBackgroundProfile,
     activeRecordingTripId,
-    identitySession?.role,
-    identitySession?.sessionToken,
-    identitySession?.userId,
+    identitySession,
     recordingStatus,
     sessionHydrated,
   ]);

@@ -37,7 +37,7 @@ import {
   type CurrentLocationSnapshot,
   watchImmediateForegroundLocation,
   watchForegroundLocation,
-  getBackgroundTrackingProfile,
+  getUnifiedAutoTrackingProfile,
 } from "../../services/location/location.service";
 import {
   ensureMotionActivityUpdatesForAutoMode,
@@ -328,7 +328,7 @@ export default function RecordingScreen() {
         return;
       }
 
-      if (recordingSession.status === "recording" && recordingSession.recordingMode === "auto") {
+      if (recordingSession.status === "recording") {
         await ensureMotionActivityUpdatesForAutoMode();
         return;
       }
@@ -341,7 +341,7 @@ export default function RecordingScreen() {
     return () => {
       active = false;
     };
-  }, [recordingSession.recordingMode, recordingSession.status]);
+  }, [recordingSession.status]);
 
   useEffect(() => {
     if (recordingSession.status !== "recording" || !recordingSession.activeTripId) {
@@ -357,10 +357,7 @@ export default function RecordingScreen() {
     async function checkLocationSilentGap() {
       const observedAtMs = Date.now();
       const observedAt = new Date(observedAtMs).toISOString();
-      const backgroundTrackingProfile = getBackgroundTrackingProfile(
-        recordingSession.recordingMode,
-        activeRecordingProfile,
-      );
+      const backgroundTrackingProfile = getUnifiedAutoTrackingProfile();
       const diagnosticState = getLocationCallbackDiagnosticState(tripLocalId);
       const sessionStartedAtMs = recordingSession.startedAt
         ? new Date(recordingSession.startedAt).getTime()
@@ -385,7 +382,7 @@ export default function RecordingScreen() {
         gapMs: Math.trunc(gapMs),
         lastCallbackReceivedAt,
         profile: activeRecordingProfile,
-        recordingMode: recordingSession.recordingMode,
+        recordingMode: "auto",
       };
 
       if (Platform.OS === "android" && lastWatchdogTickBucketRef.current !== tickBucket) {
@@ -429,7 +426,7 @@ export default function RecordingScreen() {
         recordedAt: observedAt,
         tripLocalId,
       });
-      recordLocationSilentGap(tripLocalId, recordingSession.recordingMode, {
+      recordLocationSilentGap(tripLocalId, "auto", {
         batteryOptimizationIgnored:
           batteryOptimizationSupported === true ? batteryOptimizationIgnored : null,
         gapMs,
@@ -481,7 +478,6 @@ export default function RecordingScreen() {
     batteryOptimizationIgnored,
     batteryOptimizationSupported,
     recordingSession.activeTripId,
-    recordingSession.recordingMode,
     recordingSession.startedAt,
     recordingSession.status,
   ]);

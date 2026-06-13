@@ -38,7 +38,7 @@ vi.mock("../../services/recording/recording-native-events.service", () => ({
   recordRecordingNativeEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
-const { getBackgroundTrackingProfile, syncBackgroundLocationTracking } = await import(
+const { getUnifiedAutoTrackingProfile, syncBackgroundLocationTracking } = await import(
   "../../services/location/location.service"
 );
 
@@ -50,14 +50,12 @@ describe("location service background tracking profile", () => {
     locationMocks.stopLocationUpdatesAsync.mockResolvedValue(undefined);
   });
 
-  it("keeps AUTO native tracking on the bootstrap profile even after inferred profile changes", () => {
-    expect(getBackgroundTrackingProfile("auto", "drive")).toBe("walk");
-    expect(getBackgroundTrackingProfile("auto", "bike")).toBe("walk");
-    expect(getBackgroundTrackingProfile("drive", "drive")).toBe("drive");
+  it("keeps native tracking on the unified AUTO bootstrap profile", () => {
+    expect(getUnifiedAutoTrackingProfile()).toBe("walk");
   });
 
   it("starts AUTO background tracking with stable walk options", async () => {
-    await syncBackgroundLocationTracking("recording", "trip-1", "drive", "auto");
+    await syncBackgroundLocationTracking("recording", "trip-1");
 
     expect(locationMocks.startLocationUpdatesAsync).toHaveBeenCalledWith(
       "trailbook.background-recording-location",
@@ -71,14 +69,14 @@ describe("location service background tracking profile", () => {
     );
   });
 
-  it("keeps manual drive background tracking on drive options", async () => {
-    await syncBackgroundLocationTracking("recording", "trip-1", "drive", "drive");
+  it("ignores inferred profile when choosing native tracking options", async () => {
+    await syncBackgroundLocationTracking("recording", "trip-1", "drive");
 
     expect(locationMocks.startLocationUpdatesAsync).toHaveBeenCalledWith(
       "trailbook.background-recording-location",
       expect.objectContaining({
-        activityType: "automotiveNavigation",
-        distanceInterval: 30,
+        activityType: "fitness",
+        distanceInterval: 12,
         timeInterval: 15000,
       }),
     );
