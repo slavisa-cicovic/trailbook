@@ -137,6 +137,8 @@ function dedupeLocationSnapshotsForTrip(input: {
 
 function withRawProcessingTrace(input: {
   batchId: string | null;
+  durationMs?: number;
+  phaseDurationsMs?: Record<string, number>;
   pipelineResult: RecordingPipelineResult;
   processingResults: RawLocationEventProcessingResult[];
   rawInsertedCount: number;
@@ -151,13 +153,35 @@ function withRawProcessingTrace(input: {
       ? acceptedRawCount
       : input.pipelineResult.acceptedPointCount,
     batchId: input.batchId,
+    durationMs: input.durationMs,
     duplicateRawEventCount: duplicateRawCount,
+    phaseDurationsMs: input.phaseDurationsMs,
     rawInsertedCount: input.rawInsertedCount,
     rejectedPointCount: input.processingResults.length > 0
       ? rejectedRawCount
       : input.pipelineResult.rejectedPointCount,
     rejectedRawEventCount: rejectedRawCount,
   };
+}
+
+function maybeLogBatchPerformance(input: {
+  activeTripId: string;
+  durationMs: number;
+  phaseDurationsMs: Record<string, number>;
+  rawEventCount: number;
+  snapshotCount: number;
+}) {
+  if (input.snapshotCount < 10 && input.durationMs < 1_000) {
+    return;
+  }
+
+  console.warn("[Trailbook][recording-batch-performance]", {
+    durationMs: input.durationMs,
+    phaseDurationsMs: input.phaseDurationsMs,
+    rawEventCount: input.rawEventCount,
+    snapshotCount: input.snapshotCount,
+    tripLocalId: input.activeTripId,
+  });
 }
 
 export async function recordLocationSnapshots(
@@ -169,7 +193,30 @@ export async function recordLocationSnapshots(
     return;
   }
 
-  const recordingSession = await loadRecordingSession();
+  const startedAtMs = Date.now();
+  const phaseDurationsMs: Record<string, number> = {};
+
+  async function measurePhase<T>(phaseName: string, callback: () => Promise<T>): Promise<T> {
+    const phaseStartedAtMs = Date.now();
+
+    try {
+      return await callback();
+    } finally {
+      phaseDurationsMs[phaseName] = (phaseDurationsMs[phaseName] ?? 0) + (Date.now() - phaseStartedAtMs);
+    }
+  }
+
+  function measureSyncPhase<T>(phaseName: string, callback: () => T): T {
+    const phaseStartedAtMs = Date.now();
+
+    try {
+      return callback();
+    } finally {
+      phaseDurationsMs[phaseName] = (phaseDurationsMs[phaseName] ?? 0) + (Date.now() - phaseStartedAtMs);
+    }
+  }
+
+  const recordingSession = await measurePhase("load-recording-session", loadRecordingSession);
   const activeTripId =
     recordingSession?.status === "recording" && recordingSession.activeTripId
       ? recordingSession.activeTripId
@@ -216,9 +263,15 @@ export async function recordLocationSnapshots(
       tripLocalId: activeTripId,
     });
 
-    beforeTripPoints = await loadTripPointsForTrip(activeTripId).catch(() => []);
+    beforeTripPoints = await measurePhase(
+      "load-before-trip-points",
+      () => loadTripPointsForTrip(activeTripId),
+    ).catch(() => []);
 
-    rawEvents = await insertRawLocationEvents(rawEvents).catch((error) => {
+    rawEvents = await measurePhase(
+      "insert-raw-events",
+      () => insertRawLocationEvents(rawEvents),
+    ).catch((error) => {
       console.warn("[Trailbook][recording-engine]", {
         error: error instanceof Error ? error.message : String(error),
         step: "raw-insert-failed",
@@ -228,7 +281,10 @@ export async function recordLocationSnapshots(
     });
   }
 
-  const pipelineResult = await processRecordedLocationSnapshots(pipelineSnapshots, callbackSource, options);
+  const pipelineResult = await measurePhase(
+    "process-recording-pipeline",
+    () => processRecordedLocationSnapshots(pipelineSnapshots, callbackSource, options),
+  );
 
   if (!activeTripId) {
     return;
@@ -237,9 +293,18 @@ export async function recordLocationSnapshots(
   let processingResults: RawLocationEventProcessingResult[] = [];
 
   if (rawEvents.length === 0) {
+    maybeLogBatchPerformance({
+      activeTripId,
+      durationMs: Date.now() - startedAtMs,
+      phaseDurationsMs,
+      rawEventCount: rawEvents.length,
+      snapshotCount: snapshots.length,
+    });
     void recordRecordingProcessingTrace(
       withRawProcessingTrace({
         batchId,
+        durationMs: Date.now() - startedAtMs,
+        phaseDurationsMs,
         pipelineResult,
         processingResults,
         rawInsertedCount: rawEvents.length,
@@ -248,25 +313,43 @@ export async function recordLocationSnapshots(
     return;
   }
 
-  const afterTripPoints = await loadTripPointsForTrip(activeTripId).catch(() => beforeTripPoints);
-  processingResults = buildRawLocationEventProcessingResults({
-    acceptedDecision: "accepted-by-recording-pipeline",
-    afterTripPoints,
-    beforeTripPoints,
-    rawEvents,
-    rejectedDecision: "filtered-by-recording-pipeline",
-  });
+  const afterTripPoints = await measurePhase(
+    "load-after-trip-points",
+    () => loadTripPointsForTrip(activeTripId),
+  ).catch(() => beforeTripPoints);
+  processingResults = measureSyncPhase(
+    "build-raw-processing-results",
+    () => buildRawLocationEventProcessingResults({
+      acceptedDecision: "accepted-by-recording-pipeline",
+      afterTripPoints,
+      beforeTripPoints,
+      rawEvents,
+      rejectedDecision: "filtered-by-recording-pipeline",
+    }),
+  );
 
-  await updateRawLocationEventProcessingResults(processingResults).catch((error) => {
+  await measurePhase(
+    "update-raw-processing-results",
+    () => updateRawLocationEventProcessingResults(processingResults),
+  ).catch((error) => {
     console.warn("[Trailbook][recording-engine]", {
       error: error instanceof Error ? error.message : String(error),
       step: "raw-status-update-failed",
       tripLocalId: activeTripId,
     });
   });
+  maybeLogBatchPerformance({
+    activeTripId,
+    durationMs: Date.now() - startedAtMs,
+    phaseDurationsMs,
+    rawEventCount: rawEvents.length,
+    snapshotCount: snapshots.length,
+  });
   void recordRecordingProcessingTrace(
     withRawProcessingTrace({
       batchId,
+      durationMs: Date.now() - startedAtMs,
+      phaseDurationsMs,
       pipelineResult,
       processingResults,
       rawInsertedCount: rawEvents.length,

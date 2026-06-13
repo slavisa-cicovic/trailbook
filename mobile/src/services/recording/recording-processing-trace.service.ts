@@ -11,6 +11,7 @@ export interface RecordingProcessingTrace {
   activeProfile: RecordingProfile | null;
   batchId: string | null;
   callbackSource: RecordingProcessingTraceSource;
+  durationMs?: number;
   duplicateRawEventCount: number;
   duplicateRecordedAtCount: number;
   firstRecordedAt: string | null;
@@ -23,6 +24,7 @@ export interface RecordingProcessingTrace {
   previousProfile: RecordingProfile | null;
   processingMode: RecordingProcessingMode;
   processedAt: string;
+  phaseDurationsMs?: Record<string, number>;
   rawInsertedCount: number;
   recoveredPointCount: number;
   rejectedPointCount: number;
