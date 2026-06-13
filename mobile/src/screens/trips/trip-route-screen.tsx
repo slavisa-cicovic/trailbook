@@ -384,16 +384,19 @@ export default function TripRouteScreen() {
     setSyncBusy(true);
 
     try {
+      const tripLocalId = selectedTrip.localId;
       const drainResult = await enqueueAndDrainTripSync({
         identitySession,
-        tripLocalId: selectedTrip.localId,
+        tripLocalId,
       });
-      const syncedTrip = drainResult.trips?.find((trip) => trip.localId === selectedTrip.localId);
+      const syncedTrip = drainResult.trips?.find((trip) => trip.localId === tripLocalId);
       const serverId = syncedTrip?.serverId ?? selectedTrip.serverId;
 
       if (!serverId) {
         throw new Error("Trip sync did not return a server id.");
       }
+
+      await refreshRouteModel(tripLocalId);
 
       return serverId;
     } finally {
