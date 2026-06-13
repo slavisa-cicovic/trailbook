@@ -1,5 +1,9 @@
 import type { RecordingMode } from "./trips";
 
+// Kept as `recordingMode` for local storage and backend sync compatibility.
+// New runtime recordings write `auto`; point filtering uses RecordingProfile separately.
+export type TripDiagnosticsRecordingMode = RecordingMode;
+
 export type TripDiagnosticsPlatform = "android" | "ios" | "web" | "unknown";
 export type TripDiagnosticsSource = "foreground" | "background";
 export type TripDiagnosticsDecision =
@@ -60,7 +64,7 @@ export interface TripDiagnostics {
   maxSilentGapMs: number;
   platform: TripDiagnosticsPlatform;
   recentEvents: TripDiagnosticsRecentEvent[];
-  recordingMode: RecordingMode;
+  recordingMode: TripDiagnosticsRecordingMode;
   rejectedByAccuracy: number;
   rejectedByImpliedSpeed: number;
   rejectedByJumpDistance: number;

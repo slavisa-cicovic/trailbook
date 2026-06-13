@@ -1,10 +1,10 @@
-import type { RecordingMode, RecordingProfile } from "../domain/trips";
+import type { RecordingProfile } from "../domain/trips";
 
 export interface RecordingProfileOption {
   description: string;
   hint: string;
   label: string;
-  value: RecordingMode;
+  value: RecordingProfile;
 }
 
 export type LegacyRecordingProfile =
@@ -18,12 +18,6 @@ export type LegacyRecordingProfile =
 export const DEFAULT_RECORDING_PROFILE: RecordingProfile = "walk";
 
 export const RECORDING_PROFILE_OPTIONS: RecordingProfileOption[] = [
-  {
-    value: "auto",
-    label: "Auto",
-    description: "App decides",
-    hint: "Trailbook infers segment modes and lets you correct them later if needed.",
-  },
   {
     value: "walk",
     label: "Walk",
@@ -62,11 +56,10 @@ export const RECORDING_PROFILE_OPTIONS: RecordingProfileOption[] = [
   },
 ];
 
-export const CONFIGURABLE_RECORDING_PROFILE_OPTIONS: (RecordingProfileOption & { value: RecordingProfile })[] =
-  RECORDING_PROFILE_OPTIONS.filter(
-    (option): option is RecordingProfileOption & { value: RecordingProfile } =>
-      option.value !== "auto" && option.value !== "stationary",
-  );
+export const AUTO_RECORDING_MODE_LABEL = "Auto";
+
+export const CONFIGURABLE_RECORDING_PROFILE_OPTIONS: RecordingProfileOption[] =
+  RECORDING_PROFILE_OPTIONS.filter((option) => option.value !== "stationary");
 
 export function normalizeRecordingProfile(
   profile: RecordingProfile | LegacyRecordingProfile | null | undefined,
@@ -92,17 +85,14 @@ export function normalizeRecordingProfile(
   }
 }
 
-export function normalizeRecordingMode(
-  mode: RecordingMode | LegacyRecordingProfile | null | undefined,
-): RecordingMode {
-  if (mode === "auto") {
-    return "auto";
+export function getRecordingModeLabel(mode: "auto"): string {
+  switch (mode) {
+    case "auto":
+      return AUTO_RECORDING_MODE_LABEL;
   }
-
-  return normalizeRecordingProfile(mode);
 }
 
-export function getRecordingProfileLabel(profile: RecordingMode): string {
+export function getRecordingProfileLabel(profile: RecordingProfile): string {
   return (
     RECORDING_PROFILE_OPTIONS.find((option) => option.value === profile)?.label ??
     RECORDING_PROFILE_OPTIONS[0].label

@@ -43,7 +43,7 @@ function normalizePlatform(value: string | undefined): TripDiagnosticsPlatform {
   }
 }
 
-function normalizeRecordingMode(value: string | undefined): RecordingMode {
+function normalizeDiagnosticsRecordingMode(value: string | undefined): RecordingMode {
   switch (value) {
     case "walk":
     case "bike":
@@ -95,7 +95,7 @@ function normalizeTripDiagnostics(
     maxSilentGapMs: value.maxSilentGapMs ?? 0,
     platform: normalizePlatform(value.platform),
     recentEvents: Array.isArray(value.recentEvents) ? value.recentEvents.map(normalizeRecentEvent) : [],
-    recordingMode: normalizeRecordingMode(value.recordingMode),
+    recordingMode: normalizeDiagnosticsRecordingMode(value.recordingMode),
     rejectedByAccuracy: value.rejectedByAccuracy ?? 0,
     rejectedByImpliedSpeed: value.rejectedByImpliedSpeed ?? 0,
     rejectedByJumpDistance: value.rejectedByJumpDistance ?? 0,

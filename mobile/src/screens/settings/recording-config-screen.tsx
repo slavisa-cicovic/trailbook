@@ -19,18 +19,22 @@ import { useSessionStore } from "../../state/session-store";
 import { useThemeStore } from "../../state/theme-store";
 
 const EDITABLE_PLATFORM: Exclude<RecordingConfigPlatform, "default"> = Platform.OS === "ios" ? "ios" : "android";
-const EDITABLE_MODES: RecordingProfile[] = CONFIGURABLE_RECORDING_PROFILE_OPTIONS.map((option) => option.value);
+const EDITABLE_PROFILES: RecordingProfile[] = CONFIGURABLE_RECORDING_PROFILE_OPTIONS.map((option) => option.value);
 
-function formatMode(mode: RecordingProfile) {
-  return RECORDING_PROFILE_OPTIONS.find((option) => option.value === mode)?.label ?? mode;
+function formatProfile(profile: RecordingProfile) {
+  return RECORDING_PROFILE_OPTIONS.find((option) => option.value === profile)?.label ?? profile;
 }
 
 function formatPlatform(platform: Exclude<RecordingConfigPlatform, "default">) {
   return platform === "ios" ? "iOS" : "Android";
 }
 
-function describeProfile(config: MobileRecordingConfig, platform: Exclude<RecordingConfigPlatform, "default">, mode: RecordingProfile) {
-  const pointFilter = config.pointFilters?.[platform]?.[mode] ?? config.pointFilters?.default?.[mode];
+function describeProfile(
+  config: MobileRecordingConfig,
+  platform: Exclude<RecordingConfigPlatform, "default">,
+  profile: RecordingProfile,
+) {
+  const pointFilter = config.pointFilters?.[platform]?.[profile] ?? config.pointFilters?.default?.[profile];
 
   if (!pointFilter) {
     return "Not configured";
@@ -124,24 +128,24 @@ export default function RecordingConfigScreen() {
               {formatPlatform(EDITABLE_PLATFORM)}
             </Text>
             <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              {EDITABLE_MODES.map((mode, index) => (
-                <View key={`${EDITABLE_PLATFORM}-${mode}`}>
+              {EDITABLE_PROFILES.map((profile, index) => (
+                <View key={`${EDITABLE_PLATFORM}-${profile}`}>
                   <Pressable
-                    onPress={() => router.push(`/settings/recording-config/${EDITABLE_PLATFORM}-${mode}`)}
+                    onPress={() => router.push(`/settings/recording-config/${EDITABLE_PLATFORM}-${profile}`)}
                     style={styles.row}
                   >
                     <View style={[styles.icon, { backgroundColor: theme.accentMuted }]}>
                       <MaterialIcons color={theme.accent} name="filter-alt" size={18} />
                     </View>
                     <View style={styles.rowBody}>
-                      <Text style={[styles.rowTitle, { color: theme.primaryText }]}>{formatMode(mode)}</Text>
+                      <Text style={[styles.rowTitle, { color: theme.primaryText }]}>{formatProfile(profile)}</Text>
                       <Text style={[styles.rowDescription, { color: theme.mutedText }]}>
-                        {describeProfile(config, EDITABLE_PLATFORM, mode)}
+                        {describeProfile(config, EDITABLE_PLATFORM, profile)}
                       </Text>
                     </View>
                     <MaterialIcons color={theme.mutedText} name="chevron-right" size={22} />
                   </Pressable>
-                  {index < EDITABLE_MODES.length - 1 ? (
+                  {index < EDITABLE_PROFILES.length - 1 ? (
                     <View style={[styles.divider, { backgroundColor: theme.border }]} />
                   ) : null}
                 </View>

@@ -1,4 +1,7 @@
-import { getRecordingProfileLabel } from "../../constants/recording-profiles";
+import {
+  getRecordingModeLabel,
+  getRecordingProfileLabel,
+} from "../../constants/recording-profiles";
 import { getWaypointCategoryOption } from "../../constants/waypoint-categories";
 import type { RecordingDraftInput } from "../../services/recording/recording.service";
 import type { WaypointDraftInput } from "../../services/waypoints/waypoints.service";
@@ -68,7 +71,8 @@ export function useRecordingScreenModel(input: UseRecordingScreenModelInput) {
       ? getOpenTripSegmentForTrip(currentUserTripSegments, activeTrip.localId)
       : null;
   const activeRecordingProfile = activeSegment?.recordingProfile ?? recordingSession.recordingProfile;
-  const activeRecordingProfileLabel = `Auto • ${getRecordingProfileLabel(activeRecordingProfile)}`;
+  const activeRecordingProfileLabel =
+    `${getRecordingModeLabel("auto")} • ${getRecordingProfileLabel(activeRecordingProfile)}`;
   const lastPoint = recordingSession.lastPointRecordedAt ?? "n/a";
   const activeTripCount = currentUserTrips.filter((trip) => trip.status === "active").length;
   const recentWaypoints = activeTrip

@@ -4,16 +4,16 @@ import type { TripSegment } from "../../../domain/trips";
 import { getRecordingProfileLabel } from "../../../constants/recording-profiles";
 import Card from "../../../components/ui/card";
 
-const EDITABLE_MODES = ["walk", "bike", "drive", "boat", "plane", "stationary"] as const;
-type EditableMode = (typeof EDITABLE_MODES)[number];
+const EDITABLE_PROFILES = ["walk", "bike", "drive", "boat", "plane", "stationary"] as const;
+type EditableProfile = (typeof EDITABLE_PROFILES)[number];
 
 interface Props {
   segment: TripSegment | null;
   onClose: () => void;
-  onSelectMode: (mode: EditableMode) => void;
+  onSelectProfile: (profile: EditableProfile) => void;
 }
 
-export default function SegmentEditModal({ segment, onClose, onSelectMode }: Props) {
+export default function SegmentEditModal({ segment, onClose, onSelectProfile }: Props) {
   return (
     <Modal
       animationType="fade"
@@ -25,16 +25,16 @@ export default function SegmentEditModal({ segment, onClose, onSelectMode }: Pro
         <Card
           style={styles.card}
           subtitle={segment ? `Current: ${getRecordingProfileLabel(segment.recordingProfile)}` : undefined}
-          title="Change segment mode"
+          title="Change segment profile"
           titleStyle={styles.title}
         >
           <View style={styles.options}>
-            {EDITABLE_MODES.map((option) => {
+            {EDITABLE_PROFILES.map((option) => {
               const selected = segment?.recordingProfile === option;
               return (
                 <Pressable
                   key={option}
-                  onPress={() => onSelectMode(option)}
+                  onPress={() => onSelectProfile(option)}
                   style={[styles.option, selected && styles.optionSelected]}
                 >
                   <Text style={[styles.optionText, selected && styles.optionTextSelected]}>

@@ -66,7 +66,7 @@ const mapTypeOptions: { label: string; value: TrailbookMapType }[] = [
 
 const EMPTY_TRIP_POINTS: TripPoint[] = [];
 
-type EditableMode = RecordingProfile;
+type EditableProfile = RecordingProfile;
 
 function buildTripMapRegion(
   coordinates: { latitude: number; longitude: number }[],
@@ -467,7 +467,7 @@ export default function TripRouteScreen() {
     }
   }
 
-  async function handleUpdateSegmentMode(nextMode: EditableMode) {
+  async function handleUpdateSegmentProfile(nextProfile: EditableProfile) {
     if (!selectedTrip || !segmentEditSegmentId) {
       return;
     }
@@ -487,7 +487,7 @@ export default function TripRouteScreen() {
         currentUserWaypoints,
         selectedTrip.localId,
         segmentEditSegmentId,
-        nextMode,
+        nextProfile,
         updatedAt,
       );
 
@@ -525,7 +525,7 @@ export default function TripRouteScreen() {
     } catch (error) {
       Alert.alert(
         "Segment update failed",
-        error instanceof Error ? error.message : "Unable to update this segment mode.",
+        error instanceof Error ? error.message : "Unable to update this segment profile.",
       );
     }
   }
@@ -678,7 +678,7 @@ export default function TripRouteScreen() {
       <SegmentEditModal
         segment={segmentEditTarget}
         onClose={() => setSegmentEditSegmentId(null)}
-        onSelectMode={(mode) => void handleUpdateSegmentMode(mode)}
+        onSelectProfile={(profile) => void handleUpdateSegmentProfile(profile)}
       />
 
       <TripEditModal

@@ -96,7 +96,7 @@ function calculatePerpendicularDeviationMeters(
   return Math.sqrt(deviationX * deviationX + deviationY * deviationY);
 }
 
-function getRouteSmoothingThresholds(recordingMode: RecordingProfile): {
+function getRouteSmoothingThresholds(recordingProfile: RecordingProfile): {
   maxDeviationMeters: number;
   maxDirectDistanceMeters: number;
   maxExcessMeters: number;
@@ -106,7 +106,7 @@ function getRouteSmoothingThresholds(recordingMode: RecordingProfile): {
   spikeMinExcessMeters: number;
   spikeMinDeviationMeters: number;
 } | null {
-  switch (recordingMode) {
+  switch (recordingProfile) {
     case "walk":
       return {
         maxDeviationMeters: 8,
@@ -134,14 +134,14 @@ function getRouteSmoothingThresholds(recordingMode: RecordingProfile): {
   }
 }
 
-function getMaxAccuracyMeters(recordingMode: RecordingProfile) {
-  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
+function getMaxAccuracyMeters(recordingProfile: RecordingProfile) {
+  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingProfile);
 
   if (runtimeConfig) {
     return runtimeConfig.maxAccuracyMeters;
   }
 
-  switch (recordingMode) {
+  switch (recordingProfile) {
     case "walk":
       return Platform.OS === "android" ? 50 : 35;
     case "bike":
@@ -159,14 +159,14 @@ function getMaxAccuracyMeters(recordingMode: RecordingProfile) {
   }
 }
 
-function getMaxJumpDistanceMeters(recordingMode: RecordingProfile) {
-  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
+function getMaxJumpDistanceMeters(recordingProfile: RecordingProfile) {
+  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingProfile);
 
   if (runtimeConfig) {
     return runtimeConfig.maxJumpDistanceMeters;
   }
 
-  switch (recordingMode) {
+  switch (recordingProfile) {
     case "walk":
       return 120;
     case "bike":
@@ -184,14 +184,14 @@ function getMaxJumpDistanceMeters(recordingMode: RecordingProfile) {
   }
 }
 
-function getMaxImpliedSpeedKmh(recordingMode: RecordingProfile) {
-  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
+function getMaxImpliedSpeedKmh(recordingProfile: RecordingProfile) {
+  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingProfile);
 
   if (runtimeConfig) {
     return runtimeConfig.maxImpliedSpeedKmh;
   }
 
-  switch (recordingMode) {
+  switch (recordingProfile) {
     case "walk":
       return 12;
     case "bike":
@@ -209,14 +209,14 @@ function getMaxImpliedSpeedKmh(recordingMode: RecordingProfile) {
   }
 }
 
-function getMinMovementMeters(recordingMode: RecordingProfile) {
-  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingMode);
+function getMinMovementMeters(recordingProfile: RecordingProfile) {
+  const runtimeConfig = getRuntimePointFilterProfileConfig(recordingProfile);
 
   if (runtimeConfig) {
     return runtimeConfig.minMovementMeters;
   }
 
-  switch (recordingMode) {
+  switch (recordingProfile) {
     case "walk":
       return Platform.OS === "android" ? 4 : 8;
     case "bike":
@@ -312,7 +312,7 @@ function getRecoveryAcceptanceReason(
 function shouldHoldAsPendingContinuity(
   previousPoint: TripPoint,
   nextTripPoint: TripPoint,
-  recordingMode: RecordingProfile,
+  recordingProfile: RecordingProfile,
   distanceMeters: number,
   impliedSpeedKmh: number,
   context?: AppendTripPointContext,
@@ -323,8 +323,8 @@ function shouldHoldAsPendingContinuity(
     return false;
   }
 
-  const maxJumpDistanceMeters = getMaxJumpDistanceMeters(recordingMode);
-  const maxAccuracyMeters = getMaxAccuracyMeters(recordingMode);
+  const maxJumpDistanceMeters = getMaxJumpDistanceMeters(recordingProfile);
+  const maxAccuracyMeters = getMaxAccuracyMeters(recordingProfile);
   const accuracyMeters =
     nextTripPoint.accuracy !== null && Number.isFinite(nextTripPoint.accuracy)
       ? nextTripPoint.accuracy
@@ -335,7 +335,7 @@ function shouldHoldAsPendingContinuity(
     !Number.isFinite(impliedSpeedKmh) ||
     distanceMeters < Math.min(maxJumpDistanceMeters * 0.6, 80) ||
     distanceMeters > maxJumpDistanceMeters ||
-    impliedSpeedKmh > getMaxImpliedSpeedKmh(recordingMode) * 0.75
+    impliedSpeedKmh > getMaxImpliedSpeedKmh(recordingProfile) * 0.75
   ) {
     return false;
   }
@@ -346,7 +346,7 @@ function shouldHoldAsPendingContinuity(
 function shouldConfirmPendingContinuity(
   pendingCandidate: PendingContinuityCandidate,
   nextTripPoint: TripPoint,
-  recordingMode: RecordingProfile,
+  recordingProfile: RecordingProfile,
 ): boolean {
   const pendingToNextDistance = calculateDistanceBetweenPoints(
     pendingCandidate.candidatePoint,
@@ -368,28 +368,28 @@ function shouldConfirmPendingContinuity(
   );
 
   if (
-    pendingToNextDistance < getMinMovementMeters(recordingMode) ||
-    pendingToNextSpeed > getMaxImpliedSpeedKmh(recordingMode) ||
-    anchorToNextDistance > getMaxJumpDistanceMeters(recordingMode)
+    pendingToNextDistance < getMinMovementMeters(recordingProfile) ||
+    pendingToNextSpeed > getMaxImpliedSpeedKmh(recordingProfile) ||
+    anchorToNextDistance > getMaxJumpDistanceMeters(recordingProfile)
   ) {
     return false;
   }
 
   return (
-    pendingToNextDistance <= Math.max(getMinMovementMeters(recordingMode) * 4, anchorToNextDistance * 0.85) &&
+    pendingToNextDistance <= Math.max(getMinMovementMeters(recordingProfile) * 4, anchorToNextDistance * 0.85) &&
     pendingDeviation <= Math.max(18, anchorToNextDistance * 0.3)
   );
 }
 
 function maybeRollbackRecentSpike(
   tripPoints: TripPoint[],
-  recordingMode: RecordingProfile,
+  recordingProfile: RecordingProfile,
   callbackSource: LocationCallbackSource,
 ): TripPoint[] {
   const relevantTripPoints = tripPoints.filter(
     (tripPoint) => tripPoint.tripLocalId === tripPoints[tripPoints.length - 1]?.tripLocalId,
   );
-  const thresholds = getRouteSmoothingThresholds(recordingMode);
+  const thresholds = getRouteSmoothingThresholds(recordingProfile);
 
   if (!thresholds || relevantTripPoints.length < 3) {
     return tripPoints;
@@ -418,7 +418,7 @@ function maybeRollbackRecentSpike(
     return tripPoints;
   }
 
-  recordTripPointDiagnostic(middle.tripLocalId, recordingMode, "removed-as-spike", {
+  recordTripPointDiagnostic(middle.tripLocalId, recordingProfile, "removed-as-spike", {
     recordedAt: middle.recordedAt,
     source: callbackSource,
   });
@@ -457,7 +457,7 @@ export function getVisibleTripPointsForTrip(tripPoints: TripPoint[], tripLocalId
 export function getRouteGapBreakCandidate(
   tripPoints: TripPoint[],
   nextTripPoint: TripPoint,
-  recordingMode: RecordingProfile,
+  recordingProfile: RecordingProfile,
 ): RouteGapBreakCandidate | null {
   const previousPoint = [...tripPoints]
     .reverse()
@@ -469,7 +469,7 @@ export function getRouteGapBreakCandidate(
 
   const distanceMeters = calculateDistanceBetweenPoints(previousPoint, nextTripPoint);
 
-  if (distanceMeters <= getMaxJumpDistanceMeters(recordingMode)) {
+  if (distanceMeters <= getMaxJumpDistanceMeters(recordingProfile)) {
     return null;
   }
 
@@ -503,7 +503,7 @@ export function groupVisibleTripPointsByTripId(tripPoints: TripPoint[]): Map<str
 export function appendTripPointIfUseful(
   tripPoints: TripPoint[],
   nextTripPoint: TripPoint,
-  recordingMode: RecordingProfile,
+  recordingProfile: RecordingProfile,
   callbackSource: LocationCallbackSource,
   context?: AppendTripPointContext,
 ): TripPoint[] {
@@ -515,10 +515,10 @@ export function appendTripPointIfUseful(
   ) {
     pendingContinuityByTripLocalId.delete(nextTripPoint.tripLocalId);
 
-    if (shouldConfirmPendingContinuity(pendingCandidate, nextTripPoint, recordingMode)) {
+    if (shouldConfirmPendingContinuity(pendingCandidate, nextTripPoint, recordingProfile)) {
       recordTripPointDiagnostic(
         pendingCandidate.candidatePoint.tripLocalId,
-        recordingMode,
+        recordingProfile,
         "confirmed-pending-continuity",
         {
           recordedAt: pendingCandidate.candidatePoint.recordedAt,
@@ -529,7 +529,7 @@ export function appendTripPointIfUseful(
       return appendTripPointIfUseful(
         [...tripPoints, pendingCandidate.candidatePoint],
         nextTripPoint,
-        recordingMode,
+        recordingProfile,
         callbackSource,
         context,
       );
@@ -537,7 +537,7 @@ export function appendTripPointIfUseful(
 
     recordTripPointDiagnostic(
       pendingCandidate.candidatePoint.tripLocalId,
-      recordingMode,
+      recordingProfile,
       "rejected-pending-continuity",
       {
         recordedAt: pendingCandidate.candidatePoint.recordedAt,
@@ -557,7 +557,7 @@ export function appendTripPointIfUseful(
         tripPoint.recordedAt === nextTripPoint.recordedAt,
     )
   ) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "duplicate-timestamp", {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingProfile, "duplicate-timestamp", {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,
     });
@@ -569,7 +569,7 @@ export function appendTripPointIfUseful(
     previousPoint.latitude === nextTripPoint.latitude &&
     previousPoint.longitude === nextTripPoint.longitude
   ) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "duplicate-coordinates", {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingProfile, "duplicate-coordinates", {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,
     });
@@ -579,9 +579,9 @@ export function appendTripPointIfUseful(
   if (
     nextTripPoint.accuracy !== null &&
     Number.isFinite(nextTripPoint.accuracy) &&
-    nextTripPoint.accuracy > getMaxAccuracyMeters(recordingMode)
+    nextTripPoint.accuracy > getMaxAccuracyMeters(recordingProfile)
   ) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accuracy", {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingProfile, "accuracy", {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,
     });
@@ -589,7 +589,7 @@ export function appendTripPointIfUseful(
   }
 
   if (!previousPoint) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted", {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingProfile, "accepted", {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,
     });
@@ -598,8 +598,8 @@ export function appendTripPointIfUseful(
 
   const distanceMeters = calculateDistanceBetweenPoints(previousPoint, nextTripPoint);
 
-  if (distanceMeters < getMinMovementMeters(recordingMode)) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "min-movement", {
+  if (distanceMeters < getMinMovementMeters(recordingProfile)) {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingProfile, "min-movement", {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,
     });
@@ -612,8 +612,8 @@ export function appendTripPointIfUseful(
     : calculateDistanceBetweenPoints(impliedSpeedAnchor, nextTripPoint);
   const impliedSpeedKmh = getImpliedSpeedKmh(impliedSpeedAnchor, nextTripPoint, impliedSpeedDistance);
 
-  if (impliedSpeedKmh > getMaxImpliedSpeedKmh(recordingMode)) {
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "implied-speed", {
+  if (impliedSpeedKmh > getMaxImpliedSpeedKmh(recordingProfile)) {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingProfile, "implied-speed", {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,
     });
@@ -626,7 +626,7 @@ export function appendTripPointIfUseful(
     shouldHoldAsPendingContinuity(
       previousPoint,
       nextTripPoint,
-      recordingMode,
+      recordingProfile,
       distanceMeters,
       impliedSpeedKmh,
       context,
@@ -641,16 +641,16 @@ export function appendTripPointIfUseful(
     return tripPoints;
   }
 
-  if (impliedSpeedDistance > getMaxJumpDistanceMeters(recordingMode)) {
+  if (impliedSpeedDistance > getMaxJumpDistanceMeters(recordingProfile)) {
     if (isLongGap(impliedSpeedAnchor, nextTripPoint)) {
-      recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "accepted-after-long-gap", {
+      recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingProfile, "accepted-after-long-gap", {
         recordedAt: nextTripPoint.recordedAt,
         source: callbackSource,
       });
-      return maybeRollbackRecentSpike([...tripPoints, nextTripPoint], recordingMode, callbackSource);
+      return maybeRollbackRecentSpike([...tripPoints, nextTripPoint], recordingProfile, callbackSource);
     }
 
-    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingMode, "jump-distance", {
+    recordTripPointDiagnostic(nextTripPoint.tripLocalId, recordingProfile, "jump-distance", {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,
     });
@@ -659,14 +659,14 @@ export function appendTripPointIfUseful(
 
   recordTripPointDiagnostic(
     nextTripPoint.tripLocalId,
-    recordingMode,
+    recordingProfile,
     recoveryAcceptanceReason ?? "accepted",
     {
       recordedAt: nextTripPoint.recordedAt,
       source: callbackSource,
     },
   );
-  return maybeRollbackRecentSpike([...tripPoints, nextTripPoint], recordingMode, callbackSource);
+  return maybeRollbackRecentSpike([...tripPoints, nextTripPoint], recordingProfile, callbackSource);
 }
 
 export function resetPendingTripPointContinuity(tripLocalId: string) {

@@ -29,7 +29,7 @@ const EMPTY_POINT_FILTER_PROFILE: PointFilterProfileConfig = {
 };
 
 interface ParsedTarget {
-  mode: RecordingProfile;
+  profile: RecordingProfile;
   platform: Exclude<RecordingConfigPlatform, "default">;
 }
 
@@ -44,21 +44,21 @@ function parseTarget(target: string | string[] | undefined): ParsedTarget | null
     return null;
   }
 
-  const [platform, mode] = value.split("-");
+  const [platform, profile] = value.split("-");
 
-  if ((platform !== "ios" && platform !== "android") || !isConfigurableRecordingProfile(mode)) {
+  if ((platform !== "ios" && platform !== "android") || !isConfigurableRecordingProfile(profile)) {
     return null;
   }
 
-  return { platform, mode };
+  return { platform, profile };
 }
 
 function isConfigurableRecordingProfile(value: string | undefined): value is RecordingProfile {
   return CONFIGURABLE_RECORDING_PROFILE_OPTIONS.some((option) => option.value === value);
 }
 
-function getModeLabel(mode: RecordingProfile) {
-  return RECORDING_PROFILE_OPTIONS.find((option) => option.value === mode)?.label ?? mode;
+function getProfileLabel(profile: RecordingProfile) {
+  return RECORDING_PROFILE_OPTIONS.find((option) => option.value === profile)?.label ?? profile;
 }
 
 function getPlatformLabel(platform: Exclude<RecordingConfigPlatform, "default">) {
@@ -102,8 +102,8 @@ export default function RecordingConfigProfileScreen() {
     const record = await loadEditableRecordingConfig(identitySession);
     const nextConfig = record?.config ?? null;
     const pointFilterProfile =
-      nextConfig?.pointFilters?.[parsedTarget.platform]?.[parsedTarget.mode] ??
-      nextConfig?.pointFilters?.default?.[parsedTarget.mode] ??
+      nextConfig?.pointFilters?.[parsedTarget.platform]?.[parsedTarget.profile] ??
+      nextConfig?.pointFilters?.default?.[parsedTarget.profile] ??
       EMPTY_POINT_FILTER_PROFILE;
 
     setConfig(nextConfig);
@@ -140,7 +140,7 @@ export default function RecordingConfigProfileScreen() {
         ...(nextConfig.pointFilters ?? {}),
         [parsedTarget.platform]: {
           ...(nextConfig.pointFilters?.[parsedTarget.platform] ?? {}),
-          [parsedTarget.mode]: pointFilterProfile,
+          [parsedTarget.profile]: pointFilterProfile,
         },
       };
 
@@ -164,8 +164,8 @@ export default function RecordingConfigProfileScreen() {
       const record = await loadEditableRecordingConfig(identitySession);
       const remoteConfig = record?.remoteConfig;
       const remotePointFilterProfile =
-        remoteConfig?.pointFilters?.[parsedTarget.platform]?.[parsedTarget.mode] ??
-        remoteConfig?.pointFilters?.default?.[parsedTarget.mode];
+        remoteConfig?.pointFilters?.[parsedTarget.platform]?.[parsedTarget.profile] ??
+        remoteConfig?.pointFilters?.default?.[parsedTarget.profile];
 
       if (!remoteConfig || !remotePointFilterProfile) {
         throw new Error("Server default is not available for this profile.");
@@ -176,7 +176,7 @@ export default function RecordingConfigProfileScreen() {
         ...(nextConfig.pointFilters ?? {}),
         [parsedTarget.platform]: {
           ...(nextConfig.pointFilters?.[parsedTarget.platform] ?? {}),
-          [parsedTarget.mode]: remotePointFilterProfile,
+          [parsedTarget.profile]: remotePointFilterProfile,
         },
       };
 
@@ -205,7 +205,7 @@ export default function RecordingConfigProfileScreen() {
     <ScreenLayout
       contentVariant="plain"
       onBack={() => router.back()}
-      title={`${getPlatformLabel(parsedTarget.platform)} ${getModeLabel(parsedTarget.mode)}`}
+      title={`${getPlatformLabel(parsedTarget.platform)} ${getProfileLabel(parsedTarget.profile)}`}
     >
       <View style={styles.root}>
         <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
