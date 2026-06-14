@@ -22,6 +22,7 @@ describe("purchases integration", () => {
   const originalAllowFakePurchasesInProduction = process.env.ALLOW_FAKE_PURCHASES_IN_PRODUCTION;
   const originalPurchaseEnvironment = process.env.PURCHASE_ENVIRONMENT;
   const originalMediaStorageBackend = process.env.MEDIA_STORAGE_BACKEND;
+  const originalDisablePurchaseEntitlementEnforcement = process.env.DISABLE_PURCHASE_ENTITLEMENT_ENFORCEMENT;
 
   before(async () => {
     app = await createApp();
@@ -35,6 +36,7 @@ describe("purchases integration", () => {
     process.env.ALLOW_FAKE_PURCHASES_IN_PRODUCTION = originalAllowFakePurchasesInProduction;
     process.env.PURCHASE_ENVIRONMENT = originalPurchaseEnvironment;
     process.env.MEDIA_STORAGE_BACKEND = originalMediaStorageBackend;
+    process.env.DISABLE_PURCHASE_ENTITLEMENT_ENFORCEMENT = originalDisablePurchaseEntitlementEnforcement;
     await app.close();
   });
 
@@ -44,6 +46,7 @@ describe("purchases integration", () => {
     process.env.ALLOW_FAKE_PURCHASES_IN_PRODUCTION = "false";
     process.env.PURCHASE_ENVIRONMENT = "local";
     process.env.MEDIA_STORAGE_BACKEND = "file";
+    process.env.DISABLE_PURCHASE_ENTITLEMENT_ENFORCEMENT = "false";
 
     await databaseService.$executeRawUnsafe(`
       TRUNCATE TABLE
@@ -53,6 +56,17 @@ describe("purchases integration", () => {
         mail_outbox,
         password_reset_tokens,
         sessions,
+        raw_location_events,
+        trip_route_variants,
+        trip_points,
+        trip_segments,
+        waypoint_attachments,
+        trip_shares,
+        trip_diagnostics,
+        trip_group_members,
+        trip_groups,
+        trips,
+        waypoints,
         user_entitlements,
         purchase_transactions,
         subscriptions,
@@ -227,6 +241,95 @@ describe("purchases integration", () => {
     assert.equal(transactions.length, 1);
   });
 
+  test("sync endpoint requires sync entitlement", async () => {
+    const { token } = await registerVerifiedUser("sync-rejected@example.com");
+
+    const response = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${token}`)
+      .send(buildSyncTripPayload("sync-rejected-trip"));
+
+    assert.equal(response.status, 403);
+    assert.match(String(response.body.message), /sync/);
+  });
+
+  test("premium fake purchase unlocks sync entitlement", async () => {
+    process.env.ENABLE_FAKE_PURCHASES = "true";
+    const { token } = await registerVerifiedUser("sync-allowed@example.com", "test_user");
+
+    await simulate(token, "trailbook_premium_monthly", "success");
+
+    const response = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${token}`)
+      .send(buildSyncTripPayload("sync-allowed-trip"));
+
+    assert.equal(response.status, 201);
+    assert.equal(response.body.tripLocalId, "sync-allowed-trip");
+  });
+
+  test("photo upload and sharing require their own entitlements", async () => {
+    const { token, userId } = await registerVerifiedUser("granular@example.com");
+    await grantEntitlement(userId, "sync");
+
+    const syncResponse = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${token}`)
+      .send(buildSyncTripPayload("granular-trip", { attachmentLocalId: "granular-attachment" }));
+
+    assert.equal(syncResponse.status, 201);
+
+    const uploadResponse = await request(app.getHttpServer())
+      .post(`/api/trips/${syncResponse.body.tripId}/attachments/upload`)
+      .set("Authorization", `Bearer ${token}`)
+      .field("attachmentLocalId", "granular-attachment")
+      .attach("file", Buffer.from("photo"), {
+        contentType: "image/jpeg",
+        filename: "photo.jpg",
+      });
+    assert.equal(uploadResponse.status, 403);
+    assert.match(String(uploadResponse.body.message), /photo_storage/);
+
+    const shareResponse = await request(app.getHttpServer())
+      .post(`/api/trips/${syncResponse.body.tripId}/shares`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ recipientEmail: "recipient-granular@example.com" });
+    assert.equal(shareResponse.status, 403);
+    assert.match(String(shareResponse.body.message), /sharing/);
+  });
+
+  test("shared recipient can read shared trip without paid sharing entitlement", async () => {
+    const { token: ownerToken } = await registerVerifiedUser("share-owner@example.com", "test_user");
+    const { token: recipientToken } = await registerVerifiedUser("share-recipient@example.com");
+    process.env.ENABLE_FAKE_PURCHASES = "true";
+
+    await simulate(ownerToken, "trailbook_premium_monthly", "success");
+
+    const syncResponse = await request(app.getHttpServer())
+      .post("/api/trips/sync")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send(buildSyncTripPayload("recipient-read-trip"));
+    assert.equal(syncResponse.status, 201);
+
+    const shareResponse = await request(app.getHttpServer())
+      .post(`/api/trips/${syncResponse.body.tripId}/shares`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ recipientEmail: "share-recipient@example.com" });
+    assert.equal(shareResponse.status, 201);
+
+    const sharedListResponse = await request(app.getHttpServer())
+      .get("/api/trips/shared/list")
+      .set("Authorization", `Bearer ${recipientToken}`);
+    assert.equal(sharedListResponse.status, 200);
+    assert.equal(sharedListResponse.body.sharedTrips.length, 1);
+
+    const sharedDetailResponse = await request(app.getHttpServer())
+      .get(`/api/trips/shared/${shareResponse.body.shareId}`)
+      .set("Authorization", `Bearer ${recipientToken}`);
+    assert.equal(sharedDetailResponse.status, 200);
+    assert.equal(sharedDetailResponse.body.trip.title, "recipient-read-trip");
+  });
+
   async function simulate(
     token: string,
     providerProductId: string,
@@ -241,6 +344,86 @@ describe("purchases integration", () => {
         scenario,
         transactionId,
       });
+  }
+
+  async function grantEntitlement(userId: string, entitlementCode: string) {
+    await databaseService.userEntitlement.create({
+      data: {
+        active: true,
+        entitlementCode,
+        sourceType: "manual_grant",
+        startsAt: new Date("2026-01-01T00:00:00.000Z"),
+        userId,
+      },
+    });
+  }
+
+  function buildSyncTripPayload(
+    localId: string,
+    options: { attachmentLocalId?: string } = {},
+  ) {
+    const attachmentLocalId = options.attachmentLocalId ?? `${localId}-attachment`;
+
+    return {
+      attachments: [
+        {
+          createdAt: "2026-04-09T09:00:00.000Z",
+          deletedAt: null,
+          fileSize: 12,
+          localId: attachmentLocalId,
+          mimeType: "image/jpeg",
+          type: "photo",
+          updatedAt: "2026-04-09T09:00:00.000Z",
+          waypointLocalId: `${localId}-waypoint`,
+        },
+      ],
+      createdAt: "2026-04-09T08:00:00.000Z",
+      deletedAt: null,
+      description: null,
+      deviceId: "device-purchase-test",
+      endedAt: "2026-04-09T10:00:00.000Z",
+      localId,
+      points: [
+        {
+          accuracy: 8,
+          altitude: null,
+          latitude: 44.7866,
+          localId: `${localId}-point-1`,
+          longitude: 20.4489,
+          recordedAt: "2026-04-09T08:30:00.000Z",
+          segmentLocalId: `${localId}-segment`,
+          speed: 12,
+        },
+      ],
+      recordingProfile: "drive",
+      segments: [
+        {
+          createdAt: "2026-04-09T08:00:00.000Z",
+          endedAt: "2026-04-09T10:00:00.000Z",
+          localId: `${localId}-segment`,
+          recordingProfile: "drive",
+          startedAt: "2026-04-09T08:00:00.000Z",
+          updatedAt: "2026-04-09T10:00:00.000Z",
+        },
+      ],
+      startedAt: "2026-04-09T08:00:00.000Z",
+      title: localId,
+      updatedAt: "2026-04-09T10:00:00.000Z",
+      waypoints: [
+        {
+          category: "generic",
+          createdAt: "2026-04-09T09:00:00.000Z",
+          deletedAt: null,
+          latitude: 44.8,
+          localId: `${localId}-waypoint`,
+          longitude: 20.45,
+          note: null,
+          segmentLocalId: `${localId}-segment`,
+          title: "Waypoint",
+          updatedAt: "2026-04-09T09:00:00.000Z",
+        },
+      ],
+    };
   }
 
   async function registerVerifiedUser(email: string, role: "admin" | "test_user" | "user" = "user") {

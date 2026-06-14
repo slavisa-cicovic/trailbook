@@ -20,6 +20,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 
 import { AuthService } from "../auth/auth.service";
+import { EntitlementService } from "../purchases/entitlement.service";
 import type { ShareTripDto } from "./dto/share-trip.dto";
 import type { SaveTripEditDto } from "./dto/save-trip-edit.dto";
 import type {
@@ -36,11 +37,13 @@ export class TripsController {
   constructor(
     @Inject(TripsService) private readonly tripsService: TripsService,
     @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(EntitlementService) private readonly entitlementService: EntitlementService,
   ) {}
 
   @Post("sync")
   async syncTrip(@Body() payload: SyncTripDto, @Req() request: Request) {
     const user = await this.requireAuthenticatedUser(request);
+    await this.entitlementService.requireEntitlement(user.id, "sync");
     return this.tripsService.syncTrip(user.id, payload);
   }
 
@@ -51,6 +54,7 @@ export class TripsController {
     @Req() request: Request,
   ) {
     const user = await this.requireAuthenticatedUser(request);
+    await this.entitlementService.requireEntitlement(user.id, "sync");
     return this.tripsService.syncTripPoints(user.id, tripId, payload);
   }
 
@@ -61,6 +65,7 @@ export class TripsController {
     @Req() request: Request,
   ) {
     const user = await this.requireAuthenticatedUser(request);
+    await this.entitlementService.requireEntitlement(user.id, "sync");
     return this.tripsService.syncTripStats(user.id, tripId, payload);
   }
 
@@ -95,6 +100,7 @@ export class TripsController {
   @Post("groups/sync")
   async syncTripGroups(@Body() payload: SyncTripGroupsDto, @Req() request: Request) {
     const user = await this.requireAuthenticatedUser(request);
+    await this.entitlementService.requireEntitlement(user.id, "sync");
     return this.tripsService.syncTripGroups(user.id, payload);
   }
 
@@ -119,6 +125,7 @@ export class TripsController {
   @Post(":tripId/shares")
   async shareTrip(@Param("tripId") tripId: string, @Body() input: ShareTripDto, @Req() request: Request) {
     const user = await this.requireAuthenticatedUser(request);
+    await this.entitlementService.requireEntitlement(user.id, "sharing");
     return this.tripsService.shareTrip(user.id, tripId, input);
   }
 
@@ -141,6 +148,7 @@ export class TripsController {
     @Req() request: Request,
   ) {
     const user = await this.requireAuthenticatedUser(request);
+    await this.entitlementService.requireEntitlement(user.id, "sharing");
     return this.tripsService.revokeTripShare(user.id, tripId, shareId);
   }
 
@@ -173,6 +181,7 @@ export class TripsController {
     @Req() request: Request,
   ) {
     const user = await this.requireAuthenticatedUser(request);
+    await this.entitlementService.requireEntitlement(user.id, "photo_storage");
     return this.tripsService.uploadTripAttachment(user.id, tripId, attachmentLocalId, uploadedFile ?? null);
   }
 

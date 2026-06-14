@@ -17,6 +17,7 @@ import {
   getMobilePurchaseProvider,
   isFakePurchaseProviderEnabled,
 } from "../../services/purchases/mobile-purchase-provider-resolver";
+import { setPurchaseAccess } from "../../state/purchase-access-store";
 import { useSessionStore } from "../../state/session-store";
 import { useThemeStore } from "../../state/theme-store";
 
@@ -88,6 +89,7 @@ export default function PurchasesSimulationScreen() {
       ]);
 
       setAccess(nextAccess);
+      setPurchaseAccess(nextAccess);
       setProducts(nextProducts);
       setMessage("Purchase access refreshed.");
     } catch (error) {
@@ -125,6 +127,7 @@ export default function PurchasesSimulationScreen() {
       const nextAccess = await provider.refreshAccess();
 
       setAccess(nextAccess);
+      setPurchaseAccess(nextAccess);
       setMessage(`Scenario ${action.scenario} finished: ${result.purchaseResult}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Purchase simulation failed.");
@@ -142,6 +145,7 @@ export default function PurchasesSimulationScreen() {
       const nextAccess = await provider.restorePurchases();
 
       setAccess(nextAccess);
+      setPurchaseAccess(nextAccess);
       setMessage("Restore completed.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Restore failed.");

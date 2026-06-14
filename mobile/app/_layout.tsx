@@ -16,6 +16,10 @@ import { initSentry } from "../src/core/sentry";
 import { useAppHydration } from "../src/core/hooks/use-app-hydration";
 import { syncBackgroundLocationTracking } from "../src/services/location/location.service";
 import { syncResolvedRecordingConfig } from "../src/services/recording/recording-config.service";
+import {
+  clearPurchaseAccess,
+  refreshPurchaseAccessForSession,
+} from "../src/state/purchase-access-store";
 import { useRecordingStore } from "../src/state/recording-store";
 import { useSessionStore } from "../src/state/session-store";
 import { useThemeStore } from "../src/state/theme-store";
@@ -89,8 +93,17 @@ export default function RootLayout() {
     if (sessionHydrated && !identitySession) {
       queryClient.clear();
       clearAllRecordingServiceState();
+      clearPurchaseAccess();
     }
   }, [sessionHydrated, identitySession]);
+
+  useEffect(() => {
+    if (!sessionHydrated) {
+      return;
+    }
+
+    void refreshPurchaseAccessForSession(identitySession);
+  }, [identitySession, sessionHydrated]);
 
   useEffect(() => {
     if (!sessionHydrated) {

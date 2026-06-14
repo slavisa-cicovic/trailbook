@@ -27,6 +27,7 @@ describe("auth integration", () => {
   const originalMediaStorageBackend = process.env.MEDIA_STORAGE_BACKEND;
   const originalMediaStorageDir = process.env.MEDIA_STORAGE_DIR;
   const originalTripDiagnosticsEnabled = process.env.ENABLE_TRIP_DIAGNOSTICS;
+  const originalDisablePurchaseEntitlementEnforcement = process.env.DISABLE_PURCHASE_ENTITLEMENT_ENFORCEMENT;
 
   before(async () => {
     app = await createApp();
@@ -43,6 +44,7 @@ describe("auth integration", () => {
     process.env.MEDIA_STORAGE_BACKEND = originalMediaStorageBackend;
     process.env.MEDIA_STORAGE_DIR = originalMediaStorageDir;
     process.env.ENABLE_TRIP_DIAGNOSTICS = originalTripDiagnosticsEnabled;
+    process.env.DISABLE_PURCHASE_ENTITLEMENT_ENFORCEMENT = originalDisablePurchaseEntitlementEnforcement;
     await app.close();
   });
 
@@ -55,6 +57,7 @@ describe("auth integration", () => {
     process.env.MEDIA_STORAGE_BACKEND = "file";
     process.env.MEDIA_STORAGE_DIR = "/tmp/trailbook-test-media";
     process.env.ENABLE_TRIP_DIAGNOSTICS = "true";
+    process.env.DISABLE_PURCHASE_ENTITLEMENT_ENFORCEMENT = "true";
 
     await databaseService.$executeRawUnsafe(`
       TRUNCATE TABLE

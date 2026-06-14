@@ -50,6 +50,10 @@ import {
 } from "../../repositories/trips-repository";
 import { loadWaypoints } from "../../repositories/waypoints-repository";
 import { useSessionStore } from "../../state/session-store";
+import {
+  hasPurchaseEntitlement,
+  usePurchaseAccessStore,
+} from "../../state/purchase-access-store";
 import { setTripSegments, useTripSegmentsStore } from "../../state/trip-segments-store";
 import { setTrips, useTripsStore } from "../../state/trips-store";
 import { setWaypoints, useWaypointsStore } from "../../state/waypoints-store";
@@ -161,6 +165,8 @@ export default function TripRouteScreen() {
   const trips = useTripsStore((state) => state.trips);
   const tripSegments = useTripSegmentsStore((state) => state.tripSegments);
   const waypoints = useWaypointsStore((state) => state.waypoints);
+  const purchaseAccess = usePurchaseAccessStore((state) => state.access);
+  const purchaseAccessLoading = usePurchaseAccessStore((state) => state.loading);
   const currentUserId = identitySession?.userId ?? null;
 
   const [tripEditVisible, setTripEditVisible] = useState(false);
@@ -214,6 +220,26 @@ export default function TripRouteScreen() {
   const segmentPolylines = routeModel?.segmentPolylines ?? [];
   const fallbackCoordinates = routeModel?.fallbackCoordinates ?? [];
   const waypointMarkers = routeModel?.waypointMarkers ?? [];
+  const hasSyncEntitlement = hasPurchaseEntitlement(purchaseAccess, "sync");
+  const hasPhotoStorageEntitlement = hasPurchaseEntitlement(purchaseAccess, "photo_storage");
+  const hasSharingEntitlement = hasPurchaseEntitlement(purchaseAccess, "sharing");
+  const hasUploadableAttachments = selectedTripAttachments.some(
+    (attachment) =>
+      attachment.deletedAt === null &&
+      (!attachment.serverId || attachment.syncStatus !== "synced" || !attachment.localUri.startsWith("http")),
+  );
+  const syncUnavailableReason =
+    identitySession?.mode !== "authenticated"
+      ? null
+      : !hasSyncEntitlement
+        ? "Sync requires Trailbook Premium."
+        : hasUploadableAttachments && !hasPhotoStorageEntitlement
+          ? "Photo upload requires Trailbook Premium photo storage."
+          : null;
+  const sharingUnavailableReason =
+    identitySession?.mode === "authenticated" && !hasSharingEntitlement
+      ? "Sharing requires Trailbook Premium."
+      : null;
   const routePointInfos: RoutePointInfo[] = useMemo(() => {
     if (!selectedTrip) {
       return [];
@@ -404,6 +430,10 @@ export default function TripRouteScreen() {
       throw new Error("You must be signed in to sync this trip.");
     }
 
+    if (syncUnavailableReason) {
+      throw new Error(syncUnavailableReason);
+    }
+
     setSyncBusy(true);
 
     try {
@@ -464,6 +494,12 @@ export default function TripRouteScreen() {
 
     setShareError(null);
     setShareSuccess(null);
+
+    if (sharingUnavailableReason) {
+      setShareError(sharingUnavailableReason);
+      setTripShareVisible(true);
+      return;
+    }
 
     try {
       const tripId = selectedTrip.serverId ?? (await syncSelectedTripIfNeeded());
@@ -725,6 +761,8 @@ export default function TripRouteScreen() {
     segmentEditSegmentId === null
       ? null
       : selectedTripSegments.find(({ segment }) => segment.localId === segmentEditSegmentId)?.segment ?? null;
+  const syncActionDisabled = syncBusy || purchaseAccessLoading || Boolean(syncUnavailableReason);
+  const shareActionDisabled = purchaseAccessLoading || Boolean(sharingUnavailableReason);
 
   return (
     <ScreenLayout
@@ -827,26 +865,32 @@ export default function TripRouteScreen() {
                   <>
                     <IconButton
                       accessibilityLabel={syncBusy ? "Syncing trip" : "Sync trip"}
-                      disabled={syncBusy}
+                      disabled={syncActionDisabled}
                       onPress={() => void syncSelectedTripIfNeeded()}
-                      style={[styles.syncButton, syncBusy && styles.headerIconButtonDisabled]}
+                      style={[styles.syncButton, syncActionDisabled && styles.headerIconButtonDisabled]}
                     >
                       <Animated.View style={syncIconAnimatedStyle}>
-                        <MaterialIcons color={syncIconColor} name="sync" size={18} />
+                        <MaterialIcons color={syncActionDisabled ? "#6b7280" : syncIconColor} name="sync" size={18} />
                       </Animated.View>
                     </IconButton>
                     <IconButton
                       accessibilityLabel="Share trip"
+                      disabled={shareActionDisabled}
                       icon="share"
                       onPress={() => {
                         setDetailsSheetVisible(false);
                         void openTripShare();
                       }}
-                      style={styles.shareButton}
+                      style={[styles.shareButton, shareActionDisabled && styles.headerIconButtonDisabled]}
                     />
                   </>
                 ) : null}
               </View>
+              {syncUnavailableReason || sharingUnavailableReason ? (
+                <Text style={styles.premiumHint}>
+                  {syncUnavailableReason ?? sharingUnavailableReason}
+                </Text>
+              ) : null}
               {selectedTrip.description ? (
                 <Text style={styles.tripDescription}>{selectedTrip.description}</Text>
               ) : null}
@@ -1342,6 +1386,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: "#60705d",
+  },
+  premiumHint: {
+    borderRadius: 12,
+    backgroundColor: "#fff4d7",
+    color: "#81560f",
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   shareSuccessText: {
     fontSize: 13,

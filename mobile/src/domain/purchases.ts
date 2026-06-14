@@ -3,6 +3,14 @@ export type PurchaseEnvironmentName = "local" | "sandbox" | "production";
 export type PurchaseBillingType = "none" | "monthly" | "yearly" | "lifetime";
 export type PurchaseResult = "success" | "canceled_by_user" | "declined" | "pending" | "failed";
 export type PurchaseSubscriptionStatus = "active" | "expired" | "canceled" | "lifetime";
+export type EntitlementCode =
+  | "advanced_diagnostics"
+  | "cloud_backup"
+  | "photo_storage"
+  | "raw_reprocessing"
+  | "sharing"
+  | "sync"
+  | "web_access";
 
 export type FakePurchaseScenario =
   | "success"

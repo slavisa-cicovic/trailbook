@@ -10,6 +10,14 @@ export type PurchaseProviderName = PurchaseProvider;
 export type PurchaseEnvironmentName = PurchaseEnvironment;
 export type PurchaseEventTypeName = PurchaseEventType;
 export type PurchaseResultName = PurchaseResult;
+export type EntitlementCode =
+  | "advanced_diagnostics"
+  | "cloud_backup"
+  | "photo_storage"
+  | "raw_reprocessing"
+  | "sharing"
+  | "sync"
+  | "web_access";
 
 export type FakePurchaseScenario =
   | "success"

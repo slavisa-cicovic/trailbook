@@ -14,6 +14,13 @@ import {
   isFakePurchaseProviderEnabled,
 } from "../../services/purchases/mobile-purchase-provider-resolver";
 import { requestFromBackend } from "../../services/api/mobile-api.service";
+import {
+  clearPurchaseAccess,
+  getPurchaseAccessSnapshot,
+  hasPurchaseEntitlement,
+  refreshPurchaseAccessForSession,
+  setPurchaseAccess,
+} from "../../state/purchase-access-store";
 
 vi.mock("../../services/api/mobile-api.service", () => ({
   requestFromBackend: vi.fn(),
@@ -37,6 +44,7 @@ const session: AuthenticatedDeviceSession = {
 describe("purchase API service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearPurchaseAccess();
   });
 
   it("lists fake purchase products through backend purchases endpoint", async () => {
@@ -96,6 +104,41 @@ describe("purchase API service", () => {
       "session-token",
       expect.anything(),
     );
+  });
+});
+
+describe("purchase access store", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPurchaseAccess();
+  });
+
+  it("refreshes entitlement snapshot from backend for authenticated sessions", async () => {
+    vi.mocked(requestFromBackend).mockResolvedValueOnce({
+      currentPeriodEndsAt: null,
+      entitlements: ["sync", "sharing"],
+      planCode: "premium_lifetime",
+      subscriptionStatus: "lifetime",
+    });
+
+    const access = await refreshPurchaseAccessForSession(session);
+
+    expect(access?.entitlements).toEqual(["sync", "sharing"]);
+    expect(hasPurchaseEntitlement(getPurchaseAccessSnapshot().access, "sync")).toBe(true);
+    expect(hasPurchaseEntitlement(getPurchaseAccessSnapshot().access, "photo_storage")).toBe(false);
+  });
+
+  it("clears entitlement snapshot when session is not authenticated", async () => {
+    setPurchaseAccess({
+      currentPeriodEndsAt: null,
+      entitlements: ["sync"],
+      planCode: "premium_lifetime",
+      subscriptionStatus: "lifetime",
+    });
+
+    await refreshPurchaseAccessForSession(null);
+
+    expect(getPurchaseAccessSnapshot().access).toBeNull();
   });
 });
 
