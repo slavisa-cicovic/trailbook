@@ -1780,11 +1780,12 @@ export class TripsService {
       throw new ForbiddenException("You do not have access to this attachment.");
     }
 
-    const absolutePath = await this.mediaStorageService.resolveStoragePath(attachment.storageKey);
+    const content = await this.mediaStorageService.getTripAttachment(attachment.storageKey);
 
     return {
-      absolutePath,
-      mimeType: attachment.mimeType,
+      body: content.body,
+      contentLength: content.contentLength ?? attachment.fileSizeBytes,
+      mimeType: attachment.mimeType ?? content.contentType,
     };
   }
 }

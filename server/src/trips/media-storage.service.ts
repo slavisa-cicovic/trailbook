@@ -1,18 +1,11 @@
-import { Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { Injectable } from "@nestjs/common";
 import path from "node:path";
+
+import { createMediaObjectStorage } from "./media-object-storage";
 
 @Injectable()
 export class MediaStorageService {
-  private getRootDir() {
-    const configuredRoot = process.env.MEDIA_STORAGE_DIR?.trim();
-
-    if (!configuredRoot) {
-      throw new InternalServerErrorException("MEDIA_STORAGE_DIR is not configured.");
-    }
-
-    return path.resolve(configuredRoot);
-  }
+  private readonly objectStorage = createMediaObjectStorage();
 
   async storeTripAttachment(input: {
     attachmentId: string;
@@ -21,37 +14,20 @@ export class MediaStorageService {
     tripId: string;
     fileBuffer: Buffer;
   }) {
-    const rootDir = this.getRootDir();
-    const tripDir = path.join(rootDir, "trip-attachments", input.tripId);
     const originalExtension = input.originalFilename ? path.extname(input.originalFilename) : "";
     const mimeExtension = this.getExtensionFromMimeType(input.mimeType);
     const extension = originalExtension || mimeExtension;
-    const relativePath = path.join("trip-attachments", input.tripId, `${input.attachmentId}${extension}`);
-    const absolutePath = path.join(rootDir, relativePath);
+    const storageKey = path.posix.join("trip-attachments", input.tripId, `${input.attachmentId}${extension}`);
 
-    await mkdir(tripDir, { recursive: true });
-    await writeFile(absolutePath, input.fileBuffer);
-
-    return {
-      storageKey: relativePath,
-    };
+    return this.objectStorage.putObject({
+      body: input.fileBuffer,
+      contentType: input.mimeType,
+      key: storageKey,
+    });
   }
 
-  async resolveStoragePath(storageKey: string) {
-    const rootDir = this.getRootDir();
-    const absolutePath = path.resolve(rootDir, storageKey);
-
-    if (!absolutePath.startsWith(rootDir)) {
-      throw new NotFoundException("Attachment file not found.");
-    }
-
-    try {
-      await access(absolutePath);
-    } catch {
-      throw new NotFoundException("Attachment file not found.");
-    }
-
-    return absolutePath;
+  async getTripAttachment(storageKey: string) {
+    return this.objectStorage.getObject({ key: storageKey });
   }
 
   private getExtensionFromMimeType(mimeType?: string | null) {

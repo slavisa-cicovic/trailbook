@@ -11,6 +11,7 @@ import {
   Query,
   Req,
   Res,
+  StreamableFile,
   UnauthorizedException,
   UploadedFile,
   UseInterceptors,
@@ -179,7 +180,7 @@ export class TripsController {
   async getAttachmentContent(
     @Param("attachmentId") attachmentId: string,
     @Req() request: Request,
-    @Res() response: Response,
+    @Res({ passthrough: true }) response: Response,
   ) {
     const user = await this.requireAuthenticatedUser(request);
     const attachment = await this.tripsService.getAttachmentContent(user.id, attachmentId);
@@ -188,7 +189,11 @@ export class TripsController {
       response.type(attachment.mimeType);
     }
 
-    response.sendFile(attachment.absolutePath);
+    if (attachment.contentLength !== null && attachment.contentLength !== undefined) {
+      response.setHeader("Content-Length", String(attachment.contentLength));
+    }
+
+    return new StreamableFile(attachment.body);
   }
 
   private getSessionToken(request: Request) {

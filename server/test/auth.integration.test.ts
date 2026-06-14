@@ -24,6 +24,7 @@ describe("auth integration", () => {
   const originalGoogleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const originalAuthBaseUrl = process.env.AUTH_BASE_URL;
   const originalWebAppUrl = process.env.WEB_APP_URL;
+  const originalMediaStorageBackend = process.env.MEDIA_STORAGE_BACKEND;
   const originalMediaStorageDir = process.env.MEDIA_STORAGE_DIR;
   const originalTripDiagnosticsEnabled = process.env.ENABLE_TRIP_DIAGNOSTICS;
 
@@ -39,6 +40,7 @@ describe("auth integration", () => {
     process.env.GOOGLE_CLIENT_SECRET = originalGoogleClientSecret;
     process.env.AUTH_BASE_URL = originalAuthBaseUrl;
     process.env.WEB_APP_URL = originalWebAppUrl;
+    process.env.MEDIA_STORAGE_BACKEND = originalMediaStorageBackend;
     process.env.MEDIA_STORAGE_DIR = originalMediaStorageDir;
     process.env.ENABLE_TRIP_DIAGNOSTICS = originalTripDiagnosticsEnabled;
     await app.close();
@@ -50,6 +52,7 @@ describe("auth integration", () => {
     process.env.GOOGLE_CLIENT_SECRET = "google-test-secret";
     process.env.AUTH_BASE_URL = "http://localhost:3001";
     process.env.WEB_APP_URL = "http://localhost:3000";
+    process.env.MEDIA_STORAGE_BACKEND = "file";
     process.env.MEDIA_STORAGE_DIR = "/tmp/trailbook-test-media";
     process.env.ENABLE_TRIP_DIAGNOSTICS = "true";
 
