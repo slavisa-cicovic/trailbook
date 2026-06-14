@@ -42,6 +42,54 @@ enum SubscriptionStatus {
   @@map("subscription_status")
 }
 
+enum PurchaseProvider {
+  fake
+  apple
+  google
+
+  @@map("purchase_provider")
+}
+
+enum PurchaseEnvironment {
+  local
+  sandbox
+  production
+
+  @@map("purchase_environment")
+}
+
+enum PurchaseEventType {
+  PURCHASED
+  RENEWED
+  CANCELED
+  EXPIRED
+  REFUNDED
+  REVOKED
+  DECLINED
+  PENDING
+  RESTORED
+
+  @@map("purchase_event_type")
+}
+
+enum PurchaseResult {
+  success
+  canceled_by_user
+  declined
+  pending
+  failed
+
+  @@map("purchase_result")
+}
+
+enum EntitlementSourceType {
+  subscription
+  manual_grant
+  demo
+
+  @@map("entitlement_source_type")
+}
+
 enum MailOutboxStatus {
   pending
   sent
@@ -105,6 +153,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
   subscriptions       Subscription[]
+  purchaseTransactions PurchaseTransaction[]
+  entitlements         UserEntitlement[]
   mailOutboxEntries   MailOutbox[]
   ownedTrips          Trip[]              @relation("OwnedTrips")
   ownedTripGroups     TripGroup[]         @relation("OwnedTripGroups")
@@ -198,6 +248,7 @@ model Plan {
   createdAt     DateTime         @default(now()) @map("created_at")
   updatedAt     DateTime         @updatedAt @map("updated_at")
   subscriptions Subscription[]
+  storeProducts StoreProduct[]
 
   @@map("plans")
 }
@@ -214,10 +265,77 @@ model Subscription {
   updatedAt           DateTime           @updatedAt @map("updated_at")
   user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan                Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  purchaseTransactions PurchaseTransaction[]
 
   @@index([userId])
   @@index([planId])
   @@map("subscriptions")
+}
+
+model StoreProduct {
+  id                  String            @id @default(cuid())
+  planId              String            @map("plan_id")
+  provider            PurchaseProvider
+  providerProductId   String            @map("provider_product_id")
+  internalProductCode String            @map("internal_product_code")
+  billingType         PlanBillingType   @map("billing_type")
+  active              Boolean           @default(true)
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  plan                Plan              @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerProductId])
+  @@index([planId])
+  @@map("store_products")
+}
+
+model PurchaseTransaction {
+  id                            String               @id @default(cuid())
+  userId                        String               @map("user_id")
+  subscriptionId                String?              @map("subscription_id")
+  provider                      PurchaseProvider
+  environment                   PurchaseEnvironment
+  providerTransactionId         String               @map("provider_transaction_id")
+  providerOriginalTransactionId String?              @map("provider_original_transaction_id")
+  providerProductId             String               @map("provider_product_id")
+  internalProductCode           String               @map("internal_product_code")
+  eventType                     PurchaseEventType    @map("event_type")
+  purchaseResult                PurchaseResult       @map("purchase_result")
+  subscriptionStatusAfterEvent  SubscriptionStatus?  @map("subscription_status_after_event")
+  purchasedAt                   DateTime?            @map("purchased_at")
+  expiresAt                     DateTime?            @map("expires_at")
+  revokedAt                     DateTime?            @map("revoked_at")
+  processedAt                   DateTime             @map("processed_at")
+  idempotencyKey                String               @unique @map("idempotency_key")
+  rawPayloadJson                Json                 @map("raw_payload_json")
+  createdAt                     DateTime             @default(now()) @map("created_at")
+  user                          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription                  Subscription?        @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerTransactionId])
+  @@index([userId, createdAt])
+  @@index([provider, providerOriginalTransactionId])
+  @@index([subscriptionId])
+  @@map("purchase_transactions")
+}
+
+model UserEntitlement {
+  id              String                @id @default(cuid())
+  userId          String                @map("user_id")
+  entitlementCode String                @map("entitlement_code")
+  sourceType      EntitlementSourceType @map("source_type")
+  sourceId        String?               @map("source_id")
+  active          Boolean               @default(true)
+  startsAt        DateTime              @map("starts_at")
+  expiresAt       DateTime?             @map("expires_at")
+  revokedAt       DateTime?             @map("revoked_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, entitlementCode])
+  @@index([sourceType, sourceId])
+  @@map("user_entitlements")
 }
 
 model MailOutbox {

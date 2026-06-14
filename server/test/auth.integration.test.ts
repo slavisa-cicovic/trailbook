@@ -71,7 +71,10 @@ describe("auth integration", () => {
         trip_shares,
         trips,
         waypoints,
+        user_entitlements,
+        purchase_transactions,
         subscriptions,
+        store_products,
         plans,
         users
       RESTART IDENTITY CASCADE

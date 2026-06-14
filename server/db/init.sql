@@ -34,6 +34,46 @@ $$;
 
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'purchase_provider') THEN
+    CREATE TYPE purchase_provider AS ENUM ('fake', 'apple', 'google');
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'purchase_environment') THEN
+    CREATE TYPE purchase_environment AS ENUM ('local', 'sandbox', 'production');
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'purchase_event_type') THEN
+    CREATE TYPE purchase_event_type AS ENUM ('PURCHASED', 'RENEWED', 'CANCELED', 'EXPIRED', 'REFUNDED', 'REVOKED', 'DECLINED', 'PENDING', 'RESTORED');
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'purchase_result') THEN
+    CREATE TYPE purchase_result AS ENUM ('success', 'canceled_by_user', 'declined', 'pending', 'failed');
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'entitlement_source_type') THEN
+    CREATE TYPE entitlement_source_type AS ENUM ('subscription', 'manual_grant', 'demo');
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'mail_outbox_status') THEN
     CREATE TYPE mail_outbox_status AS ENUM ('pending', 'sent', 'failed');
   END IF;
@@ -172,6 +212,68 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 
 CREATE INDEX IF NOT EXISTS subscriptions_user_id_idx ON subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS subscriptions_plan_id_idx ON subscriptions(plan_id);
+
+CREATE TABLE IF NOT EXISTS store_products (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE RESTRICT,
+  provider purchase_provider NOT NULL,
+  provider_product_id TEXT NOT NULL,
+  internal_product_code TEXT NOT NULL,
+  billing_type plan_billing_type NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(provider, provider_product_id)
+);
+
+CREATE INDEX IF NOT EXISTS store_products_plan_id_idx ON store_products(plan_id);
+
+CREATE TABLE IF NOT EXISTS purchase_transactions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  subscription_id TEXT REFERENCES subscriptions(id) ON DELETE SET NULL,
+  provider purchase_provider NOT NULL,
+  environment purchase_environment NOT NULL,
+  provider_transaction_id TEXT NOT NULL,
+  provider_original_transaction_id TEXT,
+  provider_product_id TEXT NOT NULL,
+  internal_product_code TEXT NOT NULL,
+  event_type purchase_event_type NOT NULL,
+  purchase_result purchase_result NOT NULL,
+  subscription_status_after_event subscription_status,
+  purchased_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  processed_at TIMESTAMPTZ NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  raw_payload_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(provider, provider_transaction_id)
+);
+
+CREATE INDEX IF NOT EXISTS purchase_transactions_user_id_created_at_idx ON purchase_transactions(user_id, created_at);
+CREATE INDEX IF NOT EXISTS purchase_transactions_provider_original_transaction_id_idx ON purchase_transactions(provider, provider_original_transaction_id);
+CREATE INDEX IF NOT EXISTS purchase_transactions_subscription_id_idx ON purchase_transactions(subscription_id);
+
+CREATE TABLE IF NOT EXISTS user_entitlements (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entitlement_code TEXT NOT NULL,
+  source_type entitlement_source_type NOT NULL,
+  source_id TEXT,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  starts_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS user_entitlements_user_id_entitlement_code_idx ON user_entitlements(user_id, entitlement_code);
+CREATE INDEX IF NOT EXISTS user_entitlements_source_type_source_id_idx ON user_entitlements(source_type, source_id);
+CREATE UNIQUE INDEX IF NOT EXISTS user_entitlements_one_active_code_idx
+  ON user_entitlements(user_id, entitlement_code)
+  WHERE active = TRUE;
 
 CREATE TABLE IF NOT EXISTS mail_outbox (
   id TEXT PRIMARY KEY,

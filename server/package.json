@@ -13,7 +13,7 @@
     "db:test:init": "docker compose cp db/init.sql postgres_test:/tmp/init.sql && docker compose exec -T postgres_test psql -U trailbook_test -d trailbook_test -f /tmp/init.sql",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "test": "node --env-file=.env.test --import tsx --test test/**/*.test.ts",
+    "test": "node --env-file=.env.test --import tsx --test --test-concurrency=1 test/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "echo \"Lint is not configured yet for server.\""
   },
