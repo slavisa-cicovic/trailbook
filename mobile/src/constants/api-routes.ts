@@ -11,6 +11,11 @@ export const API_ROUTES = {
     socialComplete: "/auth/mobile/social/complete",
     socialStart: (provider: string) => `/auth/mobile/${provider}`,
   },
+  purchases: {
+    me: "/purchases/me",
+    products: "/purchases/products",
+    fakeSimulate: "/purchases/fake/simulate",
+  },
   trips: {
     groups: "/trips/groups",
     groupsSync: "/trips/groups/sync",

@@ -577,6 +577,15 @@ export default function SettingsScreen() {
               title="GPS Simulation"
               value="Open"
             />
+            <SettingsDivider theme={theme} />
+            <SettingsRow
+              description="Development-only purchase provider simulation for local Apple/Google billing preparation."
+              iconName="payments"
+              onPress={() => router.push("/settings/purchases")}
+              theme={theme}
+              title="Purchases simulation"
+              value="Open"
+            />
           </SettingsSection>
         ) : null}
 

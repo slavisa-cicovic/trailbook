@@ -137,6 +137,7 @@ export default function RootLayout() {
             <Stack.Screen name="trips/[tripId]/waypoints/[waypointId]/photos/[attachmentId]" />
             <Stack.Screen name="settings" options={{ animation: "none" }} />
             <Stack.Screen name="settings/about" options={{ animation: "none" }} />
+            <Stack.Screen name="settings/purchases" options={{ animation: "none" }} />
             <Stack.Screen name="settings/recording-config" options={{ animation: "none" }} />
             <Stack.Screen name="settings/recording-config/[target]" options={{ animation: "none" }} />
             <Stack.Screen name="settings/storage-benchmark" options={{ animation: "none" }} />

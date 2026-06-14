@@ -5,7 +5,8 @@ export const STATIC_FLAGS = {
 } as const;
 
 export function resolveSessionFlags(session: AuthenticatedDeviceSession | null) {
-  const isTestUser = session?.mode === "authenticated" && session.role === "test_user";
+  const isTestUser =
+    session?.mode === "authenticated" && (session.role === "test_user" || session.role === "admin");
 
   return {
     diagnosticsEnabled: isTestUser,
