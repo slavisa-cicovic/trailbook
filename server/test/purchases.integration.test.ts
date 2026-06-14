@@ -92,6 +92,25 @@ describe("purchases integration", () => {
     assert.equal(storedProducts.length, 3);
   });
 
+  test("authenticated user can list Apple product mapping", async () => {
+    const { token } = await registerVerifiedUser("apple-products@example.com");
+
+    const response = await request(app.getHttpServer())
+      .get("/api/purchases/products?provider=apple&platform=ios")
+      .set("Authorization", `Bearer ${token}`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.length, 3);
+    assert.equal(response.body[0].provider, "apple");
+
+    const storedProducts = await databaseService.storeProduct.findMany({
+      where: {
+        provider: "apple",
+      },
+    });
+    assert.equal(storedProducts.length, 3);
+  });
+
   test("fake simulation is rejected when disabled", async () => {
     const { token } = await registerVerifiedUser("disabled@example.com", "test_user");
 
@@ -119,6 +138,35 @@ describe("purchases integration", () => {
       });
 
     assert.equal(response.status, 403);
+  });
+
+  test("Apple verify endpoint fails safely when server API credentials are missing", async () => {
+    const { token } = await registerVerifiedUser("apple-verify@example.com");
+
+    const response = await request(app.getHttpServer())
+      .post("/api/purchases/verify")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        productId: "trailbook_premium_monthly",
+        provider: "apple",
+        transactionId: "apple-sandbox-transaction-1",
+      });
+
+    assert.equal(response.status, 503);
+    assert.match(String(response.body.message), /Apple App Store Server API credentials/);
+
+    const transactions = await databaseService.purchaseTransaction.findMany();
+    assert.equal(transactions.length, 0);
+  });
+
+  test("Apple notification endpoint is disabled by default", async () => {
+    const response = await request(app.getHttpServer())
+      .post("/api/purchases/apple/notifications")
+      .send({
+        signedPayload: "sandbox-notification",
+      });
+
+    assert.equal(response.status, 503);
   });
 
   test("test user can simulate monthly purchase and current access reflects paid entitlements", async () => {

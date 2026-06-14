@@ -6,7 +6,9 @@ import {
   getPurchaseAccess,
   listPurchaseProducts,
   simulateFakePurchase,
+  verifyPurchaseWithBackend,
 } from "../../services/purchases/purchase-api.service";
+import { AppleMobilePurchaseProvider } from "../../services/purchases/apple-mobile-purchase.provider";
 import { FakeMobilePurchaseProvider } from "../../services/purchases/fake-mobile-purchase.provider";
 import { ReadOnlyMobilePurchaseProvider } from "../../services/purchases/read-only-mobile-purchase.provider";
 import {
@@ -60,6 +62,19 @@ describe("purchase API service", () => {
     );
   });
 
+  it("lists Apple products through backend purchases endpoint", async () => {
+    vi.mocked(requestFromBackend).mockResolvedValueOnce([]);
+
+    await listPurchaseProducts("session-token", "apple");
+
+    expect(requestFromBackend).toHaveBeenCalledWith(
+      `${API_ROUTES.purchases.products}?provider=apple`,
+      { method: "GET" },
+      "session-token",
+      expect.anything(),
+    );
+  });
+
   it("refreshes purchase access through /purchases/me", async () => {
     vi.mocked(requestFromBackend).mockResolvedValueOnce({
       currentPeriodEndsAt: null,
@@ -105,6 +120,36 @@ describe("purchase API service", () => {
       expect.anything(),
     );
   });
+
+  it("verifies Apple transaction through provider-neutral backend endpoint", async () => {
+    vi.mocked(requestFromBackend).mockResolvedValueOnce({
+      currentPeriodEndsAt: "2026-07-01T00:00:00.000Z",
+      entitlements: ["sync"],
+      planCode: "premium_monthly",
+      purchaseResult: "success",
+      subscriptionStatus: "active",
+    });
+
+    await verifyPurchaseWithBackend("session-token", {
+      productId: "trailbook_premium_monthly",
+      provider: "apple",
+      transactionId: "apple-transaction-1",
+    });
+
+    expect(requestFromBackend).toHaveBeenCalledWith(
+      API_ROUTES.purchases.verify,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          productId: "trailbook_premium_monthly",
+          provider: "apple",
+          transactionId: "apple-transaction-1",
+        }),
+      },
+      "session-token",
+      expect.anything(),
+    );
+  });
 });
 
 describe("purchase access store", () => {
@@ -144,13 +189,16 @@ describe("purchase access store", () => {
 
 describe("mobile purchase provider resolver", () => {
   const originalFakePurchasesFlag = process.env.EXPO_PUBLIC_ENABLE_FAKE_PURCHASES;
+  const originalPurchaseProvider = process.env.EXPO_PUBLIC_PURCHASE_PROVIDER;
 
   beforeEach(() => {
     process.env.EXPO_PUBLIC_ENABLE_FAKE_PURCHASES = "true";
+    process.env.EXPO_PUBLIC_PURCHASE_PROVIDER = "";
   });
 
   afterEach(() => {
     process.env.EXPO_PUBLIC_ENABLE_FAKE_PURCHASES = originalFakePurchasesFlag;
+    process.env.EXPO_PUBLIC_PURCHASE_PROVIDER = originalPurchaseProvider;
   });
 
   it("returns fake provider for authenticated test user when fake purchases are enabled", () => {
@@ -176,5 +224,11 @@ describe("mobile purchase provider resolver", () => {
 
     expect(isFakePurchaseProviderEnabled(tokenlessSession)).toBe(false);
     expect(getMobilePurchaseProvider(tokenlessSession)).toBeInstanceOf(ReadOnlyMobilePurchaseProvider);
+  });
+
+  it("returns Apple provider when explicitly configured", () => {
+    process.env.EXPO_PUBLIC_PURCHASE_PROVIDER = "apple";
+
+    expect(getMobilePurchaseProvider(session)).toBeInstanceOf(AppleMobilePurchaseProvider);
   });
 });

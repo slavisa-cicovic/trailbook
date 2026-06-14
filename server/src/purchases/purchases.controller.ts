@@ -6,12 +6,14 @@ import {
   Post,
   Query,
   Req,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import type { Request } from "express";
 
 import { AuthService } from "../auth/auth.service";
 import { SimulateFakePurchaseDto } from "./dto/simulate-fake-purchase.dto";
+import { VerifyPurchaseDto } from "./dto/verify-purchase.dto";
 import { PurchaseApplicationService } from "./purchase-application.service";
 import type { PurchaseProviderName } from "./purchase.types";
 
@@ -47,6 +49,26 @@ export class PurchasesController {
   async simulateFakePurchase(@Body() input: SimulateFakePurchaseDto, @Req() request: Request) {
     const user = await this.requireAuthenticatedUser(request);
     return this.purchaseApplicationService.simulateFakePurchase(user, input);
+  }
+
+  @Post("verify")
+  async verifyPurchase(@Body() input: VerifyPurchaseDto, @Req() request: Request) {
+    const user = await this.requireAuthenticatedUser(request);
+    return this.purchaseApplicationService.verifyPurchase(user, input);
+  }
+
+  @Post("apple/notifications")
+  async receiveAppleNotification(@Body() input: unknown) {
+    if (process.env.ENABLE_APPLE_PURCHASE_NOTIFICATIONS !== "true") {
+      throw new ServiceUnavailableException("Apple purchase notifications are not enabled.");
+    }
+
+    return {
+      accepted: true,
+      processed: false,
+      provider: "apple",
+      receivedPayloadType: typeof input,
+    };
   }
 
   private getSessionToken(request: Request) {

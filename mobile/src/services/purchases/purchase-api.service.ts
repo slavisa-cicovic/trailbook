@@ -1,5 +1,5 @@
 import { API_ROUTES } from "../../constants/api-routes";
-import type { FakePurchaseScenario } from "../../domain/purchases";
+import type { FakePurchaseScenario, PurchaseProviderName } from "../../domain/purchases";
 import { requestFromBackend } from "../api/mobile-api.service";
 import {
   PurchaseAccessSchema,
@@ -7,12 +7,35 @@ import {
   PurchaseSimulationResultSchema,
 } from "../api/schemas/purchases.schemas";
 
-export async function listPurchaseProducts(sessionToken: string) {
+export async function listPurchaseProducts(
+  sessionToken: string,
+  provider: PurchaseProviderName = "fake",
+) {
   return requestFromBackend(
-    `${API_ROUTES.purchases.products}?provider=fake`,
+    `${API_ROUTES.purchases.products}?provider=${encodeURIComponent(provider)}`,
     { method: "GET" },
     sessionToken,
     PurchaseProductsResponseSchema,
+  );
+}
+
+export async function verifyPurchaseWithBackend(
+  sessionToken: string,
+  input: {
+    productId: string;
+    provider: Exclude<PurchaseProviderName, "fake">;
+    purchaseToken?: string;
+    transactionId?: string;
+  },
+) {
+  return requestFromBackend(
+    API_ROUTES.purchases.verify,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+    sessionToken,
+    PurchaseSimulationResultSchema,
   );
 }
 

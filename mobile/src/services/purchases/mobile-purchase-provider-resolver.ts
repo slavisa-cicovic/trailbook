@@ -1,5 +1,6 @@
 import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import type { MobilePurchaseProvider } from "./mobile-purchase-provider";
+import { AppleMobilePurchaseProvider } from "./apple-mobile-purchase.provider";
 import { FakeMobilePurchaseProvider } from "./fake-mobile-purchase.provider";
 import { ReadOnlyMobilePurchaseProvider } from "./read-only-mobile-purchase.provider";
 
@@ -16,6 +17,14 @@ export function isFakePurchaseProviderEnabled(session: AuthenticatedDeviceSessio
 }
 
 export function getMobilePurchaseProvider(session: AuthenticatedDeviceSession | null): MobilePurchaseProvider {
+  if (
+    process.env.EXPO_PUBLIC_PURCHASE_PROVIDER === "apple" &&
+    session?.mode === "authenticated" &&
+    session.sessionToken
+  ) {
+    return new AppleMobilePurchaseProvider(session.sessionToken);
+  }
+
   if (isFakePurchaseProviderEnabled(session) && session?.sessionToken) {
     return new FakeMobilePurchaseProvider(session.sessionToken);
   }

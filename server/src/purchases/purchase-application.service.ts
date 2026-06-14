@@ -3,9 +3,11 @@ import type { PlanBillingType, Prisma, SubscriptionStatus } from "@prisma/client
 
 import type { AuthUserResponse } from "../auth/auth.types";
 import { DatabaseService } from "../database/database.service";
-import { FAKE_PURCHASE_PRODUCTS, PAID_ENTITLEMENTS, getFakeProductDefinition } from "./purchase-catalog";
+import { ApplePurchaseProvider } from "./apple-purchase.provider";
+import { FAKE_PURCHASE_PRODUCTS, PAID_ENTITLEMENTS, getApplePurchaseProducts, getFakeProductDefinition } from "./purchase-catalog";
 import { FakePurchaseProvider } from "./fake-purchase.provider";
 import type { SimulateFakePurchaseDto } from "./dto/simulate-fake-purchase.dto";
+import type { VerifyPurchaseDto } from "./dto/verify-purchase.dto";
 import type {
   NormalizedPurchaseEvent,
   PurchaseAccessResponse,
@@ -24,6 +26,7 @@ type SubscriptionWithPlan = Prisma.SubscriptionGetPayload<{
 export class PurchaseApplicationService {
   constructor(
     @Inject(DatabaseService) private readonly databaseService: DatabaseService,
+    @Inject(ApplePurchaseProvider) private readonly applePurchaseProvider: ApplePurchaseProvider,
     @Inject(FakePurchaseProvider) private readonly fakePurchaseProvider: FakePurchaseProvider,
   ) {}
 
@@ -34,15 +37,23 @@ export class PurchaseApplicationService {
   }): Promise<PurchaseProductResponse[]> {
     const provider = input.provider ?? "fake";
 
-    if (provider !== "fake") {
-      throw new BadRequestException("Purchase provider is not supported yet.");
+    if (provider === "fake") {
+      await this.ensureFakeCatalogProducts();
+      return this.fakePurchaseProvider.listProducts({
+        platform: input.platform,
+        userId: input.userId,
+      });
     }
 
-    await this.ensureFakeCatalogProducts();
-    return this.fakePurchaseProvider.listProducts({
-      platform: input.platform,
-      userId: input.userId,
-    });
+    if (provider === "apple") {
+      await this.ensureAppleCatalogProducts();
+      return this.applePurchaseProvider.listProducts({
+        platform: input.platform,
+        userId: input.userId,
+      });
+    }
+
+    throw new BadRequestException("Purchase provider is not supported yet.");
   }
 
   async getCurrentAccess(userId: string): Promise<PurchaseAccessResponse> {
@@ -120,6 +131,34 @@ export class PurchaseApplicationService {
       providerProductId: input.providerProductId,
       purchaseToken: input.purchaseToken,
       scenario: input.scenario,
+      transactionId: input.transactionId,
+      userId: user.id,
+    });
+
+    if (!event) {
+      return {
+        ...(await this.getCurrentAccess(user.id)),
+        purchaseResult: "canceled_by_user",
+      };
+    }
+
+    const access = await this.applyNormalizedEvent(event, user.id);
+
+    return {
+      ...access,
+      purchaseResult: event.purchaseResult,
+    };
+  }
+
+  async verifyPurchase(user: AuthUserResponse, input: VerifyPurchaseDto): Promise<PurchaseSimulationResponse> {
+    if (input.provider === "google") {
+      throw new BadRequestException("Google purchase verification is not implemented yet.");
+    }
+
+    await this.ensureAppleCatalogProducts();
+    const event = await this.applePurchaseProvider.completePurchase({
+      providerProductId: input.productId,
+      purchaseToken: input.purchaseToken,
       transactionId: input.transactionId,
       userId: user.id,
     });
@@ -254,6 +293,14 @@ export class PurchaseApplicationService {
     });
   }
 
+  private async ensureAppleCatalogProducts() {
+    await this.databaseService.$transaction(async (tx) => {
+      for (const product of getApplePurchaseProducts()) {
+        await this.upsertCatalogProduct(tx, product);
+      }
+    });
+  }
+
   private async upsertCatalogProduct(transaction: Prisma.TransactionClient, product: PurchaseProductDefinition) {
     const plan = await transaction.plan.upsert({
       where: { code: product.planCode },
@@ -295,6 +342,10 @@ export class PurchaseApplicationService {
   private async findStoreProduct(provider: PurchaseProviderName, providerProductId: string) {
     if (provider === "fake" && getFakeProductDefinition(providerProductId)) {
       await this.ensureFakeCatalogProducts();
+    }
+
+    if (provider === "apple") {
+      await this.ensureAppleCatalogProducts();
     }
 
     return this.databaseService.storeProduct.findUnique({

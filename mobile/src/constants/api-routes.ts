@@ -15,6 +15,7 @@ export const API_ROUTES = {
     me: "/purchases/me",
     products: "/purchases/products",
     fakeSimulate: "/purchases/fake/simulate",
+    verify: "/purchases/verify",
   },
   trips: {
     groups: "/trips/groups",
