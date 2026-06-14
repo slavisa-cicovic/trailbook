@@ -38,6 +38,7 @@ import {
   closeActiveTripSegment,
   createInitialTripSegment,
   finalizeEndedTripSegments,
+  normalizeGroundSegmentProfilesBySpeed,
   normalizeAutoClosedTripSegment,
   removeInitialAutoBootstrapWalkSegment,
 } from "../../services/trip-segments/trip-segments.service";
@@ -294,7 +295,14 @@ export async function pauseRecordingFromScreenController(
     pausedAt,
   );
 
-  await setTripSegments(normalizedState.tripSegments);
+  const speedNormalizedTripSegments = normalizeGroundSegmentProfilesBySpeed(
+    normalizedState.tripSegments,
+    normalizedState.tripPoints,
+    activeTrip.localId,
+    pausedAt,
+  );
+
+  await setTripSegments(speedNormalizedTripSegments);
   await setWaypoints(normalizedState.waypoints);
   if (normalizedState.tripPoints !== activeTripPoints) {
     setTripPointsInMemory(normalizedState.tripPoints);
@@ -363,7 +371,14 @@ export async function stopRecordingFromScreenController(
         )
       : normalizedState;
 
-  await setTripSegments(prunedState.tripSegments);
+  const speedNormalizedTripSegments = normalizeGroundSegmentProfilesBySpeed(
+    prunedState.tripSegments,
+    prunedState.tripPoints,
+    session.activeTripId,
+    endedAt,
+  );
+
+  await setTripSegments(speedNormalizedTripSegments);
   await setWaypoints(prunedState.waypoints);
   if (activeTrip && prunedState.tripPoints !== activeTripPoints) {
     setTripPointsInMemory(prunedState.tripPoints);

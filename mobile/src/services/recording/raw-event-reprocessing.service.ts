@@ -14,7 +14,10 @@ import {
 import type { RecordingProcessingTrace } from "./recording-processing-trace.service";
 import { applyRawEventReprocessingUnitOfWork } from "./recording-unit-of-work.service";
 import { saveRawEventReprocessingUndoSnapshotForTrip } from "./raw-event-reprocessing-undo.service";
-import { removeInitialAutoBootstrapWalkSegment } from "../trip-segments/trip-segments.service";
+import {
+  normalizeGroundSegmentProfilesBySpeed,
+  removeInitialAutoBootstrapWalkSegment,
+} from "../trip-segments/trip-segments.service";
 
 export type ReprocessedSegmentSummary = RecordingProcessorSegmentSummary;
 
@@ -186,6 +189,13 @@ export function buildRawReprocessingPreview(inputModel: RawReprocessingInputMode
     replayTripSegments = prunedState.tripSegments;
     nextWaypoints = prunedState.waypoints;
   }
+
+  replayTripSegments = normalizeGroundSegmentProfilesBySpeed(
+    replayTripSegments,
+    replayTripPoints,
+    trip.localId,
+    new Date().toISOString(),
+  );
 
   const oldDistanceMeters = trip.distanceMeters ?? getTripDistanceMeters(oldTripPoints, oldTripSegments, trip.localId);
   const newDistanceMeters = getTripDistanceMeters(replayTripPoints, replayTripSegments, trip.localId);

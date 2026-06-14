@@ -52,6 +52,11 @@ const AUTO_SHORT_DRIVE_KEEP_MIN_POINT_COUNT = 4;
 const AUTO_BOOTSTRAP_WALK_MAX_DISTANCE_METERS = 120;
 const AUTO_BOOTSTRAP_WALK_MAX_DURATION_MS = 2.5 * 60 * 1000;
 const AUTO_BOOTSTRAP_WALK_MAX_POINT_COUNT = 2;
+const AUTO_BIKE_TO_DRIVE_MIN_POINT_COUNT = 8;
+const AUTO_BIKE_TO_DRIVE_MIN_DURATION_MS = 60 * 1000;
+const AUTO_BIKE_TO_DRIVE_MEDIAN_KMH = 40;
+const AUTO_BIKE_TO_DRIVE_P75_KMH = 45;
+const AUTO_BIKE_TO_DRIVE_PEAK_KMH = 50;
 
 function getNextSyncStatus(currentStatus: TripSegment["syncStatus"]): TripSegment["syncStatus"] {
   return currentStatus === "local-only" ? "local-only" : "pending-sync";
@@ -127,6 +132,79 @@ function hasShortDriveEvidence(
     pointCount >= AUTO_SHORT_DRIVE_KEEP_MIN_POINT_COUNT &&
     distanceMeters >= AUTO_SHORT_DRIVE_KEEP_MIN_DISTANCE_METERS / 2
   );
+}
+
+function getSpeedPercentile(values: number[], percentile: number): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const orderedValues = [...values].sort((left, right) => left - right);
+  const index = Math.ceil(Math.max(0, Math.min(1, percentile)) * orderedValues.length) - 1;
+
+  return orderedValues[Math.max(0, Math.min(index, orderedValues.length - 1))] ?? 0;
+}
+
+function getSegmentSpeedKmhValues(segment: TripSegment, tripPoints: TripPoint[]): number[] {
+  return tripPoints
+    .filter(
+      (tripPoint) =>
+        tripPoint.tripLocalId === segment.tripLocalId &&
+        tripPoint.segmentLocalId === segment.localId &&
+        tripPoint.speed !== null &&
+        Number.isFinite(tripPoint.speed) &&
+        tripPoint.speed > 0,
+    )
+    .map((tripPoint) => (tripPoint.speed as number) * 3.6);
+}
+
+function shouldPromoteBikeSegmentToDrive(segment: TripSegment, tripPoints: TripPoint[]): boolean {
+  if (segment.recordingProfile !== "bike") {
+    return false;
+  }
+
+  const segmentDurationMs = getSegmentDurationMs(segment);
+  const speedsKmh = getSegmentSpeedKmhValues(segment, tripPoints);
+
+  if (
+    segmentDurationMs < AUTO_BIKE_TO_DRIVE_MIN_DURATION_MS ||
+    speedsKmh.length < AUTO_BIKE_TO_DRIVE_MIN_POINT_COUNT
+  ) {
+    return false;
+  }
+
+  const medianSpeedKmh = getSpeedPercentile(speedsKmh, 0.5);
+  const p75SpeedKmh = getSpeedPercentile(speedsKmh, 0.75);
+  const peakSpeedKmh = Math.max(...speedsKmh);
+
+  return (
+    medianSpeedKmh >= AUTO_BIKE_TO_DRIVE_MEDIAN_KMH ||
+    (p75SpeedKmh >= AUTO_BIKE_TO_DRIVE_P75_KMH && peakSpeedKmh >= AUTO_BIKE_TO_DRIVE_PEAK_KMH)
+  );
+}
+
+export function normalizeGroundSegmentProfilesBySpeed(
+  tripSegments: TripSegment[],
+  tripPoints: TripPoint[],
+  tripLocalId: string,
+  updatedAt: string,
+): TripSegment[] {
+  let changed = false;
+  const nextTripSegments = tripSegments.map((segment) => {
+    if (segment.tripLocalId !== tripLocalId || !shouldPromoteBikeSegmentToDrive(segment, tripPoints)) {
+      return segment;
+    }
+
+    changed = true;
+    return {
+      ...segment,
+      recordingProfile: "drive" as const,
+      updatedAt,
+      syncStatus: getNextSyncStatus(segment.syncStatus),
+    };
+  });
+
+  return changed ? nextTripSegments : tripSegments;
 }
 
 export function createInitialTripSegment(trip: Trip, startedAt: string): TripSegment {

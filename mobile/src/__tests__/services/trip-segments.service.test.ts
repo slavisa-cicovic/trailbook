@@ -27,12 +27,15 @@ vi.mock("../../services/trips/trips-management.service", () => ({
 let normalizeAutoClosedTripSegment: typeof import(
   "../../services/trip-segments/trip-segments.service"
 ).normalizeAutoClosedTripSegment;
+let normalizeGroundSegmentProfilesBySpeed: typeof import(
+  "../../services/trip-segments/trip-segments.service"
+).normalizeGroundSegmentProfilesBySpeed;
 let removeInitialAutoBootstrapWalkSegment: typeof import(
   "../../services/trip-segments/trip-segments.service"
 ).removeInitialAutoBootstrapWalkSegment;
 
 beforeAll(async () => {
-  ({ normalizeAutoClosedTripSegment, removeInitialAutoBootstrapWalkSegment } = await import(
+  ({ normalizeAutoClosedTripSegment, normalizeGroundSegmentProfilesBySpeed, removeInitialAutoBootstrapWalkSegment } = await import(
     "../../services/trip-segments/trip-segments.service"
   ));
 });
@@ -83,6 +86,18 @@ function point(localId: string, segmentLocalId: string, minutes: number, latitud
     syncStatus: "local-only",
     tripLocalId: "trip-1",
     userId: "user-1",
+  };
+}
+
+function pointWithSpeed(
+  localId: string,
+  segmentLocalId: string,
+  minutes: number,
+  speedKmh: number,
+): TripPoint {
+  return {
+    ...point(localId, segmentLocalId, minutes, 45 + minutes / 1000),
+    speed: speedKmh / 3.6,
   };
 }
 
@@ -138,6 +153,30 @@ describe("normalizeAutoClosedTripSegment", () => {
     const result = normalizeAutoClosedTripSegment(tripSegments, tripPoints, [], "trip-1", iso(12));
 
     expect(result.tripSegments.some((candidate) => candidate.recordingProfile === "drive")).toBe(false);
+  });
+});
+
+describe("normalizeGroundSegmentProfilesBySpeed", () => {
+  it("promotes bike segments to drive when sustained GPS speed is clearly drive-like", () => {
+    const tripSegments = [segment("bike-1", "bike", 0, 10)];
+    const tripPoints = Array.from({ length: 10 }, (_, index) =>
+      pointWithSpeed(`bike-point-${index + 1}`, "bike-1", index, 52 + index),
+    );
+
+    const result = normalizeGroundSegmentProfilesBySpeed(tripSegments, tripPoints, "trip-1", iso(11));
+
+    expect(result[0]?.recordingProfile).toBe("drive");
+  });
+
+  it("keeps bike segments when speed evidence is within bike range", () => {
+    const tripSegments = [segment("bike-1", "bike", 0, 10)];
+    const tripPoints = Array.from({ length: 10 }, (_, index) =>
+      pointWithSpeed(`bike-point-${index + 1}`, "bike-1", index, 22 + index / 2),
+    );
+
+    const result = normalizeGroundSegmentProfilesBySpeed(tripSegments, tripPoints, "trip-1", iso(11));
+
+    expect(result[0]?.recordingProfile).toBe("bike");
   });
 });
 
