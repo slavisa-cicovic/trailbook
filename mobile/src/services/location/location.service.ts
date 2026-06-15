@@ -194,6 +194,15 @@ function pickDiagnosticTrackingOptions(
   };
 }
 
+function getBackgroundTrackingNativeEventPayload(profile: RecordingProfile): Record<string, unknown> {
+  return {
+    options: pickDiagnosticTrackingOptions(buildBackgroundTrackingOptions(profile)),
+    platform: Platform.OS,
+    profile,
+    taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+  };
+}
+
 function wait(delayMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayMs);
@@ -214,7 +223,7 @@ export async function startBackgroundLocationTracking(
   );
   void recordRecordingNativeEvent({
     eventType: "native_service_started",
-    payload: { profile },
+    payload: getBackgroundTrackingNativeEventPayload(profile),
     tripLocalId,
   });
 }
@@ -292,8 +301,11 @@ export async function startBackgroundLocationTrackingWithRetry(
         payload: {
           attempt: index + 1,
           error: error instanceof Error ? error.message : String(error),
+          options: pickDiagnosticTrackingOptions(buildBackgroundTrackingOptions(profile)),
+          platform: Platform.OS,
           profile,
           reason: "start-retry-failed",
+          taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
         },
         tripLocalId,
       });
@@ -317,6 +329,10 @@ export async function stopBackgroundLocationTracking(tripLocalId: string | null 
   await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
   void recordRecordingNativeEvent({
     eventType: "native_service_stopped",
+    payload: {
+      platform: Platform.OS,
+      taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+    },
     tripLocalId,
   });
 }
@@ -335,7 +351,14 @@ export async function restartBackgroundLocationTracking(
   try {
     void recordRecordingNativeEvent({
       eventType: "native_location_restart_requested",
-      payload: { profile, reason, started },
+      payload: {
+        options: pickDiagnosticTrackingOptions(buildBackgroundTrackingOptions(profile)),
+        platform: Platform.OS,
+        profile,
+        reason,
+        started,
+        taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+      },
       tripLocalId,
     });
     // Stop before starting so the OS registers the new config (distanceInterval, activityType, etc.).
@@ -349,7 +372,14 @@ export async function restartBackgroundLocationTracking(
     );
     void recordRecordingNativeEvent({
       eventType: "native_location_restart_succeeded",
-      payload: { profile, previouslyStarted: started, reason },
+      payload: {
+        options: pickDiagnosticTrackingOptions(buildBackgroundTrackingOptions(profile)),
+        platform: Platform.OS,
+        previouslyStarted: started,
+        profile,
+        reason,
+        taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+      },
       tripLocalId,
     });
   } catch (error) {
@@ -360,9 +390,12 @@ export async function restartBackgroundLocationTracking(
       eventType: "native_location_restart_failed",
       payload: {
         error: error instanceof Error ? error.message : String(error),
+        options: pickDiagnosticTrackingOptions(buildBackgroundTrackingOptions(profile)),
+        platform: Platform.OS,
         profile,
         previouslyStarted: started,
         reason,
+        taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
       },
       tripLocalId,
     });
@@ -394,7 +427,12 @@ export async function syncBackgroundLocationTracking(
       await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
       void recordRecordingNativeEvent({
         eventType: "native_service_stopped",
-        payload: { reason: "sync-status", status },
+        payload: {
+          platform: Platform.OS,
+          reason: "sync-status",
+          status,
+          taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+        },
         tripLocalId: activeTripId,
       });
     }
@@ -420,7 +458,14 @@ export async function syncBackgroundLocationTracking(
     await Location.stopLocationUpdatesAsync(BACKGROUND_RECORDING_LOCATION_TASK_NAME);
     void recordRecordingNativeEvent({
       eventType: "background_tracking_restart_requested",
-      payload: { profile: backgroundTrackingProfile, reason: "options-changed" },
+      payload: {
+        currentOptions: pickDiagnosticTrackingOptions(currentOptions),
+        expectedOptions: pickDiagnosticTrackingOptions(nextOptions),
+        platform: Platform.OS,
+        profile: backgroundTrackingProfile,
+        reason: "options-changed",
+        taskName: BACKGROUND_RECORDING_LOCATION_TASK_NAME,
+      },
       tripLocalId: activeTripId,
     });
     await startBackgroundLocationTrackingWithRetry(backgroundTrackingProfile, undefined, activeTripId);

@@ -135,9 +135,56 @@ function dedupeLocationSnapshotsForTrip(input: {
   };
 }
 
+function getTimestampMs(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const timestampMs = new Date(value).getTime();
+
+  return Number.isFinite(timestampMs) ? timestampMs : null;
+}
+
+function isBeforeSessionStartSnapshot(input: {
+  origin: RawLocationEventOrigin;
+  sessionStartedAt: string | null;
+  snapshot: CurrentLocationSnapshot;
+}): boolean {
+  if (input.origin !== "device") {
+    return false;
+  }
+
+  const sessionStartedAtMs = getTimestampMs(input.sessionStartedAt);
+  const recordedAtMs = getTimestampMs(input.snapshot.recordedAt);
+
+  return sessionStartedAtMs !== null && recordedAtMs !== null && recordedAtMs < sessionStartedAtMs;
+}
+
+function getMaxDeliveryLagMs(input: {
+  receivedAt: string;
+  snapshots: CurrentLocationSnapshot[];
+}): number {
+  const receivedAtMs = getTimestampMs(input.receivedAt);
+
+  if (receivedAtMs === null) {
+    return 0;
+  }
+
+  return input.snapshots.reduce((maxLagMs, snapshot) => {
+    const recordedAtMs = getTimestampMs(snapshot.recordedAt);
+
+    if (recordedAtMs === null) {
+      return maxLagMs;
+    }
+
+    return Math.max(maxLagMs, Math.max(0, receivedAtMs - recordedAtMs));
+  }, 0);
+}
+
 function withRawProcessingTrace(input: {
   batchId: string | null;
   durationMs?: number;
+  ignoredBeforeSessionStartRawEventCount?: number;
   phaseDurationsMs?: Record<string, number>;
   pipelineResult: RecordingPipelineResult;
   processingResults: RawLocationEventProcessingResult[];
@@ -156,6 +203,7 @@ function withRawProcessingTrace(input: {
     durationMs: input.durationMs,
     duplicateRawEventCount: duplicateRawCount,
     phaseDurationsMs: input.phaseDurationsMs,
+    ignoredBeforeSessionStartRawEventCount: input.ignoredBeforeSessionStartRawEventCount,
     rawInsertedCount: input.rawInsertedCount,
     rejectedPointCount: input.processingResults.length > 0
       ? rejectedRawCount
@@ -223,6 +271,8 @@ export async function recordLocationSnapshots(
       : null;
   const origin = options.origin ?? "device";
   let batchId: string | null = null;
+  let ignoredBeforeSessionStartRawEventCount = 0;
+  const ignoredBeforeSessionStartRawEventLocalIds = new Set<string>();
   let rawEvents: RawLocationEvent[] = [];
   let beforeTripPoints: TripPoint[] = [];
   let pipelineSnapshots = snapshots;
@@ -235,7 +285,22 @@ export async function recordLocationSnapshots(
       snapshots,
       tripLocalId: activeTripId,
     });
-    pipelineSnapshots = dedupedLocationSnapshots.snapshots;
+    const sessionStartedAt = recordingSession?.startedAt ?? null;
+    pipelineSnapshots = dedupedLocationSnapshots.snapshots.filter((snapshot) => {
+      if (!isBeforeSessionStartSnapshot({ origin, sessionStartedAt, snapshot })) {
+        return true;
+      }
+
+      ignoredBeforeSessionStartRawEventLocalIds.add(
+        getRawLocationEventLocalId({
+          origin,
+          snapshot,
+          tripLocalId: activeTripId,
+        }),
+      );
+      return false;
+    });
+    ignoredBeforeSessionStartRawEventCount = ignoredBeforeSessionStartRawEventLocalIds.size;
 
     rawEvents = buildRawLocationEvents({
       activeSegmentLocalId: recordingSession?.activeSegmentId ?? null,
@@ -244,8 +309,8 @@ export async function recordLocationSnapshots(
       callbackSource,
       origin,
       receivedAt,
-      sessionStartedAt: recordingSession?.startedAt ?? null,
-      snapshots: pipelineSnapshots,
+      sessionStartedAt,
+      snapshots: dedupedLocationSnapshots.snapshots,
       tripLocalId: activeTripId,
     });
     void recordRecordingNativeEvent({
@@ -254,11 +319,15 @@ export async function recordLocationSnapshots(
         activeSegmentLocalId: recordingSession?.activeSegmentId ?? null,
         batchId,
         callbackSource,
-        dedupedLocationCount: pipelineSnapshots.length,
+        dedupedLocationCount: dedupedLocationSnapshots.snapshots.length,
+        ignoredBeforeSessionStartCount: ignoredBeforeSessionStartRawEventCount,
         firstRecordedAt: snapshots[0]?.recordedAt ?? null,
         lastRecordedAt: snapshots[snapshots.length - 1]?.recordedAt ?? null,
         locationCount: snapshots.length,
+        maxDeliveryLagMs: getMaxDeliveryLagMs({ receivedAt, snapshots }),
         origin,
+        pipelineLocationCount: pipelineSnapshots.length,
+        rawLocationCount: dedupedLocationSnapshots.snapshots.length,
       },
       tripLocalId: activeTripId,
     });
@@ -304,6 +373,7 @@ export async function recordLocationSnapshots(
       withRawProcessingTrace({
         batchId,
         durationMs: Date.now() - startedAtMs,
+        ignoredBeforeSessionStartRawEventCount,
         phaseDurationsMs,
         pipelineResult,
         processingResults,
@@ -328,6 +398,24 @@ export async function recordLocationSnapshots(
     }),
   );
 
+  if (ignoredBeforeSessionStartRawEventLocalIds.size > 0) {
+    const processedAt = new Date().toISOString();
+    processingResults = processingResults.map((result) => {
+      if (!ignoredBeforeSessionStartRawEventLocalIds.has(result.localId)) {
+        return result;
+      }
+
+      return {
+        acceptedTripPointLocalId: null,
+        localId: result.localId,
+        processedAt,
+        processingDecision: "ignored-before-session-start",
+        processingStatus: "rejected",
+        segmentLocalId: null,
+      };
+    });
+  }
+
   await measurePhase(
     "update-raw-processing-results",
     () => updateRawLocationEventProcessingResults(processingResults),
@@ -349,6 +437,7 @@ export async function recordLocationSnapshots(
     withRawProcessingTrace({
       batchId,
       durationMs: Date.now() - startedAtMs,
+      ignoredBeforeSessionStartRawEventCount,
       phaseDurationsMs,
       pipelineResult,
       processingResults,

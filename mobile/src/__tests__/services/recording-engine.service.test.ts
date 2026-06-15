@@ -222,4 +222,68 @@ describe("recording engine", () => {
     expect(processRecordedLocationSnapshots).toHaveBeenCalledTimes(1);
     expect(updateRawLocationEventProcessingResults).not.toHaveBeenCalled();
   });
+
+  it("keeps pre-session device locations in raw log but skips pipeline processing", async () => {
+    vi.mocked(loadTripPointsForTrip).mockReset();
+    vi.mocked(loadTripPointsForTrip)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([acceptedTripPoint]);
+
+    await recordLocationSnapshots(
+      [
+        {
+          accuracy: 6,
+          altitude: null,
+          latitude: 44.9,
+          longitude: 18.9,
+          recordedAt: "2026-06-02T08:59:30.000Z",
+          speed: 3,
+        },
+        {
+          accuracy: 6,
+          altitude: null,
+          latitude: 45,
+          longitude: 19,
+          recordedAt: "2026-06-02T09:01:00.000Z",
+          speed: 3,
+        },
+      ],
+      "background",
+    );
+
+    expect(processRecordedLocationSnapshots).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(processRecordedLocationSnapshots).mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({
+        recordedAt: "2026-06-02T09:01:00.000Z",
+      }),
+    ]);
+
+    const rawEvents = vi.mocked(insertRawLocationEvents).mock.calls[0]?.[0] ?? [];
+
+    expect(rawEvents).toHaveLength(2);
+    expect(rawEvents[0]).toMatchObject({
+      localId: "raw-location-trip-1-device-2026-06-02T08%3A59%3A30.000Z-44.9000000-18.9000000",
+      recordedAt: "2026-06-02T08:59:30.000Z",
+      sessionStartedAt: "2026-06-02T09:00:00.000Z",
+    });
+
+    expect(vi.mocked(updateRawLocationEventProcessingResults).mock.calls[0]?.[0]).toEqual([
+      {
+        acceptedTripPointLocalId: null,
+        localId: "raw-location-trip-1-device-2026-06-02T08%3A59%3A30.000Z-44.9000000-18.9000000",
+        processedAt: expect.any(String),
+        processingDecision: "ignored-before-session-start",
+        processingStatus: "rejected",
+        segmentLocalId: null,
+      },
+      {
+        acceptedTripPointLocalId: "point-1",
+        localId: "raw-location-trip-1-device-2026-06-02T09%3A01%3A00.000Z-45.0000000-19.0000000",
+        processedAt: expect.any(String),
+        processingDecision: "accepted-by-recording-pipeline",
+        processingStatus: "accepted",
+        segmentLocalId: "segment-1",
+      },
+    ]);
+  });
 });

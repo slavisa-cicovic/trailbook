@@ -17,6 +17,7 @@ export interface RecordingProcessingTrace {
   firstRecordedAt: string | null;
   inferredProfile: RecordingProfile | null;
   inputSnapshotCount: number;
+  ignoredBeforeSessionStartRawEventCount?: number;
   lastRecordedAt: string | null;
   maxAcceptedGapMs: number;
   maxRawGapMs: number;
