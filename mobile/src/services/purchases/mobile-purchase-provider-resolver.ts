@@ -2,6 +2,7 @@ import type { AuthenticatedDeviceSession } from "../../domain/identity";
 import type { MobilePurchaseProvider } from "./mobile-purchase-provider";
 import { AppleMobilePurchaseProvider } from "./apple-mobile-purchase.provider";
 import { FakeMobilePurchaseProvider } from "./fake-mobile-purchase.provider";
+import { GoogleMobilePurchaseProvider } from "./google-mobile-purchase.provider";
 import { ReadOnlyMobilePurchaseProvider } from "./read-only-mobile-purchase.provider";
 
 export function isFakePurchaseProviderEnabled(session: AuthenticatedDeviceSession | null): boolean {
@@ -23,6 +24,14 @@ export function getMobilePurchaseProvider(session: AuthenticatedDeviceSession | 
     session.sessionToken
   ) {
     return new AppleMobilePurchaseProvider(session.sessionToken);
+  }
+
+  if (
+    process.env.EXPO_PUBLIC_PURCHASE_PROVIDER === "google" &&
+    session?.mode === "authenticated" &&
+    session.sessionToken
+  ) {
+    return new GoogleMobilePurchaseProvider(session.sessionToken);
   }
 
   if (isFakePurchaseProviderEnabled(session) && session?.sessionToken) {

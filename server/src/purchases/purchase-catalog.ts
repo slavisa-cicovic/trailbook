@@ -79,3 +79,41 @@ export function getApplePurchaseProducts(): PurchaseProductDefinition[] {
     },
   ];
 }
+
+export function getGooglePurchaseProducts(): PurchaseProductDefinition[] {
+  return [
+    {
+      billingType: "monthly",
+      description: "Monthly Trailbook premium access through Google Play.",
+      entitlements: [...PAID_ENTITLEMENTS],
+      internalProductCode: "trailbook_premium_monthly",
+      name: "Trailbook Premium Monthly",
+      planCode: "premium_monthly",
+      priceLabel: "Google Play",
+      provider: "google",
+      providerProductId: process.env.GOOGLE_PREMIUM_MONTHLY_PRODUCT_ID?.trim() || "trailbook_premium_monthly",
+    },
+    {
+      billingType: "yearly",
+      description: "Yearly Trailbook premium access through Google Play.",
+      entitlements: [...PAID_ENTITLEMENTS],
+      internalProductCode: "trailbook_premium_yearly",
+      name: "Trailbook Premium Yearly",
+      planCode: "premium_yearly",
+      priceLabel: "Google Play",
+      provider: "google",
+      providerProductId: process.env.GOOGLE_PREMIUM_YEARLY_PRODUCT_ID?.trim() || "trailbook_premium_yearly",
+    },
+    {
+      billingType: "lifetime",
+      description: "Lifetime Trailbook premium access through Google Play.",
+      entitlements: [...PAID_ENTITLEMENTS],
+      internalProductCode: "trailbook_lifetime",
+      name: "Trailbook Lifetime",
+      planCode: "premium_lifetime",
+      priceLabel: "Google Play",
+      provider: "google",
+      providerProductId: process.env.GOOGLE_LIFETIME_PRODUCT_ID?.trim() || "trailbook_lifetime",
+    },
+  ];
+}

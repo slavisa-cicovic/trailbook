@@ -71,6 +71,20 @@ export class PurchasesController {
     };
   }
 
+  @Post("google/notifications")
+  async receiveGoogleNotification(@Body() input: unknown) {
+    if (process.env.ENABLE_GOOGLE_PURCHASE_NOTIFICATIONS !== "true") {
+      throw new ServiceUnavailableException("Google purchase notifications are not enabled.");
+    }
+
+    return {
+      accepted: true,
+      processed: false,
+      provider: "google",
+      receivedPayloadType: typeof input,
+    };
+  }
+
   private getSessionToken(request: Request) {
     const header = request.get("authorization");
     const bearerToken = header?.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : null;

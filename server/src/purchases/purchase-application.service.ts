@@ -4,8 +4,9 @@ import type { PlanBillingType, Prisma, SubscriptionStatus } from "@prisma/client
 import type { AuthUserResponse } from "../auth/auth.types";
 import { DatabaseService } from "../database/database.service";
 import { ApplePurchaseProvider } from "./apple-purchase.provider";
-import { FAKE_PURCHASE_PRODUCTS, PAID_ENTITLEMENTS, getApplePurchaseProducts, getFakeProductDefinition } from "./purchase-catalog";
+import { FAKE_PURCHASE_PRODUCTS, PAID_ENTITLEMENTS, getApplePurchaseProducts, getFakeProductDefinition, getGooglePurchaseProducts } from "./purchase-catalog";
 import { FakePurchaseProvider } from "./fake-purchase.provider";
+import { GooglePurchaseProvider } from "./google-purchase.provider";
 import type { SimulateFakePurchaseDto } from "./dto/simulate-fake-purchase.dto";
 import type { VerifyPurchaseDto } from "./dto/verify-purchase.dto";
 import type {
@@ -28,6 +29,7 @@ export class PurchaseApplicationService {
     @Inject(DatabaseService) private readonly databaseService: DatabaseService,
     @Inject(ApplePurchaseProvider) private readonly applePurchaseProvider: ApplePurchaseProvider,
     @Inject(FakePurchaseProvider) private readonly fakePurchaseProvider: FakePurchaseProvider,
+    @Inject(GooglePurchaseProvider) private readonly googlePurchaseProvider: GooglePurchaseProvider,
   ) {}
 
   async listProducts(input: {
@@ -48,6 +50,14 @@ export class PurchaseApplicationService {
     if (provider === "apple") {
       await this.ensureAppleCatalogProducts();
       return this.applePurchaseProvider.listProducts({
+        platform: input.platform,
+        userId: input.userId,
+      });
+    }
+
+    if (provider === "google") {
+      await this.ensureGoogleCatalogProducts();
+      return this.googlePurchaseProvider.listProducts({
         platform: input.platform,
         userId: input.userId,
       });
@@ -152,7 +162,26 @@ export class PurchaseApplicationService {
 
   async verifyPurchase(user: AuthUserResponse, input: VerifyPurchaseDto): Promise<PurchaseSimulationResponse> {
     if (input.provider === "google") {
-      throw new BadRequestException("Google purchase verification is not implemented yet.");
+      await this.ensureGoogleCatalogProducts();
+      const event = await this.googlePurchaseProvider.completePurchase({
+        providerProductId: input.productId,
+        purchaseToken: input.purchaseToken,
+        userId: user.id,
+      });
+
+      if (!event) {
+        return {
+          ...(await this.getCurrentAccess(user.id)),
+          purchaseResult: "canceled_by_user",
+        };
+      }
+
+      const access = await this.applyNormalizedEvent(event, user.id);
+
+      return {
+        ...access,
+        purchaseResult: event.purchaseResult,
+      };
     }
 
     await this.ensureAppleCatalogProducts();
@@ -301,6 +330,14 @@ export class PurchaseApplicationService {
     });
   }
 
+  private async ensureGoogleCatalogProducts() {
+    await this.databaseService.$transaction(async (tx) => {
+      for (const product of getGooglePurchaseProducts()) {
+        await this.upsertCatalogProduct(tx, product);
+      }
+    });
+  }
+
   private async upsertCatalogProduct(transaction: Prisma.TransactionClient, product: PurchaseProductDefinition) {
     const plan = await transaction.plan.upsert({
       where: { code: product.planCode },
@@ -346,6 +383,10 @@ export class PurchaseApplicationService {
 
     if (provider === "apple") {
       await this.ensureAppleCatalogProducts();
+    }
+
+    if (provider === "google") {
+      await this.ensureGoogleCatalogProducts();
     }
 
     return this.databaseService.storeProduct.findUnique({

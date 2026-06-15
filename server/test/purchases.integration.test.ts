@@ -111,6 +111,25 @@ describe("purchases integration", () => {
     assert.equal(storedProducts.length, 3);
   });
 
+  test("authenticated user can list Google product mapping", async () => {
+    const { token } = await registerVerifiedUser("google-products@example.com");
+
+    const response = await request(app.getHttpServer())
+      .get("/api/purchases/products?provider=google&platform=android")
+      .set("Authorization", `Bearer ${token}`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.length, 3);
+    assert.equal(response.body[0].provider, "google");
+
+    const storedProducts = await databaseService.storeProduct.findMany({
+      where: {
+        provider: "google",
+      },
+    });
+    assert.equal(storedProducts.length, 3);
+  });
+
   test("fake simulation is rejected when disabled", async () => {
     const { token } = await registerVerifiedUser("disabled@example.com", "test_user");
 
@@ -164,6 +183,37 @@ describe("purchases integration", () => {
       .post("/api/purchases/apple/notifications")
       .send({
         signedPayload: "sandbox-notification",
+      });
+
+    assert.equal(response.status, 503);
+  });
+
+  test("Google verify endpoint fails safely when service account credentials are missing", async () => {
+    const { token } = await registerVerifiedUser("google-verify@example.com");
+
+    const response = await request(app.getHttpServer())
+      .post("/api/purchases/verify")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        productId: "trailbook_premium_monthly",
+        provider: "google",
+        purchaseToken: "google-sandbox-purchase-token-1",
+      });
+
+    assert.equal(response.status, 503);
+    assert.match(String(response.body.message), /Google Play service account credentials/);
+
+    const transactions = await databaseService.purchaseTransaction.findMany();
+    assert.equal(transactions.length, 0);
+  });
+
+  test("Google notification endpoint is disabled by default", async () => {
+    const response = await request(app.getHttpServer())
+      .post("/api/purchases/google/notifications")
+      .send({
+        message: {
+          data: "sandbox-notification",
+        },
       });
 
     assert.equal(response.status, 503);

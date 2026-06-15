@@ -10,6 +10,7 @@ import {
 } from "../../services/purchases/purchase-api.service";
 import { AppleMobilePurchaseProvider } from "../../services/purchases/apple-mobile-purchase.provider";
 import { FakeMobilePurchaseProvider } from "../../services/purchases/fake-mobile-purchase.provider";
+import { GoogleMobilePurchaseProvider } from "../../services/purchases/google-mobile-purchase.provider";
 import { ReadOnlyMobilePurchaseProvider } from "../../services/purchases/read-only-mobile-purchase.provider";
 import {
   getMobilePurchaseProvider,
@@ -69,6 +70,19 @@ describe("purchase API service", () => {
 
     expect(requestFromBackend).toHaveBeenCalledWith(
       `${API_ROUTES.purchases.products}?provider=apple`,
+      { method: "GET" },
+      "session-token",
+      expect.anything(),
+    );
+  });
+
+  it("lists Google products through backend purchases endpoint", async () => {
+    vi.mocked(requestFromBackend).mockResolvedValueOnce([]);
+
+    await listPurchaseProducts("session-token", "google");
+
+    expect(requestFromBackend).toHaveBeenCalledWith(
+      `${API_ROUTES.purchases.products}?provider=google`,
       { method: "GET" },
       "session-token",
       expect.anything(),
@@ -144,6 +158,36 @@ describe("purchase API service", () => {
           productId: "trailbook_premium_monthly",
           provider: "apple",
           transactionId: "apple-transaction-1",
+        }),
+      },
+      "session-token",
+      expect.anything(),
+    );
+  });
+
+  it("verifies Google purchase token through provider-neutral backend endpoint", async () => {
+    vi.mocked(requestFromBackend).mockResolvedValueOnce({
+      currentPeriodEndsAt: "2026-07-01T00:00:00.000Z",
+      entitlements: ["sync"],
+      planCode: "premium_monthly",
+      purchaseResult: "success",
+      subscriptionStatus: "active",
+    });
+
+    await verifyPurchaseWithBackend("session-token", {
+      productId: "trailbook_premium_monthly",
+      provider: "google",
+      purchaseToken: "google-purchase-token-1",
+    });
+
+    expect(requestFromBackend).toHaveBeenCalledWith(
+      API_ROUTES.purchases.verify,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          productId: "trailbook_premium_monthly",
+          provider: "google",
+          purchaseToken: "google-purchase-token-1",
         }),
       },
       "session-token",
@@ -230,5 +274,11 @@ describe("mobile purchase provider resolver", () => {
     process.env.EXPO_PUBLIC_PURCHASE_PROVIDER = "apple";
 
     expect(getMobilePurchaseProvider(session)).toBeInstanceOf(AppleMobilePurchaseProvider);
+  });
+
+  it("returns Google provider when explicitly configured", () => {
+    process.env.EXPO_PUBLIC_PURCHASE_PROVIDER = "google";
+
+    expect(getMobilePurchaseProvider(session)).toBeInstanceOf(GoogleMobilePurchaseProvider);
   });
 });
