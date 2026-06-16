@@ -4,10 +4,13 @@ import type { TripPoint } from "../../domain/trips";
 import { recordLocationSnapshots } from "../../services/recording/recording-engine.service";
 import { processRecordedLocationSnapshots } from "../../services/recording/recording-pipeline.service";
 import { appendDiagnosticEvent } from "../../repositories/diagnostic-events-repository";
-import { insertRawLocationEvents, updateRawLocationEventProcessingResults } from "../../storage/raw-location-events-storage";
+import {
+  insertRawLocationEvents,
+  updateRawLocationEventProcessingResults,
+} from "../../repositories/raw-location-events-repository";
 import {
   loadTripPointsForTrip,
-} from "../../storage/trip-points-storage";
+} from "../../repositories/trip-points-repository";
 
 vi.mock("expo-crypto", () => ({
   randomUUID: vi.fn(() => "batch-1"),
@@ -26,12 +29,12 @@ vi.mock("../../storage/recording-storage", () => ({
   }),
 }));
 
-vi.mock("../../storage/raw-location-events-storage", () => ({
+vi.mock("../../repositories/raw-location-events-repository", () => ({
   insertRawLocationEvents: vi.fn(async (events) => events),
   updateRawLocationEventProcessingResults: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../../storage/trip-points-storage", () => ({
+vi.mock("../../repositories/trip-points-repository", () => ({
   loadTripPointsForTrip: vi.fn(),
   refreshTripSegmentStatsForTripLocalId: vi.fn().mockResolvedValue(undefined),
   refreshTripStatsForTripLocalId: vi.fn().mockResolvedValue(undefined),
@@ -200,7 +203,7 @@ describe("recording engine", () => {
     );
   });
 
-  it("does not update raw processing status for storage-ignored duplicate raw events", async () => {
+  it("skips pipeline processing for storage-ignored duplicate raw events", async () => {
     vi.mocked(insertRawLocationEvents).mockResolvedValueOnce([]);
     vi.mocked(loadTripPointsForTrip).mockReset();
     vi.mocked(loadTripPointsForTrip).mockResolvedValue([acceptedTripPoint]);
@@ -219,7 +222,36 @@ describe("recording engine", () => {
       "background",
     );
 
+    expect(processRecordedLocationSnapshots).not.toHaveBeenCalled();
+    expect(updateRawLocationEventProcessingResults).not.toHaveBeenCalled();
+  });
+
+  it("continues pipeline processing when raw event insert fails", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.mocked(insertRawLocationEvents).mockRejectedValueOnce(new Error("sqlite busy"));
+    vi.mocked(loadTripPointsForTrip).mockReset();
+    vi.mocked(loadTripPointsForTrip).mockResolvedValue([acceptedTripPoint]);
+
+    try {
+      await recordLocationSnapshots(
+        [
+          {
+            accuracy: 6,
+            altitude: null,
+            latitude: 45,
+            longitude: 19,
+            recordedAt: "2026-06-02T09:01:00.000Z",
+            speed: 3,
+          },
+        ],
+        "background",
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+
     expect(processRecordedLocationSnapshots).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(processRecordedLocationSnapshots).mock.calls[0]?.[0]).toHaveLength(1);
     expect(updateRawLocationEventProcessingResults).not.toHaveBeenCalled();
   });
 

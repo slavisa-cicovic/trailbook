@@ -25,7 +25,10 @@ import {
 import { buildRawLocationEventProcessingResults } from "./raw-location-event-processing.service";
 import { recordRecordingNativeEvent } from "./recording-native-events.service";
 import {
+  countDuplicateRecordedAtValues,
   countRawProcessingResults,
+  getMaxRecordedAtGapMs,
+  getTraceRecordedAtRange,
   recordRecordingProcessingTrace,
   type RecordingProcessingTrace,
 } from "./recording-processing-trace.service";
@@ -212,6 +215,51 @@ function withRawProcessingTrace(input: {
   };
 }
 
+function buildSkippedPipelineResult(input: {
+  callbackSource: LocationCallbackSource;
+  origin: RawLocationEventOrigin;
+  pipelineSnapshotCount: number;
+  snapshots: CurrentLocationSnapshot[];
+  tripLocalId: string | null;
+}): RecordingPipelineResult {
+  const recordedAtValues = input.snapshots.map((snapshot) => snapshot.recordedAt);
+  const { firstRecordedAt, lastRecordedAt } = getTraceRecordedAtRange(recordedAtValues);
+  const processedAt = new Date().toISOString();
+
+  return {
+    acceptedPointCount: 0,
+    duplicateRecordedAtCount: countDuplicateRecordedAtValues(recordedAtValues),
+    processingTrace: {
+      acceptedPointCount: 0,
+      activeProfile: null,
+      batchId: null,
+      callbackSource: input.callbackSource,
+      duplicateRawEventCount: 0,
+      duplicateRecordedAtCount: countDuplicateRecordedAtValues(recordedAtValues),
+      firstRecordedAt,
+      inferredProfile: null,
+      inputSnapshotCount: input.snapshots.length,
+      lastRecordedAt,
+      maxAcceptedGapMs: 0,
+      maxRawGapMs: getMaxRecordedAtGapMs(recordedAtValues),
+      origin: input.origin,
+      previousProfile: null,
+      processingMode: "live",
+      processedAt,
+      rawInsertedCount: 0,
+      recoveredPointCount: 0,
+      rejectedPointCount: input.pipelineSnapshotCount,
+      rejectedRawEventCount: 0,
+      sortedSnapshotCount: input.pipelineSnapshotCount,
+      transitionAt: null,
+      transitionChanged: false,
+      tripLocalId: input.tripLocalId,
+    },
+    recoveredPointCount: 0,
+    rejectedPointCount: input.pipelineSnapshotCount,
+  };
+}
+
 function maybeLogBatchPerformance(input: {
   activeTripId: string;
   durationMs: number;
@@ -274,6 +322,7 @@ export async function recordLocationSnapshots(
   let ignoredBeforeSessionStartRawEventCount = 0;
   const ignoredBeforeSessionStartRawEventLocalIds = new Set<string>();
   let rawEvents: RawLocationEvent[] = [];
+  let rawInsertFailed = false;
   let beforeTripPoints: TripPoint[] = [];
   let pipelineSnapshots = snapshots;
 
@@ -341,6 +390,7 @@ export async function recordLocationSnapshots(
       "insert-raw-events",
       () => insertRawLocationEvents(rawEvents),
     ).catch((error) => {
+      rawInsertFailed = true;
       console.warn("[Trailbook][recording-engine]", {
         error: error instanceof Error ? error.message : String(error),
         step: "raw-insert-failed",
@@ -348,6 +398,73 @@ export async function recordLocationSnapshots(
       });
       return [];
     });
+
+    if (!rawInsertFailed) {
+      const insertedRawEventLocalIds = new Set(rawEvents.map((event) => event.localId));
+      pipelineSnapshots = pipelineSnapshots.filter((snapshot) =>
+        insertedRawEventLocalIds.has(
+          getRawLocationEventLocalId({
+            origin,
+            snapshot,
+            tripLocalId: activeTripId,
+          }),
+        ),
+      );
+    }
+  }
+
+  if (activeTripId && pipelineSnapshots.length === 0) {
+    const pipelineResult = buildSkippedPipelineResult({
+      callbackSource,
+      origin,
+      pipelineSnapshotCount: 0,
+      snapshots,
+      tripLocalId: activeTripId,
+    });
+    const processedAt = new Date().toISOString();
+    const processingResults: RawLocationEventProcessingResult[] = rawEvents.map((event) => ({
+      acceptedTripPointLocalId: null,
+      localId: event.localId,
+      processedAt,
+      processingDecision: ignoredBeforeSessionStartRawEventLocalIds.has(event.localId)
+        ? "ignored-before-session-start"
+        : "duplicate-raw-event",
+      processingStatus: "rejected",
+      segmentLocalId: null,
+    }));
+
+    if (processingResults.length > 0) {
+      await measurePhase(
+        "update-raw-processing-results",
+        () => updateRawLocationEventProcessingResults(processingResults),
+      ).catch((error) => {
+        console.warn("[Trailbook][recording-engine]", {
+          error: error instanceof Error ? error.message : String(error),
+          step: "raw-status-update-failed",
+          tripLocalId: activeTripId,
+        });
+      });
+    }
+
+    maybeLogBatchPerformance({
+      activeTripId,
+      durationMs: Date.now() - startedAtMs,
+      phaseDurationsMs,
+      rawEventCount: rawEvents.length,
+      snapshotCount: snapshots.length,
+    });
+    void recordRecordingProcessingTrace(
+      withRawProcessingTrace({
+        batchId,
+        durationMs: Date.now() - startedAtMs,
+        ignoredBeforeSessionStartRawEventCount,
+        phaseDurationsMs,
+        pipelineResult,
+        processingResults,
+        rawInsertedCount: rawEvents.length,
+      }),
+    );
+    return;
   }
 
   const pipelineResult = await measurePhase(
