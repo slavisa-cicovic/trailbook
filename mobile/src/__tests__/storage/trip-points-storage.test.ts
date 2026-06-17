@@ -120,6 +120,43 @@ const fakeDatabase = {
         })) as T[];
     }
 
+    if (normalizedSql.includes("SELECT trip_local_id, COUNT(*) AS point_count")) {
+      const countsByTripLocalId = new Map<string, number>();
+
+      for (const row of state.tripPoints.values()) {
+        if (!params.includes(row.trip_local_id)) {
+          continue;
+        }
+
+        countsByTripLocalId.set(row.trip_local_id, (countsByTripLocalId.get(row.trip_local_id) ?? 0) + 1);
+      }
+
+      return Array.from(countsByTripLocalId.entries()).map(([tripLocalId, pointCount]) => ({
+        point_count: pointCount,
+        trip_local_id: tripLocalId,
+      })) as T[];
+    }
+
+    if (normalizedSql.includes("SELECT trip_local_id, SUM(distance_meters) AS distance_meters")) {
+      const distanceByTripLocalId = new Map<string, number>();
+
+      for (const row of state.tripSegments.values()) {
+        if (!params.includes(row.trip_local_id) || row.distance_meters === null) {
+          continue;
+        }
+
+        distanceByTripLocalId.set(
+          row.trip_local_id,
+          (distanceByTripLocalId.get(row.trip_local_id) ?? 0) + row.distance_meters,
+        );
+      }
+
+      return Array.from(distanceByTripLocalId.entries()).map(([tripLocalId, distanceMeters]) => ({
+        distance_meters: distanceMeters,
+        trip_local_id: tripLocalId,
+      })) as T[];
+    }
+
     if (normalizedSql.includes("local_id AS trip_local_id")) {
       return [...state.trips.values()]
         .filter((row) =>
@@ -503,5 +540,64 @@ describe("trip-points-storage hot path contract", () => {
       point_count: 0,
       segment_local_id: "segment-1",
     });
+  });
+
+  it("recomputes stale zero trip stats when segment stats and points exist", async () => {
+    const { loadTripStatsByTripLocalIds } = await import("../../repositories/trip-points-repository");
+
+    seedTrip("trip-1");
+    seedTripSegment("segment-1", "trip-1");
+    state.trips.set("trip-1", {
+      distance_meters: 0,
+      local_id: "trip-1",
+      point_count: 2,
+      stats_updated_at: "2026-01-01T10:00:00.000Z",
+    });
+    state.tripSegments.set("segment-1", {
+      distance_meters: 1234,
+      duration_ms: 600000,
+      ended_at: "2026-01-01T10:10:00.000Z",
+      local_id: "segment-1",
+      point_count: 2,
+      started_at: "2026-01-01T10:00:00.000Z",
+      stats_updated_at: "2026-01-01T10:00:00.000Z",
+      trip_local_id: "trip-1",
+    });
+    state.tripPoints.set("point-1", tripPointRowFromParams([
+      "point-1",
+      null,
+      "trip-1",
+      "segment-1",
+      "device-1",
+      "user-1",
+      45,
+      19,
+      "2026-01-01T10:00:00.000Z",
+      8,
+      100,
+      0,
+      "local-only",
+    ]));
+    state.tripPoints.set("point-2", tripPointRowFromParams([
+      "point-2",
+      null,
+      "trip-1",
+      "segment-1",
+      "device-1",
+      "user-1",
+      45.01,
+      19.01,
+      "2026-01-01T10:01:00.000Z",
+      8,
+      100,
+      0,
+      "local-only",
+    ]));
+
+    const tripStats = await loadTripStatsByTripLocalIds(["trip-1"]);
+
+    expect(tripStats.get("trip-1")?.point_count).toBe(2);
+    expect(tripStats.get("trip-1")?.distance_meters).toBeGreaterThan(5);
+    expect(state.trips.get("trip-1")?.distance_meters).toBeGreaterThan(5);
   });
 });

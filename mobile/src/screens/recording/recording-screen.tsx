@@ -82,6 +82,7 @@ import {
   mergeTripPointsInMemory,
   setTripPointsInMemory,
 } from "../../state/trip-points-store";
+import { setBatchProcessing } from "../../state/batch-processing-store";
 import {
   setWaypointAttachments,
 } from "../../state/waypoint-attachments-store";
@@ -113,6 +114,7 @@ export default function RecordingScreen() {
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationSnapshot | null>(null);
   const [startModalVisible, setStartModalVisible] = useState(false);
   const [startRecordingBusy, setStartRecordingBusy] = useState(false);
+  const [stopRecordingBusy, setStopRecordingBusy] = useState(false);
   const [waypointModalVisible, setWaypointModalVisible] = useState(false);
   const [sessionMenuVisible, setSessionMenuVisible] = useState(false);
   const [selectedPhotoAttachmentId, setSelectedPhotoAttachmentId] = useState<string | null>(null);
@@ -565,13 +567,25 @@ export default function RecordingScreen() {
   }
 
   async function handleStopRecording() {
-    await stopRecordingFromScreenController({
-      backgroundRecordingSupported,
-      routeModel: activeRecordingRouteModel,
-      tripSegments,
-      trips,
-      waypoints,
-    });
+    if (stopRecordingBusy) {
+      return;
+    }
+
+    setStopRecordingBusy(true);
+    setBatchProcessing(true);
+
+    try {
+      await stopRecordingFromScreenController({
+        backgroundRecordingSupported,
+        routeModel: activeRecordingRouteModel,
+        tripSegments,
+        trips,
+        waypoints,
+      });
+    } finally {
+      setBatchProcessing(false);
+      setStopRecordingBusy(false);
+    }
   }
 
   async function handleResumePausedTrip(tripLocalId: string) {
@@ -1117,7 +1131,7 @@ export default function RecordingScreen() {
           <View style={styles.sessionBar}>
             <RecordingControl
               compact
-              disabled={recordingSession.status === "idle" && !permissionsReady}
+              disabled={stopRecordingBusy || (recordingSession.status === "idle" && !permissionsReady)}
               onPress={handleRecordingControlPress}
               status={recordingSession.status}
             />

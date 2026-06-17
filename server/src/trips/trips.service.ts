@@ -40,6 +40,10 @@ export class TripsService {
     return parsed;
   }
 
+  private async lockTripMutation(tx: Prisma.TransactionClient, tripId: string) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`trip-sync:${tripId}`})::bigint)`;
+  }
+
   private calculateDistanceMeters(
     points: Array<{
       latitude: number;
@@ -410,6 +414,8 @@ export class TripsService {
         },
       });
 
+      await this.lockTripMutation(tx, upsertedTrip.id);
+
       await tx.tripPoint.deleteMany({ where: { tripId: upsertedTrip.id } });
       if (shouldSyncRawEvents) {
         await tx.rawLocationEvent.deleteMany({ where: { tripId: upsertedTrip.id } });
@@ -659,6 +665,8 @@ export class TripsService {
         throw new NotFoundException("Trip not found.");
       }
 
+      await this.lockTripMutation(tx, trip.id);
+
       const segments = await tx.tripSegment.findMany({
         where: {
           tripId,
@@ -730,6 +738,8 @@ export class TripsService {
       if (!trip) {
         throw new NotFoundException("Trip not found.");
       }
+
+      await this.lockTripMutation(tx, trip.id);
 
       if (payload.tripStats) {
         await tx.trip.update({

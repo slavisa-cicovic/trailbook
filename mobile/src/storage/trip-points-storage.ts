@@ -70,6 +70,16 @@ interface TripSegmentStatsSourceRow {
   trip_local_id: string;
 }
 
+interface TripPointCountRow {
+  point_count: number;
+  trip_local_id: string;
+}
+
+interface TripSegmentDistanceRow {
+  distance_meters: number | null;
+  trip_local_id: string;
+}
+
 function toTripPointRow(tripPoint: TripPoint): TripPointRow {
   return {
     accuracy: tripPoint.accuracy,
@@ -551,42 +561,88 @@ export async function loadTripStatsByTripLocalIds(tripLocalIds: string[]): Promi
   );
   const rowTripLocalIds = new Set(rows.map((row) => row.trip_local_id));
   const missingTripLocalIds = tripLocalIds.filter((tripLocalId) => !rowTripLocalIds.has(tripLocalId));
+  const rowsByTripLocalId = new Map(rows.map((row) => [row.trip_local_id, row]));
+  const zeroDistanceTripLocalIds = rows
+    .filter((row) => row.distance_meters === 0 && row.point_count > 0)
+    .map((row) => row.trip_local_id);
+  const existingTripLocalIds = rows.map((row) => row.trip_local_id);
+  const staleTripLocalIds = new Set<string>();
 
-  if (missingTripLocalIds.length > 0) {
-    const missingPlaceholders = missingTripLocalIds.map(() => "?").join(", ");
-    const missingPointRows = await database.getAllAsync<TripPointRow>(
-      `SELECT * FROM trip_points WHERE trip_local_id IN (${missingPlaceholders}) ORDER BY recorded_at ASC, local_id ASC`,
-      ...missingTripLocalIds,
+  if (existingTripLocalIds.length > 0) {
+    const existingPlaceholders = existingTripLocalIds.map(() => "?").join(", ");
+    const pointCountRows = await database.getAllAsync<TripPointCountRow>(
+      `SELECT trip_local_id, COUNT(*) AS point_count
+       FROM trip_points
+       WHERE trip_local_id IN (${existingPlaceholders})
+       GROUP BY trip_local_id`,
+      ...existingTripLocalIds,
     );
-    const missingTripPointsByTripLocalId = groupTripPointsByTripLocalId(
-      missingPointRows.map(toTripPoint),
+    const pointCountByTripLocalId = new Map(
+      pointCountRows.map((row) => [row.trip_local_id, row.point_count]),
     );
 
-    if (missingTripPointsByTripLocalId.size > 0) {
-      await runExclusiveDatabaseWrite(async (database) => {
-        await updateTripStatsForTripLocalIds(
-          database,
-          missingTripPointsByTripLocalId,
-          missingTripLocalIds,
-        );
-      });
+    for (const [tripLocalId, row] of rowsByTripLocalId.entries()) {
+      const actualPointCount = pointCountByTripLocalId.get(tripLocalId) ?? 0;
 
-      const nextRows = await database.getAllAsync<TripStatsRow>(
-        `SELECT
-           local_id AS trip_local_id,
-           point_count,
-           distance_meters,
-           stats_updated_at AS updated_at
-         FROM trips
-         WHERE local_id IN (${placeholders})
-           AND point_count IS NOT NULL
-           AND distance_meters IS NOT NULL
-           AND stats_updated_at IS NOT NULL`,
-        ...tripLocalIds,
-      );
-
-      return new Map(nextRows.map((row) => [row.trip_local_id, row]));
+      if (actualPointCount !== row.point_count) {
+        staleTripLocalIds.add(tripLocalId);
+      }
     }
+  }
+
+  if (zeroDistanceTripLocalIds.length > 0) {
+    const zeroDistancePlaceholders = zeroDistanceTripLocalIds.map(() => "?").join(", ");
+    const segmentDistanceRows = await database.getAllAsync<TripSegmentDistanceRow>(
+      `SELECT trip_local_id, SUM(distance_meters) AS distance_meters
+       FROM trip_segments
+       WHERE trip_local_id IN (${zeroDistancePlaceholders})
+         AND distance_meters IS NOT NULL
+       GROUP BY trip_local_id`,
+      ...zeroDistanceTripLocalIds,
+    );
+
+    for (const row of segmentDistanceRows) {
+      if ((row.distance_meters ?? 0) > 0) {
+        staleTripLocalIds.add(row.trip_local_id);
+      }
+    }
+  }
+
+  const tripLocalIdsToRefresh = Array.from(new Set([...missingTripLocalIds, ...staleTripLocalIds]));
+
+  if (tripLocalIdsToRefresh.length > 0) {
+    const refreshPlaceholders = tripLocalIdsToRefresh.map(() => "?").join(", ");
+    const refreshPointRows = await database.getAllAsync<TripPointRow>(
+      `SELECT * FROM trip_points WHERE trip_local_id IN (${refreshPlaceholders}) ORDER BY recorded_at ASC, local_id ASC`,
+      ...tripLocalIdsToRefresh,
+    );
+    const refreshTripPointsByTripLocalId = groupTripPointsByTripLocalId(
+      refreshPointRows.map(toTripPoint),
+    );
+
+    await runExclusiveDatabaseWrite(async (database) => {
+      await updateTripStatsForTripLocalIds(
+        database,
+        refreshTripPointsByTripLocalId,
+        tripLocalIdsToRefresh,
+      );
+    });
+
+    const nextRows = await database.getAllAsync<TripStatsRow>(
+      `SELECT
+         local_id AS trip_local_id,
+         point_count,
+         distance_meters,
+         stats_updated_at AS updated_at
+       FROM trips
+       WHERE local_id IN (${placeholders})
+         AND point_count IS NOT NULL
+         AND distance_meters IS NOT NULL
+         AND stats_updated_at IS NOT NULL`,
+      ...tripLocalIds,
+    );
+
+    return new Map(nextRows.map((row) => [row.trip_local_id, row]));
   }
 
   return new Map(rows.map((row) => [row.trip_local_id, row]));
