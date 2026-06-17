@@ -19,7 +19,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { TableHeadCustom, TableNoData } from "../../../components/table";
-import { getCurrentUser, getTripDetail, type AuthUser, type UserTripDetail } from "../../../lib/auth-api";
+import {
+  getCurrentUser,
+  getTripDetail,
+  isTripUserRole,
+  type AuthUser,
+  type UserTripDetail,
+} from "../../../lib/auth-api";
 import { TripRoutePreview } from "./trip-route-preview";
 
 const TIMELINE_HEAD = [
@@ -143,7 +149,7 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
   }, [router]);
 
   useEffect(() => {
-    if (user?.role !== "user") {
+    if (!user || !isTripUserRole(user.role)) {
       return;
     }
 
@@ -187,7 +193,7 @@ export function TripDetailView({ tripId }: TripDetailViewProps) {
     );
   }
 
-  if (!user || user.role !== "user") {
+  if (!user || !isTripUserRole(user.role)) {
     return (
       <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 4 }}>
         <Stack spacing={2}>

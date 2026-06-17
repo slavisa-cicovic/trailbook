@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { login } from "../../lib/auth-api";
+import { isTripUserRole, login } from "../../lib/auth-api";
 import { SocialSigninButtons } from "./social-signin-buttons";
 
 export function LoginForm({ verificationStatus }: { verificationStatus?: string }) {
@@ -21,8 +21,8 @@ export function LoginForm({ verificationStatus }: { verificationStatus?: string 
     setError(null);
 
     try {
-      await login({ email, password });
-      router.push("/dashboard");
+      const result = await login({ email, password });
+      router.push(isTripUserRole(result.user.role) ? "/trips" : "/dashboard");
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Login failed.");

@@ -4,7 +4,7 @@ import { Box, Button, Stack, Typography } from "@mui/material";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import type { AuthUser } from "../../lib/auth-api";
+import { isTripUserRole, type AuthUser } from "../../lib/auth-api";
 
 interface TrailbookSidebarProps {
   user: AuthUser;
@@ -30,7 +30,7 @@ export function TrailbookSidebar({ user }: TrailbookSidebarProps) {
       return false;
     }
 
-    if (item.userOnly && user.role !== "user") {
+    if (item.userOnly && !isTripUserRole(user.role)) {
       return false;
     }
 

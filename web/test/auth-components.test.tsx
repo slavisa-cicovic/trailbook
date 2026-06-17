@@ -125,7 +125,7 @@ describe("web auth components", () => {
     });
   });
 
-  test("login form submits credentials and redirects to dashboard", async () => {
+  test("login form submits credentials and redirects trip users to trips", async () => {
     vi.mocked(authApi.login).mockResolvedValue({
       user: {
         id: "u1",
@@ -150,7 +150,7 @@ describe("web auth components", () => {
       });
     });
 
-    expect(push).toHaveBeenCalledWith("/dashboard");
+    expect(push).toHaveBeenCalledWith("/trips");
     expect(refresh).toHaveBeenCalled();
   });
 

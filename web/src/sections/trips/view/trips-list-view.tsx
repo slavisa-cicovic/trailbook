@@ -30,7 +30,13 @@ import {
   TablePaginationCustom,
   useTable,
 } from "../../../components/table";
-import { getCurrentUser, getTripOverview, type AuthUser, type UserTripOverview } from "../../../lib/auth-api";
+import {
+  getCurrentUser,
+  getTripOverview,
+  isTripUserRole,
+  type AuthUser,
+  type UserTripOverview,
+} from "../../../lib/auth-api";
 
 type RangeTab = "total" | "today" | "week" | "month" | "year" | "custom";
 
@@ -258,7 +264,7 @@ export function TripsListView() {
   }, [router]);
 
   useEffect(() => {
-    if (user?.role !== "user") {
+    if (!user || !isTripUserRole(user.role)) {
       return;
     }
 
@@ -305,7 +311,7 @@ export function TripsListView() {
     );
   }
 
-  if (!user || user.role !== "user") {
+  if (!user || !isTripUserRole(user.role)) {
     return (
       <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 4 }}>
         <Stack spacing={2}>

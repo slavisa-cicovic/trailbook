@@ -22,8 +22,12 @@ export interface AuthUser {
   id: string;
   email: string;
   displayName: string;
-  role: "user" | "admin";
+  role: "user" | "test_user" | "admin";
   providers: string[];
+}
+
+export function isTripUserRole(role: AuthUser["role"]) {
+  return role === "user" || role === "test_user";
 }
 
 export interface AdminDashboardMetrics {
