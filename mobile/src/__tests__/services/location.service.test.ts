@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Platform } from "react-native";
 
 const locationMocks = vi.hoisted(() => ({
   hasStartedLocationUpdatesAsync: vi.fn(),
@@ -45,6 +46,7 @@ const { getUnifiedAutoTrackingProfile, syncBackgroundLocationTracking } = await 
 describe("location service background tracking profile", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Platform.OS = "ios";
     locationMocks.hasStartedLocationUpdatesAsync.mockResolvedValue(false);
     locationMocks.startLocationUpdatesAsync.mockResolvedValue(undefined);
     locationMocks.stopLocationUpdatesAsync.mockResolvedValue(undefined);
@@ -54,17 +56,17 @@ describe("location service background tracking profile", () => {
     expect(getUnifiedAutoTrackingProfile()).toBe("walk");
   });
 
-  it("starts AUTO background tracking with stable walk options", async () => {
+  it("starts AUTO background tracking with iOS navigation-grade options", async () => {
     await syncBackgroundLocationTracking("recording", "trip-1");
 
     expect(locationMocks.startLocationUpdatesAsync).toHaveBeenCalledWith(
       "trailbook.background-recording-location",
       expect.objectContaining({
-        accuracy: "high",
-        activityType: "fitness",
-        distanceInterval: 12,
+        accuracy: "bestForNavigation",
+        activityType: "otherNavigation",
+        distanceInterval: 5,
         pausesUpdatesAutomatically: false,
-        timeInterval: 15000,
+        timeInterval: 5000,
       }),
     );
   });
@@ -75,9 +77,26 @@ describe("location service background tracking profile", () => {
     expect(locationMocks.startLocationUpdatesAsync).toHaveBeenCalledWith(
       "trailbook.background-recording-location",
       expect.objectContaining({
+        activityType: "otherNavigation",
+        distanceInterval: 5,
+        timeInterval: 5000,
+      }),
+    );
+  });
+
+  it("keeps Android AUTO background tracking on the previous stable baseline", async () => {
+    Platform.OS = "android";
+
+    await syncBackgroundLocationTracking("recording", "trip-1");
+
+    expect(locationMocks.startLocationUpdatesAsync).toHaveBeenCalledWith(
+      "trailbook.background-recording-location",
+      expect.objectContaining({
+        accuracy: "high",
         activityType: "fitness",
-        distanceInterval: 12,
-        timeInterval: 15000,
+        distanceInterval: 5,
+        pausesUpdatesAutomatically: false,
+        timeInterval: 5000,
       }),
     );
   });

@@ -226,6 +226,40 @@ describe("recording engine", () => {
     expect(updateRawLocationEventProcessingResults).not.toHaveBeenCalled();
   });
 
+  it("only processes a replayed raw batch once", async () => {
+    vi.mocked(insertRawLocationEvents)
+      .mockImplementationOnce(async (events) => events)
+      .mockResolvedValueOnce([]);
+    vi.mocked(loadTripPointsForTrip).mockReset();
+    vi.mocked(loadTripPointsForTrip).mockResolvedValue([acceptedTripPoint]);
+
+    const replayedBatch = [
+      {
+        accuracy: 6,
+        altitude: null,
+        latitude: 45,
+        longitude: 19,
+        recordedAt: "2026-06-02T09:01:00.000Z",
+        speed: 3,
+      },
+      {
+        accuracy: 6,
+        altitude: null,
+        latitude: 45.1,
+        longitude: 19.1,
+        recordedAt: "2026-06-02T09:02:00.000Z",
+        speed: 3,
+      },
+    ];
+
+    await recordLocationSnapshots(replayedBatch, "background");
+    await recordLocationSnapshots(replayedBatch, "background");
+
+    expect(insertRawLocationEvents).toHaveBeenCalledTimes(2);
+    expect(processRecordedLocationSnapshots).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(processRecordedLocationSnapshots).mock.calls[0]?.[0]).toHaveLength(2);
+  });
+
   it("continues pipeline processing when raw event insert fails", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     vi.mocked(insertRawLocationEvents).mockRejectedValueOnce(new Error("sqlite busy"));

@@ -127,6 +127,10 @@ function getFallbackTrackingOptionsForProfile(profile: RecordingProfile): Tracki
 }
 
 function getBackgroundActivityTypeForProfile(profile: RecordingProfile): Location.LocationActivityType {
+  if (Platform.OS === "ios" && profile === getUnifiedAutoTrackingProfile()) {
+    return Location.LocationActivityType.OtherNavigation;
+  }
+
   switch (profile) {
     case "drive":
       return Location.LocationActivityType.AutomotiveNavigation;
@@ -142,8 +146,20 @@ function getBackgroundActivityTypeForProfile(profile: RecordingProfile): Locatio
   }
 }
 
+function getBackgroundTrackingOptionsForProfile(profile: RecordingProfile): TrackingOptions {
+  if (Platform.OS === "ios" && profile === getUnifiedAutoTrackingProfile()) {
+    return {
+      accuracy: Location.Accuracy.BestForNavigation,
+      distanceInterval: 5,
+      timeInterval: 5 * 1000,
+    };
+  }
+
+  return getTrackingOptionsForProfile(profile);
+}
+
 function buildBackgroundTrackingOptions(profile: RecordingProfile): Location.LocationTaskOptions {
-  const trackingOptions = getTrackingOptionsForProfile(profile);
+  const trackingOptions = getBackgroundTrackingOptionsForProfile(profile);
 
   return {
     ...trackingOptions,

@@ -18,9 +18,11 @@ import { useThemeStore } from "../../state/theme-store";
 import {
   getScenarioSummary,
   PREDEFINED_SCENARIOS,
+  runDuplicateBatchReplaySimulation,
   runScenario,
   startSimulationRecording,
   stopSimulationRecording,
+  type DuplicateBatchReplaySimulationResult,
   type PredefinedScenario,
   type ScenarioRunResult,
 } from "../../services/simulation/scenario-runner.service";
@@ -99,6 +101,78 @@ function ScenarioCard({ scenario, onRun, running, result, error, theme }: Scenar
   );
 }
 
+interface BatchReplayCardProps {
+  error: string | null;
+  onRun: () => void;
+  result: DuplicateBatchReplaySimulationResult | null;
+  running: boolean;
+  theme: ReturnType<typeof getAppTheme>;
+}
+
+function BatchReplayCard({ error, onRun, result, running, theme }: BatchReplayCardProps) {
+  const replayLooksGood =
+    result !== null &&
+    result.savedPointsAfterReplay === result.savedPointsAfterFirst &&
+    result.duplicateProcessingMs < result.firstProcessingMs;
+
+  return (
+    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardTitleRow}>
+          <Text style={[styles.cardName, { color: theme.primaryText }]}>Duplicate batch replay</Text>
+          <Pressable
+            disabled={running}
+            onPress={onRun}
+            style={({ pressed }) => [
+              styles.runButton,
+              { backgroundColor: theme.accent },
+              (pressed || running) && styles.runButtonPressed,
+            ]}
+          >
+            {running ? (
+              <ActivityIndicator color={theme.surface} size="small" />
+            ) : (
+              <MaterialIcons color={theme.surface} name="replay" size={18} />
+            )}
+            <Text style={[styles.runButtonText, { color: theme.surface }]}>
+              {running ? "Running..." : "Run"}
+            </Text>
+          </Pressable>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={[styles.cardSummary, { color: theme.accent }]}>Android duplicate callback guard</Text>
+          <View style={[styles.strategyBadge, { backgroundColor: theme.accentMuted }]}>
+            <Text style={[styles.strategyBadgeText, { color: theme.accent }]}>debug</Text>
+          </View>
+        </View>
+        <Text style={[styles.cardDescription, { color: theme.mutedText }]}>
+          Sends the same sleep-style batch twice. The replay should add no points and finish much faster.
+        </Text>
+      </View>
+
+      {!running && result !== null && (
+        <View style={[styles.resultRow, { borderTopColor: theme.border }]}>
+          <MaterialIcons
+            color={replayLooksGood ? theme.accent : theme.danger}
+            name={replayLooksGood ? "check-circle" : "warning"}
+            size={16}
+          />
+          <Text style={[styles.resultText, { color: replayLooksGood ? theme.accent : theme.danger }]}>
+            {`${result.locationCount} injected. First ${result.firstProcessingMs}ms, replay ${result.duplicateProcessingMs}ms. Points ${result.savedPointsBefore} → ${result.savedPointsAfterFirst} → ${result.savedPointsAfterReplay}.`}
+          </Text>
+        </View>
+      )}
+
+      {!running && error !== null && (
+        <View style={[styles.resultRow, { borderTopColor: theme.border }]}>
+          <MaterialIcons color={theme.danger} name="error-outline" size={16} />
+          <Text style={[styles.resultText, { color: theme.danger }]}>{error}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function SimulationScreen() {
   const router = useRouter();
   const themeMode = useThemeStore((state) => state.mode);
@@ -110,6 +184,9 @@ export default function SimulationScreen() {
   const [runningId, setRunningId] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ScenarioRunResult>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [batchReplayBusy, setBatchReplayBusy] = useState(false);
+  const [batchReplayResult, setBatchReplayResult] = useState<DuplicateBatchReplaySimulationResult | null>(null);
+  const [batchReplayError, setBatchReplayError] = useState<string | null>(null);
   const [simRecordingBusy, setSimRecordingBusy] = useState(false);
   const [simRecordingError, setSimRecordingError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -142,6 +219,21 @@ export default function SimulationScreen() {
     } finally {
       setRunningId(null);
       abortControllerRef.current = null;
+    }
+  }
+
+  async function handleRunBatchReplay() {
+    setBatchReplayBusy(true);
+    setBatchReplayError(null);
+    setBatchReplayResult(null);
+
+    try {
+      const result = await runDuplicateBatchReplaySimulation();
+      setBatchReplayResult(result);
+    } catch (error) {
+      setBatchReplayError(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setBatchReplayBusy(false);
     }
   }
 
@@ -238,6 +330,14 @@ export default function SimulationScreen() {
           keyboardShouldPersistTaps="handled"
           style={styles.scenarioScroll}
         >
+          <BatchReplayCard
+            error={batchReplayError}
+            onRun={() => void handleRunBatchReplay()}
+            result={batchReplayResult}
+            running={batchReplayBusy}
+            theme={theme}
+          />
+
           {PREDEFINED_SCENARIOS.map((scenario) => (
             <ScenarioCard
               key={scenario.id}

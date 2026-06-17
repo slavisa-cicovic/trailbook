@@ -46,8 +46,26 @@ export interface ScenarioRunResult {
   savedPoints: number;
 }
 
+export interface DuplicateBatchReplaySimulationResult {
+  duplicateProcessingMs: number;
+  firstProcessingMs: number;
+  locationCount: number;
+  savedPointsAfterFirst: number;
+  savedPointsAfterReplay: number;
+  savedPointsBefore: number;
+}
+
 const MIN = 60_000;
 const TRANSITION_SIMULATION_CHUNK_SIZE = 4;
+
+const DUPLICATE_BATCH_REPLAY_SCENARIO: PredefinedScenario = {
+  id: "duplicate-batch-replay",
+  name: "Duplicate batch replay",
+  description:
+    "Injects the same Android sleep-style batch twice. The second pass should skip the recording pipeline because raw events already exist.",
+  segments: [{ activity: "drive", durationMs: 20 * MIN }],
+  strategy: "sleep",
+};
 
 export const PREDEFINED_SCENARIOS: PredefinedScenario[] = [
   // --- Transition scenarios (chunked below the batch threshold for incremental AUTO detection) ---
@@ -301,6 +319,57 @@ export async function runScenario(
 
   const savedPoints = await countSavedPoints(activeTripId);
   return { locationCount: locations.length, processingMs, savedPoints };
+}
+
+export async function runDuplicateBatchReplaySimulation(): Promise<DuplicateBatchReplaySimulationResult> {
+  const recording = getRecordingStateSnapshot();
+
+  if (recording.session.status !== "recording" || !recording.session.activeTripId) {
+    throw new Error("No active recording. Start a trip first.");
+  }
+
+  const { activeTripId } = recording.session;
+
+  setSimulationLocationInjectionActive(activeTripId, true);
+  await stopBackgroundLocationTracking().catch(() => undefined);
+
+  const { lat, lon } = await getSimulationStartCoords();
+  const locations = generateScenarioLocations(
+    DUPLICATE_BATCH_REPLAY_SCENARIO.segments,
+    lat,
+    lon,
+    DUPLICATE_BATCH_REPLAY_SCENARIO.strategy,
+  );
+
+  if (locations.length > 0) {
+    await prepareActiveSimulationTrip(
+      DUPLICATE_BATCH_REPLAY_SCENARIO,
+      getLocationRecordedAt(locations[0]),
+    );
+  }
+
+  const savedPointsBefore = await countSavedPoints(activeTripId);
+  const persistOptions = { origin: "simulation" as const };
+  const firstStartedAt = Date.now();
+
+  await persistBackgroundRecordedLocations(locations, persistOptions);
+  const firstProcessingMs = Date.now() - firstStartedAt;
+  const savedPointsAfterFirst = await countSavedPoints(activeTripId);
+
+  const duplicateStartedAt = Date.now();
+
+  await persistBackgroundRecordedLocations(locations, persistOptions);
+  const duplicateProcessingMs = Date.now() - duplicateStartedAt;
+  const savedPointsAfterReplay = await countSavedPoints(activeTripId);
+
+  return {
+    duplicateProcessingMs,
+    firstProcessingMs,
+    locationCount: locations.length,
+    savedPointsAfterFirst,
+    savedPointsAfterReplay,
+    savedPointsBefore,
+  };
 }
 
 // Creates a recording trip + session without starting background GPS.
