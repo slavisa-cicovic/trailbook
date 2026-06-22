@@ -24,6 +24,7 @@ export const API_ROUTES = {
     sharesRecipients: "/trips/shares/recipients",
     sharedList: "/trips/shared/list",
     sync: "/trips/sync",
+    syncBundle: "/trips/sync-bundle",
     attachmentContent: (attachmentId: string) => `/trips/attachments/${attachmentId}/content`,
     attachmentUpload: (tripId: string) => `/trips/${tripId}/attachments/upload`,
     byId: (tripId: string) => `/trips/mine/${tripId}`,

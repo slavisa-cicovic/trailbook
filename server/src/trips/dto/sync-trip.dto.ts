@@ -1,5 +1,17 @@
 import type { MobileRecordingConfigResponse } from "../../auth/mobile-recording-config.types";
 
+export interface SyncTripBundleDto {
+  clientTripId: string;
+  description: string | null;
+  endedAt: string | null;
+  processingVersion: number;
+  rawBundle: unknown;
+  startedAt: string;
+  status: "recording" | "paused" | "completed";
+  title: string;
+  updatedAt?: string | null;
+}
+
 export interface SyncTripSegmentDto {
   createdAt: string;
   endedAt: string | null;

@@ -375,8 +375,11 @@ model Trip {
   localSourceId    String           @map("local_source_id")
   title            String
   description      String?
+  status           String?          @map("status")
   recordingProfile RecordingProfile @map("recording_profile")
   recordingConfigJson Json?         @map("recording_config_json")
+  processingVersion Int             @default(0) @map("processing_version")
+  rawBundle        Json?            @map("raw_bundle")
   batteryStartLevelPercent Float?   @map("battery_start_level_percent")
   batteryStartState String?         @map("battery_start_state")
   batteryEndLevelPercent Float?     @map("battery_end_level_percent")

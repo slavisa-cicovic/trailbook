@@ -7,6 +7,7 @@ import { MediaStorageService } from "./media-storage.service";
 import type { SaveTripEditDto } from "./dto/save-trip-edit.dto";
 import type { ShareTripDto } from "./dto/share-trip.dto";
 import type {
+  SyncTripBundleDto,
   SyncTripDto,
   SyncTripGroupsDto,
   SyncTripPointsChunkDto,
@@ -90,6 +91,38 @@ export class TripsService {
     }
 
     return deduped;
+  }
+
+  private getBundlePointCount(rawBundle: unknown): number | null {
+    if (!rawBundle || typeof rawBundle !== "object") {
+      return null;
+    }
+
+    const locations = (rawBundle as { locations?: unknown }).locations;
+
+    return Array.isArray(locations) ? locations.length : null;
+  }
+
+  private getBundleDistanceMeters(rawBundle: unknown): number | null {
+    if (!rawBundle || typeof rawBundle !== "object") {
+      return null;
+    }
+
+    const segments = (rawBundle as { segments?: unknown }).segments;
+
+    if (!Array.isArray(segments)) {
+      return null;
+    }
+
+    return segments.reduce((total, segment) => {
+      if (!segment || typeof segment !== "object") {
+        return total;
+      }
+
+      const distanceM = (segment as { distanceM?: unknown }).distanceM;
+
+      return typeof distanceM === "number" && Number.isFinite(distanceM) ? total + distanceM : total;
+    }, 0);
   }
 
   private validateTripEditInput(input: SaveTripEditDto) {
@@ -643,6 +676,70 @@ export class TripsService {
       tripId: trip.id,
       tripLocalId: payload.localId,
       syncedAt: new Date().toISOString(),
+    };
+  }
+
+  async syncTripBundle(ownerUserId: string, payload: SyncTripBundleDto) {
+    if (!payload.clientTripId.trim()) {
+      throw new BadRequestException("clientTripId is required.");
+    }
+
+    if (!payload.title.trim()) {
+      throw new BadRequestException("title is required.");
+    }
+
+    const updatedAt = this.parseDateOrFallback(payload.updatedAt, new Date());
+    const pointCount = this.getBundlePointCount(payload.rawBundle);
+    const distanceMeters = this.getBundleDistanceMeters(payload.rawBundle);
+
+    const trip = await this.databaseService.trip.upsert({
+      where: {
+        ownerUserId_localSourceId: {
+          ownerUserId,
+          localSourceId: payload.clientTripId,
+        },
+      },
+      create: {
+        createdAt: updatedAt,
+        deletedAt: null,
+        description: payload.description?.trim() || null,
+        distanceMeters,
+        endedAt: payload.endedAt ? new Date(payload.endedAt) : null,
+        localSourceId: payload.clientTripId,
+        ownerDeviceId: "bundle",
+        ownerUserId,
+        pointCount,
+        processingVersion: payload.processingVersion,
+        rawBundle: payload.rawBundle as Prisma.InputJsonValue,
+        recordingConfigJson: Prisma.JsonNull,
+        recordingProfile: "walk",
+        startedAt: new Date(payload.startedAt),
+        statsUpdatedAt: updatedAt,
+        status: payload.status,
+        title: payload.title.trim(),
+        updatedAt,
+      },
+      update: {
+        deletedAt: null,
+        description: payload.description?.trim() || null,
+        distanceMeters,
+        endedAt: payload.endedAt ? new Date(payload.endedAt) : null,
+        pointCount,
+        processingVersion: payload.processingVersion,
+        rawBundle: payload.rawBundle as Prisma.InputJsonValue,
+        startedAt: new Date(payload.startedAt),
+        statsUpdatedAt: updatedAt,
+        status: payload.status,
+        title: payload.title.trim(),
+        updatedAt,
+      },
+    });
+
+    return {
+      processingVersion: payload.processingVersion,
+      syncedAt: new Date().toISOString(),
+      tripId: trip.id,
+      tripLocalId: trip.localSourceId,
     };
   }
 

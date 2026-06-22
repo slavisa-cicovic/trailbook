@@ -7,17 +7,13 @@ import {
 import {
   buildSegmentSummaries,
   getTripDistanceMeters,
-  processRawLocationEventsForTrip,
   sortRawLocationEvents,
   type RecordingProcessorSegmentSummary,
 } from "./recording-processor.service";
 import type { RecordingProcessingTrace } from "./recording-processing-trace.service";
 import { applyRawEventReprocessingUnitOfWork } from "./recording-unit-of-work.service";
 import { saveRawEventReprocessingUndoSnapshotForTrip } from "./raw-event-reprocessing-undo.service";
-import {
-  normalizeGroundSegmentProfilesBySpeed,
-  removeInitialAutoBootstrapWalkSegment,
-} from "../trip-segments/trip-segments.service";
+import { processLegacyInputWithVelloraCore } from "./vellora-core-reprocessing.adapter";
 
 export type ReprocessedSegmentSummary = RecordingProcessorSegmentSummary;
 
@@ -47,7 +43,7 @@ export interface ReprocessingPreview {
 export interface RawReprocessingBuildResult {
   nextWaypoints: Waypoint[];
   preview: ReprocessingPreview;
-  processingResults: ReturnType<typeof processRawLocationEventsForTrip>["processingResults"];
+  processingResults: ReturnType<typeof processLegacyInputWithVelloraCore>["processingResults"];
   trip: Trip;
   tripPoints: TripPoint[];
   tripSegments: TripSegment[];
@@ -164,38 +160,13 @@ export function buildRawReprocessingPreview(inputModel: RawReprocessingInputMode
   }
 
   const sortedRawEvents = sortRawLocationEvents(rawEvents);
-  const replay = processRawLocationEventsForTrip({ rawEvents: sortedRawEvents, trip });
-  let replayTripPoints = replay.tripPoints;
-  let replayTripSegments = replay.tripSegments;
-  let nextWaypoints = remapWaypoints(waypoints, trip.localId, replayTripSegments);
-  const orderedReplaySegments = replayTripSegments
-    .filter((segment) => segment.tripLocalId === trip.localId)
-    .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
-  const firstNonWalkSegment = orderedReplaySegments.find((segment, index) =>
-    index > 0 && segment.recordingProfile !== "walk",
-  );
-
-  if (firstNonWalkSegment) {
-    const prunedState = removeInitialAutoBootstrapWalkSegment(
-      replayTripSegments,
-      replayTripPoints,
-      nextWaypoints,
-      trip.localId,
-      firstNonWalkSegment.localId,
-      new Date().toISOString(),
-    );
-
-    replayTripPoints = prunedState.tripPoints;
-    replayTripSegments = prunedState.tripSegments;
-    nextWaypoints = prunedState.waypoints;
-  }
-
-  replayTripSegments = normalizeGroundSegmentProfilesBySpeed(
-    replayTripSegments,
-    replayTripPoints,
-    trip.localId,
-    new Date().toISOString(),
-  );
+  const replay = processLegacyInputWithVelloraCore({
+    ...inputModel,
+    rawEvents: sortedRawEvents,
+  });
+  const replayTripPoints = replay.tripPoints;
+  const replayTripSegments = replay.tripSegments;
+  const nextWaypoints = remapWaypoints(waypoints, trip.localId, replayTripSegments);
 
   const oldDistanceMeters = trip.distanceMeters ?? getTripDistanceMeters(oldTripPoints, oldTripSegments, trip.localId);
   const newDistanceMeters = getTripDistanceMeters(replayTripPoints, replayTripSegments, trip.localId);
@@ -217,13 +188,13 @@ export function buildRawReprocessingPreview(inputModel: RawReprocessingInputMode
   return {
     nextWaypoints,
     preview: {
-      duplicateRawEventCount: replay.duplicateRawEventCount,
+      duplicateRawEventCount: replay.processingTrace.duplicateRawEventCount,
       firstAcceptedRecordedAt,
-      firstRawRecordedAt: replay.firstRawRecordedAt,
+      firstRawRecordedAt: replay.processingTrace.firstRecordedAt,
       lastAcceptedRecordedAt,
-      lastRawRecordedAt: replay.lastRawRecordedAt,
-      maxAcceptedGapMs: replay.maxAcceptedGapMs,
-      maxRawGapMs: replay.maxRawGapMs,
+      lastRawRecordedAt: replay.processingTrace.lastRecordedAt,
+      maxAcceptedGapMs: replay.processingTrace.maxAcceptedGapMs,
+      maxRawGapMs: replay.processingTrace.maxRawGapMs,
       newDistanceMeters,
       newPointCount: replayTripPoints.length,
       newSegmentCount: replayTripSegments.length,
@@ -234,7 +205,7 @@ export function buildRawReprocessingPreview(inputModel: RawReprocessingInputMode
       oldSegments: buildSegmentSummaries(oldTripSegments, oldTripPoints, trip.localId),
       processingTrace: replay.processingTrace,
       rawEventCount: sortedRawEvents.length,
-      rejectedRawEventCount: replay.rejectedRawEventCount,
+      rejectedRawEventCount: replay.processingTrace.rejectedRawEventCount,
       tripLocalId: trip.localId,
       warnings,
     },

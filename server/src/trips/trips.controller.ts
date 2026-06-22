@@ -24,6 +24,7 @@ import { EntitlementService } from "../purchases/entitlement.service";
 import type { ShareTripDto } from "./dto/share-trip.dto";
 import type { SaveTripEditDto } from "./dto/save-trip-edit.dto";
 import type {
+  SyncTripBundleDto,
   SyncTripDto,
   SyncTripGroupsDto,
   SyncTripPointsChunkDto,
@@ -45,6 +46,13 @@ export class TripsController {
     const user = await this.requireAuthenticatedUser(request);
     await this.entitlementService.requireEntitlement(user.id, "sync");
     return this.tripsService.syncTrip(user.id, payload);
+  }
+
+  @Post("sync-bundle")
+  async syncTripBundle(@Body() payload: SyncTripBundleDto, @Req() request: Request) {
+    const user = await this.requireAuthenticatedUser(request);
+    await this.entitlementService.requireEntitlement(user.id, "sync");
+    return this.tripsService.syncTripBundle(user.id, payload);
   }
 
   @Post(":tripId/points/sync")

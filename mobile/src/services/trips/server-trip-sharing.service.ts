@@ -25,8 +25,17 @@ import {
   finalizeEndedTripSegments,
   recoverSegmentlessTripSections,
 } from "../trip-segments/trip-segments.service";
+import {
+  buildVelloraTripBundleFromLegacyInput,
+  processLegacyInputWithVelloraCore,
+} from "../recording/vellora-core-reprocessing.adapter";
+import { PROCESSING_VERSION } from "../../core/trips";
 
 const TRIP_POINTS_SYNC_BATCH_SIZE = 500;
+
+function isTripBundleSyncEnabled() {
+  return process.env.EXPO_PUBLIC_SYNC_TRIP_BUNDLE_ENABLED === "true";
+}
 
 async function request<T>(path: string, sessionToken: string, init?: RequestInit, schema?: z.ZodType<T>) {
   try {
@@ -235,6 +244,7 @@ export async function syncTripToServer(
     waypoints: Waypoint[];
   },
 ) {
+  const rawEvents = await loadRawLocationEventsForTrip(input.trip.localId);
   const recoveredState = recoverSegmentlessTripSections(input.trip, input.tripSegments, input.tripPoints);
   const tripPointsWithAssignedSegments = assignMissingTripPointSegments(
     recoveredState.tripPoints,
@@ -331,7 +341,7 @@ export async function syncTripToServer(
       updatedAt: input.trip.updatedAt,
       deletedAt: input.trip.deletedAt,
       diagnostics: diagnosticsPayload,
-      rawEvents: (await loadRawLocationEventsForTrip(input.trip.localId)).map((event) => ({
+      rawEvents: rawEvents.map((event) => ({
         acceptedTripPointLocalId: event.acceptedTripPointLocalId,
         accuracy: event.accuracy,
         activeSegmentLocalId: event.activeSegmentLocalId,
@@ -410,7 +420,74 @@ export async function syncTripToServer(
     },
   );
 
+  if (isTripBundleSyncEnabled()) {
+    await syncTripBundleToServer(sessionToken, {
+      attachments: input.attachments,
+      rawEvents,
+      trip: input.trip,
+      tripPoints,
+      tripSegments,
+      waypoints: input.waypoints,
+    });
+  }
+
   return response;
+}
+
+export async function syncTripBundleToServer(
+  sessionToken: string,
+  input: {
+    attachments: WaypointAttachment[];
+    rawEvents: Awaited<ReturnType<typeof loadRawLocationEventsForTrip>>;
+    trip: Trip;
+    tripPoints: TripPoint[];
+    tripSegments: TripSegment[];
+    waypoints: Waypoint[];
+  },
+) {
+  const inputModel = {
+    oldTripPoints: input.tripPoints,
+    rawEvents: input.rawEvents,
+    recordingSession: null,
+    trip: input.trip,
+    tripSegments: input.tripSegments,
+    waypoints: input.waypoints,
+  };
+  const bundle =
+    input.rawEvents.length > 0
+      ? processLegacyInputWithVelloraCore(inputModel).bundle
+      : buildVelloraTripBundleFromLegacyInput(inputModel);
+
+  return request<{
+    processingVersion: number;
+    syncedAt: string;
+    tripId: string;
+    tripLocalId: string;
+  }>(API_ROUTES.trips.syncBundle, sessionToken, {
+    method: "POST",
+    body: JSON.stringify({
+      clientTripId: input.trip.localId,
+      description: input.trip.description,
+      endedAt: input.trip.endedAt,
+      processingVersion: bundle.trip.processingVersion || PROCESSING_VERSION,
+      rawBundle: {
+        ...bundle,
+        waypointImages: input.attachments.map((attachment) => ({
+          createdAt: attachment.createdAt,
+          id: attachment.localId,
+          localUri: attachment.localUri,
+          mimeType: attachment.mimeType,
+          remoteUrl: attachment.localUri.startsWith("http") ? attachment.localUri : null,
+          uploaded: attachment.syncStatus === "synced",
+          waypointId: attachment.waypointLocalId,
+        })),
+      },
+      startedAt: input.trip.startedAt,
+      status: input.trip.status === "ended" ? "completed" : input.trip.status === "paused" ? "paused" : "recording",
+      title: input.trip.title,
+      updatedAt: input.trip.updatedAt,
+    }),
+  });
 }
 
 export async function uploadTripAttachmentToServer(
