@@ -77,6 +77,38 @@ export class TripsService {
     return total;
   }
 
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+  }
+
+  private getRawBundle(rawBundle: Prisma.JsonValue | null | undefined): Record<string, unknown> | null {
+    return this.isRecord(rawBundle) ? rawBundle : null;
+  }
+
+  private getRawBundleArray(rawBundle: Record<string, unknown>, key: string): Record<string, unknown>[] {
+    const value = rawBundle[key];
+
+    return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => this.isRecord(item)) : [];
+  }
+
+  private getStringValue(value: unknown): string | null {
+    return typeof value === "string" ? value : null;
+  }
+
+  private getNumberValue(value: unknown): number | null {
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  }
+
+  private getBundleWaypointCount(rawBundle: unknown): number | null {
+    if (!this.isRecord(rawBundle)) {
+      return null;
+    }
+
+    const waypoints = rawBundle.waypoints;
+
+    return Array.isArray(waypoints) ? waypoints.length : null;
+  }
+
   private dedupeByLocalId<T extends { localId: string }>(items: T[]) {
     const seen = new Set<string>();
     const deduped: T[] = [];
@@ -165,24 +197,233 @@ export class TripsService {
       pointCount: number | null;
       distanceMeters: number | null;
       statsUpdatedAt: Date | null;
-      segments: Array<{ id: string }>;
-      waypoints: Array<{ deletedAt: Date | null }>;
+      rawBundle?: Prisma.JsonValue | null;
     },
   ) {
+    const rawBundle = this.getRawBundle(trip.rawBundle);
+
+    if (!rawBundle) {
+      return null;
+    }
+
     return {
       trip: {
         description: trip.description,
         endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
         id: trip.id,
-        pointCount: trip.pointCount,
-        distanceMeters: trip.distanceMeters,
+        pointCount: this.getBundlePointCount(rawBundle),
+        distanceMeters: this.getBundleDistanceMeters(rawBundle),
         statsUpdatedAt: trip.statsUpdatedAt ? trip.statsUpdatedAt.toISOString() : null,
         recordingProfile: trip.recordingProfile,
-        segmentCount: trip.segments.length,
+        segmentCount: this.getRawBundleArray(rawBundle, "segments").length,
         startedAt: trip.startedAt.toISOString(),
         title: trip.title,
         updatedAt: trip.updatedAt.toISOString(),
-        waypointCount: trip.waypoints.filter((waypoint) => waypoint.deletedAt === null).length,
+        waypointCount: this.getBundleWaypointCount(rawBundle) ?? 0,
+      },
+    };
+  }
+
+  private getBundleSegmentLocalId(tripLocalId: string, segment: Record<string, unknown>, index: number): string {
+    return this.getStringValue(segment.localId) ?? `core-segment-${tripLocalId}-${index + 1}`;
+  }
+
+  private getBundleSegmentType(segment: Record<string, unknown>): "walk" | "bike" | "drive" | "boat" | "plane" | "stationary" {
+    const type = this.getStringValue(segment.segmentType);
+
+    if (type === "walk" || type === "bike" || type === "drive" || type === "boat" || type === "plane") {
+      return type;
+    }
+
+    return "stationary";
+  }
+
+  private findBundleSegmentForTimestamp(
+    timestamp: string,
+    segments: Array<Record<string, unknown>>,
+  ): { index: number; segment: Record<string, unknown> } | null {
+    const timestampMs = new Date(timestamp).getTime();
+
+    if (!Number.isFinite(timestampMs)) {
+      return null;
+    }
+
+    for (let index = 0; index < segments.length; index += 1) {
+      const segment = segments[index];
+      const startedAt = this.getStringValue(segment.startedAt);
+      const endedAt = this.getStringValue(segment.endedAt);
+
+      if (!startedAt || !endedAt) {
+        continue;
+      }
+
+      const startedAtMs = new Date(startedAt).getTime();
+      const endedAtMs = new Date(endedAt).getTime();
+
+      if (Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs) && timestampMs >= startedAtMs && timestampMs <= endedAtMs) {
+        return { index, segment };
+      }
+    }
+
+    return null;
+  }
+
+  private getOwnedTripDetailFromRawBundle(
+    trip: Parameters<TripsService["toOwnedTripDetail"]>[0],
+    rawBundle: Record<string, unknown>,
+  ) {
+    const bundleSegments = this.getRawBundleArray(rawBundle, "segments");
+    const bundleLocations = this.getRawBundleArray(rawBundle, "locations");
+    const bundleWaypoints = this.getRawBundleArray(rawBundle, "waypoints");
+    const waypointImages = this.getRawBundleArray(rawBundle, "waypointImages");
+    const pointCount = this.getBundlePointCount(rawBundle) ?? trip.pointCount ?? null;
+    const distanceMeters = this.getBundleDistanceMeters(rawBundle) ?? trip.distanceMeters ?? null;
+    const segments = bundleSegments.map((segment, index) => {
+      const startedAt = this.getStringValue(segment.startedAt) ?? trip.startedAt.toISOString();
+      const endedAt = this.getStringValue(segment.endedAt);
+      const segmentLocalId = this.getBundleSegmentLocalId(trip.localSourceId, segment, index);
+
+      return {
+        createdAt: startedAt,
+        distanceMeters: this.getNumberValue(segment.distanceM),
+        durationMs: endedAt ? Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime()) : null,
+        endedAt,
+        id: segmentLocalId,
+        localId: segmentLocalId,
+        pointCount: bundleLocations.filter((location) => {
+          const timestamp = this.getStringValue(location.timestamp);
+          const matched = timestamp ? this.findBundleSegmentForTimestamp(timestamp, bundleSegments) : null;
+
+          return matched?.index === index;
+        }).length,
+        recordingProfile: this.getBundleSegmentType(segment),
+        startedAt,
+        statsUpdatedAt: trip.statsUpdatedAt ? trip.statsUpdatedAt.toISOString() : null,
+        updatedAt: trip.updatedAt.toISOString(),
+      };
+    });
+    const points = bundleLocations.map((location, index) => {
+      const timestamp = this.getStringValue(location.timestamp) ?? trip.startedAt.toISOString();
+      const matchedSegment = this.findBundleSegmentForTimestamp(timestamp, bundleSegments);
+      const segmentLocalId = matchedSegment
+        ? this.getBundleSegmentLocalId(trip.localSourceId, matchedSegment.segment, matchedSegment.index)
+        : null;
+
+      return {
+        accuracy: this.getNumberValue(location.accuracyM),
+        altitude: this.getNumberValue(location.altitudeM),
+        id: this.getStringValue(location.id) ?? `bundle-point-${trip.localSourceId}-${index + 1}`,
+        latitude: this.getNumberValue(location.latitude) ?? 0,
+        localId: this.getStringValue(location.id) ?? `bundle-point-${trip.localSourceId}-${index + 1}`,
+        longitude: this.getNumberValue(location.longitude) ?? 0,
+        recordedAt: timestamp,
+        segmentId: segmentLocalId,
+        speed: this.getNumberValue(location.speedMps),
+      };
+    });
+    const rawEvents = bundleLocations.map((location, index) => {
+      const timestamp = this.getStringValue(location.timestamp) ?? trip.startedAt.toISOString();
+      const matchedSegment = this.findBundleSegmentForTimestamp(timestamp, bundleSegments);
+      const segmentLocalId = matchedSegment
+        ? this.getBundleSegmentLocalId(trip.localSourceId, matchedSegment.segment, matchedSegment.index)
+        : null;
+      const localId = this.getStringValue(location.id) ?? `bundle-raw-${trip.localSourceId}-${index + 1}`;
+
+      return {
+        acceptedTripPointLocalId: `bundle-point-${trip.localSourceId}-${index + 1}`,
+        accuracy: this.getNumberValue(location.accuracyM),
+        activeSegmentLocalId: segmentLocalId,
+        altitude: this.getNumberValue(location.altitudeM),
+        batchId: "bundle",
+        batchIndex: index,
+        callbackSource: this.getStringValue(location.provider) ?? "background",
+        id: localId,
+        latitude: this.getNumberValue(location.latitude) ?? 0,
+        localId,
+        longitude: this.getNumberValue(location.longitude) ?? 0,
+        origin: "device",
+        processedAt: trip.updatedAt.toISOString(),
+        processingDecision: "restored-from-raw-bundle",
+        processingStatus: "accepted",
+        receivedAt: timestamp,
+        recordedAt: timestamp,
+        segmentLocalId,
+        sessionStartedAt: trip.startedAt.toISOString(),
+        speed: this.getNumberValue(location.speedMps),
+      };
+    });
+    const waypoints = bundleWaypoints.map((waypoint, index) => ({
+      category: this.getStringValue(waypoint.type) ?? "generic",
+      createdAt: this.getStringValue(waypoint.createdAt) ?? trip.createdAt.toISOString(),
+      id: this.getStringValue(waypoint.id) ?? `bundle-waypoint-${trip.localSourceId}-${index + 1}`,
+      latitude: this.getNumberValue(waypoint.latitude) ?? 0,
+      localId: this.getStringValue(waypoint.id) ?? `bundle-waypoint-${trip.localSourceId}-${index + 1}`,
+      longitude: this.getNumberValue(waypoint.longitude) ?? 0,
+      note: this.getStringValue(waypoint.note),
+      segmentId: null,
+      title: this.getStringValue(waypoint.title) ?? "Waypoint",
+      updatedAt: this.getStringValue(waypoint.updatedAt) ?? trip.updatedAt.toISOString(),
+    }));
+    const attachments = trip.attachments
+      .filter((attachment) => attachment.deletedAt === null && attachment.storageKey !== null)
+      .map((attachment) => ({
+        createdAt: attachment.createdAt.toISOString(),
+        fileSizeBytes: attachment.fileSizeBytes,
+        id: attachment.id,
+        localId: attachment.localSourceId,
+        mimeType: attachment.mimeType,
+        updatedAt: attachment.updatedAt.toISOString(),
+        waypointId: attachment.waypointId,
+        waypointLocalId: attachment.waypointLocalSourceId,
+      }));
+    const bundleAttachments = waypointImages
+      .map((image, index) => {
+        const waypointId = this.getStringValue(image.waypointId);
+        const id = this.getStringValue(image.id) ?? `bundle-image-${trip.localSourceId}-${index + 1}`;
+
+        if (!waypointId) {
+          return null;
+        }
+
+        return {
+          createdAt: this.getStringValue(image.createdAt) ?? trip.createdAt.toISOString(),
+          fileSizeBytes: null,
+          id,
+          localId: id,
+          mimeType: this.getStringValue(image.mimeType),
+          updatedAt: this.getStringValue(image.createdAt) ?? trip.updatedAt.toISOString(),
+          waypointId,
+          waypointLocalId: waypointId,
+        };
+      })
+      .filter((attachment): attachment is NonNullable<typeof attachment> => attachment !== null);
+
+    return {
+      trip: {
+        createdAt: trip.createdAt.toISOString(),
+        deletedAt: trip.deletedAt ? trip.deletedAt.toISOString() : null,
+        description: trip.description,
+        deviceId: trip.ownerDeviceId,
+        endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
+        id: trip.id,
+        localId: trip.localSourceId,
+        recordingConfig: trip.recordingConfigJson ?? null,
+        recordingProfile: trip.recordingProfile,
+        batteryStartLevelPercent: trip.batteryStartLevelPercent ?? null,
+        batteryStartState: trip.batteryStartState ?? null,
+        batteryEndLevelPercent: trip.batteryEndLevelPercent ?? null,
+        batteryEndState: trip.batteryEndState ?? null,
+        pointCount,
+        distanceMeters,
+        statsUpdatedAt: trip.statsUpdatedAt ? trip.statsUpdatedAt.toISOString() : null,
+        startedAt: trip.startedAt.toISOString(),
+        title: trip.title,
+        updatedAt: trip.updatedAt.toISOString(),
+        attachments: attachments.length > 0 ? attachments : bundleAttachments,
+        points,
+        rawEvents,
+        segments,
+        waypoints,
       },
     };
   }
@@ -209,6 +450,7 @@ export class TripsService {
       pointCount?: number | null;
       distanceMeters?: number | null;
       statsUpdatedAt?: Date | null;
+      rawBundle?: Prisma.JsonValue | null;
       attachments: Array<{
         id: string;
         localSourceId: string;
@@ -220,52 +462,6 @@ export class TripsService {
         updatedAt: Date;
         deletedAt: Date | null;
         storageKey: string | null;
-      }>;
-      points: Array<{
-        id: string;
-        localSourceId: string;
-        latitude: number;
-        longitude: number;
-        recordedAt: Date;
-        accuracy: number | null;
-        altitude: number | null;
-        speed: number | null;
-        segmentId: string | null;
-      }>;
-      rawLocationEvents: Array<{
-        acceptedTripPointLocalSourceId: string | null;
-        accuracy: number | null;
-        activeSegmentLocalSourceId: string | null;
-        altitude: number | null;
-        batchId: string;
-        batchIndex: number;
-        callbackSource: string;
-        id: string;
-        latitude: number;
-        localSourceId: string;
-        longitude: number;
-        origin: string;
-        processedAt: Date | null;
-        processingDecision: string | null;
-        processingStatus: string;
-        receivedAt: Date;
-        recordedAt: Date;
-        segmentLocalSourceId: string | null;
-        sessionStartedAt: Date | null;
-        speed: number | null;
-      }>;
-      segments: Array<{
-        id: string;
-        localSourceId: string;
-        recordingProfile: "walk" | "bike" | "drive" | "boat" | "plane" | "stationary";
-        startedAt: Date;
-        endedAt: Date | null;
-        pointCount: number | null;
-        distanceMeters: number | null;
-        durationMs: number | null;
-        statsUpdatedAt: Date | null;
-        createdAt: Date;
-        updatedAt: Date;
       }>;
       waypoints: Array<{
         id: string;
@@ -293,102 +489,13 @@ export class TripsService {
       }>;
     },
   ) {
-    return {
-      trip: {
-        createdAt: trip.createdAt.toISOString(),
-        deletedAt: trip.deletedAt ? trip.deletedAt.toISOString() : null,
-        description: trip.description,
-        deviceId: trip.ownerDeviceId,
-        endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
-        id: trip.id,
-        localId: trip.localSourceId,
-        recordingConfig: trip.recordingConfigJson ?? null,
-        recordingProfile: trip.recordingProfile,
-        batteryStartLevelPercent: trip.batteryStartLevelPercent ?? null,
-        batteryStartState: trip.batteryStartState ?? null,
-        batteryEndLevelPercent: trip.batteryEndLevelPercent ?? null,
-        batteryEndState: trip.batteryEndState ?? null,
-        pointCount: trip.pointCount ?? null,
-        distanceMeters: trip.distanceMeters ?? null,
-        statsUpdatedAt: trip.statsUpdatedAt ? trip.statsUpdatedAt.toISOString() : null,
-        startedAt: trip.startedAt.toISOString(),
-        title: trip.title,
-        updatedAt: trip.updatedAt.toISOString(),
-        attachments: trip.attachments
-          .filter((attachment) => attachment.deletedAt === null && attachment.storageKey !== null)
-          .map((attachment) => ({
-            createdAt: attachment.createdAt.toISOString(),
-            fileSizeBytes: attachment.fileSizeBytes,
-            id: attachment.id,
-            localId: attachment.localSourceId,
-            mimeType: attachment.mimeType,
-            updatedAt: attachment.updatedAt.toISOString(),
-            waypointId: attachment.waypointId,
-            waypointLocalId: attachment.waypointLocalSourceId,
-          })),
-        points: trip.points.map((point) => ({
-          accuracy: point.accuracy,
-          altitude: point.altitude,
-          id: point.id,
-          latitude: point.latitude,
-          localId: point.localSourceId,
-          longitude: point.longitude,
-          recordedAt: point.recordedAt.toISOString(),
-          segmentId: point.segmentId,
-          speed: point.speed,
-        })),
-        rawEvents: trip.rawLocationEvents.map((event) => ({
-          acceptedTripPointLocalId: event.acceptedTripPointLocalSourceId,
-          accuracy: event.accuracy,
-          activeSegmentLocalId: event.activeSegmentLocalSourceId,
-          altitude: event.altitude,
-          batchId: event.batchId,
-          batchIndex: event.batchIndex,
-          callbackSource: event.callbackSource,
-          id: event.id,
-          latitude: event.latitude,
-          localId: event.localSourceId,
-          longitude: event.longitude,
-          origin: event.origin,
-          processedAt: event.processedAt ? event.processedAt.toISOString() : null,
-          processingDecision: event.processingDecision,
-          processingStatus: event.processingStatus,
-          receivedAt: event.receivedAt.toISOString(),
-          recordedAt: event.recordedAt.toISOString(),
-          segmentLocalId: event.segmentLocalSourceId,
-          sessionStartedAt: event.sessionStartedAt ? event.sessionStartedAt.toISOString() : null,
-          speed: event.speed,
-          tripLocalId: trip.localSourceId,
-        })),
-        segments: trip.segments.map((segment) => ({
-          createdAt: segment.createdAt.toISOString(),
-          endedAt: segment.endedAt ? segment.endedAt.toISOString() : null,
-          id: segment.id,
-          localId: segment.localSourceId,
-          pointCount: segment.pointCount,
-          distanceMeters: segment.distanceMeters,
-          durationMs: segment.durationMs,
-          statsUpdatedAt: segment.statsUpdatedAt ? segment.statsUpdatedAt.toISOString() : null,
-          recordingProfile: segment.recordingProfile,
-          startedAt: segment.startedAt.toISOString(),
-          updatedAt: segment.updatedAt.toISOString(),
-        })),
-        waypoints: trip.waypoints
-          .filter((waypoint) => waypoint.deletedAt === null)
-          .map((waypoint) => ({
-            category: waypoint.category,
-            createdAt: waypoint.createdAt.toISOString(),
-            id: waypoint.id,
-            latitude: waypoint.latitude,
-            localId: waypoint.localSourceId,
-            longitude: waypoint.longitude,
-            note: waypoint.note,
-            segmentId: waypoint.segmentId,
-            title: waypoint.title,
-            updatedAt: waypoint.updatedAt.toISOString(),
-          })),
-      },
-    };
+    const rawBundle = this.getRawBundle(trip.rawBundle);
+
+    if (!rawBundle) {
+      throw new NotFoundException("Trip raw bundle not found.");
+    }
+
+    return this.getOwnedTripDetailFromRawBundle(trip, rawBundle);
   }
 
   async syncTrip(ownerUserId: string, payload: SyncTripDto) {
@@ -1200,17 +1307,15 @@ export class TripsService {
         ownerUserId,
         deletedAt: null,
       },
-      include: {
-        segments: true,
-        waypoints: true,
-      },
       orderBy: {
         startedAt: "desc",
       },
     });
 
     return {
-      trips: trips.map((trip) => this.toOwnedTripSummary(trip).trip),
+      trips: trips
+        .map((trip) => this.toOwnedTripSummary(trip)?.trip ?? null)
+        .filter((trip): trip is NonNullable<typeof trip> => trip !== null),
     };
   }
 
@@ -1220,19 +1325,6 @@ export class TripsService {
       include: {
         attachments: {
           orderBy: { createdAt: "asc" },
-        },
-        points: {
-          orderBy: { recordedAt: "asc" },
-        },
-        rawLocationEvents: {
-          orderBy: [
-            { recordedAt: "asc" },
-            { batchId: "asc" },
-            { batchIndex: "asc" },
-          ],
-        },
-        segments: {
-          orderBy: { startedAt: "asc" },
         },
         waypoints: {
           orderBy: { createdAt: "asc" },
@@ -1257,12 +1349,6 @@ export class TripsService {
           },
           orderBy: { createdAt: "asc" },
         },
-        points: {
-          orderBy: { recordedAt: "asc" },
-        },
-        segments: {
-          orderBy: { startedAt: "asc" },
-        },
         waypoints: {
           where: {
             deletedAt: null,
@@ -1276,71 +1362,69 @@ export class TripsService {
       throw new NotFoundException("Trip not found.");
     }
 
-    const photoAttachments = trip.attachments.filter((attachment) => attachment.type === "photo");
-    const photoCountByWaypointId = new Map<string, number>();
+    const rawBundle = this.getRawBundle(trip.rawBundle);
 
-    for (const attachment of photoAttachments) {
-      photoCountByWaypointId.set(
-        attachment.waypointId,
-        (photoCountByWaypointId.get(attachment.waypointId) ?? 0) + 1,
-      );
+    if (rawBundle) {
+      const ownedDetail = this.getOwnedTripDetailFromRawBundle(trip, rawBundle).trip;
+      const photoCountByWaypointLocalId = new Map<string, number>();
+
+      for (const attachment of ownedDetail.attachments) {
+        photoCountByWaypointLocalId.set(
+          attachment.waypointLocalId,
+          (photoCountByWaypointLocalId.get(attachment.waypointLocalId) ?? 0) + 1,
+        );
+      }
+
+      return {
+        trip: {
+          id: trip.id,
+          title: trip.title,
+          description: trip.description,
+          recordingProfile: trip.recordingProfile,
+          startedAt: trip.startedAt.toISOString(),
+          endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
+          updatedAt: trip.updatedAt.toISOString(),
+          syncStatus: "synced" as const,
+        },
+        summary: {
+          distanceMeters: ownedDetail.distanceMeters ?? 0,
+          waypointCount: ownedDetail.waypoints.length,
+          photoCount: ownedDetail.attachments.length,
+          segmentCount: ownedDetail.segments.length,
+        },
+        points: ownedDetail.points.map((point) => ({
+          localId: point.localId,
+          latitude: point.latitude,
+          longitude: point.longitude,
+          recordedAt: point.recordedAt,
+          segmentLocalId: point.segmentId,
+          accuracy: point.accuracy,
+          altitude: point.altitude,
+          speed: point.speed,
+        })),
+        segments: ownedDetail.segments.map((segment) => ({
+          localId: segment.localId,
+          recordingProfile: segment.recordingProfile,
+          startedAt: segment.startedAt,
+          endedAt: segment.endedAt,
+          distanceMeters: segment.distanceMeters ?? 0,
+        })),
+        waypoints: ownedDetail.waypoints.map((waypoint) => ({
+          localId: waypoint.localId,
+          category: waypoint.category,
+          title: waypoint.title,
+          note: waypoint.note,
+          latitude: waypoint.latitude,
+          longitude: waypoint.longitude,
+          recordedAt: waypoint.createdAt,
+          photoCount: photoCountByWaypointLocalId.get(waypoint.localId) ?? 0,
+          segmentLocalId: waypoint.segmentId,
+        })),
+        pauses: [],
+      };
     }
 
-    const distanceMeters = trip.distanceMeters ?? this.calculateDistanceMeters(trip.points);
-
-    return {
-      trip: {
-        id: trip.id,
-        title: trip.title,
-        description: trip.description,
-        recordingProfile: trip.recordingProfile,
-        startedAt: trip.startedAt.toISOString(),
-        endedAt: trip.endedAt ? trip.endedAt.toISOString() : null,
-        updatedAt: trip.updatedAt.toISOString(),
-        syncStatus: "synced" as const,
-      },
-      summary: {
-        distanceMeters,
-        waypointCount: trip.waypoints.length,
-        photoCount: photoAttachments.length,
-        segmentCount: trip.segments.length,
-      },
-      points: trip.points.map((point) => ({
-        localId: point.localSourceId,
-        latitude: point.latitude,
-        longitude: point.longitude,
-        recordedAt: point.recordedAt.toISOString(),
-        segmentLocalId:
-          trip.segments.find((segment) => segment.id === point.segmentId)?.localSourceId ?? null,
-        accuracy: point.accuracy,
-        altitude: point.altitude,
-        speed: point.speed,
-      })),
-      segments: trip.segments.map((segment) => {
-        return {
-          localId: segment.localSourceId,
-          recordingProfile: segment.recordingProfile,
-          startedAt: segment.startedAt.toISOString(),
-          endedAt: segment.endedAt ? segment.endedAt.toISOString() : null,
-          distanceMeters:
-            segment.distanceMeters ??
-            this.calculateDistanceMeters(trip.points.filter((point) => point.segmentId === segment.id)),
-        };
-      }),
-      waypoints: trip.waypoints.map((waypoint) => ({
-        localId: waypoint.localSourceId,
-        category: waypoint.category,
-        title: waypoint.title,
-        note: waypoint.note,
-        latitude: waypoint.latitude,
-        longitude: waypoint.longitude,
-        recordedAt: waypoint.createdAt.toISOString(),
-        photoCount: photoCountByWaypointId.get(waypoint.id) ?? 0,
-        segmentLocalId:
-          trip.segments.find((segment) => segment.id === waypoint.segmentId)?.localSourceId ?? null,
-      })),
-      pauses: [],
-    };
+    throw new NotFoundException("Trip raw bundle not found.");
   }
 
   async updateTrip(ownerUserId: string, tripId: string, input: UpdateTripDto) {
