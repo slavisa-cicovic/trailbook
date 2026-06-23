@@ -1,6 +1,5 @@
-import { StyleSheet, View } from "react-native";
-
-import LoadingButton from "./loading-button";
+import { StyleSheet, View } from 'react-native';
+import LoadingButton from './loading-button';
 
 interface ModalActionsProps {
   primaryDisabled?: boolean;
@@ -48,12 +47,6 @@ export default function ModalActions({
 }
 
 const styles = StyleSheet.create({
-  actions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 8,
-  },
-  button: {
-    flex: 1,
-  },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  button: { flex: 1 },
 });

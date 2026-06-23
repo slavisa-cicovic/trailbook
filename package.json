@@ -11,6 +11,7 @@
     "lint": "npm run lint --workspace mobile && npm run lint --workspace web && npm run lint --workspace server"
   },
   "devDependencies": {
+    "expo": "~54.0.35",
     "eslint": "^9.39.4",
     "eslint-config-expo": "^56.0.4"
   }

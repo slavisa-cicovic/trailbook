@@ -1,9 +1,0 @@
-{
-  "platforms": ["apple", "android"],
-  "apple": {
-    "modules": ["TrailbookMotionActivityModule"]
-  },
-  "android": {
-    "modules": ["expo.modules.trailbookmotionactivity.TrailbookMotionActivityModule"]
-  }
-}

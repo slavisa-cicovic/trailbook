@@ -1,187 +1,77 @@
-import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, View, useColorScheme } from "react-native";
-import { useBatchProcessing } from "../src/state/batch-processing-store";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { queryClient } from "../src/lib/query-client";
-import { clearAllRecordingServiceState } from "../src/services/recording/recording-state-cleanup.service";
+import { useEffect, useState } from 'react';
+import { Platform, useColorScheme } from 'react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import * as NavigationBar from 'expo-navigation-bar';
+import { runMigrations } from '@/core/db/runMigrations';
+import { useAuthStore } from '@/feature/auth/authStore';
+import { useRecordingStore } from '@/feature/recording/recordingStore';
+import { useThemeStore } from '@/feature/settings/themeStore';
+import { getAppTheme, resolveAppThemeMode } from '@/constants/app-theme';
+// Side-effect imports: register TaskManager tasks before any component mounts
+import '@/core/data/location/locationTask';
+import { registerSyncTask } from '@/core/data/sync/syncTask';
 
-import "../src/services/recording/background-recording-task";
-import { getAppTheme, resolveAppThemeMode } from "../src/constants/app-theme";
-import { ErrorBoundary } from "../src/core/error-boundary";
-import { setupGlobalErrorHandler } from "../src/core/global-error-handler";
-import { initSentry } from "../src/core/sentry";
-import { useAppHydration } from "../src/core/hooks/use-app-hydration";
-import { syncBackgroundLocationTracking } from "../src/services/location/location.service";
-import { syncResolvedRecordingConfig } from "../src/services/recording/recording-config.service";
-import {
-  clearPurchaseAccess,
-  refreshPurchaseAccessForSession,
-} from "../src/state/purchase-access-store";
-import { useRecordingStore } from "../src/state/recording-store";
-import { useSessionStore } from "../src/state/session-store";
-import { useThemeStore } from "../src/state/theme-store";
+SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
-  const { coreHydrated, sessionHydrated, recordingHydrated, tripsHydrated, tripSegmentsHydrated } =
-    useAppHydration();
-
-  const identitySession = useSessionStore((state) => state.identitySession);
-  const themeMode = useThemeStore((state) => state.mode);
-  const systemColorScheme = useColorScheme();
-  const recordingStatus = useRecordingStore((state) => state.session.status);
-  const activeRecordingTripId = useRecordingStore((state) => state.session.activeTripId);
-  const isBatchProcessing = useBatchProcessing();
-
-  const resolvedThemeMode = resolveAppThemeMode(themeMode, systemColorScheme);
-  const theme = getAppTheme(resolvedThemeMode);
+function AuthGate({ ready }: { ready: boolean }) {
+  const status = useAuthStore((s) => s.status);
+  const segments = useSegments();
+  const router = useRouter();
 
   useEffect(() => {
-    initSentry();
-    setupGlobalErrorHandler();
-  }, []);
+    if (!ready || status === 'loading') return;
 
-  useEffect(() => {
-    if (!recordingHydrated || !tripsHydrated || !tripSegmentsHydrated) {
-      return;
+    const inLogin = segments[0] === 'login';
+
+    if (status === 'unauthenticated' && !inLogin) {
+      router.replace('/login');
+    } else if ((status === 'authenticated' || status === 'demo') && inLogin) {
+      router.replace('/recording');
     }
-
-    void syncBackgroundLocationTracking(
-      recordingStatus,
-      activeRecordingTripId,
-    ).catch(() => undefined);
-  }, [
-    activeRecordingTripId,
-    recordingHydrated,
-    recordingStatus,
-    tripSegmentsHydrated,
-    tripsHydrated,
-  ]);
+  }, [ready, status, segments]);
 
   useEffect(() => {
-    if (
-      !recordingHydrated ||
-      !tripsHydrated ||
-      !tripSegmentsHydrated ||
-      recordingStatus !== "recording" ||
-      !activeRecordingTripId
-    ) {
-      return;
+    if (ready && status !== 'loading') {
+      SplashScreen.hideAsync();
     }
+  }, [ready, status]);
 
-    const intervalId = setInterval(() => {
-      void syncBackgroundLocationTracking(
-        recordingStatus,
-        activeRecordingTripId,
-      ).catch((error) => {
-        console.warn("[Trailbook][background-watchdog] sync failed", error);
-      });
-    }, 30 * 1000);
-
-    return () => clearInterval(intervalId);
-  }, [
-    activeRecordingTripId,
-    recordingHydrated,
-    recordingStatus,
-    tripSegmentsHydrated,
-    tripsHydrated,
-  ]);
-
-  useEffect(() => {
-    if (sessionHydrated && !identitySession) {
-      queryClient.clear();
-      clearAllRecordingServiceState();
-      clearPurchaseAccess();
-    }
-  }, [sessionHydrated, identitySession]);
-
-  useEffect(() => {
-    if (!sessionHydrated) {
-      return;
-    }
-
-    void refreshPurchaseAccessForSession(identitySession);
-  }, [identitySession, sessionHydrated]);
-
-  useEffect(() => {
-    if (!sessionHydrated) {
-      return;
-    }
-
-    void syncResolvedRecordingConfig(identitySession)
-      .then(() =>
-        syncBackgroundLocationTracking(
-          recordingStatus,
-          activeRecordingTripId,
-        ),
-      )
-      .catch(() => undefined);
-  }, [
-    activeRecordingTripId,
-    identitySession,
-    recordingStatus,
-    sessionHydrated,
-  ]);
-
-  return (
-    <QueryClientProvider client={queryClient}>
-    <ErrorBoundary>
-      {!coreHydrated ? (
-        <View style={[styles.loadingScreen, { backgroundColor: theme.background }]}>
-          <ActivityIndicator size="large" color={theme.accent} />
-        </View>
-      ) : (
-        <GestureHandlerRootView style={styles.gestureRoot}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="login" />
-            <Stack.Screen name="register" />
-            <Stack.Screen name="forgot-password" />
-            <Stack.Screen name="auth/callback" />
-            <Stack.Screen name="recording" options={{ animation: "none" }} />
-            <Stack.Screen name="trips/index" options={{ animation: "none" }} />
-            <Stack.Screen name="trips/shared/[shareId]" />
-            <Stack.Screen name="trips/shared/[shareId]/waypoints/[waypointId]" />
-            <Stack.Screen name="trips/shared/[shareId]/waypoints/[waypointId]/photos/[attachmentId]" />
-            <Stack.Screen name="trips/[tripId]" />
-            <Stack.Screen name="trips/[tripId]/waypoints/[waypointId]" />
-            <Stack.Screen name="trips/[tripId]/waypoints/[waypointId]/photos/[attachmentId]" />
-            <Stack.Screen name="settings" options={{ animation: "none" }} />
-            <Stack.Screen name="settings/about" options={{ animation: "none" }} />
-            <Stack.Screen name="settings/purchases" options={{ animation: "none" }} />
-            <Stack.Screen name="settings/recording-config" options={{ animation: "none" }} />
-            <Stack.Screen name="settings/recording-config/[target]" options={{ animation: "none" }} />
-            <Stack.Screen name="settings/storage-benchmark" options={{ animation: "none" }} />
-            <Stack.Screen name="simulation" options={{ animation: "none" }} />
-          </Stack>
-          {isBatchProcessing && recordingStatus === "recording" && (
-            <View style={[styles.batchOverlay, { backgroundColor: theme.background }]} pointerEvents="box-only">
-              <ActivityIndicator size="large" color={theme.accent} />
-            </View>
-          )}
-          <StatusBar style={resolvedThemeMode === "night" ? "light" : "dark"} />
-        </GestureHandlerRootView>
-      )}
-    </ErrorBoundary>
-    </QueryClientProvider>
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
 
-const styles = StyleSheet.create({
-  gestureRoot: {
-    flex: 1,
-  },
-  loadingScreen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  batchOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    opacity: 0.85,
-  },
-});
+export default function RootLayout() {
+  const [ready, setReady] = useState(false);
+  const initAuth = useAuthStore((s) => s.init);
+  const initRecording = useRecordingStore((s) => s.init);
+  const initTheme = useThemeStore((s) => s.init);
+
+  const themeMode = useThemeStore((s) => s.preference);
+  const systemColorScheme = useColorScheme();
+  const resolvedMode = resolveAppThemeMode(themeMode, systemColorScheme);
+  const theme = getAppTheme(resolvedMode);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    NavigationBar.setBackgroundColorAsync(theme.background);
+    NavigationBar.setButtonStyleAsync(resolvedMode === 'night' ? 'light' : 'dark');
+  }, [theme.background, resolvedMode]);
+
+  useEffect(() => {
+    runMigrations()
+      .then(() => Promise.all([initAuth(), initTheme()]))
+      .then(() => initRecording())
+      .then(() => registerSyncTask())
+      .then(() => setReady(true))
+      .catch((e) => console.error('Startup failed', e));
+  }, []);
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <StatusBar style="auto" />
+      <AuthGate ready={ready} />
+    </GestureHandlerRootView>
+  );
+}

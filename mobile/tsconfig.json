@@ -1,9 +1,13 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": ".",
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "paths": {
+      "@/*": [
+        "src/*"
+      ],
       "expo-location": [
         "../node_modules/expo-location"
       ],

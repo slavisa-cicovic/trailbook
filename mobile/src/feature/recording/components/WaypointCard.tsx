@@ -1,0 +1,102 @@
+import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import type { ActiveWaypoint } from '@/feature/recording/recordingStore';
+import type { WaypointCategory } from '@/core/domain/model/waypoint';
+import { useAppTheme } from '@/hooks/useAppTheme';
+
+type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
+
+const CATEGORY_LABEL: Record<WaypointCategory, string> = {
+  GENERIC: 'NOTE', DEPARTURE: 'DEPARTURE', FUEL: 'FUEL',
+  BORDER: 'BORDER', PORT: 'PORT', FERRY: 'FERRY',
+  RESTAURANT: 'RESTAURANT', CAFE: 'CAFE', VIEWPOINT: 'VIEWPOINT',
+  MONUMENT: 'MONUMENT', BEACH: 'BEACH',
+};
+
+const CATEGORY_ICON: Record<WaypointCategory, IconName> = {
+  GENERIC: 'location-on', DEPARTURE: 'home', FUEL: 'local-gas-station',
+  BORDER: 'security', PORT: 'anchor', FERRY: 'directions-boat',
+  RESTAURANT: 'restaurant', CAFE: 'local-cafe', VIEWPOINT: 'visibility',
+  MONUMENT: 'account-balance', BEACH: 'beach-access',
+};
+
+interface Props {
+  waypoint: ActiveWaypoint;
+  onAddPhoto: () => void;
+  onRemove: () => void;
+}
+
+export function WaypointCard({ waypoint, onAddPhoto, onRemove }: Props) {
+  const { theme } = useAppTheme();
+  const coords = `${waypoint.latitude.toFixed(5)}, ${waypoint.longitude.toFixed(5)}`;
+  const time = waypoint.createdAt.toLocaleString();
+
+  return (
+    <View style={[styles.card, { backgroundColor: theme.accentMuted }]}>
+      {waypoint.firstImageUri && (
+        <Image source={{ uri: waypoint.firstImageUri }} style={styles.photo} />
+      )}
+
+      <View style={styles.body}>
+        <View style={styles.categoryChip}>
+          <MaterialIcons name={CATEGORY_ICON[waypoint.category]} size={13} color="#fffdf8" />
+          <Text style={styles.categoryLabel}>{CATEGORY_LABEL[waypoint.category]}</Text>
+        </View>
+
+        <Text style={[styles.title, { color: theme.primaryText }]}>{waypoint.title}</Text>
+
+        <View style={styles.actions}>
+          <Pressable style={[styles.addPhotoBtn, { backgroundColor: theme.border }]} onPress={onAddPhoto}>
+            <Text style={[styles.addPhotoText, { color: theme.primaryText }]}>Add photo</Text>
+          </Pressable>
+          <Pressable style={[styles.removeBtn, { backgroundColor: theme.dangerMuted }]} onPress={onRemove}>
+            <Text style={[styles.removeText, { color: theme.danger }]}>Remove note</Text>
+          </Pressable>
+        </View>
+
+        <Text style={[styles.meta, { color: theme.mutedText }]}>Location: {coords}</Text>
+        <Text style={[styles.meta, { color: theme.mutedText }]}>{time}</Text>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  photo: {
+    width: '100%',
+    height: 160,
+    resizeMode: 'cover',
+  },
+  body: {
+    padding: 14,
+    gap: 8,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    backgroundColor: '#c0631a',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  categoryLabel: {
+    color: '#fffdf8',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  title: { fontSize: 16, fontWeight: '700' },
+  actions: { flexDirection: 'row', gap: 8 },
+  addPhotoBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
+  addPhotoText: { fontSize: 13, fontWeight: '600' },
+  removeBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
+  removeText: { fontSize: 13, fontWeight: '600' },
+  meta: { fontSize: 12 },
+});

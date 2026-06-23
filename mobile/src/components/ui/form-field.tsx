@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,7 +8,7 @@ import {
   type TextInputProps,
   type TextStyle,
   type ViewStyle,
-} from "react-native";
+} from 'react-native';
 
 interface FormFieldProps extends TextInputProps {
   containerStyle?: StyleProp<ViewStyle>;
@@ -22,7 +22,7 @@ const FormField = forwardRef<TextInput, FormFieldProps>(function FormField(
   { containerStyle, inputStyle, label, labelStyle, style, textarea = false, ...inputProps },
   ref,
 ) {
-  const textAlignVertical = inputProps.textAlignVertical ?? (textarea ? "top" : undefined);
+  const textAlignVertical = inputProps.textAlignVertical ?? (textarea ? 'top' : undefined);
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -41,26 +41,22 @@ const FormField = forwardRef<TextInput, FormFieldProps>(function FormField(
 export default FormField;
 
 const styles = StyleSheet.create({
-  container: {
-    gap: 6,
-  },
+  container: { gap: 6 },
   label: {
     fontSize: 12,
-    textTransform: "uppercase",
+    textTransform: 'uppercase',
     letterSpacing: 0.8,
-    color: "#60705d",
+    color: '#60705d',
   },
   input: {
     borderWidth: 1,
-    borderColor: "#d7ddcf",
+    borderColor: '#d7ddcf',
     borderRadius: 14,
-    backgroundColor: "#ffffff",
+    backgroundColor: '#ffffff',
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
-    color: "#243224",
+    color: '#243224',
   },
-  textarea: {
-    minHeight: 90,
-  },
+  textarea: { minHeight: 90 },
 });

@@ -1,9 +1,4 @@
-import { Redirect } from "expo-router";
-
-import { useSessionStore } from "../src/state/session-store";
-
-export default function IndexRoute() {
-  const hasSession = useSessionStore((state) => Boolean(state.identitySession));
-
-  return <Redirect href={hasSession ? "/recording" : "/login"} />;
+import { Redirect } from 'expo-router';
+export default function Index() {
+  return <Redirect href="/login" />;
 }
