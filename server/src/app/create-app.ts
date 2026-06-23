@@ -1,9 +1,7 @@
 import "dotenv/config";
 import "reflect-metadata";
 
-import cookieParser from "cookie-parser";
 import { json, urlencoded } from "express";
-import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { INestApplication } from "@nestjs/common";
 
@@ -36,7 +34,6 @@ export async function createApp(): Promise<INestApplication> {
 
   app.use(json({ limit: bodyLimit }));
   app.use(urlencoded({ extended: true, limit: bodyLimit }));
-  app.use(cookieParser());
   app.enableCors({
     origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
       if (!origin || allowedOrigins.has(origin) || isAllowedDevOrigin(origin)) {
@@ -48,14 +45,7 @@ export async function createApp(): Promise<INestApplication> {
     },
     credentials: true,
   });
-  app.setGlobalPrefix("api");
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
+  app.setGlobalPrefix("api/v1");
 
   await databaseService.enableShutdownHooks(app);
   return app;

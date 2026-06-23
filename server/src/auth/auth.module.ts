@@ -1,16 +1,13 @@
 import { Module } from "@nestjs/common";
 
-import { MailModule } from "../mail/mail.module";
-import { UsersModule } from "../users/users.module";
+import { DatabaseModule } from "../database/database.module";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
-import { MobileRecordingConfigService } from "./mobile-recording-config.service";
-import { SocialAuthService } from "./social-auth.service";
 
 @Module({
-  imports: [UsersModule, MailModule],
+  imports: [DatabaseModule],
   controllers: [AuthController],
-  providers: [AuthService, SocialAuthService, MobileRecordingConfigService],
+  providers: [AuthService],
   exports: [AuthService],
 })
 export class AuthModule {}

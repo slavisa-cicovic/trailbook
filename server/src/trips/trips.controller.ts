@@ -1,235 +1,38 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Inject,
-  Param,
-  Patch,
-  Post,
-  Put,
-  Query,
-  Req,
-  Res,
-  StreamableFile,
-  UnauthorizedException,
-  UploadedFile,
-  UseInterceptors,
-} from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { Body, Controller, Get, HttpStatus, Inject, Param, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 
 import { AuthService } from "../auth/auth.service";
-import { EntitlementService } from "../purchases/entitlement.service";
-import type { ShareTripDto } from "./dto/share-trip.dto";
-import type { SaveTripEditDto } from "./dto/save-trip-edit.dto";
-import type {
-  SyncTripBundleDto,
-  SyncTripDto,
-  SyncTripGroupsDto,
-  SyncTripPointsChunkDto,
-  SyncTripStatsSnapshotDto,
-} from "./dto/sync-trip.dto";
-import { UpdateTripDto } from "./dto/update-trip.dto";
+import type { TripBundleDto } from "./dto/sync-trip.dto";
 import { TripsService } from "./trips.service";
 
 @Controller("trips")
 export class TripsController {
   constructor(
-    @Inject(TripsService) private readonly tripsService: TripsService,
     @Inject(AuthService) private readonly authService: AuthService,
-    @Inject(EntitlementService) private readonly entitlementService: EntitlementService,
+    @Inject(TripsService) private readonly tripsService: TripsService,
   ) {}
 
-  @Post("sync")
-  async syncTrip(@Body() payload: SyncTripDto, @Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    await this.entitlementService.requireEntitlement(user.id, "sync");
-    return this.tripsService.syncTrip(user.id, payload);
+  @Get()
+  async list(@Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.tripsService.listForUser(user.id);
   }
 
-  @Post("sync-bundle")
-  async syncTripBundle(@Body() payload: SyncTripBundleDto, @Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    await this.entitlementService.requireEntitlement(user.id, "sync");
-    return this.tripsService.syncTripBundle(user.id, payload);
+  @Post()
+  async upload(@Body() bundle: TripBundleDto, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    const created = await this.tripsService.save(user.id, bundle);
+    response.status(created ? HttpStatus.CREATED : HttpStatus.OK);
+    return {
+      accepted: true,
+      created,
+      clientTripId: bundle.trip.clientTripId,
+    };
   }
 
-  @Post(":tripId/points/sync")
-  async syncTripPoints(
-    @Param("tripId") tripId: string,
-    @Body() payload: SyncTripPointsChunkDto,
-    @Req() request: Request,
-  ) {
-    const user = await this.requireAuthenticatedUser(request);
-    await this.entitlementService.requireEntitlement(user.id, "sync");
-    return this.tripsService.syncTripPoints(user.id, tripId, payload);
-  }
-
-  @Post(":tripId/stats/sync")
-  async syncTripStats(
-    @Param("tripId") tripId: string,
-    @Body() payload: SyncTripStatsSnapshotDto,
-    @Req() request: Request,
-  ) {
-    const user = await this.requireAuthenticatedUser(request);
-    await this.entitlementService.requireEntitlement(user.id, "sync");
-    return this.tripsService.syncTripStats(user.id, tripId, payload);
-  }
-
-  @Get("overview")
-  async getTripOverview(
-    @Query("from") from: string | undefined,
-    @Query("to") to: string | undefined,
-    @Req() request: Request,
-  ) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.getTripOverview(user.id, from, to);
-  }
-
-  @Get("mine")
-  async listOwnedTrips(@Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.listOwnedTrips(user.id);
-  }
-
-  @Get("mine/:tripId")
-  async getOwnedTrip(@Param("tripId") tripId: string, @Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.getOwnedTrip(user.id, tripId);
-  }
-
-  @Get("groups")
-  async listTripGroups(@Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.listTripGroups(user.id);
-  }
-
-  @Post("groups/sync")
-  async syncTripGroups(@Body() payload: SyncTripGroupsDto, @Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    await this.entitlementService.requireEntitlement(user.id, "sync");
-    return this.tripsService.syncTripGroups(user.id, payload);
-  }
-
-  @Get(":tripId")
-  async getTripDetail(@Param("tripId") tripId: string, @Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.getTripDetail(user.id, tripId);
-  }
-
-  @Patch(":tripId")
-  async updateTrip(@Param("tripId") tripId: string, @Body() input: UpdateTripDto, @Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.updateTrip(user.id, tripId, input);
-  }
-
-  @Put(":tripId/edit")
-  async saveTripEdit(@Param("tripId") tripId: string, @Body() input: SaveTripEditDto, @Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.saveTripEdit(user.id, tripId, input);
-  }
-
-  @Post(":tripId/shares")
-  async shareTrip(@Param("tripId") tripId: string, @Body() input: ShareTripDto, @Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    await this.entitlementService.requireEntitlement(user.id, "sharing");
-    return this.tripsService.shareTrip(user.id, tripId, input);
-  }
-
-  @Get("shares/recipients")
-  async listShareRecipients(@Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.listShareRecipients(user.id);
-  }
-
-  @Get(":tripId/shares")
-  async listTripShares(@Param("tripId") tripId: string, @Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.listTripShares(user.id, tripId);
-  }
-
-  @Delete(":tripId/shares/:shareId")
-  async revokeTripShare(
-    @Param("tripId") tripId: string,
-    @Param("shareId") shareId: string,
-    @Req() request: Request,
-  ) {
-    const user = await this.requireAuthenticatedUser(request);
-    await this.entitlementService.requireEntitlement(user.id, "sharing");
-    return this.tripsService.revokeTripShare(user.id, tripId, shareId);
-  }
-
-  @Get("shared/list")
-  async listSharedTrips(@Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.listSharedTrips(user.id);
-  }
-
-  @Get("shared/:shareId")
-  async getSharedTrip(@Param("shareId") shareId: string, @Req() request: Request) {
-    const user = await this.requireAuthenticatedUser(request);
-    return this.tripsService.getSharedTrip(user.id, shareId);
-  }
-
-  @Post(":tripId/attachments/upload")
-  @UseInterceptors(FileInterceptor("file"))
-  async uploadTripAttachment(
-    @Param("tripId") tripId: string,
-    @Body("attachmentLocalId") attachmentLocalId: string,
-    @UploadedFile()
-    uploadedFile:
-      | {
-          buffer: Buffer;
-          mimetype?: string;
-          originalname?: string;
-          size?: number;
-        }
-      | undefined,
-    @Req() request: Request,
-  ) {
-    const user = await this.requireAuthenticatedUser(request);
-    await this.entitlementService.requireEntitlement(user.id, "photo_storage");
-    return this.tripsService.uploadTripAttachment(user.id, tripId, attachmentLocalId, uploadedFile ?? null);
-  }
-
-  @Get("attachments/:attachmentId/content")
-  async getAttachmentContent(
-    @Param("attachmentId") attachmentId: string,
-    @Req() request: Request,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    const user = await this.requireAuthenticatedUser(request);
-    const attachment = await this.tripsService.getAttachmentContent(user.id, attachmentId);
-
-    if (attachment.mimeType) {
-      response.type(attachment.mimeType);
-    }
-
-    if (attachment.contentLength !== null && attachment.contentLength !== undefined) {
-      response.setHeader("Content-Length", String(attachment.contentLength));
-    }
-
-    return new StreamableFile(attachment.body);
-  }
-
-  private getSessionToken(request: Request) {
-    const header = request.get("authorization");
-    const bearerToken = header?.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : null;
-    const queryToken =
-      typeof request.query?.token === "string" && request.query.token.trim().length > 0
-        ? request.query.token.trim()
-        : null;
-    return bearerToken || request.cookies?.trailbook_session || queryToken;
-  }
-
-  private async requireAuthenticatedUser(request: Request) {
-    const currentUser = await this.authService.getCurrentUser(this.getSessionToken(request));
-
-    if (!currentUser.user) {
-      throw new UnauthorizedException("Authentication required.");
-    }
-
-    return currentUser.user;
+  @Get(":clientTripId")
+  async get(@Param("clientTripId") clientTripId: string, @Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.tripsService.get(clientTripId, user.id);
   }
 }
