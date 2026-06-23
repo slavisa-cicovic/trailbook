@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import type { TripWithMeta } from '@/feature/trips/tripsStore';
 import type { SegmentType } from '@/core/domain/model/segment';
 import type { AppThemePalette } from '@/constants/app-theme';
@@ -42,7 +42,7 @@ interface Props {
 
 export function TripCard({ item, onPress, onDelete }: Props) {
   const { trip, segments, totalDistanceM, waypointCount, photoCount } = item;
-  const swipeRef = useRef<Swipeable>(null);
+  const swipeRef = useRef<SwipeableMethods>(null);
   const { theme, resolvedMode } = useAppTheme();
 
   const night = resolvedMode === 'night';
