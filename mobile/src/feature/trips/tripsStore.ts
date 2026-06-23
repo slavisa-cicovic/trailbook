@@ -6,6 +6,7 @@ import * as tripDao from '@/core/data/local/tripDao';
 import * as segmentDao from '@/core/data/local/segmentDao';
 import * as waypointDao from '@/core/data/local/waypointDao';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
+import { uploadTrip } from '@/core/domain/usecase/UploadTripUseCase';
 
 export interface TripWithMeta {
   trip: Trip;
@@ -18,11 +19,13 @@ export interface TripWithMeta {
 interface TripsState {
   trips: TripWithMeta[];
   loading: boolean;
+  syncingTripIds: string[];
 }
 
 interface TripsActions {
   load(): Promise<void>;
   deleteTrip(clientTripId: string): Promise<void>;
+  syncTrip(clientTripId: string): Promise<string | null>;
 }
 
 async function buildMeta(trip: Trip): Promise<TripWithMeta> {
@@ -50,6 +53,7 @@ export const useTripsStore = create<TripsState & TripsActions>((set) => {
   return {
     trips: [],
     loading: false,
+    syncingTripIds: [],
 
     async load() {
       set({ loading: true });
@@ -64,6 +68,24 @@ export const useTripsStore = create<TripsState & TripsActions>((set) => {
     async deleteTrip(clientTripId) {
       await tripDao.deleteByClientId(clientTripId);
       // trips:changed event fires → load() re-runs
+    },
+
+    async syncTrip(clientTripId) {
+      const { syncingTripIds } = useTripsStore.getState();
+      if (syncingTripIds.includes(clientTripId)) return null;
+
+      set({ syncingTripIds: [...syncingTripIds, clientTripId] });
+      try {
+        const result = await uploadTrip(clientTripId);
+        return result.ok ? null : result.error;
+      } finally {
+        set({
+          syncingTripIds: useTripsStore
+            .getState()
+            .syncingTripIds
+            .filter((id) => id !== clientTripId),
+        });
+      }
     },
   };
 });

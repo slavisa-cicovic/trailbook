@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import type { TripWithMeta } from '@/feature/trips/tripsStore';
 import type { SegmentType } from '@/core/domain/model/segment';
 import type { AppThemePalette } from '@/constants/app-theme';
@@ -38,11 +38,13 @@ interface Props {
   item: TripWithMeta;
   onPress(): void;
   onDelete(): void;
+  onSync(): void;
+  syncing?: boolean;
 }
 
-export function TripCard({ item, onPress, onDelete }: Props) {
+export function TripCard({ item, onPress, onDelete, onSync, syncing = false }: Props) {
   const { trip, segments, totalDistanceM, waypointCount, photoCount } = item;
-  const swipeRef = useRef<SwipeableMethods>(null);
+  const swipeRef = useRef<Swipeable>(null);
   const { theme, resolvedMode } = useAppTheme();
 
   const night = resolvedMode === 'night';
@@ -53,21 +55,30 @@ export function TripCard({ item, onPress, onDelete }: Props) {
     ? trip.endedAt.getTime() - trip.startedAt.getTime()
     : 0;
 
-  const syncLabel = trip.syncState === 'SYNCED' ? 'SYNCED'
+  const syncLabel = syncing ? 'SYNCING'
+    : trip.syncState === 'SYNCED' ? 'SYNCED'
     : trip.syncState === 'PENDING' ? 'PENDING'
     : 'FAILED';
 
-  const badgeBg = trip.syncState === 'SYNCED'
+  const badgeBg = syncing
+    ? theme.accentMuted
+    : trip.syncState === 'SYNCED'
     ? (night ? '#1a3d18' : '#d4ead0')
     : trip.syncState === 'FAILED'
     ? theme.dangerMuted
     : theme.accentMuted;
 
-  const badgeTextColor = trip.syncState === 'SYNCED'
+  const badgeTextColor = syncing
+    ? theme.mutedText
+    : trip.syncState === 'SYNCED'
     ? (night ? '#7dcf78' : '#2e6b2a')
     : trip.syncState === 'FAILED'
     ? theme.danger
     : theme.mutedText;
+
+  function handleSyncPress() {
+    if (!syncing) onSync();
+  }
 
   function renderRightActions() {
     return (
@@ -87,17 +98,24 @@ export function TripCard({ item, onPress, onDelete }: Props) {
 
   return (
     <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2} rightThreshold={40}>
-      <Pressable style={[styles.card, { backgroundColor: theme.card }]} onPress={onPress}>
+      <View style={[styles.card, { backgroundColor: theme.card }]}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.primaryText }]} numberOfLines={1}>
-            {trip.title}
-          </Text>
-          <View style={[styles.badge, { backgroundColor: badgeBg }]}>
+          <Pressable style={styles.titlePressable} onPress={onPress}>
+            <Text style={[styles.title, { color: theme.primaryText }]} numberOfLines={1}>
+              {trip.title}
+            </Text>
+          </Pressable>
+          <Pressable
+            disabled={syncing}
+            hitSlop={8}
+            style={[styles.badge, { backgroundColor: badgeBg }]}
+            onPress={handleSyncPress}
+          >
             <Text style={[styles.badgeText, { color: badgeTextColor }]}>{syncLabel}</Text>
-          </View>
+          </Pressable>
         </View>
 
-        <View style={styles.grid}>
+        <Pressable style={styles.grid} onPress={onPress}>
           <StatCell label="MODE" value={modeLabel(segments)} theme={theme} />
           <StatCell label="DISTANCE" value={formatDistance(totalDistanceM)} theme={theme} />
           <StatCell label="WAYPOINTS" value={String(waypointCount)} theme={theme} />
@@ -106,8 +124,8 @@ export function TripCard({ item, onPress, onDelete }: Props) {
           <StatCell label="DURATION" value={durationMs > 0 ? formatDuration(durationMs) : '—'} theme={theme} />
           <StatCell label="STARTED" value={formatDate(trip.startedAt)} theme={theme} />
           <StatCell label="ENDED" value={trip.endedAt ? formatDate(trip.endedAt) : '—'} theme={theme} />
-        </View>
-      </Pressable>
+        </Pressable>
+      </View>
     </Swipeable>
   );
 }
@@ -127,6 +145,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start',
     justifyContent: 'space-between', marginBottom: 16, gap: 8,
   },
+  titlePressable: { flex: 1 },
   title: { flex: 1, fontSize: 22, fontWeight: '800' },
   badge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
   badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },

@@ -1,8 +1,7 @@
 import type { SocialProvider } from '@/core/auth/AuthRepository';
 import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
-
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080/api/v1';
+import { API_BASE_URL } from './apiConfig';
 
 interface SocialLoginResponse {
   accessToken: string;
@@ -16,7 +15,7 @@ interface RefreshResponse {
 
 async function post<T>(path: string, body: unknown): Promise<Result<T>> {
   try {
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -43,7 +42,7 @@ export async function refreshToken(refreshTokenValue: string): Promise<Result<Re
 }
 
 export async function logoutRemote(refreshTokenValue: string): Promise<void> {
-  await fetch(`${BASE_URL}/auth/logout`, {
+  await fetch(`${API_BASE_URL}/auth/logout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken: refreshTokenValue }),

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator, ScrollView,
+  View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -72,8 +72,10 @@ function applyFilters(trips: TripWithMeta[], f: Filters): TripWithMeta[] {
 export default function TripsScreen() {
   const trips = useTripsStore((s) => s.trips);
   const loading = useTripsStore((s) => s.loading);
+  const syncingTripIds = useTripsStore((s) => s.syncingTripIds);
   const load = useTripsStore((s) => s.load);
   const deleteTrip = useTripsStore((s) => s.deleteTrip);
+  const syncTrip = useTripsStore((s) => s.syncTrip);
   const router = useRouter();
   const { theme } = useAppTheme();
 
@@ -84,6 +86,13 @@ export default function TripsScreen() {
   useEffect(() => { load(); }, []);
 
   const filteredTrips = useMemo(() => applyFilters(trips, filters), [trips, filters]);
+
+  async function handleSyncTrip(clientTripId: string) {
+    const error = await syncTrip(clientTripId);
+    if (error) {
+      Alert.alert('Sync failed', error);
+    }
+  }
 
   function ListHeader() {
     return (
@@ -161,6 +170,8 @@ export default function TripsScreen() {
                 item={item}
                 onPress={() => router.push(`/trips/${item.trip.clientTripId}`)}
                 onDelete={() => void deleteTrip(item.trip.clientTripId)}
+                onSync={() => void handleSyncTrip(item.trip.clientTripId)}
+                syncing={syncingTripIds.includes(item.trip.clientTripId)}
               />
             )}
             ListHeaderComponent={ListHeader}
