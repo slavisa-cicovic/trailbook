@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
-    "eas:build:ios:preview": "eas build --platform ios --profile preview"
+    "eas:build:ios:preview": "eas build --platform ios --profile preview",
+    "eas:update:preview": "eas update --branch preview",
+    "eas:update:production": "eas update --branch production"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -36,6 +38,7 @@
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.8",
     "expo-task-manager": "~14.0.8",
+    "expo-updates": "~29.0.18",
     "mitt": "^3.0.0",
     "react": "19.1.0",
     "react-native": "0.81.5",

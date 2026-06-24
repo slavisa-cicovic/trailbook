@@ -35,6 +35,12 @@ module.exports = {
         },
       ],
     ],
+    updates: {
+      url: "https://u.expo.dev/34a686f3-39be-4580-a53e-eebbf40627b5",
+    },
+    runtimeVersion: {
+      policy: "appVersion",
+    },
     assetBundlePatterns: ["**/*"],
     ios: {
       icon: "./assets/app-icon.png",
