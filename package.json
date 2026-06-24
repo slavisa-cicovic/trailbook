@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "expo": "~54.0.35",
+    "expo-linking": "~8.0.12",
     "eslint": "^9.39.4",
     "eslint-config-expo": "^56.0.4"
   }
