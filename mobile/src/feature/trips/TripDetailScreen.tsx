@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   Pressable,
   ActivityIndicator,
@@ -10,7 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import MapView, { Polyline, Marker } from 'react-native-maps';
+import MapView, { Polyline, Marker, Callout } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -23,6 +24,8 @@ import { TrailMap } from '@/components/ui/TrailMap';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import type { Segment } from '@/core/domain/model/segment';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
+import type { Waypoint, WaypointCategory, WaypointImage } from '@/core/domain/model/waypoint';
+import { CATEGORY_ICON } from '@/constants/waypointCategories';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const BOTTOM_NAV_HEIGHT = 64;
@@ -146,15 +149,39 @@ export default function TripDetailScreen() {
             />
           ) : null;
         })}
-        {waypoints.map((w) => (
-          <Marker
-            key={w.id}
-            coordinate={{ latitude: w.latitude, longitude: w.longitude }}
-            title={w.title}
-            pinColor={theme.accent}
-          />
-        ))}
+        {waypoints.map((w) => {
+          const images = imagesByWaypoint[w.id] ?? [];
+          const hasImages = images.length > 0;
+          return (
+            <Marker
+              key={w.id}
+              coordinate={{ latitude: w.latitude, longitude: w.longitude }}
+              onPress={hasImages ? undefined : () => router.push(`/waypoint/${w.id}`)}
+            >
+              <WaypointPin category={w.category} />
+              {hasImages && (
+                <Callout tooltip onPress={() => router.push(`/waypoint/${w.id}`)}>
+                  <WaypointCallout title={w.title} image={images[0]} />
+                </Callout>
+              )}
+            </Marker>
+          );
+        })}
       </TrailMap>
+
+      {/* Transparent overlay over visible map area — tap to collapse sheet */}
+      {expanded && (
+        <Pressable
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: SHEET_HEIGHT + BOTTOM_NAV_HEIGHT + insets.bottom,
+          }}
+          onPress={() => setExpanded(false)}
+        />
+      )}
 
       {/* Floating back button */}
       <Pressable
@@ -228,11 +255,10 @@ export default function TripDetailScreen() {
             <Text style={[styles.dragChevron, { color: theme.mutedText }]}>˅</Text>
           </Pressable>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetContent}>
-            {/* Title */}
+          {/* Fixed header content */}
+          <View style={styles.sheetFixed}>
             <Text style={[styles.sheetTitle, { color: theme.primaryText }]}>{trip.title}</Text>
 
-            {/* Action buttons */}
             <View style={styles.actionRow}>
               <ActionBtn
                 icon="edit"
@@ -264,7 +290,6 @@ export default function TripDetailScreen() {
               />
             </View>
 
-            {/* Sync banner */}
             {!isSynced && (
               <View style={[styles.syncBanner, { backgroundColor: '#fffbe6' }]}>
                 <Text style={styles.syncBannerText}>
@@ -273,7 +298,6 @@ export default function TripDetailScreen() {
               </View>
             )}
 
-            {/* Stats row */}
             <View style={[styles.statsRow, { borderColor: theme.border }]}>
               <StatCell label="WAYPOINTS" value={String(waypoints.length)} theme={theme} />
               <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
@@ -282,7 +306,6 @@ export default function TripDetailScreen() {
               <StatCell label="DISTANCE" value={formatDistance(totalDistanceM)} theme={theme} />
             </View>
 
-            {/* Battery card */}
             {batteryDelta !== null && batteryDelta > 0 && (
               <View style={[styles.batteryCard, { backgroundColor: '#f0f7f0' }]}>
                 <Text style={styles.batteryLabel}>BATTERY CONSUMPTION</Text>
@@ -294,68 +317,47 @@ export default function TripDetailScreen() {
               </View>
             )}
 
-            {/* Timeline */}
             {segments.length > 0 && (
-              <View>
-                <Text style={[styles.timelineHeader, { color: theme.primaryText }]}>Timeline</Text>
-                {segments.map((seg, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.timelineRow,
-                      i < segments.length - 1 && {
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderBottomColor: theme.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.timelineLeft}>
-                      <View style={styles.timelineNameRow}>
-                        <Text style={[styles.timelineName, { color: theme.primaryText }]}>
-                          {SEGMENT_LABEL[seg.segmentType]}
-                        </Text>
-                        <Pressable
-                          hitSlop={8}
-                          onPress={() => Alert.alert('Edit segment', 'Coming soon')}
-                        >
-                          <MaterialIcons name="edit" size={14} color={theme.mutedText} />
-                        </Pressable>
-                      </View>
-                      <Text style={[styles.timelineMeta, { color: theme.mutedText }]}>
-                        {formatTimeRange(seg.startedAt, seg.endedAt)}{' '}
-                        · {formatDuration(seg.endedAt.getTime() - seg.startedAt.getTime())}
-                      </Text>
-                    </View>
-                    <Text style={[styles.timelineDist, { color: theme.primaryText }]}>
-                      {formatDistance(seg.distanceM)}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+              <Text style={[styles.timelineHeader, { color: theme.primaryText }]}>Timeline</Text>
             )}
+          </View>
 
-            {/* Waypoints */}
-            {waypoints.length > 0 && (
-              <View style={{ marginTop: 16 }}>
-                <Text style={[styles.timelineHeader, { color: theme.primaryText }]}>Waypoints</Text>
-                {waypoints.map((w, i) => (
-                  <Pressable
-                    key={w.id}
-                    style={[
-                      styles.timelineRow,
-                      i < waypoints.length - 1 && {
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderBottomColor: theme.border,
-                      },
-                    ]}
-                    onPress={() => router.push(`/waypoint/${w.id}`)}
-                  >
-                    <Text style={[styles.timelineName, { color: theme.primaryText }]}>{w.title}</Text>
-                    <Text style={[styles.chevron, { color: theme.mutedText }]}>›</Text>
-                  </Pressable>
-                ))}
+          {/* Scrollable timeline */}
+          <ScrollView style={styles.timelineScroll} showsVerticalScrollIndicator={false}>
+            {segments.map((seg, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.timelineRow,
+                  { marginHorizontal: 20 },
+                  i < segments.length - 1 && {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: theme.border,
+                  },
+                ]}
+              >
+                <View style={styles.timelineLeft}>
+                  <View style={styles.timelineNameRow}>
+                    <Text style={[styles.timelineName, { color: theme.primaryText }]}>
+                      {SEGMENT_LABEL[seg.segmentType]}
+                    </Text>
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => Alert.alert('Edit segment', 'Coming soon')}
+                    >
+                      <MaterialIcons name="edit" size={14} color={theme.mutedText} />
+                    </Pressable>
+                  </View>
+                  <Text style={[styles.timelineMeta, { color: theme.mutedText }]}>
+                    {formatTimeRange(seg.startedAt, seg.endedAt)}{' '}
+                    · {formatDuration(seg.endedAt.getTime() - seg.startedAt.getTime())}
+                  </Text>
+                </View>
+                <Text style={[styles.timelineDist, { color: theme.primaryText }]}>
+                  {formatDistance(seg.distanceM)}
+                </Text>
               </View>
-            )}
+            ))}
           </ScrollView>
         </View>
       )}
@@ -415,6 +417,91 @@ function StatCell({
     </View>
   );
 }
+
+// ── Waypoint marker helpers ────────────────────────────────────────────────
+
+
+function WaypointPin({ category }: { category: WaypointCategory }) {
+  return (
+    <View style={pinStyles.circle}>
+      <MaterialIcons name={CATEGORY_ICON[category]} size={18} color="#fff" />
+    </View>
+  );
+}
+
+function WaypointCallout({ title, image }: { title: string; image: WaypointImage }) {
+  return (
+    <View style={calloutStyles.container}>
+      <Image
+        source={{ uri: image.localUri }}
+        style={calloutStyles.image}
+        resizeMode="cover"
+      />
+      <View style={calloutStyles.titleBar}>
+        <Text style={calloutStyles.title} numberOfLines={1}>{title}</Text>
+      </View>
+      {/* pointer arrow */}
+      <View style={calloutStyles.arrow} />
+    </View>
+  );
+}
+
+const pinStyles = StyleSheet.create({
+  circle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#5c3d1e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+});
+
+const calloutStyles = StyleSheet.create({
+  container: {
+    width: 180,
+    borderRadius: 12,
+    overflow: 'visible',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  image: {
+    width: 180,
+    height: 110,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  titleBar: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+  },
+  title: { fontSize: 13, fontWeight: '600', color: '#1a1a1a' },
+  arrow: {
+    position: 'absolute',
+    bottom: -10,
+    left: '50%',
+    marginLeft: -8,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#fff',
+  },
+});
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
@@ -483,7 +570,8 @@ const styles = StyleSheet.create({
   dragHandleArea: { alignItems: 'center', paddingTop: 10, paddingBottom: 4, gap: 4 },
   dragHandle: { width: 36, height: 4, borderRadius: 2 },
   dragChevron: { fontSize: 16, lineHeight: 18 },
-  sheetContent: { paddingHorizontal: 20, paddingBottom: 24 },
+  sheetFixed: { paddingHorizontal: 20, paddingBottom: 8 },
+  timelineScroll: { flex: 1 },
   sheetTitle: { fontSize: 26, fontWeight: '800', marginBottom: 16 },
 
   // Action buttons

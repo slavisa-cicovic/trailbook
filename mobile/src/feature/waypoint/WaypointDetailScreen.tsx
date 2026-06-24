@@ -1,18 +1,30 @@
 import { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ActivityIndicator, ScrollView, Image, Pressable, Alert,
+  View, Text, ScrollView, Image, Pressable, StyleSheet,
+  ActivityIndicator, Modal, Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { Marker } from 'react-native-maps';
 import { useWaypointDetailStore } from '@/feature/waypoint/waypointDetailStore';
 import { EditWaypointSheet } from './components/EditWaypointSheet';
-import { deleteWaypoint } from '@/core/domain/usecase/DeleteWaypointUseCase';
-import ScreenLayout from '@/components/layout/screen-layout';
-import IconButton from '@/components/ui/icon-button';
+import { addPhotoToWaypoint } from '@/core/domain/usecase/AddPhotoToWaypointUseCase';
+import { BottomNav } from '@/components/ui/BottomNav';
+import { TrailMap } from '@/components/ui/TrailMap';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { CATEGORY_ICON, CATEGORY_LABEL } from '@/constants/waypointCategories';
+import type { WaypointImage } from '@/core/domain/model/waypoint';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const PHOTO_HEIGHT = Math.round(SCREEN_WIDTH * 0.65);
+const BOTTOM_NAV_HEIGHT = 64;
 
 export default function WaypointDetailScreen() {
   const { waypointId } = useLocalSearchParams<{ waypointId: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
 
   const load = useWaypointDetailStore((s) => s.load);
@@ -20,93 +32,194 @@ export default function WaypointDetailScreen() {
   const reset = useWaypointDetailStore((s) => s.reset);
   const waypoint = useWaypointDetailStore((s) => s.waypoint);
   const images = useWaypointDetailStore((s) => s.images);
+  const prevId = useWaypointDetailStore((s) => s.prevId);
+  const nextId = useWaypointDetailStore((s) => s.nextId);
   const loading = useWaypointDetailStore((s) => s.loading);
 
   const [showEditSheet, setShowEditSheet] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [viewingImage, setViewingImage] = useState<WaypointImage | null>(null);
 
   useEffect(() => {
     if (waypointId) load(waypointId);
     return () => reset();
   }, [waypointId]);
 
-  function confirmDelete() {
-    Alert.alert('Delete waypoint?', 'This will also remove all photos.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          if (!waypointId) return;
-          setDeleting(true);
-          const result = await deleteWaypoint(waypointId);
-          setDeleting(false);
-          if (!result.ok) Alert.alert('Delete failed', result.error);
-          else router.back();
-        },
-      },
-    ]);
+  function navigateTo(id: string) {
+    router.replace(`/waypoint/${id}`);
+  }
+
+  async function onAddPhoto() {
+    if (!waypoint) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.85,
+    });
+    if (result.canceled) return;
+    for (const asset of result.assets) {
+      await addPhotoToWaypoint(waypoint.id, asset.uri, 'GALLERY', null);
+    }
+    reload();
   }
 
   if (loading || !waypoint) {
     return (
-      <ScreenLayout onBack={() => router.back()}>
+      <View style={[styles.centered, { backgroundColor: theme.background }]}>
         <ActivityIndicator color={theme.accent} />
-      </ScreenLayout>
+      </View>
     );
   }
 
+  const pillBottom = BOTTOM_NAV_HEIGHT + insets.bottom + 12;
+
   return (
-    <ScreenLayout title={waypoint.title} onBack={() => router.back()} scrollEnabled>
-      {/* Photos */}
-      {images.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.photoRail}
-          style={styles.photoRailWrap}
-        >
-          {images.map((img) => (
-            <Image key={img.id} source={{ uri: img.localUri }} style={[styles.photo, { backgroundColor: theme.accentMuted }]} />
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Details */}
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <View style={styles.infoRow}>
-          <Text style={[styles.infoLabel, { color: theme.mutedText }]}>Category</Text>
-          <Text style={[styles.infoValue, { color: theme.primaryText }]}>{waypoint.category}</Text>
-        </View>
-        <View style={[styles.divider, { backgroundColor: theme.border }]} />
-        <View style={styles.infoRow}>
-          <Text style={[styles.infoLabel, { color: theme.mutedText }]}>Coordinates</Text>
-          <Text style={[styles.infoValue, { color: theme.primaryText }]}>
-            {waypoint.latitude.toFixed(5)}, {waypoint.longitude.toFixed(5)}
-          </Text>
-        </View>
-        {waypoint.description ? (
-          <>
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <View style={styles.infoCol}>
-              <Text style={[styles.infoLabel, { color: theme.mutedText }]}>Notes</Text>
-              <Text style={[styles.descText, { color: theme.primaryText }]}>{waypoint.description}</Text>
-            </View>
-          </>
-        ) : null}
-      </View>
-
-      {/* Actions */}
-      <View style={styles.actionRow}>
+    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.background }]}>
         <Pressable
-          style={[styles.editBtn, { backgroundColor: theme.accent }, deleting && { opacity: 0.4 }]}
-          onPress={() => setShowEditSheet(true)}
-          disabled={deleting}
+          style={[styles.backBtn, { backgroundColor: theme.accentMuted }]}
+          onPress={() => router.back()}
+          hitSlop={10}
         >
-          <Text style={[styles.editBtnText, { color: theme.background }]}>Edit</Text>
+          <Text style={[styles.backArrow, { color: theme.primaryText }]}>←</Text>
         </Pressable>
-        <IconButton icon="delete" variant="danger" size="lg" onPress={confirmDelete} disabled={deleting} />
+        <Text style={[styles.headerTitle, { color: theme.primaryText }]}>Waypoint</Text>
       </View>
+
+      {/* Scrollable content */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: pillBottom + 60 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Photos section */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionTitle, { color: theme.primaryText }]}>Photos</Text>
+          <Pressable
+            style={[styles.addPhotoBtn, { backgroundColor: theme.accentMuted }]}
+            onPress={() => void onAddPhoto()}
+          >
+            <Text style={[styles.addPhotoBtnText, { color: theme.primaryText }]}>Add photo(s)</Text>
+          </Pressable>
+        </View>
+        <Text style={[styles.photoHint, { color: theme.mutedText }]}>
+          Tap a photo to open full screen. Long press to enter selection mode.
+        </Text>
+
+        {images.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.photoRail}
+            style={styles.photoRailWrap}
+            decelerationRate="fast"
+            snapToInterval={SCREEN_WIDTH - 48}
+            snapToAlignment="start"
+          >
+            {images.map((img) => (
+              <Pressable
+                key={img.id}
+                onPress={() => setViewingImage(img)}
+              >
+                <Image
+                  source={{ uri: img.localUri }}
+                  style={[
+                    styles.photo,
+                    { backgroundColor: theme.accentMuted, height: PHOTO_HEIGHT },
+                  ]}
+                  resizeMode="cover"
+                />
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={[styles.emptyPhotos, { backgroundColor: theme.accentMuted }]}>
+            <MaterialIcons name="photo-camera" size={32} color={theme.mutedText} />
+            <Text style={[styles.emptyPhotosText, { color: theme.mutedText }]}>No photos yet</Text>
+          </View>
+        )}
+
+        {/* Location section */}
+        <Text style={[styles.sectionTitle, { color: theme.primaryText, marginTop: 24 }]}>Location</Text>
+        <View style={[styles.miniMapCard, { backgroundColor: theme.card }]}>
+          <TrailMap
+            style={styles.miniMap}
+            switcherPosition="none"
+            scrollEnabled={false}
+            zoomEnabled={false}
+            rotateEnabled={false}
+            pitchEnabled={false}
+            initialRegion={{
+              latitude: waypoint.latitude,
+              longitude: waypoint.longitude,
+              latitudeDelta: 0.012,
+              longitudeDelta: 0.012,
+            }}
+          >
+            <Marker
+              coordinate={{ latitude: waypoint.latitude, longitude: waypoint.longitude }}
+              pinColor={theme.accent}
+            />
+          </TrailMap>
+        </View>
+      </ScrollView>
+
+      {/* Bottom pill */}
+      <View
+        style={[
+          styles.pill,
+          { backgroundColor: theme.card, bottom: pillBottom },
+        ]}
+      >
+        <Pressable
+          onPress={() => prevId && navigateTo(prevId)}
+          disabled={!prevId}
+          hitSlop={12}
+        >
+          <Text style={[styles.navArrow, { color: prevId ? theme.primaryText : theme.mutedText }]}>‹</Text>
+        </Pressable>
+
+        <Pressable style={styles.pillCenter} onPress={() => setShowEditSheet(true)}>
+          <MaterialIcons
+            name={CATEGORY_ICON[waypoint.category]}
+            size={18}
+            color={theme.accent}
+          />
+          <Text style={[styles.pillTitle, { color: theme.primaryText }]} numberOfLines={1}>
+            {waypoint.title}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => nextId && navigateTo(nextId)}
+          disabled={!nextId}
+          hitSlop={12}
+        >
+          <Text style={[styles.navArrow, { color: nextId ? theme.primaryText : theme.mutedText }]}>›</Text>
+        </Pressable>
+      </View>
+
+      <BottomNav />
+
+      {/* Full-screen photo viewer */}
+      <Modal
+        visible={!!viewingImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewingImage(null)}
+      >
+        <Pressable style={styles.photoModal} onPress={() => setViewingImage(null)}>
+          {viewingImage && (
+            <Image
+              source={{ uri: viewingImage.localUri }}
+              style={styles.fullPhoto}
+              resizeMode="contain"
+            />
+          )}
+        </Pressable>
+      </Modal>
 
       <EditWaypointSheet
         waypoint={waypoint}
@@ -114,37 +227,101 @@ export default function WaypointDetailScreen() {
         onDismiss={() => setShowEditSheet(false)}
         onSaved={() => reload()}
       />
-    </ScreenLayout>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  photoRailWrap: { marginBottom: 12 },
-  photoRail: { gap: 10, paddingHorizontal: 2 },
-  photo: { width: 200, height: 150, borderRadius: 18 },
-  card: {
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    marginBottom: 12,
-  },
-  infoRow: {
+  screen: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  header: {
     flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 12,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backArrow: { fontSize: 18, fontWeight: '600' },
+  headerTitle: { fontSize: 24, fontWeight: '800' },
+
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20 },
+
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
+    marginBottom: 6,
   },
-  infoCol: { paddingVertical: 12 },
-  infoLabel: { fontSize: 13 },
-  infoValue: { fontSize: 15, fontWeight: '500' },
-  divider: { height: StyleSheet.hairlineWidth },
-  descText: { fontSize: 15, marginTop: 6, lineHeight: 22 },
-  actionRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  editBtn: {
-    flex: 1,
+  sectionTitle: { fontSize: 22, fontWeight: '800' },
+  addPhotoBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  addPhotoBtnText: { fontSize: 14, fontWeight: '600' },
+
+  photoHint: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
+
+  photoRailWrap: { marginHorizontal: -20 },
+  photoRail: { paddingHorizontal: 20, gap: 12 },
+  photo: {
+    width: SCREEN_WIDTH - 72,
+    borderRadius: 24,
+  },
+
+  emptyPhotos: {
+    height: 140,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  emptyPhotosText: { fontSize: 14 },
+
+  miniMapCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    height: 180,
+    marginTop: 10,
+  },
+  miniMap: { flex: 1 },
+
+  // Pill
+  pill: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
     paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  editBtnText: { fontSize: 16, fontWeight: '700' },
+  navArrow: { fontSize: 28, fontWeight: '300', paddingHorizontal: 8 },
+  pillCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pillTitle: { flex: 1, fontSize: 16, fontWeight: '700' },
+
+  // Full-screen photo
+  photoModal: {
+    flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullPhoto: { width: '100%', height: '100%' },
 });
