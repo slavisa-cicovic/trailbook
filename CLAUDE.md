@@ -2,15 +2,17 @@
 
 This file is the operating guide for AI/code agents working in Trailbook.
 
-Trailbook is not a prototype anymore. Treat it as an offline-first mobile recording product with a backend sync path and a small web/admin surface.
+Trailbook is an offline-first mobile trip-recording app with a backend sync path
+and a small web surface. The mobile app was fully rearchitected (based on the
+Vellora design) to fix fundamental issues with geolocation tracking and processing.
+The new architecture is in effect across all three packages.
 
 ## Repository Map
 
-- `mobile/` - Expo / React Native app, TypeScript, SQLite, maps, recording, sync, photos.
-- `server/` - NestJS backend, Prisma, PostgreSQL, auth, sync, media metadata.
-- `web/` - Next.js + MUI web/admin/review surface.
-- `docs/` - implementation plans, architecture decisions, release notes.
-- `mobile/modules/trailbook-motion-activity/` - custom Android native module for activity/power-management support.
+- `mobile/` — Expo / React Native app, TypeScript, Drizzle + SQLite, maps, recording, sync, photos.
+- `server/` — NestJS backend, Prisma, PostgreSQL, auth, raw-bundle storage, media upload.
+- `web/` — Next.js + MUI web/admin surface.
+- `docs/` — implementation plans (`PLAN_NN_*.md`), architecture decisions.
 
 ## Current Priorities
 
@@ -24,182 +26,285 @@ Optimize in this order:
 6. Performance.
 7. UI polish.
 
-Android recording issues are a known hard area. Do not paper over them with ad-hoc UI fixes. Prefer deterministic processing, raw event capture, diagnostics, and tests.
+Android recording reliability is a known hard area. Do not paper over issues with
+ad-hoc UI fixes. Prefer deterministic processing, raw event capture, and tests.
 
 ## Working Rules
 
 - Make small, focused, reviewable changes.
 - Inspect existing code before changing behavior.
 - Do not refactor broad areas unless explicitly requested.
-- Do not silently change API payloads, SQLite schema, Prisma schema, sync format, or persisted domain shapes.
-- If changing persisted data, update migrations/versioning and mention migration risk.
-- Keep business logic out of UI components.
-- Prefer deterministic, testable services over screen-level side effects.
+- Do not silently change API payloads, SQLite/Drizzle schema, Prisma schema, sync
+  format, or persisted domain shapes.
+- If changing persisted data, update Drizzle migrations and mention migration risk.
+- Keep business logic out of screens and stores.
+- Prefer deterministic, testable use-cases/repositories over screen-level side effects.
 - Do not commit unless explicitly asked.
 
 ## Planning Rules
 
-Use `docs/PLAN_*.md` for non-trivial work.
+Use `docs/PLAN_*.md` for non-trivial work. Next plan number is **66**.
 
-Current convention:
+> **Warning:** The app went through a complete rearchitecture (PLAN_67) that replaced
+> the entire old mobile core. The plans remaining in `docs/` describe future features
+> but were written against the old architecture. Before implementing any plan, verify
+> that its assumptions, module references, and file paths still hold against the actual
+> code. Trust the code and this CLAUDE.md — not the plan description.
 
-- Use numbered plans, for example `docs/PLAN_51_mobile_architecture_hardening.md`.
-- For large scopes, split into lettered subplans, for example `PLAN_51A`, `PLAN_51B`, `PLAN_51C`.
-- If a subplan needs a follow-up, use suffixes like `PLAN_51A2`.
+Conventions:
+
+- Numbered plans: `docs/PLAN_21_short_description.md`.
+- Large scopes: lettered subplans `PLAN_21A`, `PLAN_21B`, etc.
+- Subplan follow-ups: `PLAN_21A2`.
 - Mark implementation status inside the plan when work is completed.
-- Keep plans concrete: goal, non-goals, implementation steps, testing, acceptance criteria.
+- Keep plans concrete: goal, non-goals, steps, testing, acceptance criteria.
+- All plan files, CLAUDE.md files, and AGENT.md files must be written in English.
 
-Do not create generic plan names like `PLAN_01_mvp_foundation.md`; this repository already has a mature numbered plan history.
+## Tech Stack
 
-## Roles And Feature Gates
+| Concern | Choice |
+|---------|--------|
+| Mobile framework | Expo managed workflow + EAS Build |
+| Navigation | Expo Router (file-based) |
+| Local DB | expo-sqlite v16 + Drizzle ORM |
+| State | Zustand (one store per feature) |
+| Background location | expo-location + expo-task-manager |
+| Maps | react-native-maps |
+| HTTP | Native fetch + typed wrappers |
+| Auth storage | expo-secure-store |
+| Camera / Gallery | expo-image-picker |
+| Backend | NestJS + Prisma + PostgreSQL |
+| Object storage | S3-compatible (MinIO local, AWS S3 prod) |
+| Web | Next.js + MUI |
+
+## Data Model — Three Layers
+
+The data splits into three layers with different lifecycles. Do not blur them.
+
+- **RAW** — everything the OS gives during recording. Immutable, append-only,
+  lossless. The single source of truth for reprocessing. Processing never edits it.
+- **DERIVED** — segments and cleaned path. A pure function of RAW + `CaptureMeta`
+  + `processingVersion`. Fully regenerable; reprocessing deletes and rebuilds it.
+- **AUTHORED** — user input (trip title/description, waypoints, images). Never
+  derived; reprocessing must not touch it.
+
+Key domain types (see `mobile/src/core/domain/model/`):
+
+```typescript
+// AUTHORED
+type TripStatus = 'RECORDING' | 'PAUSED' | 'COMPLETED';
+type SyncState  = 'PENDING'   | 'SYNCED' | 'FAILED';
+
+interface Trip {
+  id: number;               // local Drizzle id (on-device only)
+  clientTripId: string;     // UUID generated on device; idempotency key for upload
+  title: string;
+  description: string | null;
+  startedAt: Date;
+  endedAt: Date | null;     // null while recording
+  status: TripStatus;
+  processingVersion: number;
+  syncState: SyncState;
+}
+
+// DERIVED
+type SegmentType = 'WALK' | 'BIKE' | 'DRIVE' | 'BOAT' | 'PLANE' | 'STATIONARY' | 'UNKNOWN';
+
+// RAW context — must be persisted so pipeline is deterministic across devices
+interface CaptureMeta {
+  tripId: string;
+  captureSchemaVersion: number;
+  appVersion: string;
+  osApiLevel: number;
+  deviceModel: string;
+  captureTimeZone: string;  // IANA tz AT CAPTURE — pipeline uses this, never the live tz
+}
+
+type SessionEventType =
+  | 'RECORDING_STARTED' | 'RECORDING_STOPPED'
+  | 'RECORDING_PAUSED'  | 'RECORDING_RESUMED' | 'TRIP_RESUMED'
+  | 'SERVICE_RESTARTED' | 'PROCESS_DEATH_RECOVERED'
+  | 'PERMISSION_CHANGED' | 'LOCATION_SETTINGS_CHANGED';
+```
+
+Notes:
+- `SegmentType` ≠ raw OS activity. The OS emits `IN_VEHICLE / ON_BICYCLE / ON_FOOT /
+  WALKING / RUNNING / STILL / TILTING / UNKNOWN`. BOAT and PLANE are inferred by the
+  pipeline from activity + speed. Store raw activity verbatim; emit `SegmentType` only
+  as DERIVED output.
+- `duration` is derived (`endedAt - startedAt`); never stored.
+- Timestamps: `Date` in domain; ISO-8601 strings in DTOs and Drizzle columns.
+- `Result<T>` from `@/core/common/result` for all fallible operations.
+- Path alias: `@/` → `src/`.
+
+## Mobile Folder Structure
+
+```
+app/                          # Expo Router screens
+src/
+  core/
+    auth/                     # AuthRepository interface + SecureStore impl
+    common/                   # Result<T>, uuid, constants
+    data/
+      activity/               # Speed-derived activity sampler
+      devicestate/            # Battery/power-save/GPS state sampler
+      local/                  # DAOs (trip, waypoint, waypointImage, rawLocation,
+      |                       #   rawActivity, rawDevice, rawSessionEvent, segment,
+      |                       #   captureMeta)
+      location/               # locationTask (expo-task-manager), activeTripStore
+      remote/                 # apiClient, dto/tripBundleDto, FetchRemoteTripDataSource,
+      |                       #   FetchRemoteWaypointImageDataSource
+      repository/             # TripRepositoryImpl, RawCaptureRepositoryImpl
+      sync/                   # syncTask (background upload)
+    db/                       # Drizzle schema, migrations, db singleton, dbEvents
+    domain/
+      model/                  # Plain TS types (trip, segment, waypoint, rawSamples, tripBundle)
+      processing/             # Pure pipeline: process(bundle, version) → Segment[]
+      usecase/                # Use-case interfaces + implementations
+  feature/
+    auth/                     # authStore
+    recording/                # recordingStore, components
+    trips/                    # tripsStore, tripDetailStore, components
+    waypoint/                 # waypointDetailStore, components
+    settings/                 # settingsStore, themeStore
+  components/                 # Shared layout + UI components
+  constants/                  # Theme, segment colors
+  hooks/                      # App-level hooks (e.g. useAppTheme)
+```
+
+## Processing Pipeline — The Critical Invariant
+
+The whole point of the RAW layer: a trip can be reprocessed on any device so that
+fixing the code fixes all trips, without re-walking a route.
+
+**Invariant (do not break):** processing output is a pure function of
+`(RAW bundle + CaptureMeta + processingVersion)` and nothing else.
+
+The pipeline (`core/domain/processing/pipeline.ts`) must NOT read:
+- the live system clock
+- the current time zone or locale
+- live sensors or OS APIs
+- the network
+- randomness
+
+Anything it needs about capture conditions comes from `CaptureMeta`. This is what
+guarantees the same bundle yields the same segments on any device.
+
+Rules:
+- `process(bundle, version): Segment[]` — pure, side-effect-free.
+- `CURRENT_PROCESSING_VERSION` lives in `pipeline.ts`; bump it when the algorithm
+  changes in a way that can produce different output for the same RAW.
+- Reprocessing = load RAW for `clientTripId` → run pipeline at current version →
+  replace DERIVED segments → update `Trip.processingVersion`. RAW and AUTHORED untouched.
+- The RAW bundle is the test-fixture format. Pull a bundle (`GET /trips/:clientTripId`),
+  drop it in test resources, write a failing test, fix pipeline, go green, reprocess.
+
+## Location Recording Rules
+
+- Recording uses `expo-location` `startLocationUpdatesAsync` with a **foreground
+  service** configuration. The service writes **RAW samples only** via DAOs: location,
+  speed-derived activity, device state, and session events.
+- The location task (`core/data/location/locationTask.ts`) writes to SQLite and emits
+  `dbEvents` for reactive UI updates.
+- Processing runs on-device from RAW, not inline in the task. The UI observes stores
+  which read from the DB — it never reads locations directly.
+- `activeTripStore.ts` holds the in-memory `clientTripId` for the running recording
+  session so the background task knows which trip to write to.
+- Batch delivery can occur on Android. The task processes each location in order.
+- App behavior in Expo Go can differ from a release APK. Do not assume iOS behavior
+  proves Android behavior.
+
+## Permissions
+
+Declared and requested at runtime:
+- `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`
+- `ACCESS_BACKGROUND_LOCATION` — currently declared in the manifest; this adds extra
+  Play Store review. Revisit before store submission: if recording is always
+  user-initiated from the foreground, the foreground service covers background + screen-
+  off without this permission.
+- `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION` (Android 14+)
+- `POST_NOTIFICATIONS` (Android 13+)
+- `ACTIVITY_RECOGNITION` (Android 10+, for future full activity detection)
+- `CAMERA` (waypoint photos taken in-app)
+- `INTERNET`
+
+Rules:
+- Permission request logic must not be scattered across screens. Keep it close to the
+  feature that needs it and clearly gated.
+- Recording screen must show a clear warning and a single action if required permissions
+  are missing.
+- Never crash or silently no-op on denied permissions.
+- Config files own declarations: `mobile/app.config.js` and
+  `mobile/android/app/src/main/AndroidManifest.xml`.
+
+## Sync Rules
+
+- The **backend is a lossless RAW store**, not a processor. It stores the full
+  `TripBundle` as `jsonb` and serves it back unchanged.
+- Upload unit is `TripBundle`: `{ trip, captureMeta, raw: { locations, activities,
+  devices, events }, waypoints, segments? }`. DERIVED segments may be included as a
+  display cache but are never the source of truth.
+- **Idempotent on `clientTripId`**: repeated upload of the same trip is a no-op on
+  the server. Sync must never create duplicates.
+- `syncState` transitions: `PENDING → SYNCED` on success; `PENDING → FAILED` on
+  permanent error (manual retry). Only `TripRepositoryImpl` flips `syncState`.
+- Waypoint images upload separately via object storage (not inside the bundle).
+  `WaypointImage.uploadState`: `PENDING | UPLOADED | FAILED`. `objectKey` is the
+  S3 object key stored after successful upload.
+- Sync runs via `core/data/sync/syncTask.ts`.
+- Do not silently recompute on the backend stats that mobile already produced.
+- If editing sync, think about idempotency first.
+
+## Media Rules
+
+- Waypoint photos are stored locally (file URI) and uploaded to object storage.
+- Room (`waypointImages` table) stores only the URI + `objectKey` + `uploadState`.
+- Restore from backend should download photos so offline viewing works.
+- Local file paths can be invalidated (e.g. iOS app reinstall). URI resolution must
+  be defensive.
+- Do not silently lose local photos during migration or restore.
+
+## Backend Rules
+
+NestJS + Prisma + PostgreSQL. The server's primary job:
+- Auth/session issuance and refresh token management.
+- Receiving and losslessly storing `TripBundle` (raw `jsonb`).
+- Serving bundles back by `clientTripId` for restore and the reprocessing debug loop.
+- Pre-signed URL issuance for waypoint image upload/download (object storage).
+
+Rules:
+- Keep controllers thin; keep business logic in services.
+- Validate DTOs for all writes.
+- Do not expose Prisma models directly as API response types.
+- If editing Prisma schema: run `npm run prisma:push --workspace server` and document
+  migration risk.
+- `rawBundle` is stored as `jsonb` — do not normalize or process its contents.
+- The backend does NOT reprocess trips or derive segments.
+
+## Roles
 
 Known roles:
-
 - `user`
 - `web_user`
 - `test_user`
 - `admin`
 
 Rules:
-
-- Test/debug tools must be gated by `test_user`.
-- Settings sections such as recording config, data transfer, diagnostics, GPS simulation and support debug info are test-user features.
-- Role changes may be refreshed from backend when entering Settings; do not require logout/login for role refresh if a backend check exists.
+- Test/debug tools and diagnostic features must be gated by `test_user`.
 - Normal users must not see internal debug tools.
-
-## Mobile Architecture
-
-Important current modules:
-
-- `mobile/src/screens/recording/recording-screen.tsx`
-- `mobile/src/screens/recording/recording-screen.controller.ts`
-- `mobile/src/services/recording/recording-engine.service.ts`
-- `mobile/src/services/recording/recording-processor.service.ts`
-- `mobile/src/services/recording/auto-recording.service.ts`
-- `mobile/src/services/recording/raw-event-reprocessing.service.ts`
-- `mobile/src/services/permissions/permission-manager.service.ts`
-- `mobile/src/storage/sqlite/db.ts`
-- `mobile/src/storage/raw-location-events-storage.ts`
-- `mobile/src/storage/diagnostic-events-storage.ts`
-- `mobile/src/storage/recording-native-events-storage.ts`
-
-Rules:
-
-- SQLite is the primary local persistence layer for trip data.
-- Auth/session/token storage remains outside trip SQLite data.
-- Critical recording data must not live only in React state.
-- Increment `DATABASE_VERSION` when adding SQLite schema changes.
-- `clearLocalTripData` must delete newly added trip-related tables.
-- Keep raw location events separate from derived trip points.
-- Keep derived stats on `trips` and `trip_segments`, not separate stats tables, unless a future versioning requirement appears.
-- Reprocessing should start from raw events and produce deterministic derived points/segments.
-- Keep app-level hooks in `mobile/src/core/hooks`.
-- Keep feature-specific query/mutation hooks under `mobile/src/features/<feature>/hooks`, for example sharing hooks in `mobile/src/features/sharing/hooks`.
-
-## Recording Rules
-
-Current product decision:
-
-- Every AUTO trip starts with a concrete `walk` profile.
-- AUTO is a controller/observer over concrete profiles, not a separate sampling profile.
-- AUTO should infer profile transitions from raw callback batches before filtering points as the current profile.
-- Manual profile switching exists mainly for testing and may be removed later.
-- Foreground UI may observe/display location, but recording writes and profile transitions must go through the recording pipeline, not ad-hoc screen writes.
-- Background/native delivery can batch events, especially on Android. Batch processing must be order-aware and deterministic.
-- Keep raw events so bad processing can be reprocessed after logic fixes.
-
-Known Android constraints:
-
-- Android may delay or batch background location callbacks.
-- Battery optimization can reduce or stop delivery.
-- Permission state must be verified explicitly, especially `ACCESS_BACKGROUND_LOCATION`.
-- App behavior in Expo Go can differ from release APK behavior.
-- Do not assume iOS behavior proves Android behavior.
-
-## Permissions
-
-Permissions must be handled centrally.
-
-Primary service:
-
-- `mobile/src/services/permissions/permission-manager.service.ts`
-
-Rules:
-
-- Do not scatter permission request logic across screens/services.
-- Config files still own declarations: `mobile/app.config.js`, `mobile/android/app/src/main/AndroidManifest.xml`, iOS plist config.
-- Recording must be disabled if required permissions are missing.
-- If permissions are missing, Recording screen should show a clear warning and a single action to run permission setup.
-- Camera/photo flows should rely on PermissionManager status and should not independently create divergent permission behavior.
-
-## Sync Rules
-
-- Sync must be explicit and retry-safe.
-- Repeated sync must not create duplicates.
-- Sync should include enough derived snapshots that backend does not recompute mobile-derived stats.
-- Raw events may currently be synced because this is still an internal/test phase and they are required for debugging/reprocessing.
-- Soft deletes and `syncStatus` transitions must stay consistent.
-- If editing sync, think about idempotency first.
-
-## Media Rules
-
-- Waypoint photos are stored locally for offline use and uploaded/restored through sync.
-- Server stores metadata and file references, not photo blobs in PostgreSQL.
-- Restore from backend should download photos so offline viewing works.
-- iOS upgrades can invalidate local file paths; photo URI resolution must be defensive.
-- Do not silently lose local photos during migration or restore.
-
-## Diagnostics And Support
-
-Current observability pieces:
-
-- `SupportBundleV1` in `mobile/src/services/support/support-bundle.service.ts`
-- token scrubber in `mobile/src/services/support/support-bundle-scrubber.service.ts`
-- normalized diagnostic events in `mobile/src/storage/diagnostic-events-storage.ts`
-- recording native events in `mobile/src/storage/recording-native-events-storage.ts`
-- raw location event summaries in `mobile/src/storage/raw-location-events-storage.ts`
-
-Rules:
-
-- Support bundles must never include session tokens, refresh tokens, passwords, cookies or authorization headers.
-- Support bundles may include route/coordinate diagnostics for `test_user`.
-- Error boundaries should record diagnostic events.
-- If adding a new diagnostic table or event category, include it in support bundle only if it helps field debugging.
-- Crash reporting is currently deferred; before wider beta, decide and configure Sentry or an equivalent with PII/token scrubbing.
-
-## Backend Rules
-
-Backend responsibilities:
-
-- Auth/session issuance.
-- Role and entitlement enforcement.
-- Sync receive/restore.
-- Sharing authorization.
-- Media metadata and download/upload authorization.
-
-Rules:
-
-- Keep controllers thin.
-- Keep business logic in services.
-- Validate DTOs for writes.
-- Do not expose Prisma models directly as API contracts.
-- If editing Prisma schema, run/give the correct `prisma db push` or migration path.
-- Prisma enum values cannot contain hyphens; use names like `test_user`.
+- Role changes may be refreshed from backend when entering Settings; do not require
+  logout/login for role refresh if a backend check exists.
 
 ## Web Rules
 
 The web app is secondary to mobile.
 
 Rules:
-
 - Keep pages thin.
-- Prefer simple review/admin workflows over dashboard complexity.
-- Do not couple web access to mobile billing assumptions without backend entitlements.
+- Prefer simple trip review/admin workflows over dashboard complexity.
 - Web-only features must still respect backend authorization.
 
 ## Commands
-
-Use the smallest relevant validation.
 
 Mobile:
 
@@ -217,12 +322,11 @@ npm test --workspace server
 npm run prisma:push --workspace server
 ```
 
-Android native/release checks:
+Android release build:
 
 ```bash
 cd mobile/android
-./gradlew assembleRelease -Dorg.gradle.java.home=/usr/lib/jvm/java-17-openjdk
-./gradlew :trailbook-motion-activity:compileReleaseKotlin -Dorg.gradle.java.home=/usr/lib/jvm/java-17-openjdk
+./gradlew assembleRelease -Dorg.gradle.java.home=/usr/lib/jvm/java-21-openjdk
 ```
 
 Repository-wide:
@@ -238,15 +342,14 @@ If a command cannot be run, say exactly why.
 
 Prioritize tests for:
 
-- recording processor and batch behavior
-- AUTO profile transitions
-- raw event reprocessing
-- trip stats and segment stats
-- sync idempotency
-- permission manager behavior
-- support bundle token scrubbing
-- media restore/photo URI handling
-- trip groups and selection behavior
+- processing pipeline correctness (golden fixtures: real RAW bundles → expected segments)
+- pipeline determinism: same bundle + version → same output every time
+- `ReprocessTripUseCase` behavior (RAW and AUTHORED untouched, only DERIVED replaced)
+- sync idempotency (`clientTripId` deduplication)
+- `TripRepositoryImpl` and `RawCaptureRepositoryImpl`
+- `UploadTripUseCase` and `UploadWaypointImagesUseCase`
+- Drizzle schema migrations
+- photo URI handling and restore
 
 Avoid huge broad tests when a small focused test covers the risk.
 
@@ -254,40 +357,34 @@ Avoid huge broad tests when a small focused test covers the risk.
 
 Be careful when touching:
 
-- recording lifecycle
-- background location service start/stop/restart
-- AUTO profile detection
-- raw event persistence/reprocessing
-- SQLite schema and migrations
-- sync payloads and restore behavior
-- permissions
-- photo storage/restore
-- role/feature-gate logic
-- Prisma schema
+- `core/domain/processing/` — any change here can silently alter segment output for
+  all existing trips; bump `CURRENT_PROCESSING_VERSION` if output can change
+- `core/db/schema.ts` and `core/db/migrations/` — schema changes require a new
+  migration; verify with existing data
+- `core/data/location/locationTask.ts` — background task; failures here lose
+  raw data silently
+- `core/data/location/activeTripStore.ts` — if this loses the active trip ID,
+  the background task writes nothing
+- sync payload shape and `TripBundle` DTO — changing the wire format breaks
+  round-trip restore
+- Prisma schema — if editing, provide the correct `prisma db push` path
+- photo upload/restore flow — silent failures lose user data
+- `clientTripId` idempotency — any change risks duplicates on the server
 
-For these areas, state the risk and validate with typecheck/tests or a targeted manual check.
-
-## Release Readiness
-
-Release checklist:
-
-- `docs/RELEASE_READINESS.md`
-
-Rules:
-
-- Keep each release item status-based: `todo`, `in_progress`, `done`, `not_applicable`.
-- Sentry/crash reporting is deferred during internal testing but is a blocker before wider beta.
-- SQLite encryption remains a pre-release security decision.
-- Maps keys, production API URL, permissions copy and debug gates must be verified before store builds.
+For these areas, state the risk and validate with typecheck/tests or a targeted
+manual check before marking work done.
 
 ## What To Avoid
 
 - Do not store secrets in the repository.
-- Do not hardcode personal credentials in committed code.
-- Do not add hidden recording paths outside the recording engine.
-- Do not add another permission flow outside PermissionManager.
-- Do not delete raw events unless there is an explicit retention policy.
-- Do not silently recompute backend stats that mobile already produced.
+- Do not hardcode credentials in committed code.
+- Do not write business logic in Expo Router screens or Zustand stores — screens
+  render state, stores expose state; logic lives in use cases and repositories.
+- Do not let the location task do anything other than write RAW samples and emit
+  `dbEvents`. No derivation, no processing, no UI side effects.
+- Do not add a second recording path outside `locationTask` + `RawCaptureRepository`.
+- Do not modify RAW or AUTHORED data during reprocessing.
+- Do not silently drop RAW fields in the bundle DTO — future pipeline code may need them.
 - Do not make Android assumptions based only on iOS tests.
 - Do not expose test-user tools to normal users.
 
