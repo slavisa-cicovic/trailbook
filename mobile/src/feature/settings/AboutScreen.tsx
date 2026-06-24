@@ -85,7 +85,6 @@ export default function AboutScreen() {
     <ScreenLayout
       contentVariant="plain"
       onBack={() => router.back()}
-      showBottomNavigation
       title="About"
     >
       <View style={styles.root}>
