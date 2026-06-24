@@ -7,7 +7,7 @@ import * as rawActivityDao from '@/core/data/local/rawActivityDao';
 import { buildActivitySampleFromSpeed } from '@/core/data/activity/activitySampler';
 import { dbEvents } from '@/core/db/events';
 
-export const LOCATION_TASK = 'vellora-location-task';
+export const LOCATION_TASK = 'trailbook-location-task';
 
 // Defined at module level — must be imported before any component mounts
 TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: TaskManager.TaskManagerTaskBody<{ locations: LocationObject[] }>) => {

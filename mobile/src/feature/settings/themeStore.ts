@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from 'react-native';
 
-const THEME_KEY = 'vellora.theme_preference';
+const THEME_KEY = 'trailbook.theme_preference';
 
 export type ThemePreference = 'auto' | 'day' | 'night';
 

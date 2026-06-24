@@ -3,7 +3,7 @@ import * as TaskManager from 'expo-task-manager';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { uploadTrip } from '@/core/domain/usecase/UploadTripUseCase';
 
-export const SYNC_TASK = 'vellora-sync-task';
+export const SYNC_TASK = 'trailbook-sync-task';
 
 // Must be defined at module level before any component mounts
 TaskManager.defineTask(SYNC_TASK, async () => {

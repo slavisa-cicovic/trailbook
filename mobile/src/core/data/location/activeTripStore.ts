@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-const KEY = 'vellora.active_trip_id';
+const KEY = 'trailbook.active_trip_id';
 
 export async function setActiveRecordingTripId(tripId: string): Promise<void> {
   await SecureStore.setItemAsync(KEY, tripId);

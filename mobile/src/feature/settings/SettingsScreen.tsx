@@ -233,7 +233,7 @@ export default function SettingsScreen() {
           <SettingsRow
             iconName="info-outline"
             onPress={() => router.push('/about')}
-            title="About Vellora"
+            title="About Trailbook"
             value="Open"
           />
         </SettingsSection>

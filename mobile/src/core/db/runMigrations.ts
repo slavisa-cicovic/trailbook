@@ -94,7 +94,7 @@ const MIGRATION_0000 = `
 const MIGRATIONS: [number, string][] = [[0, MIGRATION_0000]];
 
 export async function runMigrations(): Promise<void> {
-  const sqlite = openDatabaseSync('vellora.db');
+  const sqlite = openDatabaseSync('trailbook.db');
 
   await sqlite.execAsync(
     `CREATE TABLE IF NOT EXISTS _migrations (version integer PRIMARY KEY NOT NULL);`,

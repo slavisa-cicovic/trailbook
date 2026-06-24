@@ -5,10 +5,10 @@ import { ok, err } from '@/core/common/result';
 import * as authApiClient from '@/core/data/remote/authApiClient';
 
 const KEYS = {
-  accessToken: 'vellora.access_token',
-  refreshToken: 'vellora.refresh_token',
-  isDemo: 'vellora.is_demo',
-  displayName: 'vellora.display_name',
+  accessToken: 'trailbook.access_token',
+  refreshToken: 'trailbook.refresh_token',
+  isDemo: 'trailbook.is_demo',
+  displayName: 'trailbook.display_name',
 } as const;
 
 export class SecureStoreAuthRepository implements AuthRepository {
