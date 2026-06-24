@@ -9,6 +9,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/feature/auth/authStore';
@@ -59,11 +60,12 @@ export default function LoginScreen() {
         style={styles.keyboard}
       >
         <View style={styles.container}>
-          <View style={[styles.hero, { backgroundColor: theme.accent }]}>
-            <Text style={[styles.heroLetter, { color: theme.background }]}>T</Text>
-          </View>
-
-          <Text style={[styles.appName, { color: theme.primaryText }]}>Trailbook</Text>
+          <Image
+            accessibilityIgnoresInvertColors
+            resizeMode="contain"
+            source={require('../../../assets/login-screen.png')}
+            style={styles.logo}
+          />
           <Text style={[styles.tagline, { color: theme.mutedText }]}>
             Sign in to sync your recorded trips.
           </Text>
@@ -133,16 +135,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  hero: {
-    width: 96,
-    height: 96,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+  logo: {
+    width: 220,
+    height: 220,
+    resizeMode: 'contain',
+    marginBottom: 16,
   },
-  heroLetter: { fontSize: 48, fontWeight: '800' },
-  appName: { fontSize: 28, fontWeight: '700', marginBottom: 4 },
   tagline: { fontSize: 15, marginBottom: 32, textAlign: 'center' },
   form: { width: '100%', marginBottom: 16 },
   label: { fontSize: 12, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
