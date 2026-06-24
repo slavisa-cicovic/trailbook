@@ -24,8 +24,13 @@ export async function uploadTrip(clientTripId: string): Promise<Result<void>> {
   const uploadResult = await remoteTripDataSource.uploadTrip(bundleResult.value);
 
   if (uploadResult.ok) {
+    const imageUploadResult = await uploadWaypointImages(clientTripId);
+    if (!imageUploadResult.ok) {
+      await tripRepository.updateSyncState(clientTripId, 'FAILED');
+      return err(imageUploadResult.error);
+    }
+
     await tripRepository.updateSyncState(clientTripId, 'SYNCED');
-    await uploadWaypointImages(clientTripId);
     return ok(undefined);
   } else {
     await tripRepository.updateSyncState(clientTripId, 'FAILED');

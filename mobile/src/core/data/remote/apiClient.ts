@@ -61,3 +61,7 @@ export function apiPost<T>(path: string, body: unknown): Promise<Result<T>> {
 export function apiGet<T>(path: string): Promise<Result<T>> {
   return withToken((token) => doRequest<T>(path, { method: 'GET' }, token));
 }
+
+export function apiDelete<T>(path: string): Promise<Result<T>> {
+  return withToken((token) => doRequest<T>(path, { method: 'DELETE' }, token));
+}

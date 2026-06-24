@@ -45,12 +45,16 @@ To store uploaded photos in MinIO instead of the local filesystem, set:
 ```env
 MEDIA_STORAGE_BACKEND="s3"
 S3_ENDPOINT="http://localhost:9000"
+S3_PUBLIC_ENDPOINT="http://YOUR_LAN_IP:9000"
 S3_REGION="us-east-1"
 S3_BUCKET="trailbook-media"
 S3_ACCESS_KEY_ID="trailbook"
 S3_SECRET_ACCESS_KEY="trailbook-secret"
 S3_FORCE_PATH_STYLE=true
 ```
+
+`S3_ENDPOINT` is used by the server. `S3_PUBLIC_ENDPOINT` must be reachable from
+the mobile device because presigned upload/download URLs contain this host.
 
 Keep `MEDIA_STORAGE_BACKEND="file"` to use `MEDIA_STORAGE_DIR`.
 

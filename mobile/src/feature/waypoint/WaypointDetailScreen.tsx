@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, Image, Pressable, StyleSheet,
-  ActivityIndicator, Modal, Dimensions,
+  ActivityIndicator, Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,8 +15,7 @@ import { BottomNav } from '@/components/ui/BottomNav';
 import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import { CATEGORY_ICON, CATEGORY_LABEL } from '@/constants/waypointCategories';
-import type { WaypointImage } from '@/core/domain/model/waypoint';
+import { CATEGORY_ICON } from '@/constants/waypointCategories';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PHOTO_HEIGHT = Math.round(SCREEN_WIDTH * 0.65);
@@ -38,8 +37,6 @@ export default function WaypointDetailScreen() {
   const loading = useWaypointDetailStore((s) => s.loading);
 
   const [showEditSheet, setShowEditSheet] = useState(false);
-  const [viewingImage, setViewingImage] = useState<WaypointImage | null>(null);
-
   useEffect(() => {
     if (waypointId) load(waypointId);
     return () => reset();
@@ -99,7 +96,7 @@ export default function WaypointDetailScreen() {
           </Pressable>
         </View>
         <Text style={[styles.photoHint, { color: theme.mutedText }]}>
-          Tap a photo to open full screen. Long press to enter selection mode.
+          Tap a photo to open full screen.
         </Text>
 
         {images.length > 0 ? (
@@ -115,7 +112,7 @@ export default function WaypointDetailScreen() {
             {images.map((img) => (
               <Pressable
                 key={img.id}
-                onPress={() => setViewingImage(img)}
+                onPress={() => router.push(`/waypoint/${waypoint.id}/photo/${img.id}`)}
               >
                 <Image
                   source={{ uri: img.localUri }}
@@ -190,24 +187,6 @@ export default function WaypointDetailScreen() {
       </View>
 
       <BottomNav />
-
-      {/* Full-screen photo viewer */}
-      <Modal
-        visible={!!viewingImage}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setViewingImage(null)}
-      >
-        <Pressable style={styles.photoModal} onPress={() => setViewingImage(null)}>
-          {viewingImage && (
-            <Image
-              source={{ uri: viewingImage.localUri }}
-              style={styles.fullPhoto}
-              resizeMode="contain"
-            />
-          )}
-        </Pressable>
-      </Modal>
 
       <EditWaypointSheet
         waypoint={waypoint}
@@ -301,13 +280,4 @@ const styles = StyleSheet.create({
   navBtnDisabled: { opacity: 0.42 },
   pillCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 10 },
   pillTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: '#243224' },
-
-  // Full-screen photo
-  photoModal: {
-    flex: 1,
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fullPhoto: { width: '100%', height: '100%' },
 });

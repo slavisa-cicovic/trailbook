@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Req } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
 
 import { AuthService } from "../auth/auth.service";
@@ -26,9 +26,30 @@ export class WaypointImagesController {
     return this.waypointImagesService.requestUpload(waypointId, input.imageId, input.contentType ?? "image/jpeg");
   }
 
+  @Post(":waypointId/images/:imageId/complete")
+  async completeImageUpload(
+    @Param("waypointId") waypointId: string,
+    @Param("imageId") imageId: string,
+    @Req() request: Request,
+  ) {
+    await this.authService.requireAuthenticatedUser(request);
+    return this.waypointImagesService.completeUpload(waypointId, imageId);
+  }
+
   @Get(":waypointId/images")
   async getImages(@Param("waypointId") waypointId: string, @Req() request: Request) {
     await this.authService.requireAuthenticatedUser(request);
     return this.waypointImagesService.getImages(waypointId);
+  }
+
+  @Delete(":waypointId/images/:imageId")
+  @HttpCode(204)
+  async deleteImage(
+    @Param("waypointId") waypointId: string,
+    @Param("imageId") imageId: string,
+    @Req() request: Request,
+  ) {
+    await this.authService.requireAuthenticatedUser(request);
+    await this.waypointImagesService.deleteImage(waypointId, imageId);
   }
 }

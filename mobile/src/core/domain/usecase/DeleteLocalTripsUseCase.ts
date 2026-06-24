@@ -9,12 +9,6 @@ export async function deleteLocalTrips(isRecording: boolean): Promise<Result<voi
       return err('Cannot delete while a trip is recording');
     }
 
-    const hasUnsynced = await tripRepository.hasUnsyncedData();
-    if (!hasUnsynced.ok) return err(hasUnsynced.error);
-    if (hasUnsynced.value) {
-      return err('Some trips or photos have not been uploaded yet. Sync first to avoid data loss.');
-    }
-
     const rawResult = await rawCaptureRepository.deleteAllRawData();
     if (!rawResult.ok) return err(rawResult.error);
 

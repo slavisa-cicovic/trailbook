@@ -3,6 +3,8 @@ import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
 import type { ImageSource } from '@/core/domain/model/waypoint';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
+import * as waypointDao from '@/core/data/local/waypointDao';
+import * as tripDao from '@/core/data/local/tripDao';
 import { dbEvents } from '@/core/db/events';
 import { randomUuid } from '@/core/common/uuid';
 
@@ -13,6 +15,11 @@ export async function addPhotoToWaypoint(
   capturedAt: Date | null,
 ): Promise<Result<void>> {
   try {
+    const waypoint = await waypointDao.getById(waypointId);
+    if (!waypoint) {
+      return err('Waypoint not found.');
+    }
+
     const dir = `${FileSystem.documentDirectory}waypoint_photos/${waypointId}/`;
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
     const ext = uri.split('.').pop() ?? 'jpg';
@@ -27,6 +34,7 @@ export async function addPhotoToWaypoint(
       objectKey: null,
       uploadState: 'PENDING',
     });
+    await tripDao.updateSyncState(waypoint.tripId, 'PENDING');
     dbEvents.emit('waypoints:changed');
     return ok(undefined);
   } catch (e) {

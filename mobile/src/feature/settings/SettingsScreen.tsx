@@ -140,7 +140,7 @@ export default function SettingsScreen() {
         visible={showDeleteConfirm}
         onClose={onDismissDeleteConfirm}
         title="Delete all local trips?"
-        subtitle="This removes all trips, waypoints and photos from this device. Only trips already synced to the server can be restored."
+        subtitle="This permanently removes all trips, waypoints and photos from this device."
       >
         <ModalActions
           primaryLabel="Delete"

@@ -15,10 +15,13 @@ interface RemoteImageInfo {
   objectKey: string;
 }
 
-async function restoreImage(waypointId: string, image: RemoteImageInfo): Promise<void> {
+async function restoreImage(
+  waypointId: string,
+  image: RemoteImageInfo,
+): Promise<Result<void>> {
   try {
     const bytesResult = await remoteWaypointImageDataSource.downloadImage(image.getUrl);
-    if (!bytesResult.ok) return;
+    if (!bytesResult.ok) return err(bytesResult.error);
 
     const localUri = await saveRestoredPhoto(waypointId, image.imageId, bytesResult.value);
     await waypointImageDao.insert({
@@ -30,8 +33,9 @@ async function restoreImage(waypointId: string, image: RemoteImageInfo): Promise
       objectKey: image.objectKey,
       uploadState: 'UPLOADED',
     });
-  } catch {
-    // silent: this image won't be shown, but the trip is still restored
+    return ok(undefined);
+  } catch (error) {
+    return err(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -43,21 +47,26 @@ export async function restoreTrips(): Promise<Result<void>> {
 
   for (const item of listResult.value) {
     const existsResult = await tripRepository.tripExists(item.clientTripId);
-    if (!existsResult.ok) continue;
-    if (existsResult.value) continue;
+    if (!existsResult.ok) return err(existsResult.error);
 
     const bundleResult = await remoteTripDataSource.fetchTrip(item.clientTripId);
-    if (!bundleResult.ok) continue;
+    if (!bundleResult.ok) return err(bundleResult.error);
 
-    const saveResult = await rawCaptureRepository.saveTripBundle(bundleResult.value);
-    if (!saveResult.ok) continue;
+    if (!existsResult.value) {
+      const saveResult = await rawCaptureRepository.saveTripBundle(bundleResult.value);
+      if (!saveResult.ok) return err(saveResult.error);
+    }
 
     for (const waypoint of bundleResult.value.waypoints) {
       const imagesResult = await remoteWaypointImageDataSource.getImages(waypoint.id);
-      if (!imagesResult.ok) continue;
+      if (!imagesResult.ok) return err(imagesResult.error);
+      const localImages = await waypointImageDao.getForWaypoint(waypoint.id);
+      const localImageIds = new Set(localImages.map((image) => image.id));
 
       for (const image of imagesResult.value) {
-        await restoreImage(waypoint.id, image);
+        if (localImageIds.has(image.imageId)) continue;
+        const restoreResult = await restoreImage(waypoint.id, image);
+        if (!restoreResult.ok) return err(restoreResult.error);
       }
     }
   }

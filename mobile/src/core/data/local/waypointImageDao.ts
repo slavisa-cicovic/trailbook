@@ -47,6 +47,11 @@ export async function deleteAllForTrip(waypointIds: string[]): Promise<void> {
   dbEvents.emit('waypointImages:changed');
 }
 
+export async function deleteById(id: string): Promise<void> {
+  await db.delete(waypointImages).where(eq(waypointImages.id, id));
+  dbEvents.emit('waypointImages:changed');
+}
+
 export async function deleteAll(): Promise<void> {
   await db.delete(waypointImages);
   dbEvents.emit('waypointImages:changed');
@@ -81,7 +86,16 @@ export async function countForWaypoints(waypointIds: string[]): Promise<number> 
   return rows.length;
 }
 
-export async function getPendingForTrip(waypointIds: string[]): Promise<WaypointImage[]> {
+export async function countNotUploadedForWaypoints(waypointIds: string[]): Promise<number> {
+  if (waypointIds.length === 0) return 0;
+  const rows = await db
+    .select({ uploadState: waypointImages.uploadState })
+    .from(waypointImages)
+    .where(inArray(waypointImages.waypointId, waypointIds));
+  return rows.filter((row) => row.uploadState !== 'UPLOADED').length;
+}
+
+export async function getNotUploadedForTrip(waypointIds: string[]): Promise<WaypointImage[]> {
   if (waypointIds.length === 0) return [];
   const rows = await db
     .select()
@@ -89,5 +103,5 @@ export async function getPendingForTrip(waypointIds: string[]): Promise<Waypoint
     .where(
       inArray(waypointImages.waypointId, waypointIds),
     );
-  return rows.filter((r) => r.uploadState === 'PENDING').map(toDomain);
+  return rows.filter((r) => r.uploadState !== 'UPLOADED').map(toDomain);
 }

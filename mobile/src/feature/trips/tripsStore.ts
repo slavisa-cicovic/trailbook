@@ -34,8 +34,27 @@ async function buildMeta(trip: Trip): Promise<TripWithMeta> {
     waypointDao.getForTrip(trip.clientTripId),
   ]);
   const totalDistanceM = segments.reduce((acc, s) => acc + (s.distanceM ?? 0), 0);
-  const photoCount = await waypointImageDao.countForWaypoints(waypoints.map((w) => w.id));
-  return { trip, segments, totalDistanceM, waypointCount: waypoints.length, photoCount };
+  const waypointIds = waypoints.map((waypoint) => waypoint.id);
+  const [photoCount, notUploadedPhotoCount] = await Promise.all([
+    waypointImageDao.countForWaypoints(waypointIds),
+    waypointImageDao.countNotUploadedForWaypoints(waypointIds),
+  ]);
+  const reconciledTrip =
+    trip.syncState === 'SYNCED' && notUploadedPhotoCount > 0
+      ? { ...trip, syncState: 'PENDING' as const }
+      : trip;
+
+  if (reconciledTrip !== trip) {
+    await tripDao.updateSyncState(trip.clientTripId, 'PENDING');
+  }
+
+  return {
+    trip: reconciledTrip,
+    segments,
+    totalDistanceM,
+    waypointCount: waypoints.length,
+    photoCount,
+  };
 }
 
 export const useTripsStore = create<TripsState & TripsActions>((set) => {
