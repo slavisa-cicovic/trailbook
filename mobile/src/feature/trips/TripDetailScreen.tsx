@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,12 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import MapView, { Polyline, Marker } from 'react-native-maps';
+import MapView, {
+  Polyline,
+  Marker,
+  type LongPressEvent,
+  type Region,
+} from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -33,14 +38,41 @@ import {
   WAYPOINT_PREVIEW_STEM_SIZE,
   WAYPOINT_PREVIEW_WIDTH,
 } from './components/WaypointPhotoPreview';
+import {
+  TripPointInfoPreview,
+  TRIP_POINT_PREVIEW_HEIGHT,
+  TRIP_POINT_PREVIEW_STEM_SIZE,
+  TRIP_POINT_PREVIEW_WIDTH,
+  type TripPointInfo,
+} from './components/TripPointInfoPreview';
 
 const WAYPOINT_PREVIEW_MARGIN = 12;
 const WAYPOINT_PREVIEW_GAP = 14;
+const TRIP_POINT_PREVIEW_MIN_DISTANCE_METERS = 120;
+const TRIP_POINT_PREVIEW_MAX_DISTANCE_METERS = 50_000;
+const TRIP_POINT_PREVIEW_TOUCH_RADIUS_PX = 32;
+const METERS_PER_DEGREE_LATITUDE = 111_320;
 
 function pointsForSegment(locations: RawLocationSample[], seg: Segment) {
   return locations
     .filter((l) => l.timestamp >= seg.startedAt && l.timestamp <= seg.endedAt)
     .map((l) => ({ latitude: l.latitude, longitude: l.longitude }));
+}
+
+function segmentForTimestamp(segments: Segment[], timestamp: Date) {
+  let match: Segment | undefined;
+
+  for (const segment of segments) {
+    if (
+      timestamp >= segment.startedAt &&
+      timestamp <= segment.endedAt &&
+      (!match || segment.startedAt > match.startedAt)
+    ) {
+      match = segment;
+    }
+  }
+
+  return match;
 }
 
 function formatDuration(ms: number) {
@@ -62,6 +94,103 @@ function formatTimeRange(from: Date, to: Date) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(value, max));
+}
+
+function getMetersPerDegreeLongitude(latitude: number) {
+  return METERS_PER_DEGREE_LATITUDE * Math.cos((latitude * Math.PI) / 180);
+}
+
+function getLocalMeters(
+  coordinate: { latitude: number; longitude: number },
+  origin: { latitude: number; longitude: number },
+) {
+  return {
+    x: (coordinate.longitude - origin.longitude) * getMetersPerDegreeLongitude(origin.latitude),
+    y: (coordinate.latitude - origin.latitude) * METERS_PER_DEGREE_LATITUDE,
+  };
+}
+
+function getDistanceToSegmentMeters(
+  target: { latitude: number; longitude: number },
+  start: TripPointInfo,
+  end: TripPointInfo,
+) {
+  const startMeters = getLocalMeters(start, target);
+  const endMeters = getLocalMeters(end, target);
+  const dx = endMeters.x - startMeters.x;
+  const dy = endMeters.y - startMeters.y;
+  const segmentLengthSquared = dx * dx + dy * dy;
+
+  if (segmentLengthSquared === 0) {
+    return {
+      distanceMeters: Math.hypot(startMeters.x, startMeters.y),
+      nearestPoint: start,
+    };
+  }
+
+  const t = clamp(-(startMeters.x * dx + startMeters.y * dy) / segmentLengthSquared, 0, 1);
+  const projection = {
+    x: startMeters.x + t * dx,
+    y: startMeters.y + t * dy,
+  };
+
+  return {
+    distanceMeters: Math.hypot(projection.x, projection.y),
+    nearestPoint: t < 0.5 ? start : end,
+  };
+}
+
+function findNearestTripPoint(
+  target: { latitude: number; longitude: number },
+  tripPointInfos: TripPointInfo[],
+  maxDistanceMeters: number,
+) {
+  if (tripPointInfos.length === 0) return null;
+
+  if (tripPointInfos.length === 1) {
+    const pointMeters = getLocalMeters(tripPointInfos[0], target);
+    return Math.hypot(pointMeters.x, pointMeters.y) <= maxDistanceMeters
+      ? tripPointInfos[0]
+      : null;
+  }
+
+  let best: { distanceMeters: number; nearestPoint: TripPointInfo } | null = null;
+
+  for (let index = 0; index < tripPointInfos.length - 1; index += 1) {
+    const candidate = getDistanceToSegmentMeters(
+      target,
+      tripPointInfos[index],
+      tripPointInfos[index + 1],
+    );
+    if (!best || candidate.distanceMeters < best.distanceMeters) {
+      best = candidate;
+    }
+  }
+
+  return best && best.distanceMeters <= maxDistanceMeters ? best.nearestPoint : null;
+}
+
+function getTripPointPreviewMaxDistanceMeters(
+  region: Region | null,
+  mapLayout: { width: number; height: number },
+) {
+  if (!region || mapLayout.width <= 0 || mapLayout.height <= 0) {
+    return TRIP_POINT_PREVIEW_MIN_DISTANCE_METERS;
+  }
+
+  const horizontalMeters =
+    region.longitudeDelta * getMetersPerDegreeLongitude(region.latitude);
+  const verticalMeters = region.latitudeDelta * METERS_PER_DEGREE_LATITUDE;
+  const metersPerPixel = Math.max(
+    horizontalMeters / mapLayout.width,
+    verticalMeters / mapLayout.height,
+  );
+
+  return clamp(
+    metersPerPixel * TRIP_POINT_PREVIEW_TOUCH_RADIUS_PX,
+    TRIP_POINT_PREVIEW_MIN_DISTANCE_METERS,
+    TRIP_POINT_PREVIEW_MAX_DISTANCE_METERS,
+  );
 }
 
 export default function TripDetailScreen() {
@@ -90,8 +219,14 @@ export default function TripDetailScreen() {
   const [expanded, setExpanded] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const [mapLayout, setMapLayout] = useState({ width: 0, height: 0 });
+  const [currentRegion, setCurrentRegion] = useState<Region | null>(null);
   const [waypointPreview, setWaypointPreview] = useState<{
     waypointId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [tripPointPreview, setTripPointPreview] = useState<{
+    point: TripPointInfo;
     x: number;
     y: number;
   } | null>(null);
@@ -139,11 +274,13 @@ export default function TripDetailScreen() {
   function navigateToTrip(id: string) {
     setExpanded(false);
     setWaypointPreview(null);
+    setTripPointPreview(null);
     router.replace(`/trips/${id}`);
   }
 
   function navigateToWaypoint(waypointId: string) {
     setWaypointPreview(null);
+    setTripPointPreview(null);
     router.push(`/waypoint/${waypointId}`);
   }
 
@@ -170,7 +307,40 @@ export default function TripDetailScreen() {
       // Keep the centered fallback when native map projection is temporarily unavailable.
     }
 
+    setTripPointPreview(null);
     setWaypointPreview({ waypointId: waypoint.id, x, y });
+  }
+
+  async function handleMapLongPress(event: LongPressEvent) {
+    const nearestPoint = findNearestTripPoint(
+      event.nativeEvent.coordinate,
+      tripPointInfos,
+      getTripPointPreviewMaxDistanceMeters(currentRegion, mapLayout),
+    );
+
+    if (!nearestPoint) {
+      setTripPointPreview(null);
+      return;
+    }
+
+    let x = event.nativeEvent.position.x;
+    let y = event.nativeEvent.position.y;
+
+    try {
+      const projectedPoint = await mapRef.current?.pointForCoordinate({
+        latitude: nearestPoint.latitude,
+        longitude: nearestPoint.longitude,
+      });
+      if (projectedPoint) {
+        x = projectedPoint.x;
+        y = projectedPoint.y;
+      }
+    } catch {
+      // Keep the long-press position when native map projection is unavailable.
+    }
+
+    setWaypointPreview(null);
+    setTripPointPreview({ point: nearestPoint, x, y });
   }
 
   function handleMapLayout(event: LayoutChangeEvent) {
@@ -193,6 +363,23 @@ export default function TripDetailScreen() {
 
   const isSyncing = syncingTripIds.includes(clientTripId ?? '');
   const isSynced = trip?.syncState === 'SYNCED';
+  const tripPointInfos = useMemo(
+    () =>
+      locationSamples.map((sample, index) => {
+        const segment = segmentForTimestamp(segments, sample.timestamp);
+
+        return {
+          accuracyM: sample.accuracyM ?? null,
+          id: `${sample.timestamp.toISOString()}-${index}`,
+          latitude: sample.latitude,
+          longitude: sample.longitude,
+          recordedAt: sample.timestamp,
+          segmentType: segment?.segmentType ?? 'UNKNOWN',
+          speedMps: sample.speedMps ?? null,
+        };
+      }),
+    [locationSamples, segments],
+  );
   const previewWaypoint = waypointPreview
     ? waypoints.find((waypoint) => waypoint.id === waypointPreview.waypointId)
     : undefined;
@@ -238,6 +425,49 @@ export default function TripDetailScreen() {
         } as const;
       })()
     : null;
+  const tripPointPreviewPlacement =
+    tripPointPreview && mapLayout.width > 0 && mapLayout.height > 0
+      ? (() => {
+          const maxLeft = Math.max(
+            WAYPOINT_PREVIEW_MARGIN,
+            mapLayout.width - TRIP_POINT_PREVIEW_WIDTH - WAYPOINT_PREVIEW_MARGIN,
+          );
+          const maxTop = Math.max(
+            WAYPOINT_PREVIEW_MARGIN,
+            mapLayout.height - TRIP_POINT_PREVIEW_HEIGHT - WAYPOINT_PREVIEW_MARGIN,
+          );
+          const left = clamp(
+            tripPointPreview.x - TRIP_POINT_PREVIEW_WIDTH / 2,
+            WAYPOINT_PREVIEW_MARGIN,
+            maxLeft,
+          );
+          const hasSpaceAbove =
+            tripPointPreview.y >=
+            TRIP_POINT_PREVIEW_HEIGHT +
+              WAYPOINT_PREVIEW_GAP +
+              TRIP_POINT_PREVIEW_STEM_SIZE;
+          const preferredTop = hasSpaceAbove
+            ? tripPointPreview.y -
+              TRIP_POINT_PREVIEW_HEIGHT -
+              WAYPOINT_PREVIEW_GAP -
+              TRIP_POINT_PREVIEW_STEM_SIZE / 2
+            : tripPointPreview.y +
+              WAYPOINT_PREVIEW_GAP +
+              TRIP_POINT_PREVIEW_STEM_SIZE / 2;
+          const top = clamp(preferredTop, WAYPOINT_PREVIEW_MARGIN, maxTop);
+          const stemLeft = clamp(
+            tripPointPreview.x - left - TRIP_POINT_PREVIEW_STEM_SIZE / 2,
+            TRIP_POINT_PREVIEW_STEM_SIZE,
+            TRIP_POINT_PREVIEW_WIDTH - TRIP_POINT_PREVIEW_STEM_SIZE * 2,
+          );
+
+          return {
+            card: { left, top },
+            stem: { left: stemLeft },
+            stemPosition: hasSpaceAbove ? 'bottom' : 'top',
+          } as const;
+        })()
+      : null;
 
   return (
     <SafeAreaView
@@ -252,6 +482,8 @@ export default function TripDetailScreen() {
           style={StyleSheet.absoluteFill}
           switcherPosition="top-right"
           moveOnMarkerPress={false}
+          onLongPress={(event) => void handleMapLongPress(event)}
+          onRegionChangeComplete={setCurrentRegion}
         >
           {segments.map((seg, i) => {
             const pts = pointsForSegment(locationSamples, seg);
@@ -282,6 +514,14 @@ export default function TripDetailScreen() {
             onOpen={() => navigateToWaypoint(previewWaypoint.id)}
             placement={previewPlacement}
             title={previewWaypoint.title}
+          />
+        )}
+
+        {tripPointPreview && tripPointPreviewPlacement && (
+          <TripPointInfoPreview
+            onClose={() => setTripPointPreview(null)}
+            placement={tripPointPreviewPlacement}
+            point={tripPointPreview.point}
           />
         )}
 
