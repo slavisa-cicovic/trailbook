@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   Pressable,
   ActivityIndicator,
   Alert,
   ScrollView,
+  Modal,
   Dimensions,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import MapView, { Polyline, Marker, Callout } from 'react-native-maps';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import MapView, { Callout, Polyline, Marker } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -24,12 +24,10 @@ import { TrailMap } from '@/components/ui/TrailMap';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import type { Segment } from '@/core/domain/model/segment';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
-import type { Waypoint, WaypointCategory, WaypointImage } from '@/core/domain/model/waypoint';
+import type { Waypoint, WaypointCategory } from '@/core/domain/model/waypoint';
 import { CATEGORY_ICON } from '@/constants/waypointCategories';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
 const BOTTOM_NAV_HEIGHT = 64;
-const SHEET_HEIGHT = Math.round(SCREEN_HEIGHT * 0.65);
 
 
 function pointsForSegment(locations: RawLocationSample[], seg: Segment) {
@@ -87,10 +85,17 @@ export default function TripDetailScreen() {
     return () => reset();
   }, [clientTripId]);
 
+  // Reload waypoints/images when returning from waypoint screen
+  useFocusEffect(
+    useCallback(() => {
+      if (clientTripId) load(clientTripId);
+    }, [clientTripId]),
+  );
+
   useEffect(() => {
     if (!locationSamples.length || !mapRef.current) return;
     const coords = locationSamples.map((l) => ({ latitude: l.latitude, longitude: l.longitude }));
-    const bottomPad = expanded ? SHEET_HEIGHT + BOTTOM_NAV_HEIGHT : 180;
+    const bottomPad = 180;
     setTimeout(() => {
       mapRef.current?.fitToCoordinates(coords, {
         edgePadding: { top: insets.top + 120, right: 40, bottom: bottomPad, left: 40 },
@@ -149,39 +154,33 @@ export default function TripDetailScreen() {
             />
           ) : null;
         })}
-        {waypoints.map((w) => {
-          const images = imagesByWaypoint[w.id] ?? [];
-          const hasImages = images.length > 0;
-          return (
-            <Marker
-              key={w.id}
-              coordinate={{ latitude: w.latitude, longitude: w.longitude }}
-              onPress={hasImages ? undefined : () => router.push(`/waypoint/${w.id}`)}
-            >
-              <WaypointPin category={w.category} />
-              {hasImages && (
-                <Callout tooltip onPress={() => router.push(`/waypoint/${w.id}`)}>
-                  <WaypointCallout title={w.title} image={images[0]} />
-                </Callout>
-              )}
-            </Marker>
-          );
-        })}
+        {waypoints.map((w) => (
+          <Marker
+            key={w.id}
+            coordinate={{ latitude: w.latitude, longitude: w.longitude }}
+          >
+            <WaypointPin category={w.category} />
+            <Callout tooltip>
+              <Pressable
+                style={calloutStyles.bubble}
+                onPress={() => router.push(`/waypoint/${w.id}`)}
+              >
+                <View style={calloutStyles.row}>
+                  <MaterialIcons
+                    name={CATEGORY_ICON[w.category]}
+                    size={14}
+                    color="#5c3d1e"
+                  />
+                  <Text style={calloutStyles.title} numberOfLines={1}>
+                    {w.title}
+                  </Text>
+                </View>
+                <Text style={calloutStyles.hint}>Tap to open</Text>
+              </Pressable>
+            </Callout>
+          </Marker>
+        ))}
       </TrailMap>
-
-      {/* Transparent overlay over visible map area — tap to collapse sheet */}
-      {expanded && (
-        <Pressable
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: SHEET_HEIGHT + BOTTOM_NAV_HEIGHT + insets.bottom,
-          }}
-          onPress={() => setExpanded(false)}
-        />
-      )}
 
       {/* Floating back button */}
       <Pressable
@@ -189,7 +188,7 @@ export default function TripDetailScreen() {
         onPress={() => router.back()}
         hitSlop={10}
       >
-        <Text style={[styles.backArrow, { color: theme.primaryText }]}>←</Text>
+        <MaterialIcons name="arrow-back" size={20} color={theme.primaryText} />
       </Pressable>
 
       {loading && (
@@ -199,168 +198,179 @@ export default function TripDetailScreen() {
       )}
 
       {/* ── COLLAPSED PILL ── */}
-      {trip && !expanded && (
-        <View style={[styles.pill, { backgroundColor: theme.card, bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 12 }]}>
-          <Pressable
-            onPress={() => prevTrip && navigateToTrip(prevTrip.trip.clientTripId)}
-            disabled={!prevTrip}
-            hitSlop={12}
-          >
-            <Text style={[styles.navArrow, { color: prevTrip ? theme.primaryText : theme.mutedText }]}>
-              ‹
-            </Text>
-          </Pressable>
+      {trip && (
+        <View
+          pointerEvents="box-none"
+          style={[styles.pillWrap, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 16 }]}
+        >
+          <View style={styles.pill}>
+            <Pressable
+              style={[styles.navBtn, !prevTrip && styles.navBtnDisabled]}
+              onPress={() => prevTrip && navigateToTrip(prevTrip.trip.clientTripId)}
+              disabled={!prevTrip}
+            >
+              <MaterialIcons
+                name="chevron-left"
+                size={24}
+                color={prevTrip ? '#243224' : '#9aa596'}
+              />
+            </Pressable>
 
-          <Pressable style={styles.pillCenter} onPress={() => setExpanded(true)}>
-            <Text style={[styles.pillTitle, { color: theme.primaryText }]} numberOfLines={1}>
-              {trip.title}
-            </Text>
-            <Text style={[styles.pillMeta, { color: theme.mutedText }]}>
-              {formatDistance(totalDistanceM)}
-            </Text>
-            <Text style={[styles.pillChevron, { color: theme.mutedText }]}>˄</Text>
-          </Pressable>
+            <Pressable style={styles.pillCenter} onPress={() => setExpanded(true)}>
+              <Text style={styles.pillTitle} numberOfLines={1}>{trip.title}</Text>
+              <View style={styles.pillMetaWrap}>
+                <Text style={styles.pillMeta}>{formatDistance(totalDistanceM)}</Text>
+                <MaterialIcons name="expand-less" size={20} color="#52624f" />
+              </View>
+            </Pressable>
 
-          <Pressable
-            onPress={() => nextTrip && navigateToTrip(nextTrip.trip.clientTripId)}
-            disabled={!nextTrip}
-            hitSlop={12}
-          >
-            <Text style={[styles.navArrow, { color: nextTrip ? theme.primaryText : theme.mutedText }]}>
-              ›
-            </Text>
-          </Pressable>
+            <Pressable
+              style={[styles.navBtn, !nextTrip && styles.navBtnDisabled]}
+              onPress={() => nextTrip && navigateToTrip(nextTrip.trip.clientTripId)}
+              disabled={!nextTrip}
+            >
+              <MaterialIcons
+                name="chevron-right"
+                size={24}
+                color={nextTrip ? '#243224' : '#9aa596'}
+              />
+            </Pressable>
+          </View>
         </View>
       )}
 
-      {/* ── EXPANDED BOTTOM SHEET ── */}
-      {trip && expanded && (
-        <View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: theme.card,
-              height: SHEET_HEIGHT,
-              bottom: BOTTOM_NAV_HEIGHT + insets.bottom,
-            },
-          ]}
-        >
-          {/* Drag handle / close row */}
+      {/* ── DETAILS SHEET (Modal) ── */}
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setExpanded(false)}
+        transparent
+        visible={expanded}
+      >
+        <View style={styles.sheetOverlay}>
           <Pressable
-            style={styles.dragHandleArea}
+            accessibilityLabel="Close trip details"
             onPress={() => setExpanded(false)}
-            hitSlop={{ top: 10, bottom: 10, left: 40, right: 40 }}
-          >
+            style={styles.sheetBackdrop}
+          />
+          <View style={[styles.sheet, { backgroundColor: theme.card }]}>
             <View style={[styles.dragHandle, { backgroundColor: theme.border }]} />
-            <Text style={[styles.dragChevron, { color: theme.mutedText }]}>˅</Text>
-          </Pressable>
-
-          {/* Fixed header content */}
-          <View style={styles.sheetFixed}>
-            <Text style={[styles.sheetTitle, { color: theme.primaryText }]}>{trip.title}</Text>
-
-            <View style={styles.actionRow}>
-              <ActionBtn
-                icon="edit"
-                color={theme.mutedText}
-                bg={theme.accentMuted}
-                onPress={() => Alert.alert('Edit', 'Coming soon')}
-              />
-              <ActionBtn
-                icon="autorenew"
-                color={theme.accent}
-                bg={theme.accentMuted}
-                onPress={() => void onReprocess()}
-                loading={reprocessing}
-              />
-              <ActionBtn
-                icon="sync"
-                color={isSynced ? theme.mutedText : theme.accent}
-                bg={theme.accentMuted}
-                onPress={() => void onSync()}
-                loading={isSyncing}
-                disabled={isSynced}
-              />
-              <ActionBtn
-                icon="share"
-                color={theme.mutedText}
-                bg={theme.accentMuted}
-                onPress={() => Alert.alert('Share', 'Coming soon')}
-                disabled
-              />
-            </View>
-
-            {!isSynced && (
-              <View style={[styles.syncBanner, { backgroundColor: '#fffbe6' }]}>
-                <Text style={styles.syncBannerText}>
-                  {trip.syncState === 'FAILED' ? 'Sync failed — tap Sync to retry.' : 'Not yet synced to server.'}
-                </Text>
+            <Text style={[styles.sheetTitle, { color: theme.primaryText }]} numberOfLines={1}>
+              {trip?.title}
+            </Text>
+            <ScrollView
+              contentContainerStyle={styles.sheetBody}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.actionRow}>
+                <ActionBtn
+                  icon="edit"
+                  color={theme.mutedText}
+                  bg={theme.accentMuted}
+                  onPress={() => Alert.alert('Edit', 'Coming soon')}
+                />
+                <ActionBtn
+                  icon="autorenew"
+                  color={theme.accent}
+                  bg={theme.accentMuted}
+                  onPress={() => void onReprocess()}
+                  loading={reprocessing}
+                />
+                <ActionBtn
+                  icon="sync"
+                  color={isSynced ? theme.mutedText : theme.accent}
+                  bg={theme.accentMuted}
+                  onPress={() => void onSync()}
+                  loading={isSyncing}
+                  disabled={isSynced}
+                />
+                <ActionBtn
+                  icon="share"
+                  color={theme.mutedText}
+                  bg={theme.accentMuted}
+                  onPress={() => Alert.alert('Share', 'Coming soon')}
+                  disabled
+                />
               </View>
-            )}
 
-            <View style={[styles.statsRow, { borderColor: theme.border }]}>
-              <StatCell label="WAYPOINTS" value={String(waypoints.length)} theme={theme} />
-              <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-              <StatCell label="PHOTOS" value={String(totalPhotos)} theme={theme} />
-              <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-              <StatCell label="DISTANCE" value={formatDistance(totalDistanceM)} theme={theme} />
-            </View>
-
-            {batteryDelta !== null && batteryDelta > 0 && (
-              <View style={[styles.batteryCard, { backgroundColor: '#f0f7f0' }]}>
-                <Text style={styles.batteryLabel}>BATTERY CONSUMPTION</Text>
-                <Text style={styles.batteryValue}>{batteryDelta}%</Text>
-                <Text style={styles.batteryDetail}>
-                  {firstDevice.batteryPct}%{firstDevice.isCharging ? ' charging' : ' unplugged'} →{' '}
-                  {lastDevice.batteryPct}%{lastDevice.isCharging ? ' charging' : ' unplugged'}
-                </Text>
-              </View>
-            )}
-
-            {segments.length > 0 && (
-              <Text style={[styles.timelineHeader, { color: theme.primaryText }]}>Timeline</Text>
-            )}
-          </View>
-
-          {/* Scrollable timeline */}
-          <ScrollView style={styles.timelineScroll} showsVerticalScrollIndicator={false}>
-            {segments.map((seg, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.timelineRow,
-                  { marginHorizontal: 20 },
-                  i < segments.length - 1 && {
-                    borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: theme.border,
-                  },
-                ]}
-              >
-                <View style={styles.timelineLeft}>
-                  <View style={styles.timelineNameRow}>
-                    <Text style={[styles.timelineName, { color: theme.primaryText }]}>
-                      {SEGMENT_LABEL[seg.segmentType]}
-                    </Text>
-                    <Pressable
-                      hitSlop={8}
-                      onPress={() => Alert.alert('Edit segment', 'Coming soon')}
-                    >
-                      <MaterialIcons name="edit" size={14} color={theme.mutedText} />
-                    </Pressable>
-                  </View>
-                  <Text style={[styles.timelineMeta, { color: theme.mutedText }]}>
-                    {formatTimeRange(seg.startedAt, seg.endedAt)}{' '}
-                    · {formatDuration(seg.endedAt.getTime() - seg.startedAt.getTime())}
+              {!isSynced && (
+                <View style={[styles.syncBanner, { backgroundColor: '#fffbe6' }]}>
+                  <Text style={styles.syncBannerText}>
+                    {trip?.syncState === 'FAILED'
+                      ? 'Sync failed — tap Sync to retry.'
+                      : 'Not yet synced to server.'}
                   </Text>
                 </View>
-                <Text style={[styles.timelineDist, { color: theme.primaryText }]}>
-                  {formatDistance(seg.distanceM)}
-                </Text>
+              )}
+
+              <View style={[styles.statsRow, { borderColor: theme.border }]}>
+                <StatCell label="WAYPOINTS" value={String(waypoints.length)} theme={theme} />
+                <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+                <StatCell label="PHOTOS" value={String(totalPhotos)} theme={theme} />
+                <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+                <StatCell label="DISTANCE" value={formatDistance(totalDistanceM)} theme={theme} />
               </View>
-            ))}
-          </ScrollView>
+
+              {batteryDelta !== null && batteryDelta > 0 && (
+                <View style={[styles.batteryCard, { backgroundColor: '#f0f7f0' }]}>
+                  <Text style={styles.batteryLabel}>BATTERY CONSUMPTION</Text>
+                  <Text style={styles.batteryValue}>{batteryDelta}%</Text>
+                  <Text style={styles.batteryDetail}>
+                    {firstDevice.batteryPct}%{firstDevice.isCharging ? ' charging' : ' unplugged'} →{' '}
+                    {lastDevice.batteryPct}%{lastDevice.isCharging ? ' charging' : ' unplugged'}
+                  </Text>
+                </View>
+              )}
+
+              {segments.length > 0 && (
+                <View style={[styles.segmentsList, { borderColor: theme.border }]}>
+                  <Text style={[styles.timelineHeader, { color: theme.primaryText }]}>Timeline</Text>
+                  <ScrollView
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator={segments.length > 3}
+                    style={styles.segmentsScroll}
+                  >
+                    {segments.map((seg, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          styles.timelineRow,
+                          i < segments.length - 1 && {
+                            borderBottomWidth: StyleSheet.hairlineWidth,
+                            borderBottomColor: theme.border,
+                          },
+                        ]}
+                      >
+                        <View style={styles.timelineLeft}>
+                          <View style={styles.timelineNameRow}>
+                            <Text style={[styles.timelineName, { color: theme.primaryText }]}>
+                              {SEGMENT_LABEL[seg.segmentType]}
+                            </Text>
+                            <Pressable
+                              hitSlop={8}
+                              onPress={() => Alert.alert('Edit segment', 'Coming soon')}
+                            >
+                              <MaterialIcons name="edit" size={14} color={theme.mutedText} />
+                            </Pressable>
+                          </View>
+                          <Text style={[styles.timelineMeta, { color: theme.mutedText }]}>
+                            {formatTimeRange(seg.startedAt, seg.endedAt)}
+                            {' · '}
+                            {formatDuration(seg.endedAt.getTime() - seg.startedAt.getTime())}
+                          </Text>
+                        </View>
+                        <Text style={[styles.timelineDist, { color: theme.primaryText }]}>
+                          {formatDistance(seg.distanceM)}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </ScrollView>
+          </View>
         </View>
-      )}
+      </Modal>
 
       {/* Spacer pushes BottomNav to the bottom (all sibling elements are position:absolute) */}
       <View style={{ flex: 1 }} pointerEvents="none" />
@@ -429,23 +439,6 @@ function WaypointPin({ category }: { category: WaypointCategory }) {
   );
 }
 
-function WaypointCallout({ title, image }: { title: string; image: WaypointImage }) {
-  return (
-    <View style={calloutStyles.container}>
-      <Image
-        source={{ uri: image.localUri }}
-        style={calloutStyles.image}
-        resizeMode="cover"
-      />
-      <View style={calloutStyles.titleBar}>
-        <Text style={calloutStyles.title} numberOfLines={1}>{title}</Text>
-      </View>
-      {/* pointer arrow */}
-      <View style={calloutStyles.arrow} />
-    </View>
-  );
-}
-
 const pinStyles = StyleSheet.create({
   circle: {
     width: 36,
@@ -463,45 +456,25 @@ const pinStyles = StyleSheet.create({
 });
 
 const calloutStyles = StyleSheet.create({
-  container: {
-    width: 180,
+  bubble: {
+    minWidth: 140,
+    maxWidth: 220,
+    backgroundColor: '#fffdf8',
     borderRadius: 12,
-    overflow: 'visible',
-    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
     shadowRadius: 6,
-    elevation: 6,
+    elevation: 4,
   },
-  image: {
-    width: 180,
-    height: 110,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  titleBar: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-  },
-  title: { fontSize: 13, fontWeight: '600', color: '#1a1a1a' },
-  arrow: {
-    position: 'absolute',
-    bottom: -10,
-    left: '50%',
-    marginLeft: -8,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderTopWidth: 10,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: '#fff',
-  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  title: { flex: 1, fontSize: 14, fontWeight: '700', color: '#243224' },
+  hint: { fontSize: 12, color: '#76856f' },
 });
+
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
@@ -523,8 +496,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  backArrow: { fontSize: 18, fontWeight: '600' },
-
   // Loading
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -533,46 +504,81 @@ const styles = StyleSheet.create({
   },
 
   // Collapsed pill
-  pill: {
+  pillWrap: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: 14,
+    right: 14,
+  },
+  pill: {
+    minHeight: 58,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(235, 225, 207, 0.9)',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 14,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 6,
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    shadowColor: '#142014',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 7,
   },
-  navArrow: { fontSize: 28, fontWeight: '300', paddingHorizontal: 8 },
-  pillCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pillTitle: { flex: 1, fontSize: 16, fontWeight: '700' },
-  pillMeta: { fontSize: 14 },
-  pillChevron: { fontSize: 18 },
+  navBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(230, 236, 225, 0.9)',
+  },
+  navBtnDisabled: { opacity: 0.42 },
+  pillCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 10,
+    gap: 8,
+  },
+  pillTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: '#243224' },
+  pillMetaWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pillMeta: { fontSize: 13, fontWeight: '700', color: '#52624f' },
 
-  // Expanded sheet
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 10,
+  // Details sheet (Modal)
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(20, 28, 20, 0.28)',
   },
-  dragHandleArea: { alignItems: 'center', paddingTop: 10, paddingBottom: 4, gap: 4 },
-  dragHandle: { width: 36, height: 4, borderRadius: 2 },
-  dragChevron: { fontSize: 16, lineHeight: 18 },
-  sheetFixed: { paddingHorizontal: 20, paddingBottom: 8 },
-  timelineScroll: { flex: 1 },
-  sheetTitle: { fontSize: 26, fontWeight: '800', marginBottom: 16 },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject },
+  sheet: {
+    width: '100%',
+    maxHeight: '82%',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(235, 225, 207, 0.92)',
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 22,
+    shadowColor: '#142014',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  dragHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  sheetBody: { gap: 14, paddingTop: 14, paddingBottom: 12 },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: '#243224', marginBottom: 2 },
 
   // Action buttons
   actionRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
@@ -617,12 +623,18 @@ const styles = StyleSheet.create({
   batteryDetail: { fontSize: 13, color: '#3a6b3a' },
 
   // Timeline
-  timelineHeader: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
-  timelineRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  segmentsList: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 12,
+  },
+  segmentsScroll: { maxHeight: 205 },
+  timelineHeader: { fontSize: 16, fontWeight: '700', color: '#243224' },
+  timelineRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   timelineLeft: { flex: 1, gap: 3 },
   timelineNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  timelineName: { fontSize: 16, fontWeight: '600' },
+  timelineName: { fontSize: 14, fontWeight: '700' },
   timelineMeta: { fontSize: 13 },
-  timelineDist: { fontSize: 15, fontWeight: '600' },
-  chevron: { fontSize: 20 },
+  timelineDist: { fontSize: 13, fontWeight: '700', color: '#355035' },
 });

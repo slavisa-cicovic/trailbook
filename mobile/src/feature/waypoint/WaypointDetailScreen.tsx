@@ -168,37 +168,31 @@ export default function WaypointDetailScreen() {
 
       {/* Bottom pill */}
       <View
-        style={[
-          styles.pill,
-          { backgroundColor: theme.card, bottom: pillBottom },
-        ]}
+        pointerEvents="box-none"
+        style={[styles.pillWrap, { bottom: pillBottom }]}
       >
-        <Pressable
-          onPress={() => prevId && navigateTo(prevId)}
-          disabled={!prevId}
-          hitSlop={12}
-        >
-          <Text style={[styles.navArrow, { color: prevId ? theme.primaryText : theme.mutedText }]}>‹</Text>
-        </Pressable>
+        <View style={styles.pill}>
+          <Pressable
+            style={[styles.navBtn, !prevId && styles.navBtnDisabled]}
+            onPress={() => prevId && navigateTo(prevId)}
+            disabled={!prevId}
+          >
+            <MaterialIcons name="chevron-left" size={24} color={prevId ? '#243224' : '#9aa596'} />
+          </Pressable>
 
-        <Pressable style={styles.pillCenter} onPress={() => setShowEditSheet(true)}>
-          <MaterialIcons
-            name={CATEGORY_ICON[waypoint.category]}
-            size={18}
-            color={theme.accent}
-          />
-          <Text style={[styles.pillTitle, { color: theme.primaryText }]} numberOfLines={1}>
-            {waypoint.title}
-          </Text>
-        </Pressable>
+          <Pressable style={styles.pillCenter} onPress={() => setShowEditSheet(true)}>
+            <MaterialIcons name={CATEGORY_ICON[waypoint.category]} size={18} color={theme.accent} />
+            <Text style={styles.pillTitle} numberOfLines={1}>{waypoint.title}</Text>
+          </Pressable>
 
-        <Pressable
-          onPress={() => nextId && navigateTo(nextId)}
-          disabled={!nextId}
-          hitSlop={12}
-        >
-          <Text style={[styles.navArrow, { color: nextId ? theme.primaryText : theme.mutedText }]}>›</Text>
-        </Pressable>
+          <Pressable
+            style={[styles.navBtn, !nextId && styles.navBtnDisabled]}
+            onPress={() => nextId && navigateTo(nextId)}
+            disabled={!nextId}
+          >
+            <MaterialIcons name="chevron-right" size={24} color={nextId ? '#243224' : '#9aa596'} />
+          </Pressable>
+        </View>
       </View>
 
       <BottomNav />
@@ -297,24 +291,39 @@ const styles = StyleSheet.create({
   miniMap: { flex: 1 },
 
   // Pill
-  pill: {
+  pillWrap: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: 14,
+    right: 14,
+  },
+  pill: {
+    minHeight: 58,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(235, 225, 207, 0.9)',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 14,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 6,
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    shadowColor: '#142014',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 7,
   },
-  navArrow: { fontSize: 28, fontWeight: '300', paddingHorizontal: 8 },
-  pillCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pillTitle: { flex: 1, fontSize: 16, fontWeight: '700' },
+  navBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(230, 236, 225, 0.9)',
+  },
+  navBtnDisabled: { opacity: 0.42 },
+  pillCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 10 },
+  pillTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: '#243224' },
 
   // Full-screen photo
   photoModal: {
