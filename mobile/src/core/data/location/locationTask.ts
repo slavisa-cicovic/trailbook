@@ -50,7 +50,7 @@ export async function startLocationTask(): Promise<void> {
     showsBackgroundLocationIndicator: true,
     pausesUpdatesAutomatically: false,
     foregroundService: {
-      notificationTitle: 'Vellora',
+      notificationTitle: 'Trailbook',
       notificationBody: 'Recording trip in progress...',
       notificationColor: '#1a1a1a',
     },
