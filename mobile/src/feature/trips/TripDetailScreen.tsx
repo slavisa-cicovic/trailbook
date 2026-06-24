@@ -8,7 +8,6 @@ import {
   Alert,
   ScrollView,
   Modal,
-  Image,
   type LayoutChangeEvent,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -27,13 +26,16 @@ import type { Segment } from '@/core/domain/model/segment';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
 import type { Waypoint, WaypointCategory } from '@/core/domain/model/waypoint';
 import { CATEGORY_ICON } from '@/constants/waypointCategories';
+import {
+  WaypointPhotoPreview,
+  WAYPOINT_PREVIEW_HEIGHT,
+  WAYPOINT_PREVIEW_STEM_SIZE,
+  WAYPOINT_PREVIEW_WIDTH,
+} from './components/WaypointPhotoPreview';
 
 const BOTTOM_NAV_HEIGHT = 64;
-const WAYPOINT_PREVIEW_WIDTH = 148;
-const WAYPOINT_PREVIEW_HEIGHT = 108;
 const WAYPOINT_PREVIEW_MARGIN = 12;
 const WAYPOINT_PREVIEW_GAP = 14;
-const WAYPOINT_PREVIEW_STEM_SIZE = 14;
 
 function pointsForSegment(locations: RawLocationSample[], seg: Segment) {
   return locations
@@ -271,49 +273,13 @@ export default function TripDetailScreen() {
       </TrailMap>
 
       {previewWaypoint && previewImage && previewPlacement && (
-        <View pointerEvents="box-none" style={previewStyles.root}>
-          <Pressable
-            accessibilityLabel="Close waypoint preview"
-            onPress={() => setWaypointPreview(null)}
-            style={previewStyles.backdrop}
-          />
-          <View style={[previewStyles.cardWrap, previewPlacement.card]}>
-            {previewPlacement.stemPosition === 'top' && (
-              <View
-                style={[
-                  previewStyles.stem,
-                  previewStyles.stemTop,
-                  previewPlacement.stem,
-                ]}
-              />
-            )}
-            <Pressable
-              accessibilityLabel={`Open waypoint ${previewWaypoint.title}`}
-              onPress={() => navigateToWaypoint(previewWaypoint.id)}
-              style={previewStyles.card}
-            >
-              <Image
-                resizeMode="cover"
-                source={{ uri: previewImage.localUri }}
-                style={previewStyles.image}
-              />
-              <View style={previewStyles.titleOverlay}>
-                <Text numberOfLines={1} style={previewStyles.title}>
-                  {previewWaypoint.title}
-                </Text>
-              </View>
-            </Pressable>
-            {previewPlacement.stemPosition === 'bottom' && (
-              <View
-                style={[
-                  previewStyles.stem,
-                  previewStyles.stemBottom,
-                  previewPlacement.stem,
-                ]}
-              />
-            )}
-          </View>
-        </View>
+        <WaypointPhotoPreview
+          imageUri={previewImage.localUri}
+          onClose={() => setWaypointPreview(null)}
+          onOpen={() => navigateToWaypoint(previewWaypoint.id)}
+          placement={previewPlacement}
+          title={previewWaypoint.title}
+        />
       )}
 
       {/* Floating back button */}
@@ -588,71 +554,6 @@ const pinStyles = StyleSheet.create({
     elevation: 4,
   },
 });
-
-const previewStyles = StyleSheet.create({
-  root: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  cardWrap: {
-    position: 'absolute',
-    width: WAYPOINT_PREVIEW_WIDTH,
-  },
-  card: {
-    width: WAYPOINT_PREVIEW_WIDTH,
-    height: WAYPOINT_PREVIEW_HEIGHT,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#fffdf8',
-    borderWidth: 1,
-    borderColor: '#ebe1cf',
-    shadowColor: '#142014',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 7,
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#d7ddcf',
-  },
-  titleOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 9,
-    paddingTop: 18,
-    paddingBottom: 7,
-    backgroundColor: 'rgba(20, 28, 20, 0.56)',
-  },
-  title: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#fffdf8',
-  },
-  stem: {
-    position: 'absolute',
-    width: WAYPOINT_PREVIEW_STEM_SIZE,
-    height: WAYPOINT_PREVIEW_STEM_SIZE,
-    backgroundColor: '#fffdf8',
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#ebe1cf',
-  },
-  stemTop: {
-    top: -WAYPOINT_PREVIEW_STEM_SIZE / 2,
-    transform: [{ rotate: '225deg' }],
-  },
-  stemBottom: {
-    bottom: -WAYPOINT_PREVIEW_STEM_SIZE / 2,
-    transform: [{ rotate: '45deg' }],
-  },
-});
-
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
