@@ -28,7 +28,7 @@ function activityTypeToSegmentType(activityType: number): SegmentType | null {
 }
 
 function speedToSegmentType(speedMps: number | undefined): SegmentType {
-  if (speedMps === undefined) return 'UNKNOWN';
+  if (speedMps === undefined || speedMps < 0) return 'UNKNOWN';
   if (speedMps < V1.stationaryMaxMps) return 'STATIONARY';
   if (speedMps < V1.walkMaxMps)       return 'WALK';
   if (speedMps < V1.bikeMaxMps)       return 'BIKE';

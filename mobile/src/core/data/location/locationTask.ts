@@ -28,10 +28,11 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: TaskManager.TaskMa
       timestamp,
       latitude: loc.coords.latitude,
       longitude: loc.coords.longitude,
-      accuracyM: loc.coords.accuracy ?? undefined,
-      altitudeM: loc.coords.altitude ?? undefined,
-      speedMps: loc.coords.speed ?? undefined,
-      bearingDeg: loc.coords.heading ?? undefined,
+      // iOS returns -1 for unavailable values; treat negative as undefined
+      accuracyM: loc.coords.accuracy != null && loc.coords.accuracy >= 0 ? loc.coords.accuracy : undefined,
+      altitudeM: loc.coords.altitude != null && loc.coords.altitude > -999 ? loc.coords.altitude : undefined,
+      speedMps: loc.coords.speed != null && loc.coords.speed >= 0 ? loc.coords.speed : undefined,
+      bearingDeg: loc.coords.heading != null && loc.coords.heading >= 0 ? loc.coords.heading : undefined,
       provider: 'fused',
     });
 
