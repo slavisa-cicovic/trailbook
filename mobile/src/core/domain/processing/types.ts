@@ -29,4 +29,7 @@ export const V1 = {
   minStationaryDurationMs: 30_000,
   gapSplitThresholdMs: 5 * 60_000,
   mergeGapThresholdMs: 30_000,
+  // Absorb an isolated segment that is sandwiched between two same-type segments
+  // and shorter than this threshold (handles traffic stops, brief slowdowns, etc.)
+  isoSegmentAbsorbMaxMs: 3 * 60_000,
 } as const;

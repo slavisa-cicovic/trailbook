@@ -56,8 +56,14 @@ export function mergeAndFinalize(
     }
   }
 
+  // Post-process 1: remove leading/trailing STATIONARY when there is movement
+  const trimmed = trimBoundaryStationary(merged);
+
+  // Post-process 2: absorb short isolated segments sandwiched between same-type neighbours
+  const absorbed = absorbIsolated(trimmed);
+
   // Finalize: assign index + distanceM
-  return merged.map((seg, idx) => ({
+  return absorbed.map((seg, idx) => ({
     tripId,
     index: idx,
     segmentType: seg.type,
@@ -65,4 +71,51 @@ export function mergeAndFinalize(
     endedAt: seg.endTime,
     distanceM: distanceInRange(geoPoints, seg.startTime, seg.endTime),
   }));
+}
+
+function trimBoundaryStationary(segments: RawSegment[]): RawSegment[] {
+  if (segments.length <= 1) return segments;
+  const hasMovement = segments.some((s) => s.type !== 'STATIONARY');
+  if (!hasMovement) return segments;
+
+  let result = [...segments];
+
+  if (result[0].type === 'STATIONARY') {
+    result = [{ ...result[1], startTime: result[0].startTime }, ...result.slice(2)];
+  }
+
+  if (result.length > 1 && result[result.length - 1].type === 'STATIONARY') {
+    result = [
+      ...result.slice(0, -2),
+      { ...result[result.length - 2], endTime: result[result.length - 1].endTime },
+    ];
+  }
+
+  return result;
+}
+
+function absorbIsolated(segments: RawSegment[]): RawSegment[] {
+  if (segments.length < 3) return segments;
+
+  let result = [...segments];
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    for (let i = 1; i < result.length - 1; i++) {
+      const prev = result[i - 1];
+      const curr = result[i];
+      const next = result[i + 1];
+      if (prev.type === next.type) {
+        const durationMs = curr.endTime.getTime() - curr.startTime.getTime();
+        if (durationMs <= V1.isoSegmentAbsorbMaxMs) {
+          result.splice(i - 1, 3, { startTime: prev.startTime, endTime: next.endTime, type: prev.type });
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+
+  return result;
 }

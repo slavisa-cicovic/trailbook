@@ -17,6 +17,9 @@ export async function reprocessTrip(clientTripId: string): Promise<Result<void>>
     const versionResult = await tripRepository.updateProcessingVersion(clientTripId, CURRENT_PROCESSING_VERSION);
     if (!versionResult.ok) return err(versionResult.error);
 
+    const syncResult = await tripRepository.updateSyncState(clientTripId, 'PENDING');
+    if (!syncResult.ok) return err(syncResult.error);
+
     return ok(undefined);
   } catch (e) {
     return err(e instanceof Error ? e.message : String(e));

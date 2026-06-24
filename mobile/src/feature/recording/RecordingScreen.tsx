@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  View, Text, Pressable, StyleSheet, Platform,
-} from 'react-native';
-import MapView, { Polyline, Marker, PROVIDER_GOOGLE, type MapType, type Region } from 'react-native-maps';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import MapView, { Polyline, Marker, type MapType, type Region } from 'react-native-maps';
+import { TrailMap } from '@/components/ui/TrailMap';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
@@ -18,28 +17,6 @@ import { SessionCard } from './components/SessionCard';
 import { WaypointCard } from './components/WaypointCard';
 import { useAppTheme } from '@/hooks/useAppTheme';
 
-const NIGHT_MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#212121' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
-  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#181818' }] },
-  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
-  { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#2c2c2c' }] },
-  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#373737' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
-  { featureType: 'road.highway.controlled_access', elementType: 'geometry', stylers: [{ color: '#4e4e4e' }] },
-  { featureType: 'road.local', elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
-  { featureType: 'transit', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#000000' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#3d3d3d' }] },
-];
-
-const MAP_TYPES: { label: string; value: MapType }[] = [
-  { label: 'Map', value: 'standard' },
-  { label: 'Satellite', value: 'satellite' },
-  { label: 'Hybrid', value: 'hybrid' },
-];
 
 export default function RecordingScreen() {
   const [showStartSheet, setShowStartSheet] = useState(false);
@@ -63,7 +40,7 @@ export default function RecordingScreen() {
   const resumeRecording = useRecordingStore((s) => s.resumeRecording);
 
   const displayName = useAuthStore((s) => s.displayName);
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
 
   useEffect(() => {
     Location.getLastKnownPositionAsync().then((pos) => {
@@ -114,14 +91,12 @@ export default function RecordingScreen() {
       <Text style={[styles.screenTitle, { color: theme.primaryText }]}>Vellora</Text>
 
       <View style={[styles.mapCard, { backgroundColor: theme.accentMuted }]}>
-        <MapView
+        <TrailMap
           ref={mapRef}
-          style={styles.map}
           mapType={mapType}
-          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+          onMapTypeChange={setMapType}
+          switcherPosition="top-left"
           initialRegion={initialRegion}
-          customMapStyle={resolvedMode === 'night' ? NIGHT_MAP_STYLE : []}
-          userInterfaceStyle={resolvedMode === 'night' ? 'dark' : 'light'}
           showsUserLocation
           followsUserLocation={isRecording}
           showsMyLocationButton={false}
@@ -138,7 +113,7 @@ export default function RecordingScreen() {
               pinColor={theme.accent}
             />
           ))}
-        </MapView>
+        </TrailMap>
 
         <SessionCard
           isRecording={isRecording}
@@ -150,26 +125,6 @@ export default function RecordingScreen() {
           onResumePress={() => void onPauseResumePress()}
           onDetailsPress={() => setShowSessionSheet(true)}
         />
-
-        <View style={styles.mapTypeSwitcher}>
-          {MAP_TYPES.map((t) => (
-            <Pressable
-              key={t.value}
-              style={[
-                styles.mapTypeChip,
-                { backgroundColor: mapType === t.value ? theme.accent : theme.card },
-              ]}
-              onPress={() => setMapType(t.value)}
-            >
-              <Text style={[
-                styles.mapTypeText,
-                { color: mapType === t.value ? theme.background : theme.primaryText },
-              ]}>
-                {t.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
       </View>
 
       <BottomNav />
@@ -257,11 +212,6 @@ const styles = StyleSheet.create({
   },
 
   mapCard: { flex: 1, marginHorizontal: 12, borderRadius: 28, overflow: 'hidden' },
-  map: { flex: 1 },
-
-  mapTypeSwitcher: { position: 'absolute', top: 110, left: 14, flexDirection: 'row', gap: 8 },
-  mapTypeChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  mapTypeText: { fontSize: 13, fontWeight: '600' },
 
   infoCard: { borderRadius: 18, padding: 16, gap: 8 },
   infoRow: { fontSize: 14, lineHeight: 20 },

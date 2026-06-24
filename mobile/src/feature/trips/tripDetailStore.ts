@@ -8,6 +8,8 @@ import * as segmentDao from '@/core/data/local/segmentDao';
 import * as waypointDao from '@/core/data/local/waypointDao';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import * as rawLocationDao from '@/core/data/local/rawLocationDao';
+import * as rawDeviceDao from '@/core/data/local/rawDeviceDao';
+import type { RawDeviceSample } from '@/core/domain/model/rawSamples';
 
 interface TripDetailState {
   trip: Trip | null;
@@ -15,6 +17,7 @@ interface TripDetailState {
   waypoints: Waypoint[];
   imagesByWaypoint: Record<string, WaypointImage[]>;
   locationSamples: RawLocationSample[];
+  deviceSamples: RawDeviceSample[];
   loading: boolean;
   error: string | null;
 }
@@ -30,6 +33,7 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
   waypoints: [],
   imagesByWaypoint: {},
   locationSamples: [],
+  deviceSamples: [],
   loading: false,
   error: null,
 
@@ -39,10 +43,11 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
       const trip = await tripDao.getTripByClientId(clientTripId);
       if (!trip) { set({ loading: false, error: 'Trip not found' }); return; }
 
-      const [segments, waypoints, locationSamples] = await Promise.all([
+      const [segments, waypoints, locationSamples, deviceSamples] = await Promise.all([
         segmentDao.getForTrip(clientTripId),
         waypointDao.getForTrip(clientTripId),
         rawLocationDao.getAllForTrip(clientTripId),
+        rawDeviceDao.getAllForTrip(clientTripId),
       ]);
 
       const imagesByWaypoint: Record<string, WaypointImage[]> = {};
@@ -52,13 +57,13 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
         }),
       );
 
-      set({ trip, segments, waypoints, imagesByWaypoint, locationSamples, loading: false });
+      set({ trip, segments, waypoints, imagesByWaypoint, locationSamples, deviceSamples, loading: false });
     } catch (e) {
       set({ loading: false, error: e instanceof Error ? e.message : String(e) });
     }
   },
 
   reset() {
-    set({ trip: null, segments: [], waypoints: [], imagesByWaypoint: {}, locationSamples: [], error: null });
+    set({ trip: null, segments: [], waypoints: [], imagesByWaypoint: {}, locationSamples: [], deviceSamples: [], error: null });
   },
 }));
