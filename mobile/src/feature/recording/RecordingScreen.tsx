@@ -13,6 +13,7 @@ import { addPhotoToWaypoint } from '@/core/domain/usecase/AddPhotoToWaypointUseC
 import * as ImagePicker from 'expo-image-picker';
 import BottomSheetModal from '@/components/ui/bottom-sheet-modal';
 import { BottomNav } from '@/components/ui/BottomNav';
+import { TopAppBar } from '@/components/ui/TopAppBar';
 import { SessionCard } from './components/SessionCard';
 import { WaypointCard } from './components/WaypointCard';
 import { useAppTheme } from '@/hooks/useAppTheme';
@@ -88,7 +89,7 @@ export default function RecordingScreen() {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
-      <Text style={[styles.screenTitle, { color: theme.primaryText }]}>Vellora</Text>
+      <TopAppBar title="Trailbook" />
 
       <View style={[styles.mapCard, { backgroundColor: theme.accentMuted }]}>
         <TrailMap
@@ -203,14 +204,6 @@ export default function RecordingScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  screenTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
-  },
-
   mapCard: { flex: 1, marginHorizontal: 12, borderRadius: 28, overflow: 'hidden' },
 
   infoCard: { borderRadius: 18, padding: 16, gap: 8 },

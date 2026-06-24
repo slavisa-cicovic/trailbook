@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import MapView, { Polyline, Marker } from 'react-native-maps';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { useTripDetailStore } from '@/feature/trips/tripDetailStore';
@@ -21,6 +21,7 @@ import { SEGMENT_COLOR, SEGMENT_LABEL } from '@/constants/segmentColors';
 import { reprocessTrip } from '@/core/domain/usecase/ReprocessTripUseCase';
 import { BottomNav } from '@/components/ui/BottomNav';
 import { TrailMap } from '@/components/ui/TrailMap';
+import { TopAppBar } from '@/components/ui/TopAppBar';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import type { Segment } from '@/core/domain/model/segment';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
@@ -33,7 +34,6 @@ import {
   WAYPOINT_PREVIEW_WIDTH,
 } from './components/WaypointPhotoPreview';
 
-const BOTTOM_NAV_HEIGHT = 64;
 const WAYPOINT_PREVIEW_MARGIN = 12;
 const WAYPOINT_PREVIEW_GAP = 14;
 
@@ -68,7 +68,6 @@ export default function TripDetailScreen() {
   const { clientTripId } = useLocalSearchParams<{ clientTripId: string }>();
   const router = useRouter();
   const { theme } = useAppTheme();
-  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
 
   const load = useTripDetailStore((s) => s.load);
@@ -115,7 +114,7 @@ export default function TripDetailScreen() {
     const bottomPad = 180;
     setTimeout(() => {
       mapRef.current?.fitToCoordinates(coords, {
-        edgePadding: { top: insets.top + 120, right: 40, bottom: bottomPad, left: 40 },
+        edgePadding: { top: 80, right: 40, bottom: bottomPad, left: 40 },
         animated: true,
       });
     }, 300);
@@ -206,8 +205,7 @@ export default function TripDetailScreen() {
           WAYPOINT_PREVIEW_MARGIN,
           mapLayout.width - WAYPOINT_PREVIEW_WIDTH - WAYPOINT_PREVIEW_MARGIN,
         );
-        const usableBottom =
-          mapLayout.height - BOTTOM_NAV_HEIGHT - insets.bottom - WAYPOINT_PREVIEW_MARGIN;
+        const usableBottom = mapLayout.height - WAYPOINT_PREVIEW_MARGIN;
         const maxTop = Math.max(
           WAYPOINT_PREVIEW_MARGIN,
           usableBottom - WAYPOINT_PREVIEW_HEIGHT,
@@ -242,102 +240,97 @@ export default function TripDetailScreen() {
     : null;
 
   return (
-    <View style={styles.container} onLayout={handleMapLayout}>
-      {/* Full-screen map */}
-      <TrailMap
-        ref={mapRef}
-        style={StyleSheet.absoluteFill}
-        switcherPosition="top-right"
-        moveOnMarkerPress={false}
-      >
-        {segments.map((seg, i) => {
-          const pts = pointsForSegment(locationSamples, seg);
-          return pts.length > 1 ? (
-            <Polyline
-              key={i}
-              coordinates={pts}
-              strokeColor={SEGMENT_COLOR[seg.segmentType]}
-              strokeWidth={4}
-            />
-          ) : null;
-        })}
-        {waypoints.map((w) => (
-          <Marker
-            key={w.id}
-            coordinate={{ latitude: w.latitude, longitude: w.longitude }}
-            onPress={() => void handleWaypointPress(w)}
-          >
-            <WaypointPin category={w.category} />
-          </Marker>
-        ))}
-      </TrailMap>
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      style={[styles.container, { backgroundColor: theme.background }]}
+    >
+      <TopAppBar onBack={() => router.back()} title="Trip details" />
 
-      {previewWaypoint && previewImage && previewPlacement && (
-        <WaypointPhotoPreview
-          imageUri={previewImage.localUri}
-          onClose={() => setWaypointPreview(null)}
-          onOpen={() => navigateToWaypoint(previewWaypoint.id)}
-          placement={previewPlacement}
-          title={previewWaypoint.title}
-        />
-      )}
-
-      {/* Floating back button */}
-      <Pressable
-        style={[styles.backBtn, { backgroundColor: theme.card, top: insets.top + 12 }]}
-        onPress={() => router.back()}
-        hitSlop={10}
-      >
-        <MaterialIcons name="arrow-back" size={20} color={theme.primaryText} />
-      </Pressable>
-
-      {loading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator color={theme.accent} size="large" />
-        </View>
-      )}
-
-      {/* ── COLLAPSED PILL ── */}
-      {trip && (
-        <View
-          pointerEvents="box-none"
-          style={[styles.pillWrap, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 16 }]}
+      <View style={styles.mapArea} onLayout={handleMapLayout}>
+        <TrailMap
+          ref={mapRef}
+          style={StyleSheet.absoluteFill}
+          switcherPosition="top-right"
+          moveOnMarkerPress={false}
         >
-          <View style={styles.pill}>
-            <Pressable
-              style={[styles.navBtn, !prevTrip && styles.navBtnDisabled]}
-              onPress={() => prevTrip && navigateToTrip(prevTrip.trip.clientTripId)}
-              disabled={!prevTrip}
-            >
-              <MaterialIcons
-                name="chevron-left"
-                size={24}
-                color={prevTrip ? '#243224' : '#9aa596'}
+          {segments.map((seg, i) => {
+            const pts = pointsForSegment(locationSamples, seg);
+            return pts.length > 1 ? (
+              <Polyline
+                key={i}
+                coordinates={pts}
+                strokeColor={SEGMENT_COLOR[seg.segmentType]}
+                strokeWidth={4}
               />
-            </Pressable>
-
-            <Pressable style={styles.pillCenter} onPress={() => setExpanded(true)}>
-              <Text style={styles.pillTitle} numberOfLines={1}>{trip.title}</Text>
-              <View style={styles.pillMetaWrap}>
-                <Text style={styles.pillMeta}>{formatDistance(totalDistanceM)}</Text>
-                <MaterialIcons name="expand-less" size={20} color="#52624f" />
-              </View>
-            </Pressable>
-
-            <Pressable
-              style={[styles.navBtn, !nextTrip && styles.navBtnDisabled]}
-              onPress={() => nextTrip && navigateToTrip(nextTrip.trip.clientTripId)}
-              disabled={!nextTrip}
+            ) : null;
+          })}
+          {waypoints.map((w) => (
+            <Marker
+              key={w.id}
+              coordinate={{ latitude: w.latitude, longitude: w.longitude }}
+              onPress={() => void handleWaypointPress(w)}
             >
-              <MaterialIcons
-                name="chevron-right"
-                size={24}
-                color={nextTrip ? '#243224' : '#9aa596'}
-              />
-            </Pressable>
+              <WaypointPin category={w.category} />
+            </Marker>
+          ))}
+        </TrailMap>
+
+        {previewWaypoint && previewImage && previewPlacement && (
+          <WaypointPhotoPreview
+            imageUri={previewImage.localUri}
+            onClose={() => setWaypointPreview(null)}
+            onOpen={() => navigateToWaypoint(previewWaypoint.id)}
+            placement={previewPlacement}
+            title={previewWaypoint.title}
+          />
+        )}
+
+        {loading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator color={theme.accent} size="large" />
           </View>
-        </View>
-      )}
+        )}
+
+        {trip && (
+          <View pointerEvents="box-none" style={styles.pillWrap}>
+            <View style={styles.pill}>
+              <Pressable
+                style={[styles.navBtn, !prevTrip && styles.navBtnDisabled]}
+                onPress={() => prevTrip && navigateToTrip(prevTrip.trip.clientTripId)}
+                disabled={!prevTrip}
+              >
+                <MaterialIcons
+                  name="chevron-left"
+                  size={24}
+                  color={prevTrip ? '#243224' : '#9aa596'}
+                />
+              </Pressable>
+
+              <Pressable style={styles.pillCenter} onPress={() => setExpanded(true)}>
+                <Text style={styles.pillTitle} numberOfLines={1}>{trip.title}</Text>
+                <View style={styles.pillMetaWrap}>
+                  <Text style={styles.pillMeta}>{formatDistance(totalDistanceM)}</Text>
+                  <MaterialIcons name="expand-less" size={20} color="#52624f" />
+                </View>
+              </Pressable>
+
+              <Pressable
+                style={[styles.navBtn, !nextTrip && styles.navBtnDisabled]}
+                onPress={() => nextTrip && navigateToTrip(nextTrip.trip.clientTripId)}
+                disabled={!nextTrip}
+              >
+                <MaterialIcons
+                  name="chevron-right"
+                  size={24}
+                  color={nextTrip ? '#243224' : '#9aa596'}
+                />
+              </Pressable>
+            </View>
+          </View>
+        )}
+      </View>
+
+      <BottomNav />
 
       {/* ── DETAILS SHEET (Modal) ── */}
       <Modal
@@ -472,10 +465,7 @@ export default function TripDetailScreen() {
         </View>
       </Modal>
 
-      {/* Spacer pushes BottomNav to the bottom (all sibling elements are position:absolute) */}
-      <View style={{ flex: 1 }} pointerEvents="none" />
-      <BottomNav />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -559,21 +549,9 @@ const pinStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
-  // Floating back button
-  backBtn: {
-    position: 'absolute',
-    left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+  mapArea: {
+    flex: 1,
+    position: 'relative',
   },
   // Loading
   loadingOverlay: {
@@ -587,6 +565,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 14,
     right: 14,
+    bottom: 16,
   },
   pill: {
     minHeight: 58,

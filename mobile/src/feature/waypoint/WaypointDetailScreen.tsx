@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Modal, Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Marker } from 'react-native-maps';
@@ -13,6 +13,7 @@ import { EditWaypointSheet } from './components/EditWaypointSheet';
 import { addPhotoToWaypoint } from '@/core/domain/usecase/AddPhotoToWaypointUseCase';
 import { BottomNav } from '@/components/ui/BottomNav';
 import { TrailMap } from '@/components/ui/TrailMap';
+import { TopAppBar } from '@/components/ui/TopAppBar';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { CATEGORY_ICON, CATEGORY_LABEL } from '@/constants/waypointCategories';
 import type { WaypointImage } from '@/core/domain/model/waypoint';
@@ -75,18 +76,11 @@ export default function WaypointDetailScreen() {
   const pillBottom = BOTTOM_NAV_HEIGHT + insets.bottom + 12;
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.background }]}>
-        <Pressable
-          style={[styles.backBtn, { backgroundColor: theme.accentMuted }]}
-          onPress={() => router.back()}
-          hitSlop={10}
-        >
-          <Text style={[styles.backArrow, { color: theme.primaryText }]}>←</Text>
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: theme.primaryText }]}>Waypoint</Text>
-      </View>
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      style={[styles.screen, { backgroundColor: theme.background }]}
+    >
+      <TopAppBar onBack={() => router.back()} title="Waypoint" />
 
       {/* Scrollable content */}
       <ScrollView
@@ -221,30 +215,13 @@ export default function WaypointDetailScreen() {
         onDismiss={() => setShowEditSheet(false)}
         onSaved={() => reload()}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 12,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backArrow: { fontSize: 18, fontWeight: '600' },
-  headerTitle: { fontSize: 24, fontWeight: '800' },
 
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20 },

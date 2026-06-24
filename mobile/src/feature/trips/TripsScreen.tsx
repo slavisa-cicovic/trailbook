@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTripsStore, type TripWithMeta } from '@/feature/trips/tripsStore';
 import { BottomNav } from '@/components/ui/BottomNav';
+import { TopAppBar } from '@/components/ui/TopAppBar';
 import { TripCard } from './components/TripCard';
 import { FiltersPanel, FiltersToggle, DEFAULT_FILTERS, type Filters } from './components/FiltersPanel';
 import { TotalCard } from './components/TotalCard';
@@ -97,7 +98,6 @@ export default function TripsScreen() {
   function ListHeader() {
     return (
       <View style={{ backgroundColor: theme.background }}>
-        <Text style={[styles.title, { color: theme.primaryText }]}>Trips</Text>
         <Text style={[styles.subtitle, { color: theme.mutedText }]}>
           Your local recorded routes and saved trip content.
         </Text>
@@ -148,9 +148,9 @@ export default function TripsScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+        <TopAppBar title="Trips" />
         {loading && trips.length === 0 ? (
           <View style={styles.loadingContainer}>
-            <Text style={[styles.title, { color: theme.primaryText }]}>Trips</Text>
             <ActivityIndicator color={theme.accent} style={{ marginTop: 40 }} />
           </View>
         ) : tab !== 'my_trips' ? (
@@ -197,7 +197,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   loadingContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
 
-  title: { fontSize: 32, fontWeight: '800', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
   subtitle: { fontSize: 14, lineHeight: 20, paddingHorizontal: 20, paddingBottom: 16 },
 
   tabRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 16 },
