@@ -1,4 +1,4 @@
-import { openDatabaseSync } from 'expo-sqlite';
+import { openDatabaseSync, type SQLiteDatabase } from 'expo-sqlite';
 
 const MIGRATION_0000 = `
   CREATE TABLE IF NOT EXISTS capture_meta (
@@ -91,10 +91,53 @@ const MIGRATION_0000 = `
   CREATE INDEX IF NOT EXISTS waypoints_trip_id_idx ON waypoints (trip_id);
 `;
 
-const MIGRATIONS: [number, string][] = [[0, MIGRATION_0000]];
+// Adds client_trip_id to trips if the DB pre-dates migration 0000 (old schema).
+async function migration_0001(sqlite: SQLiteDatabase): Promise<void> {
+  const cols = await sqlite.getAllAsync<{ name: string }>(
+    `SELECT name FROM pragma_table_info('trips')`,
+  );
+  if (cols.some((c) => c.name === 'client_trip_id')) return;
+
+  await sqlite.execAsync(`ALTER TABLE trips ADD COLUMN client_trip_id text;`);
+  const rows = await sqlite.getAllAsync<{ id: number }>(
+    `SELECT id FROM trips WHERE client_trip_id IS NULL`,
+  );
+  for (const row of rows) {
+    await sqlite.runAsync(
+      `UPDATE trips SET client_trip_id = ? WHERE id = ?`,
+      [`migrated-${row.id}`, row.id],
+    );
+  }
+}
+
+type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
+
+const MIGRATIONS: Migration[] = [
+  [0, MIGRATION_0000],
+  [1, migration_0001],
+];
 
 export async function runMigrations(): Promise<void> {
   const sqlite = openDatabaseSync('trailbook.db');
+
+  // If the trips table exists but lacks client_trip_id, the schema predates the
+  // current migration (regardless of whether _migrations exists or what it contains).
+  // Drop everything so MIGRATION_0000 can recreate all tables from scratch.
+  const allTables = await sqlite.getAllAsync<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`,
+  );
+  const hasTrips = allTables.some((t) => t.name === 'trips');
+  if (hasTrips) {
+    const tripsCols = await sqlite.getAllAsync<{ name: string }>(
+      `SELECT name FROM pragma_table_info('trips')`,
+    );
+    const schemaOk = tripsCols.some((c) => c.name === 'client_trip_id');
+    if (!schemaOk) {
+      for (const { name } of allTables) {
+        await sqlite.execAsync(`DROP TABLE IF EXISTS "${name}"`);
+      }
+    }
+  }
 
   await sqlite.execAsync(
     `CREATE TABLE IF NOT EXISTS _migrations (version integer PRIMARY KEY NOT NULL);`,
@@ -103,10 +146,14 @@ export async function runMigrations(): Promise<void> {
   const applied = await sqlite.getAllAsync<{ version: number }>(`SELECT version FROM _migrations`);
   const appliedSet = new Set(applied.map((r) => r.version));
 
-  for (const [version, sql] of MIGRATIONS) {
+  for (const [version, migration] of MIGRATIONS) {
     if (appliedSet.has(version)) continue;
     await sqlite.withTransactionAsync(async () => {
-      await sqlite.execAsync(sql);
+      if (typeof migration === 'string') {
+        await sqlite.execAsync(migration);
+      } else {
+        await migration(sqlite);
+      }
       await sqlite.runAsync(`INSERT INTO _migrations (version) VALUES (?)`, version);
     });
   }
