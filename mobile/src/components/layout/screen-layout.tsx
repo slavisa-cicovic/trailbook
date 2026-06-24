@@ -1,4 +1,4 @@
-import { type PropsWithChildren } from 'react';
+import { type PropsWithChildren, type ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +18,7 @@ interface ScreenLayoutProps extends PropsWithChildren {
   contentStyle?: StyleProp<ViewStyle>;
   contentVariant?: 'card' | 'plain';
   onBack?: () => void;
+  rightActions?: ReactNode;
   scrollEnabled?: boolean;
   showBottomNavigation?: boolean;
 }
@@ -28,6 +29,7 @@ export default function ScreenLayout({
   contentStyle,
   contentVariant = 'card',
   onBack,
+  rightActions,
   scrollEnabled = true,
   showBottomNavigation = false,
 }: ScreenLayoutProps) {
@@ -44,7 +46,7 @@ export default function ScreenLayout({
       >
         <View style={styles.shell}>
           {(title || onBack) && (
-            <TopAppBar onBack={onBack} title={title ?? ''} />
+            <TopAppBar onBack={onBack} rightActions={rightActions} title={title ?? ''} />
           )}
 
           {scrollEnabled ? (

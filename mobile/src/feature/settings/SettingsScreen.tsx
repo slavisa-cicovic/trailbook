@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Pressable, ActivityIndicator, Alert,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useSettingsStore } from '@/feature/settings/settingsStore';
@@ -16,6 +17,97 @@ const THEME_OPTIONS: { label: string; value: ThemePreference }[] = [
   { label: 'Day', value: 'day' },
   { label: 'Night', value: 'night' },
 ];
+
+type SettingsIconName = keyof typeof MaterialIcons.glyphMap;
+
+function SettingsSection({ children, title }: { children: ReactNode; title: string }) {
+  const { theme } = useAppTheme();
+
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: theme.mutedText }]}>{title}</Text>
+      <View
+        style={[
+          styles.preferenceGroup,
+          { backgroundColor: theme.card, borderColor: theme.border },
+        ]}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
+function SettingsDivider() {
+  const { theme } = useAppTheme();
+  return <View style={[styles.preferenceDivider, { backgroundColor: theme.border }]} />;
+}
+
+function SettingsRow({
+  description,
+  disabled,
+  iconName,
+  loading,
+  onPress,
+  title,
+  tone = 'default',
+  value,
+}: {
+  description?: string;
+  disabled?: boolean;
+  iconName: SettingsIconName;
+  loading?: boolean;
+  onPress?: () => void;
+  title: string;
+  tone?: 'default' | 'danger';
+  value?: string;
+}) {
+  const { theme } = useAppTheme();
+  const interactive = Boolean(onPress) && !disabled;
+  const iconColor = tone === 'danger' ? theme.danger : theme.accent;
+  const iconBackground = tone === 'danger' ? theme.dangerMuted : theme.accentMuted;
+
+  return (
+    <Pressable
+      disabled={!interactive}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.preferenceRow,
+        pressed && styles.preferenceRowPressed,
+        disabled && styles.preferenceRowDisabled,
+      ]}
+    >
+      <View style={[styles.preferenceIcon, { backgroundColor: iconBackground }]}>
+        <MaterialIcons color={iconColor} name={iconName} size={20} />
+      </View>
+      <View style={styles.preferenceBody}>
+        <Text
+          style={[
+            styles.preferenceTitle,
+            { color: tone === 'danger' ? theme.danger : theme.primaryText },
+          ]}
+        >
+          {title}
+        </Text>
+        {description ? (
+          <Text style={[styles.preferenceDescription, { color: theme.mutedText }]}>
+            {description}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.preferenceTrailing}>
+        {loading ? (
+          <ActivityIndicator color={theme.accent} size="small" />
+        ) : value ? (
+          <Text style={[styles.preferenceValue, { color: theme.mutedText }]}>{value}</Text>
+        ) : null}
+        {interactive && !loading ? (
+          <MaterialIcons color={theme.mutedText} name="chevron-right" size={22} />
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -45,94 +137,107 @@ export default function SettingsScreen() {
   }, [statusMessage]);
 
   return (
-    <ScreenLayout title="Settings" showBottomNavigation contentVariant="plain" scrollEnabled>
-      {/* Account */}
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <Text style={[styles.cardLabel, { color: theme.mutedText }]}>Account</Text>
-        <View style={styles.row}>
-          <View>
-            <Text style={[styles.rowTitle, { color: theme.primaryText }]}>
-              {isDemo ? 'Demo user' : displayName ?? 'Signed in'}
-            </Text>
-            {isDemo && <Text style={[styles.rowSub, { color: theme.mutedText }]}>Max 3 trips · no sync</Text>}
-            {!isDemo && status === 'authenticated' && <Text style={[styles.rowSub, { color: theme.mutedText }]}>Full account</Text>}
-          </View>
-        </View>
-      </View>
-
-      {/* Theme */}
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <Text style={[styles.cardLabel, { color: theme.mutedText }]}>Theme</Text>
-        <View style={styles.chipRow}>
-          {THEME_OPTIONS.map((opt) => {
-            const selected = preference === opt.value;
-            return (
-              <Pressable
-                key={opt.value}
-                style={[styles.chip, { backgroundColor: selected ? theme.accent : theme.accentMuted }]}
-                onPress={() => setPreference(opt.value)}
-              >
-                <Text style={[styles.chipText, { color: selected ? theme.background : theme.primaryText }]}>
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Data */}
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <Text style={[styles.cardLabel, { color: theme.mutedText }]}>Data</Text>
-
+    <ScreenLayout
+      contentStyle={styles.screenContent}
+      rightActions={
         <Pressable
-          style={[styles.row, styles.rowPressable, (isDemo || isWorking) && styles.rowDisabled]}
-          onPress={isDemo ? undefined : () => void onRestoreFromBackend()}
-          disabled={isDemo || isWorking}
-        >
-          <Text style={[styles.rowTitle, { color: isDemo ? theme.mutedText : theme.primaryText }]}>
-            Restore from backend
-          </Text>
-          {isWorking
-            ? <ActivityIndicator size="small" color={theme.accent} />
-            : <Text style={[styles.chevron, { color: theme.mutedText }]}>›</Text>
-          }
-        </Pressable>
-
-        <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-        <Pressable
-          style={[styles.row, styles.rowPressable, (isDemo || isWorking) && styles.rowDisabled]}
-          onPress={isDemo ? undefined : onDeleteLocalClick}
-          disabled={isDemo || isWorking}
-        >
-          <Text style={[styles.rowTitle, { color: isDemo ? theme.mutedText : theme.danger }]}>
-            Delete local trips
-          </Text>
-          <Text style={[styles.chevron, { color: theme.mutedText }]}>›</Text>
-        </Pressable>
-      </View>
-
-      {/* About */}
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <Text style={[styles.cardLabel, { color: theme.mutedText }]}>App</Text>
-        <Pressable style={[styles.row, styles.rowPressable]} onPress={() => router.push('/about')}>
-          <Text style={[styles.rowTitle, { color: theme.primaryText }]}>About Vellora</Text>
-          <Text style={[styles.chevron, { color: theme.mutedText }]}>›</Text>
-        </Pressable>
-      </View>
-
-      {/* Logout */}
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <Pressable
-          style={[styles.row, styles.rowPressable, isWorking && { opacity: 0.6 }]}
-          onPress={onLogout}
+          accessibilityLabel={isDemo ? 'Exit demo' : 'Log out'}
           disabled={isWorking}
+          hitSlop={10}
+          onPress={onLogout}
+          style={[
+            styles.logoutAppBarButton,
+            { backgroundColor: theme.dangerMuted },
+            isWorking && styles.preferenceRowDisabled,
+          ]}
         >
-          <Text style={[styles.rowTitle, { color: theme.danger }]}>
-            {isDemo ? 'Exit demo' : 'Log out'}
-          </Text>
+          <MaterialIcons color={theme.danger} name="logout" size={20} />
         </Pressable>
+      }
+      title="Settings"
+      showBottomNavigation
+      contentVariant="plain"
+      scrollEnabled
+    >
+      <View style={styles.settingsRoot}>
+        <SettingsSection title="Account">
+          <SettingsRow
+            description={
+              isDemo
+                ? 'Max 3 trips · no sync'
+                : status === 'authenticated'
+                  ? 'Full account'
+                  : undefined
+            }
+            iconName="person"
+            title={isDemo ? 'Demo user' : displayName ?? 'Signed in'}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Theme">
+          <View style={styles.themePreference}>
+            <View style={[styles.preferenceIcon, { backgroundColor: theme.accentMuted }]}>
+              <MaterialIcons color={theme.accent} name="palette" size={20} />
+            </View>
+            <View style={styles.preferenceBody}>
+              <Text style={[styles.preferenceTitle, { color: theme.primaryText }]}>Theme</Text>
+              <View style={styles.themeRow}>
+                {THEME_OPTIONS.map((option) => {
+                  const selected = preference === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => setPreference(option.value)}
+                      style={[
+                        styles.themeButton,
+                        { backgroundColor: selected ? theme.accent : theme.accentMuted },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.themeButtonText,
+                          { color: selected ? theme.background : theme.accent },
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        </SettingsSection>
+
+        <SettingsSection title="Data">
+          <SettingsRow
+            disabled={isDemo || isWorking}
+            iconName="cloud-download"
+            loading={isWorking}
+            onPress={isDemo ? undefined : () => void onRestoreFromBackend()}
+            title="Restore from backend"
+            value={isDemo ? 'Unavailable' : 'Restore'}
+          />
+          <SettingsDivider />
+          <SettingsRow
+            disabled={isDemo || isWorking}
+            iconName="delete-sweep"
+            onPress={isDemo ? undefined : onDeleteLocalClick}
+            title="Delete local trips"
+            tone="danger"
+            value={isDemo ? 'Unavailable' : 'Delete'}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="App">
+          <SettingsRow
+            iconName="info-outline"
+            onPress={() => router.push('/about')}
+            title="About Vellora"
+            value="Open"
+          />
+        </SettingsSection>
+
       </View>
 
       {/* Delete confirm sheet */}
@@ -154,33 +259,103 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 8,
-    marginBottom: 12,
+  screenContent: {
+    justifyContent: 'flex-start',
   },
-  cardLabel: {
+  logoutAppBarButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsRoot: {
+    gap: 18,
+  },
+  section: {
+    gap: 8,
+  },
+  sectionTitle: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginLeft: 4,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 8,
   },
-  row: {
+  preferenceGroup: {
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  preferenceRow: {
+    minHeight: 68,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  preferenceRowPressed: {
+    opacity: 0.72,
+  },
+  preferenceRowDisabled: {
+    opacity: 0.62,
+  },
+  preferenceIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  preferenceBody: {
+    flex: 1,
+    gap: 3,
+  },
+  preferenceTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  preferenceDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  preferenceTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  preferenceValue: {
+    flexShrink: 1,
+    maxWidth: 110,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  preferenceDivider: {
+    height: 1,
+    marginLeft: 62,
+  },
+  themePreference: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  themeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 9,
+  },
+  themeButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
     paddingVertical: 10,
   },
-  rowPressable: {},
-  rowDisabled: { opacity: 0.4 },
-  rowTitle: { fontSize: 16 },
-  rowSub: { fontSize: 12, marginTop: 2 },
-  chevron: { fontSize: 20 },
-  divider: { height: StyleSheet.hairlineWidth },
-  chipRow: { flexDirection: 'row', gap: 10, paddingBottom: 8 },
-  chip: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 14 },
-  chipText: { fontSize: 14, fontWeight: '600' },
+  themeButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
 });
