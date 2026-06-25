@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useSettingsStore } from '@/feature/settings/settingsStore';
 import { useThemeStore, type ThemePreference } from '@/feature/settings/themeStore';
+import { usePurchaseStore } from '@/feature/purchases/purchaseStore';
 import SettingsDivider from '@/feature/settings/components/SettingsDivider';
 import SettingsRow from '@/feature/settings/components/SettingsRow';
 import SettingsSection from '@/feature/settings/components/SettingsSection';
@@ -29,8 +30,12 @@ export default function SettingsScreen() {
 
   const status = useAuthStore((s) => s.status);
   const displayName = useAuthStore((s) => s.displayName);
+  const email = useAuthStore((s) => s.email);
   const isDemo = useAuthStore((s) => s.isDemo);
   const role = useAuthStore((s) => s.role);
+  const purchaseAccess = usePurchaseStore((s) => s.access);
+  const purchaseBusyAction = usePurchaseStore((s) => s.busyAction);
+  const refreshPurchaseAccess = usePurchaseStore((s) => s.refreshAccess);
 
   const isWorking = useSettingsStore((s) => s.isWorking);
   const statusMessage = useSettingsStore((s) => s.statusMessage);
@@ -56,6 +61,10 @@ export default function SettingsScreen() {
       buttons: [{ text: 'OK', onPress: onStatusMessageShown }],
     });
   }, [onStatusMessageShown, showAlert, statusMessage]);
+
+  useEffect(() => {
+    if (status === 'authenticated') void refreshPurchaseAccess();
+  }, [refreshPurchaseAccess, status]);
 
   return (
     <ScreenLayout
@@ -92,6 +101,26 @@ export default function SettingsScreen() {
             }
             iconName="person"
             title={isDemo ? 'Demo user' : displayName ?? 'Signed in'}
+          />
+          <SettingsDivider />
+          <SettingsRow
+            description={isDemo ? 'Not available in demo mode' : email ?? 'Sign in again to load email'}
+            iconName="mail-outline"
+            title="Email"
+          />
+          <SettingsDivider />
+          <SettingsRow
+            description={
+              isDemo
+                ? 'Local access only'
+                : purchaseAccess
+                  ? `${purchaseAccess.planCode} · ${purchaseAccess.subscriptionStatus}`
+                  : 'Loading purchase access'
+            }
+            iconName="workspace-premium"
+            loading={!isDemo && purchaseBusyAction === 'access'}
+            title="Purchase"
+            value={isDemo ? 'Demo' : purchaseAccess?.subscriptionStatus}
           />
         </SettingsSection>
 

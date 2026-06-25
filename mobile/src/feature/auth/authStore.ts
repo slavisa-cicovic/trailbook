@@ -9,6 +9,7 @@ export type AuthStatus = 'loading' | 'authenticated' | 'demo' | 'unauthenticated
 interface AuthState {
   status: AuthStatus;
   displayName: string | null;
+  email: string | null;
   isDemo: boolean;
   role: string | null;
 }
@@ -23,12 +24,13 @@ interface AuthActions {
 export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   status: 'loading',
   displayName: null,
+  email: null,
   isDemo: false,
   role: null,
 
   async init() {
-    const { status, displayName, role } = await authRepository.init();
-    set({ status, displayName, isDemo: status === 'demo', role });
+    const { status, displayName, email, role } = await authRepository.init();
+    set({ status, displayName, email, isDemo: status === 'demo', role });
   },
 
   async loginWithSocial(provider, idToken) {
@@ -37,6 +39,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
     set({
       status: 'authenticated',
       displayName: result.value.displayName,
+      email: result.value.email,
       isDemo: false,
       role: result.value.role,
     });
@@ -45,11 +48,23 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
 
   async loginAsDemo() {
     await authRepository.loginAsDemo();
-    set({ status: 'demo', displayName: 'Demo User', isDemo: true, role: null });
+    set({
+      status: 'demo',
+      displayName: 'Demo User',
+      email: null,
+      isDemo: true,
+      role: null,
+    });
   },
 
   async logout() {
     await authRepository.logout();
-    set({ status: 'unauthenticated', displayName: null, isDemo: false, role: null });
+    set({
+      status: 'unauthenticated',
+      displayName: null,
+      email: null,
+      isDemo: false,
+      role: null,
+    });
   },
 }));

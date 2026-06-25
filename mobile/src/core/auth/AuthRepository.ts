@@ -22,6 +22,7 @@ export interface AuthRepository {
   init(): Promise<{
     status: 'authenticated' | 'demo' | 'unauthenticated';
     displayName: string | null;
+    email: string | null;
     role: string | null;
   }>;
 }

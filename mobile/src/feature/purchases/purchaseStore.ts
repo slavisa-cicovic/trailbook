@@ -12,6 +12,7 @@ interface PurchaseState {
   message: string | null;
   products: PurchaseProduct[];
   load(): Promise<void>;
+  refreshAccess(): Promise<void>;
   runScenario(actionKey: string, productId: string, scenario: FakePurchaseScenario): Promise<void>;
   clearMessage(): void;
 }
@@ -21,6 +22,16 @@ export const usePurchaseStore = create<PurchaseState>((set) => ({
   busyAction: null,
   message: null,
   products: [],
+
+  async refreshAccess() {
+    set({ busyAction: 'access' });
+    const result = await purchaseRepository.getCurrentAccess();
+    if (!result.ok) {
+      set({ busyAction: null });
+      return;
+    }
+    set({ access: result.value, busyAction: null });
+  },
 
   async load() {
     set({ busyAction: 'refresh', message: null });
