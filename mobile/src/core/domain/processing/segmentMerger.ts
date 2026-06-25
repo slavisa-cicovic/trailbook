@@ -43,11 +43,19 @@ export function mergeAndFinalize(
 ): Segment[] {
   if (!rawSegments.length) return [];
 
-  // Merge consecutive same-type segments with gap < threshold
-  const merged: RawSegment[] = [{ ...rawSegments[0] }];
-  for (let i = 1; i < rawSegments.length; i++) {
+  // A short low-speed interruption between confirmed drive segments is usually
+  // traffic, parking manoeuvring, or sparse callbacks rather than a true mode change.
+  const driveStable = absorbDriveInterruptions(rawSegments);
+
+  // Sparse slow movement should not be labelled as cycling solely because one
+  // reported speed crossed the walk threshold.
+  const movementNormalized = normalizeSlowBikeSegments(driveStable, geoPoints);
+
+  // Merge consecutive same-type segments with gap < threshold.
+  const merged: RawSegment[] = [{ ...movementNormalized[0] }];
+  for (let i = 1; i < movementNormalized.length; i++) {
     const prev = merged[merged.length - 1];
-    const curr = rawSegments[i];
+    const curr = movementNormalized[i];
     const gapMs = curr.startTime.getTime() - prev.endTime.getTime();
     if (prev.type === curr.type && gapMs <= V1.mergeGapThresholdMs) {
       prev.endTime = curr.endTime;
@@ -71,6 +79,57 @@ export function mergeAndFinalize(
     endedAt: seg.endTime,
     distanceM: distanceInRange(geoPoints, seg.startTime, seg.endTime),
   }));
+}
+
+function absorbDriveInterruptions(segments: RawSegment[]): RawSegment[] {
+  if (segments.length < 3) return segments.map((segment) => ({ ...segment }));
+
+  const result = segments.map((segment) => ({ ...segment }));
+
+  for (let index = 1; index < result.length - 1; index += 1) {
+    const previous = result[index - 1];
+    const current = result[index];
+    const next = result[index + 1];
+    const durationMs = current.endTime.getTime() - current.startTime.getTime();
+    const previousGapMs = current.startTime.getTime() - previous.endTime.getTime();
+    const nextGapMs = next.startTime.getTime() - current.endTime.getTime();
+
+    if (
+      previous.type === 'DRIVE' &&
+      next.type === 'DRIVE' &&
+      durationMs <= V1.driveInterruptionMaxMs &&
+      previousGapMs <= V1.mergeGapThresholdMs &&
+      nextGapMs <= V1.mergeGapThresholdMs
+    ) {
+      current.type = 'DRIVE';
+    }
+  }
+
+  return result;
+}
+
+function normalizeSlowBikeSegments(
+  segments: RawSegment[],
+  geoPoints: GeoPoint[],
+): RawSegment[] {
+  return segments.map((segment) => {
+    if (segment.type !== 'BIKE') return segment;
+
+    const durationSeconds =
+      (segment.endTime.getTime() - segment.startTime.getTime()) / 1000;
+    if (durationSeconds <= 0) return segment;
+
+    const averageSpeedMps =
+      distanceInRange(geoPoints, segment.startTime, segment.endTime) / durationSeconds;
+
+    if (averageSpeedMps < V1.stationaryMaxMps) {
+      return { ...segment, type: 'STATIONARY' };
+    }
+    if (averageSpeedMps < V1.bikeMinAverageMps) {
+      return { ...segment, type: 'WALK' };
+    }
+    return segment;
+  });
 }
 
 function trimBoundaryStationary(segments: RawSegment[]): RawSegment[] {

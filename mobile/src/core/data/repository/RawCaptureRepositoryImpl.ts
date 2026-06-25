@@ -10,7 +10,10 @@ import * as rawDeviceDao from '@/core/data/local/rawDeviceDao';
 import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
 import * as tripDao from '@/core/data/local/tripDao';
 import * as waypointDao from '@/core/data/local/waypointDao';
+import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import * as segmentDao from '@/core/data/local/segmentDao';
+import * as reprocessingSnapshotDao from '@/core/data/local/reprocessingSnapshotDao';
+import { sqlite } from '@/core/db';
 
 export class RawCaptureRepositoryImpl implements RawCaptureRepository {
   async initCaptureMeta(meta: CaptureMeta): Promise<Result<void>> {
@@ -52,18 +55,41 @@ export class RawCaptureRepositoryImpl implements RawCaptureRepository {
     });
   }
 
-  async saveTripBundle(bundle: TripBundle): Promise<Result<void>> {
+  async replaceTripBundle(bundle: TripBundle): Promise<Result<void>> {
+    const tripId = bundle.trip.clientTripId;
+
     return resultOfAsync(async () => {
-      await tripDao.insertTrip(bundle.trip);
-      await captureMetaDao.insert(bundle.captureMeta);
-      await rawLocationDao.insertAll(bundle.locations);
-      await rawActivityDao.insertAll(bundle.activities);
-      await rawDeviceDao.insertAll(bundle.deviceStates);
-      await rawSessionEventDao.insertAll(bundle.sessionEvents);
-      await waypointDao.insertAll(bundle.waypoints);
-      if (bundle.segments.length > 0) {
-        await segmentDao.insertAll(bundle.segments);
-      }
+      await sqlite.withTransactionAsync(async () => {
+        const existingWaypoints = await waypointDao.getForTrip(tripId);
+        const waypointIds = Array.from(
+          new Set([
+            ...existingWaypoints.map((waypoint) => waypoint.id),
+            ...bundle.waypoints.map((waypoint) => waypoint.id),
+          ]),
+        );
+
+        await waypointImageDao.deleteAllForTrip(waypointIds);
+        await segmentDao.deleteForTrip(tripId);
+        await waypointDao.deleteForTrip(tripId);
+        await rawSessionEventDao.deleteForTrip(tripId);
+        await rawDeviceDao.deleteForTrip(tripId);
+        await rawActivityDao.deleteForTrip(tripId);
+        await rawLocationDao.deleteForTrip(tripId);
+        await captureMetaDao.deleteForTrip(tripId);
+        await reprocessingSnapshotDao.deleteForTrip(tripId);
+        await tripDao.deleteByClientId(tripId);
+
+        await tripDao.insertTrip(bundle.trip);
+        await captureMetaDao.insert(bundle.captureMeta);
+        await rawLocationDao.insertAll(bundle.locations);
+        await rawActivityDao.insertAll(bundle.activities);
+        await rawDeviceDao.insertAll(bundle.deviceStates);
+        await rawSessionEventDao.insertAll(bundle.sessionEvents);
+        await waypointDao.insertAll(bundle.waypoints);
+        if (bundle.segments.length > 0) {
+          await segmentDao.insertAll(bundle.segments);
+        }
+      });
     });
   }
 

@@ -27,6 +27,13 @@ export interface TripRepository {
 
   replaceSegments(tripId: string, segments: Segment[]): Promise<Result<void>>;
   getSegmentsForTrip(tripId: string): Promise<Result<Segment[]>>;
+  applyReprocessing(
+    tripId: string,
+    segments: Segment[],
+    processingVersion: number,
+  ): Promise<Result<void>>;
+  undoReprocessing(tripId: string): Promise<Result<void>>;
+  hasReprocessingSnapshot(tripId: string): Promise<Result<boolean>>;
 
   getTripBundle(clientTripId: string): Promise<Result<TripBundle | null>>;
 }

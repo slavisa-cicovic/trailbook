@@ -61,6 +61,11 @@ export async function deleteWaypoint(id: string): Promise<void> {
   dbEvents.emit('waypoints:changed');
 }
 
+export async function deleteForTrip(tripId: string): Promise<void> {
+  await db.delete(waypoints).where(eq(waypoints.tripId, tripId));
+  dbEvents.emit('waypoints:changed');
+}
+
 export async function getForTrip(tripId: string): Promise<Waypoint[]> {
   const rows = await db.select().from(waypoints).where(eq(waypoints.tripId, tripId));
   return rows.map(toDomain);

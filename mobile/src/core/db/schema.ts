@@ -125,3 +125,9 @@ export const segments = sqliteTable(
   },
   (t) => [index('segments_trip_id_idx').on(t.tripId)],
 );
+
+export const reprocessingSnapshots = sqliteTable('reprocessing_snapshots', {
+  tripId: text('trip_id').primaryKey(),
+  snapshotJson: text('snapshot_json').notNull(),
+  createdAt: text('created_at').notNull(),
+});

@@ -10,6 +10,7 @@ import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import * as rawLocationDao from '@/core/data/local/rawLocationDao';
 import * as rawDeviceDao from '@/core/data/local/rawDeviceDao';
 import type { RawDeviceSample } from '@/core/domain/model/rawSamples';
+import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 
 interface TripDetailState {
   trip: Trip | null;
@@ -18,6 +19,7 @@ interface TripDetailState {
   imagesByWaypoint: Record<string, WaypointImage[]>;
   locationSamples: RawLocationSample[];
   deviceSamples: RawDeviceSample[];
+  hasReprocessingSnapshot: boolean;
   loading: boolean;
   error: string | null;
 }
@@ -34,6 +36,7 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
   imagesByWaypoint: {},
   locationSamples: [],
   deviceSamples: [],
+  hasReprocessingSnapshot: false,
   loading: false,
   error: null,
 
@@ -43,12 +46,14 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
       const trip = await tripDao.getTripByClientId(clientTripId);
       if (!trip) { set({ loading: false, error: 'Trip not found' }); return; }
 
-      const [segments, waypoints, locationSamples, deviceSamples] = await Promise.all([
+      const [segments, waypoints, locationSamples, deviceSamples, snapshotResult] = await Promise.all([
         segmentDao.getForTrip(clientTripId),
         waypointDao.getForTrip(clientTripId),
         rawLocationDao.getAllForTrip(clientTripId),
         rawDeviceDao.getAllForTrip(clientTripId),
+        tripRepository.hasReprocessingSnapshot(clientTripId),
       ]);
+      if (!snapshotResult.ok) throw new Error(snapshotResult.error);
 
       const imagesByWaypoint: Record<string, WaypointImage[]> = {};
       await Promise.all(
@@ -57,13 +62,31 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
         }),
       );
 
-      set({ trip, segments, waypoints, imagesByWaypoint, locationSamples, deviceSamples, loading: false });
+      set({
+        trip,
+        segments,
+        waypoints,
+        imagesByWaypoint,
+        locationSamples,
+        deviceSamples,
+        hasReprocessingSnapshot: snapshotResult.value,
+        loading: false,
+      });
     } catch (e) {
       set({ loading: false, error: e instanceof Error ? e.message : String(e) });
     }
   },
 
   reset() {
-    set({ trip: null, segments: [], waypoints: [], imagesByWaypoint: {}, locationSamples: [], deviceSamples: [], error: null });
+    set({
+      trip: null,
+      segments: [],
+      waypoints: [],
+      imagesByWaypoint: {},
+      locationSamples: [],
+      deviceSamples: [],
+      hasReprocessingSnapshot: false,
+      error: null,
+    });
   },
 }));

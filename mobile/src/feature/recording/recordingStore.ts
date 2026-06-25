@@ -13,6 +13,7 @@ import * as captureMetaDao from '@/core/data/local/captureMetaDao';
 import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
 import * as rawDeviceDao from '@/core/data/local/rawDeviceDao';
 import * as rawLocationDao from '@/core/data/local/rawLocationDao';
+import * as rawActivityDao from '@/core/data/local/rawActivityDao';
 import * as waypointDao from '@/core/data/local/waypointDao';
 import { sampleDeviceState } from '@/core/data/devicestate/deviceStateSampler';
 import {
@@ -34,6 +35,37 @@ import { uploadTrip } from '@/core/domain/usecase/UploadTripUseCase';
 
 const DEMO_TRIP_LIMIT = 3;
 const DEVICE_SAMPLE_INTERVAL_MS = 60_000;
+
+async function requireRecordingLocationPermissions(): Promise<Result<void>> {
+  const backgroundAvailable = await Location.isBackgroundLocationAvailableAsync();
+  if (!backgroundAvailable) {
+    return err('Background location is unavailable in this build.');
+  }
+
+  const foreground = await Location.requestForegroundPermissionsAsync();
+  if (!foreground.granted) {
+    return err('Location permission denied.');
+  }
+
+  let background = await Location.getBackgroundPermissionsAsync();
+  if (!background.granted) {
+    background = await Location.requestBackgroundPermissionsAsync();
+  }
+  if (!background.granted) {
+    return err('Always allow location access is required for trip recording.');
+  }
+
+  return ok(undefined);
+}
+
+async function deleteIncompleteTrip(tripId: string) {
+  await rawSessionEventDao.deleteForTrip(tripId);
+  await rawDeviceDao.deleteForTrip(tripId);
+  await rawLocationDao.deleteForTrip(tripId);
+  await rawActivityDao.deleteForTrip(tripId);
+  await captureMetaDao.deleteForTrip(tripId);
+  await tripDao.deleteByClientId(tripId);
+}
 
 function osApiLevel(): number {
   if (Platform.OS === 'android') {
@@ -159,8 +191,8 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
         if (ids.length >= DEMO_TRIP_LIMIT) return err('DEMO_LIMIT_REACHED');
       }
 
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return err('Location permission denied');
+      const permissionResult = await requireRecordingLocationPermissions();
+      if (!permissionResult.ok) return permissionResult;
 
       const clientTripId = randomUuid();
       const now = new Date();
@@ -186,9 +218,13 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       try {
         await startLocationTask();
       } catch (locErr) {
-        // Background location unavailable (e.g. Expo Go on iOS).
-        // Trip is created and UI enters recording state — no GPS data collected.
-        console.warn('[Recording] Background location unavailable:', locErr);
+        await clearActiveRecordingTripId();
+        await deleteIncompleteTrip(clientTripId);
+        throw new Error(
+          `Unable to start background location: ${
+            locErr instanceof Error ? locErr.message : String(locErr)
+          }`,
+        );
       }
 
       subscribeToLiveUpdates(clientTripId);
@@ -232,13 +268,11 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
     if (!activeTrip || !isPaused) return err('Nothing to resume');
 
     try {
+      const permissionResult = await requireRecordingLocationPermissions();
+      if (!permissionResult.ok) return permissionResult;
+      await startLocationTask();
       await rawSessionEventDao.insert({ tripId: activeTrip.clientTripId, timestamp: new Date(), type: 'RECORDING_RESUMED' });
       await tripDao.updateStatus(activeTrip.clientTripId, 'RECORDING');
-      try {
-        await startLocationTask();
-      } catch (locErr) {
-        console.warn('[Recording] Background location unavailable:', locErr);
-      }
       deviceSampleInterval = setInterval(async () => {
         await rawDeviceDao.insert(await sampleDeviceState(activeTrip.clientTripId));
       }, DEVICE_SAMPLE_INTERVAL_MS);

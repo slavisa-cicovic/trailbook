@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
+  Animated,
   ScrollView,
   Modal,
   type LayoutChangeEvent,
@@ -22,7 +23,10 @@ import { format } from 'date-fns';
 import { useTripDetailStore } from '@/feature/trips/tripDetailStore';
 import { useTripsStore } from '@/feature/trips/tripsStore';
 import { SEGMENT_COLOR, SEGMENT_LABEL } from '@/constants/segmentColors';
-import { reprocessTrip } from '@/core/domain/usecase/ReprocessTripUseCase';
+import {
+  reprocessTrip,
+  undoReprocessing,
+} from '@/core/domain/usecase/ReprocessTripUseCase';
 import { BottomNav } from '@/components/ui/BottomNav';
 import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
@@ -208,6 +212,7 @@ export default function TripDetailScreen() {
   const imagesByWaypoint = useTripDetailStore((s) => s.imagesByWaypoint);
   const locationSamples = useTripDetailStore((s) => s.locationSamples);
   const deviceSamples = useTripDetailStore((s) => s.deviceSamples);
+  const hasReprocessingSnapshot = useTripDetailStore((s) => s.hasReprocessingSnapshot);
   const loading = useTripDetailStore((s) => s.loading);
 
   const allTrips = useTripsStore((s) => s.trips);
@@ -256,13 +261,23 @@ export default function TripDetailScreen() {
     }, 300);
   }, [locationSamples, expanded]);
 
-  async function onReprocess() {
+  async function onReprocessToggle() {
     if (!clientTripId) return;
     setReprocessing(true);
-    const result = await reprocessTrip(clientTripId);
+    const result = hasReprocessingSnapshot
+      ? await undoReprocessing(clientTripId)
+      : await reprocessTrip(clientTripId);
     setReprocessing(false);
-    if (!result.ok) showAlert({ title: 'Reprocess failed', message: result.error });
-    else load(clientTripId);
+    if (!result.ok) {
+      showAlert({
+        title: hasReprocessingSnapshot ? 'Undo failed' : 'Reprocess failed',
+        message: result.error,
+      });
+      return;
+    }
+
+    setExpanded(false);
+    await load(clientTripId);
   }
 
   async function onSync() {
@@ -598,27 +613,34 @@ export default function TripDetailScreen() {
             >
               <View style={styles.actionRow}>
                 <ActionBtn
+                  accessibilityLabel="Edit trip"
                   icon="edit"
                   color={theme.mutedText}
                   bg={theme.accentMuted}
                   onPress={() => showAlert({ title: 'Edit', message: 'Coming soon' })}
                 />
                 <ActionBtn
-                  icon="autorenew"
-                  color={theme.accent}
-                  bg={theme.accentMuted}
-                  onPress={() => void onReprocess()}
+                  accessibilityLabel={
+                    hasReprocessingSnapshot ? 'Undo reprocessing' : 'Reprocess trip'
+                  }
+                  icon={hasReprocessingSnapshot ? 'undo' : 'redo'}
+                  color={hasReprocessingSnapshot ? theme.danger : theme.accent}
+                  bg={hasReprocessingSnapshot ? theme.dangerMuted : theme.accentMuted}
+                  onPress={() => void onReprocessToggle()}
                   loading={reprocessing}
                 />
                 <ActionBtn
+                  accessibilityLabel={isSynced ? 'Trip synced' : 'Sync trip'}
                   icon="sync"
-                  color={isSynced ? theme.mutedText : theme.accent}
-                  bg={theme.accentMuted}
+                  color={isSynced ? theme.mutedText : theme.danger}
+                  bg={isSynced ? theme.accentMuted : theme.dangerMuted}
                   onPress={() => void onSync()}
                   loading={isSyncing}
+                  spinWhenLoading
                   disabled={isSynced}
                 />
                 <ActionBtn
+                  accessibilityLabel="Share trip"
                   icon="share"
                   color={theme.mutedText}
                   bg={theme.accentMuted}
@@ -626,16 +648,6 @@ export default function TripDetailScreen() {
                   disabled
                 />
               </View>
-
-              {!isSynced && (
-                <View style={[styles.syncBanner, { backgroundColor: '#fffbe6' }]}>
-                  <Text style={styles.syncBannerText}>
-                    {trip?.syncState === 'FAILED'
-                      ? 'Sync failed — tap Sync to retry.'
-                      : 'Not yet synced to server.'}
-                  </Text>
-                </View>
-              )}
 
               <View style={[styles.statsRow, { borderColor: theme.border }]}>
                 <StatCell label="WAYPOINTS" value={String(waypoints.length)} theme={theme} />
@@ -715,27 +727,68 @@ export default function TripDetailScreen() {
 // ── Small helpers ──────────────────────────────────────────────────────────
 
 function ActionBtn({
+  accessibilityLabel,
   icon,
   color,
   bg,
   onPress,
   loading,
+  spinWhenLoading,
   disabled,
 }: {
+  accessibilityLabel: string;
   icon: keyof typeof MaterialIcons.glyphMap;
   color: string;
   bg: string;
   onPress: () => void;
   loading?: boolean;
+  spinWhenLoading?: boolean;
   disabled?: boolean;
 }) {
+  const [rotation] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (!loading || !spinWhenLoading) {
+      rotation.stopAnimation();
+      rotation.setValue(0);
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.timing(rotation, {
+        toValue: 1,
+        duration: 900,
+        useNativeDriver: true,
+      }),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [loading, rotation, spinWhenLoading]);
+
+  const rotatingStyle = {
+    transform: [
+      {
+        rotate: rotation.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['0deg', '360deg'],
+        }),
+      },
+    ],
+  };
+
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
       style={[styles.actionBtn, { backgroundColor: bg, opacity: disabled ? 0.4 : 1 }]}
       onPress={onPress}
       disabled={disabled || loading}
     >
-      {loading ? (
+      {loading && spinWhenLoading ? (
+        <Animated.View style={rotatingStyle}>
+          <MaterialIcons name={icon} size={20} color={color} />
+        </Animated.View>
+      ) : loading ? (
         <ActivityIndicator size="small" color={color} />
       ) : (
         <MaterialIcons name={icon} size={20} color={color} />
@@ -890,14 +943,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  // Sync banner
-  syncBanner: {
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-  },
-  syncBannerText: { fontSize: 13, color: '#7a6200' },
 
   // Stats
   statsRow: {

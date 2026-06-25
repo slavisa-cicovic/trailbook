@@ -110,11 +110,20 @@ async function migration_0001(sqlite: SQLiteDatabase): Promise<void> {
   }
 }
 
+const MIGRATION_0002 = `
+  CREATE TABLE IF NOT EXISTS reprocessing_snapshots (
+    trip_id text PRIMARY KEY NOT NULL,
+    snapshot_json text NOT NULL,
+    created_at text NOT NULL
+  );
+`;
+
 type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
 
 const MIGRATIONS: Migration[] = [
   [0, MIGRATION_0000],
   [1, migration_0001],
+  [2, MIGRATION_0002],
 ];
 
 export async function runMigrations(): Promise<void> {

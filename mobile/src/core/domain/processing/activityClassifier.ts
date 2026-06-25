@@ -12,6 +12,7 @@ const ACT_UNKNOWN    = 4;
 const ACT_TILTING    = 5;
 const ACT_WALKING    = 7;
 const ACT_RUNNING    = 8;
+const EARTH_RADIUS_M = 6_371_000;
 
 function activityTypeToSegmentType(activityType: number): SegmentType | null {
   switch (activityType) {
@@ -43,6 +44,43 @@ function bestActivityType(sample: RawActivitySample): SegmentType | null {
   return activityTypeToSegmentType(best.activityType);
 }
 
+function distanceM(start: GeoPoint, end: GeoPoint) {
+  const dLat = ((end.latitude - start.latitude) * Math.PI) / 180;
+  const dLon = ((end.longitude - start.longitude) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((start.latitude * Math.PI) / 180) *
+      Math.cos((end.latitude * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function intervalSpeedMps(point: GeoPoint, next: GeoPoint) {
+  const durationSeconds = (next.timestamp.getTime() - point.timestamp.getTime()) / 1000;
+  if (durationSeconds <= 0) return undefined;
+
+  const reportedSpeed =
+    point.speedMps !== undefined && point.speedMps >= 0 ? point.speedMps : undefined;
+  const impliedSpeed = distanceM(point, next) / durationSeconds;
+
+  if (reportedSpeed === undefined) return impliedSpeed;
+  return Math.max(reportedSpeed, impliedSpeed);
+}
+
+function reconcileActivityWithSpeed(
+  activityType: SegmentType | null,
+  speedMps: number | undefined,
+) {
+  const speedType = speedToSegmentType(speedMps);
+
+  // Motion/activity hints cannot override physically impossible walking/cycling speeds.
+  if (speedMps !== undefined && speedMps >= V1.hardDriveMinMps) {
+    return 'DRIVE' as const;
+  }
+
+  return activityType ?? speedType;
+}
+
 export function classifyIntervals(
   geoPoints: GeoPoint[],
   activitySamples: RawActivitySample[],
@@ -70,16 +108,17 @@ export function classifyIntervals(
   for (let i = 0; i < geoPoints.length - 1; i++) {
     const p = geoPoints[i];
     const next = geoPoints[i + 1];
+    const intervalDurationMs = next.timestamp.getTime() - p.timestamp.getTime();
+    if (intervalDurationMs <= 0 || intervalDurationMs > V1.maxContinuousIntervalMs) {
+      continue;
+    }
 
     const actSample = nearestActivity(p.timestamp);
-    let type: SegmentType;
-
-    if (actSample) {
-      const fromActivity = bestActivityType(actSample);
-      type = fromActivity ?? speedToSegmentType(p.speedMps);
-    } else {
-      type = speedToSegmentType(p.speedMps);
-    }
+    const fromActivity = actSample ? bestActivityType(actSample) : null;
+    const type = reconcileActivityWithSpeed(
+      fromActivity,
+      intervalSpeedMps(p, next),
+    );
 
     // Merge with previous interval if same type
     const last = intervals[intervals.length - 1];

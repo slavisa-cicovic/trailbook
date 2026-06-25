@@ -1,6 +1,7 @@
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import type { LocationObject } from 'expo-location';
+import { Platform } from 'react-native';
 import { getActiveRecordingTripId } from './activeTripStore';
 import * as rawLocationDao from '@/core/data/local/rawLocationDao';
 import * as rawActivityDao from '@/core/data/local/rawActivityDao';
@@ -44,12 +45,24 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: TaskManager.TaskMa
 });
 
 export async function startLocationTask(): Promise<void> {
+  const isRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
+  if (isRunning) {
+    await Location.stopLocationUpdatesAsync(LOCATION_TASK);
+  }
+
   await Location.startLocationUpdatesAsync(LOCATION_TASK, {
-    accuracy: Location.Accuracy.High,
+    accuracy:
+      Platform.OS === 'ios'
+        ? Location.Accuracy.BestForNavigation
+        : Location.Accuracy.High,
     timeInterval: 3000,
     distanceInterval: 5,
     showsBackgroundLocationIndicator: true,
     pausesUpdatesAutomatically: false,
+    activityType: Location.ActivityType.OtherNavigation,
+    deferredUpdatesDistance: 0,
+    deferredUpdatesInterval: 0,
+    deferredUpdatesTimeout: 0,
     foregroundService: {
       notificationTitle: 'Trailbook',
       notificationBody: 'Recording trip in progress...',

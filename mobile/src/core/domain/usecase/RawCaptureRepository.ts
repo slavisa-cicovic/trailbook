@@ -9,6 +9,6 @@ export interface RawCaptureRepository {
   insertDeviceState(sample: RawDeviceSample): Promise<Result<void>>;
   insertSessionEvent(event: RawSessionEvent): Promise<Result<void>>;
   getTripBundle(clientTripId: string): Promise<Result<TripBundle | null>>;
-  saveTripBundle(bundle: TripBundle): Promise<Result<void>>;
+  replaceTripBundle(bundle: TripBundle): Promise<Result<void>>;
   deleteAllRawData(): Promise<Result<void>>;
 }

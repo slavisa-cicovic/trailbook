@@ -14,7 +14,9 @@ import * as rawLocationDao from '@/core/data/local/rawLocationDao';
 import * as rawActivityDao from '@/core/data/local/rawActivityDao';
 import * as rawDeviceDao from '@/core/data/local/rawDeviceDao';
 import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
+import * as reprocessingSnapshotDao from '@/core/data/local/reprocessingSnapshotDao';
 import { deleteAllPhotos } from '@/core/data/local/photoStorage';
+import { sqlite } from '@/core/db';
 
 export class TripRepositoryImpl implements TripRepository {
   async createTrip(trip: Omit<Trip, 'id'>): Promise<Result<void>> {
@@ -50,7 +52,10 @@ export class TripRepositoryImpl implements TripRepository {
   }
 
   async deleteTrip(clientTripId: string): Promise<Result<void>> {
-    return resultOfAsync(() => tripDao.deleteByClientId(clientTripId));
+    return resultOfAsync(async () => {
+      await reprocessingSnapshotDao.deleteForTrip(clientTripId);
+      await tripDao.deleteByClientId(clientTripId);
+    });
   }
 
   async deleteAllLocalData(): Promise<Result<void>> {
@@ -59,6 +64,7 @@ export class TripRepositoryImpl implements TripRepository {
       await waypointImageDao.deleteAll();
       await waypointDao.deleteAll();
       await segmentDao.deleteAll();
+      await reprocessingSnapshotDao.deleteAll();
       await tripDao.deleteAll();
     });
   }
@@ -109,6 +115,55 @@ export class TripRepositoryImpl implements TripRepository {
 
   async getSegmentsForTrip(tripId: string): Promise<Result<Segment[]>> {
     return resultOfAsync(() => segmentDao.getForTrip(tripId));
+  }
+
+  async applyReprocessing(
+    tripId: string,
+    segs: Segment[],
+    processingVersion: number,
+  ): Promise<Result<void>> {
+    return resultOfAsync(async () => {
+      await sqlite.withTransactionAsync(async () => {
+        const existingSnapshot = await reprocessingSnapshotDao.existsForTrip(tripId);
+        if (existingSnapshot) {
+          throw new Error('This trip has already been reprocessed. Undo it before trying again.');
+        }
+
+        const trip = await tripDao.getTripByClientId(tripId);
+        if (!trip) throw new Error('Trip not found');
+
+        const currentSegments = await segmentDao.getForTrip(tripId);
+        await reprocessingSnapshotDao.insert({
+          tripId,
+          processingVersion: trip.processingVersion,
+          segments: currentSegments,
+          createdAt: new Date(),
+        });
+        await segmentDao.deleteForTrip(tripId);
+        await segmentDao.insertAll(segs);
+        await tripDao.updateProcessingVersion(tripId, processingVersion);
+        await tripDao.updateSyncState(tripId, 'PENDING');
+      });
+    });
+  }
+
+  async undoReprocessing(tripId: string): Promise<Result<void>> {
+    return resultOfAsync(async () => {
+      await sqlite.withTransactionAsync(async () => {
+        const snapshot = await reprocessingSnapshotDao.getForTrip(tripId);
+        if (!snapshot) throw new Error('No reprocessing snapshot found');
+
+        await segmentDao.deleteForTrip(tripId);
+        await segmentDao.insertAll(snapshot.segments);
+        await tripDao.updateProcessingVersion(tripId, snapshot.processingVersion);
+        await tripDao.updateSyncState(tripId, 'PENDING');
+        await reprocessingSnapshotDao.deleteForTrip(tripId);
+      });
+    });
+  }
+
+  async hasReprocessingSnapshot(tripId: string): Promise<Result<boolean>> {
+    return resultOfAsync(() => reprocessingSnapshotDao.existsForTrip(tripId));
   }
 
   async getTripBundle(clientTripId: string): Promise<Result<TripBundle | null>> {

@@ -1,7 +1,6 @@
 import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
 import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
-import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { rawCaptureRepository } from '@/core/data/repository/RawCaptureRepositoryImpl';
 import { remoteTripDataSource } from '@/core/data/remote/FetchRemoteTripDataSource';
 import { remoteWaypointImageDataSource } from '@/core/data/remote/FetchRemoteWaypointImageDataSource';
@@ -46,16 +45,11 @@ export async function restoreTrips(): Promise<Result<void>> {
   if (!listResult.ok) return listResult;
 
   for (const item of listResult.value) {
-    const existsResult = await tripRepository.tripExists(item.clientTripId);
-    if (!existsResult.ok) return err(existsResult.error);
-
     const bundleResult = await remoteTripDataSource.fetchTrip(item.clientTripId);
     if (!bundleResult.ok) return err(bundleResult.error);
 
-    if (!existsResult.value) {
-      const saveResult = await rawCaptureRepository.saveTripBundle(bundleResult.value);
-      if (!saveResult.ok) return err(saveResult.error);
-    }
+    const saveResult = await rawCaptureRepository.replaceTripBundle(bundleResult.value);
+    if (!saveResult.ok) return err(saveResult.error);
 
     for (const waypoint of bundleResult.value.waypoints) {
       const imagesResult = await remoteWaypointImageDataSource.getImages(waypoint.id);
