@@ -9,7 +9,7 @@ import { runMigrations } from '@/core/db/runMigrations';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
 import { useThemeStore } from '@/feature/settings/themeStore';
-import { getAppTheme, resolveAppThemeMode } from '@/constants/app-theme';
+import { resolveAppThemeMode } from '@/constants/app-theme';
 import { CustomAlertProvider } from '@/components/ui/custom-alert-dialog';
 // Side-effect imports: register TaskManager tasks before any component mounts
 import '@/core/data/location/locationTask';
@@ -52,13 +52,11 @@ export default function RootLayout() {
   const themeMode = useThemeStore((s) => s.preference);
   const systemColorScheme = useColorScheme();
   const resolvedMode = resolveAppThemeMode(themeMode, systemColorScheme);
-  const theme = getAppTheme(resolvedMode);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    NavigationBar.setBackgroundColorAsync(theme.background);
     NavigationBar.setButtonStyleAsync(resolvedMode === 'night' ? 'light' : 'dark');
-  }, [theme.background, resolvedMode]);
+  }, [resolvedMode]);
 
   useEffect(() => {
     runMigrations()
