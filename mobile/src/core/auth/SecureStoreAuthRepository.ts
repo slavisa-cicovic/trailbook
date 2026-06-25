@@ -9,6 +9,7 @@ const KEYS = {
   refreshToken: 'trailbook.refresh_token',
   isDemo: 'trailbook.is_demo',
   displayName: 'trailbook.display_name',
+  role: 'trailbook.role',
 } as const;
 
 export class SecureStoreAuthRepository implements AuthRepository {
@@ -18,13 +19,15 @@ export class SecureStoreAuthRepository implements AuthRepository {
     const { accessToken, refreshToken, user } = result.value;
     await this.saveTokens(accessToken, refreshToken);
     await SecureStore.setItemAsync(KEYS.displayName, user.displayName);
+    await SecureStore.setItemAsync(KEYS.role, user.role);
     await SecureStore.deleteItemAsync(KEYS.isDemo);
-    return ok({ id: user.id, email: user.email, displayName: user.displayName });
+    return ok({ id: user.id, email: user.email, displayName: user.displayName, role: user.role });
   }
 
   async loginAsDemo(): Promise<void> {
     await SecureStore.setItemAsync(KEYS.isDemo, 'true');
     await SecureStore.setItemAsync(KEYS.displayName, 'Demo User');
+    await SecureStore.deleteItemAsync(KEYS.role);
     await SecureStore.deleteItemAsync(KEYS.accessToken);
     await SecureStore.deleteItemAsync(KEYS.refreshToken);
   }
@@ -36,6 +39,7 @@ export class SecureStoreAuthRepository implements AuthRepository {
     await SecureStore.deleteItemAsync(KEYS.refreshToken);
     await SecureStore.deleteItemAsync(KEYS.isDemo);
     await SecureStore.deleteItemAsync(KEYS.displayName);
+    await SecureStore.deleteItemAsync(KEYS.role);
   }
 
   async getAccessToken(): Promise<string | null> {
@@ -71,15 +75,17 @@ export class SecureStoreAuthRepository implements AuthRepository {
   async init(): Promise<{
     status: 'authenticated' | 'demo' | 'unauthenticated';
     displayName: string | null;
+    role: string | null;
   }> {
-    const [isDemo, accessToken, displayName] = await Promise.all([
+    const [isDemo, accessToken, displayName, role] = await Promise.all([
       SecureStore.getItemAsync(KEYS.isDemo),
       SecureStore.getItemAsync(KEYS.accessToken),
       SecureStore.getItemAsync(KEYS.displayName),
+      SecureStore.getItemAsync(KEYS.role),
     ]);
-    if (isDemo === 'true') return { status: 'demo', displayName };
-    if (accessToken) return { status: 'authenticated', displayName };
-    return { status: 'unauthenticated', displayName: null };
+    if (isDemo === 'true') return { status: 'demo', displayName, role: null };
+    if (accessToken) return { status: 'authenticated', displayName, role };
+    return { status: 'unauthenticated', displayName: null, role: null };
   }
 }
 

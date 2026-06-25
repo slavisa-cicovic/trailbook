@@ -6,6 +6,7 @@ export interface AuthUser {
   id: string;
   email: string;
   displayName: string;
+  role: string;
 }
 
 export interface AuthRepository {
@@ -18,5 +19,9 @@ export interface AuthRepository {
   refreshAccessToken(): Promise<Result<string>>;
   isDemo(): Promise<boolean>;
   getDisplayName(): Promise<string | null>;
-  init(): Promise<{ status: 'authenticated' | 'demo' | 'unauthenticated'; displayName: string | null }>;
+  init(): Promise<{
+    status: 'authenticated' | 'demo' | 'unauthenticated';
+    displayName: string | null;
+    role: string | null;
+  }>;
 }

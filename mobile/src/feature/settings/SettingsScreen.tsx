@@ -28,6 +28,7 @@ export default function SettingsScreen() {
   const status = useAuthStore((s) => s.status);
   const displayName = useAuthStore((s) => s.displayName);
   const isDemo = useAuthStore((s) => s.isDemo);
+  const role = useAuthStore((s) => s.role);
 
   const isWorking = useSettingsStore((s) => s.isWorking);
   const statusMessage = useSettingsStore((s) => s.statusMessage);
@@ -41,6 +42,9 @@ export default function SettingsScreen() {
 
   const preference = useThemeStore((s) => s.preference);
   const setPreference = useThemeStore((s) => s.setPreference);
+  const purchaseSimulationEnabled =
+    (role === 'admin' || role === 'test_user') &&
+    (__DEV__ || process.env.EXPO_PUBLIC_ENABLE_FAKE_PURCHASES === 'true');
 
   useEffect(() => {
     if (statusMessage) {
@@ -149,6 +153,17 @@ export default function SettingsScreen() {
             value="Open"
           />
         </SettingsSection>
+
+        {purchaseSimulationEnabled ? (
+          <SettingsSection title="Developer">
+            <SettingsRow
+              iconName="payments"
+              onPress={() => router.push('/purchases')}
+              title="Purchases simulation"
+              value="Open"
+            />
+          </SettingsSection>
+        ) : null}
 
       </View>
 

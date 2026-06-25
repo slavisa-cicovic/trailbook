@@ -8,18 +8,18 @@ datasource db {
 }
 
 model Trip {
-  id                BigInt   @id @default(autoincrement())
-  clientTripId      String   @unique @map("client_trip_id") @db.VarChar(36)
-  title             String   @db.VarChar(500)
+  id                BigInt    @id @default(autoincrement())
+  clientTripId      String    @unique @map("client_trip_id") @db.VarChar(36)
+  title             String    @db.VarChar(500)
   description       String?
-  startedAt         DateTime @map("started_at") @db.Timestamptz(6)
+  startedAt         DateTime  @map("started_at") @db.Timestamptz(6)
   endedAt           DateTime? @map("ended_at") @db.Timestamptz(6)
-  status            String   @db.VarChar(50)
-  processingVersion Int      @default(0) @map("processing_version")
-  rawBundle         Json     @map("raw_bundle") @db.JsonB
-  userId            String   @map("user_id") @db.VarChar(50)
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  status            String    @db.VarChar(50)
+  processingVersion Int       @default(0) @map("processing_version")
+  rawBundle         Json      @map("raw_bundle") @db.JsonB
+  userId            String    @map("user_id") @db.VarChar(50)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([startedAt(sort: Desc)], map: "trips_started_at_idx")
   @@index([userId], map: "trips_user_id_idx")
@@ -27,14 +27,57 @@ model Trip {
 }
 
 model User {
-  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email         String         @unique @db.VarChar(255)
-  displayName   String         @map("display_name") @db.VarChar(100)
-  role          String         @default("user") @db.VarChar(50)
-  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  refreshTokens RefreshToken[]
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String          @unique @db.VarChar(255)
+  displayName    String          @map("display_name") @db.VarChar(100)
+  role           String          @default("user") @db.VarChar(50)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  refreshTokens  RefreshToken[]
+  purchaseAccess PurchaseAccess?
+  purchaseEvents PurchaseEvent[]
 
   @@map("users")
+}
+
+model PurchaseAccess {
+  userId                String    @id @map("user_id") @db.Uuid
+  planCode              String    @map("plan_code") @db.VarChar(100)
+  subscriptionStatus    String    @map("subscription_status") @db.VarChar(50)
+  provider              String?   @db.VarChar(50)
+  environment           String?   @db.VarChar(50)
+  providerProductId     String?   @map("provider_product_id") @db.VarChar(255)
+  originalTransactionId String?   @map("original_transaction_id") @db.VarChar(255)
+  currentPeriodEndsAt   DateTime? @map("current_period_ends_at") @db.Timestamptz(6)
+  entitlements          Json      @db.JsonB
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_access")
+}
+
+model PurchaseEvent {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                String    @map("user_id") @db.Uuid
+  provider              String    @db.VarChar(50)
+  environment           String    @db.VarChar(50)
+  providerProductId     String    @map("provider_product_id") @db.VarChar(255)
+  transactionId         String    @map("transaction_id") @db.VarChar(255)
+  originalTransactionId String?   @map("original_transaction_id") @db.VarChar(255)
+  eventType             String    @map("event_type") @db.VarChar(50)
+  result                String    @db.VarChar(50)
+  purchasedAt           DateTime? @map("purchased_at") @db.Timestamptz(6)
+  expiresAt             DateTime? @map("expires_at") @db.Timestamptz(6)
+  revokedAt             DateTime? @map("revoked_at") @db.Timestamptz(6)
+  idempotencyKey        String    @unique @map("idempotency_key") @db.VarChar(500)
+  rawPayload            Json      @map("raw_payload") @db.JsonB
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, transactionId])
+  @@index([userId, createdAt(sort: Desc)], map: "purchase_events_user_created_at_idx")
+  @@index([provider, originalTransactionId], map: "purchase_events_original_transaction_idx")
+  @@map("purchase_events")
 }
 
 model RefreshToken {

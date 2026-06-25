@@ -19,6 +19,44 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 
 CREATE INDEX IF NOT EXISTS refresh_tokens_token_idx ON refresh_tokens (token);
 
+CREATE TABLE IF NOT EXISTS purchase_access (
+    user_id                 UUID         PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    plan_code               VARCHAR(100) NOT NULL,
+    subscription_status     VARCHAR(50)  NOT NULL,
+    provider                VARCHAR(50),
+    environment             VARCHAR(50),
+    provider_product_id     VARCHAR(255),
+    original_transaction_id VARCHAR(255),
+    current_period_ends_at  TIMESTAMPTZ,
+    entitlements            JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS purchase_events (
+    id                      UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                 UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider                VARCHAR(50)  NOT NULL,
+    environment             VARCHAR(50)  NOT NULL,
+    provider_product_id     VARCHAR(255) NOT NULL,
+    transaction_id          VARCHAR(255) NOT NULL,
+    original_transaction_id VARCHAR(255),
+    event_type              VARCHAR(50)  NOT NULL,
+    result                  VARCHAR(50)  NOT NULL,
+    purchased_at            TIMESTAMPTZ,
+    expires_at              TIMESTAMPTZ,
+    revoked_at              TIMESTAMPTZ,
+    idempotency_key         VARCHAR(500) NOT NULL UNIQUE,
+    raw_payload             JSONB        NOT NULL,
+    created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT purchase_events_provider_transaction_key UNIQUE (provider, transaction_id)
+);
+
+CREATE INDEX IF NOT EXISTS purchase_events_user_created_at_idx
+    ON purchase_events (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS purchase_events_original_transaction_idx
+    ON purchase_events (provider, original_transaction_id);
+
 CREATE TABLE IF NOT EXISTS trips (
     id                 BIGSERIAL    PRIMARY KEY,
     client_trip_id     VARCHAR(36)  NOT NULL,

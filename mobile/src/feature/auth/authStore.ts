@@ -10,6 +10,7 @@ interface AuthState {
   status: AuthStatus;
   displayName: string | null;
   isDemo: boolean;
+  role: string | null;
 }
 
 interface AuthActions {
@@ -23,10 +24,11 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
   status: 'loading',
   displayName: null,
   isDemo: false,
+  role: null,
 
   async init() {
-    const { status, displayName } = await authRepository.init();
-    set({ status, displayName, isDemo: status === 'demo' });
+    const { status, displayName, role } = await authRepository.init();
+    set({ status, displayName, isDemo: status === 'demo', role });
   },
 
   async loginWithSocial(provider, idToken) {
@@ -36,17 +38,18 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
       status: 'authenticated',
       displayName: result.value.displayName,
       isDemo: false,
+      role: result.value.role,
     });
     return ok(undefined);
   },
 
   async loginAsDemo() {
     await authRepository.loginAsDemo();
-    set({ status: 'demo', displayName: 'Demo User', isDemo: true });
+    set({ status: 'demo', displayName: 'Demo User', isDemo: true, role: null });
   },
 
   async logout() {
     await authRepository.logout();
-    set({ status: 'unauthenticated', displayName: null, isDemo: false });
+    set({ status: 'unauthenticated', displayName: null, isDemo: false, role: null });
   },
 }));
