@@ -12,6 +12,7 @@ module.exports = {
     icon: "./assets/app-icon.png",
     plugins: [
       "expo-router",
+      "expo-background-task",
       "expo-secure-store",
       [
         "expo-image-picker",
