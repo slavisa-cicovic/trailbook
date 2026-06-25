@@ -1,12 +1,15 @@
-import { type ReactNode, useEffect } from 'react';
+import { useEffect } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, ActivityIndicator, Alert,
+  View, Text, StyleSheet, Pressable, Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useSettingsStore } from '@/feature/settings/settingsStore';
 import { useThemeStore, type ThemePreference } from '@/feature/settings/themeStore';
+import SettingsDivider from '@/feature/settings/components/SettingsDivider';
+import SettingsRow from '@/feature/settings/components/SettingsRow';
+import SettingsSection from '@/feature/settings/components/SettingsSection';
 import ScreenLayout from '@/components/layout/screen-layout';
 import BottomSheetModal from '@/components/ui/bottom-sheet-modal';
 import ModalActions from '@/components/ui/modal-actions';
@@ -17,97 +20,6 @@ const THEME_OPTIONS: { label: string; value: ThemePreference }[] = [
   { label: 'Day', value: 'day' },
   { label: 'Night', value: 'night' },
 ];
-
-type SettingsIconName = keyof typeof MaterialIcons.glyphMap;
-
-function SettingsSection({ children, title }: { children: ReactNode; title: string }) {
-  const { theme } = useAppTheme();
-
-  return (
-    <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: theme.mutedText }]}>{title}</Text>
-      <View
-        style={[
-          styles.preferenceGroup,
-          { backgroundColor: theme.card, borderColor: theme.border },
-        ]}
-      >
-        {children}
-      </View>
-    </View>
-  );
-}
-
-function SettingsDivider() {
-  const { theme } = useAppTheme();
-  return <View style={[styles.preferenceDivider, { backgroundColor: theme.border }]} />;
-}
-
-function SettingsRow({
-  description,
-  disabled,
-  iconName,
-  loading,
-  onPress,
-  title,
-  tone = 'default',
-  value,
-}: {
-  description?: string;
-  disabled?: boolean;
-  iconName: SettingsIconName;
-  loading?: boolean;
-  onPress?: () => void;
-  title: string;
-  tone?: 'default' | 'danger';
-  value?: string;
-}) {
-  const { theme } = useAppTheme();
-  const interactive = Boolean(onPress) && !disabled;
-  const iconColor = tone === 'danger' ? theme.danger : theme.accent;
-  const iconBackground = tone === 'danger' ? theme.dangerMuted : theme.accentMuted;
-
-  return (
-    <Pressable
-      disabled={!interactive}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.preferenceRow,
-        pressed && styles.preferenceRowPressed,
-        disabled && styles.preferenceRowDisabled,
-      ]}
-    >
-      <View style={[styles.preferenceIcon, { backgroundColor: iconBackground }]}>
-        <MaterialIcons color={iconColor} name={iconName} size={20} />
-      </View>
-      <View style={styles.preferenceBody}>
-        <Text
-          style={[
-            styles.preferenceTitle,
-            { color: tone === 'danger' ? theme.danger : theme.primaryText },
-          ]}
-        >
-          {title}
-        </Text>
-        {description ? (
-          <Text style={[styles.preferenceDescription, { color: theme.mutedText }]}>
-            {description}
-          </Text>
-        ) : null}
-      </View>
-      <View style={styles.preferenceTrailing}>
-        {loading ? (
-          <ActivityIndicator color={theme.accent} size="small" />
-        ) : value ? (
-          <Text style={[styles.preferenceValue, { color: theme.mutedText }]}>{value}</Text>
-        ) : null}
-        {interactive && !loading ? (
-          <MaterialIcons color={theme.mutedText} name="chevron-right" size={22} />
-        ) : null}
-      </View>
-    </Pressable>
-  );
-}
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -272,32 +184,6 @@ const styles = StyleSheet.create({
   settingsRoot: {
     gap: 18,
   },
-  section: {
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginLeft: 4,
-    textTransform: 'uppercase',
-  },
-  preferenceGroup: {
-    borderRadius: 22,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  preferenceRow: {
-    minHeight: 68,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  preferenceRowPressed: {
-    opacity: 0.72,
-  },
   preferenceRowDisabled: {
     opacity: 0.62,
   },
@@ -315,26 +201,6 @@ const styles = StyleSheet.create({
   preferenceTitle: {
     fontSize: 16,
     fontWeight: '800',
-  },
-  preferenceDescription: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  preferenceTrailing: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  preferenceValue: {
-    flexShrink: 1,
-    maxWidth: 110,
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'right',
-  },
-  preferenceDivider: {
-    height: 1,
-    marginLeft: 62,
   },
   themePreference: {
     flexDirection: 'row',
