@@ -1,14 +1,10 @@
 import { create } from 'zustand';
-import {
-  getPurchaseAccess,
-  listFakePurchaseProducts,
-  simulateFakePurchase,
-} from './purchaseApi';
+import { purchaseRepository } from '@/core/data/repository/PurchaseRepositoryImpl';
 import type {
   FakePurchaseScenario,
   PurchaseAccess,
   PurchaseProduct,
-} from './purchase.types';
+} from '@/core/domain/model/purchase';
 
 interface PurchaseState {
   access: PurchaseAccess | null;
@@ -29,8 +25,8 @@ export const usePurchaseStore = create<PurchaseState>((set) => ({
   async load() {
     set({ busyAction: 'refresh', message: null });
     const [accessResult, productsResult] = await Promise.all([
-      getPurchaseAccess(),
-      listFakePurchaseProducts(),
+      purchaseRepository.getCurrentAccess(),
+      purchaseRepository.getFakeProducts(),
     ]);
 
     if (!accessResult.ok) {
@@ -52,7 +48,7 @@ export const usePurchaseStore = create<PurchaseState>((set) => ({
 
   async runScenario(actionKey, productId, scenario) {
     set({ busyAction: actionKey, message: null });
-    const result = await simulateFakePurchase({ productId, scenario });
+    const result = await purchaseRepository.simulateFakePurchase({ productId, scenario });
     if (!result.ok) {
       set({ busyAction: null, message: result.error });
       return;

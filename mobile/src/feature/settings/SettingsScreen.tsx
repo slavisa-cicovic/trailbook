@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, Alert,
+  View, Text, StyleSheet, Pressable,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -12,6 +11,7 @@ import SettingsRow from '@/feature/settings/components/SettingsRow';
 import SettingsSection from '@/feature/settings/components/SettingsSection';
 import ScreenLayout from '@/components/layout/screen-layout';
 import BottomSheetModal from '@/components/ui/bottom-sheet-modal';
+import LoadingButton from '@/components/ui/loading-button';
 import ModalActions from '@/components/ui/modal-actions';
 import { useAppTheme } from '@/hooks/useAppTheme';
 
@@ -45,12 +45,6 @@ export default function SettingsScreen() {
   const purchaseSimulationEnabled =
     (role === 'admin' || role === 'test_user') &&
     (__DEV__ || process.env.EXPO_PUBLIC_ENABLE_FAKE_PURCHASES === 'true');
-
-  useEffect(() => {
-    if (statusMessage) {
-      Alert.alert('', statusMessage, [{ text: 'OK', onPress: onStatusMessageShown }]);
-    }
-  }, [statusMessage]);
 
   return (
     <ScreenLayout
@@ -180,6 +174,15 @@ export default function SettingsScreen() {
           onPrimaryPress={() => void onConfirmDeleteLocal()}
           onSecondaryPress={onDismissDeleteConfirm}
         />
+      </BottomSheetModal>
+
+      <BottomSheetModal
+        onClose={onStatusMessageShown}
+        subtitle={statusMessage ?? undefined}
+        title="Trailbook"
+        visible={statusMessage !== null}
+      >
+        <LoadingButton onPress={onStatusMessageShown}>OK</LoadingButton>
       </BottomSheetModal>
     </ScreenLayout>
   );
