@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpStatus, Inject, Param, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 
 import { AuthService } from "../auth/auth.service";
@@ -34,5 +34,12 @@ export class TripsController {
   async get(@Param("clientTripId") clientTripId: string, @Req() request: Request) {
     const user = await this.authService.requireAuthenticatedUser(request);
     return this.tripsService.get(clientTripId, user.id);
+  }
+
+  @Delete(":clientTripId")
+  @HttpCode(204)
+  async delete(@Param("clientTripId") clientTripId: string, @Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    await this.tripsService.delete(clientTripId, user.id);
   }
 }

@@ -31,7 +31,7 @@ module.exports = {
           locationAlwaysAndWhenInUsePermission:
             "Trailbook uses your location to keep recording trips when the app is in the background or the screen is locked.",
           isIosBackgroundLocationEnabled: true,
-          isAndroidBackgroundLocationEnabled: true,
+          isAndroidBackgroundLocationEnabled: false,
           isAndroidForegroundServiceEnabled: true,
         },
       ],
@@ -72,7 +72,14 @@ module.exports = {
     },
     android: {
       package: "com.slavisacicovic.trailbook",
-      permissions: ["CAMERA", "POST_NOTIFICATIONS"],
+      blockedPermissions: ["android.permission.ACCESS_BACKGROUND_LOCATION"],
+      permissions: [
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.CAMERA",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+      ],
       usesCleartextTraffic: true,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",

@@ -2,6 +2,7 @@ import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
 import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
 import { rawCaptureRepository } from '@/core/data/repository/RawCaptureRepositoryImpl';
+import { flushPendingTripDeletions } from './DeleteTripUseCase';
 import { remoteTripDataSource } from '@/core/data/remote/FetchRemoteTripDataSource';
 import { remoteWaypointImageDataSource } from '@/core/data/remote/FetchRemoteWaypointImageDataSource';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
@@ -40,6 +41,11 @@ async function restoreImage(
 
 export async function restoreTrips(): Promise<Result<void>> {
   if (await authRepository.isDemo()) return err('Demo users cannot restore trips');
+
+  const deletionResult = await flushPendingTripDeletions();
+  if (!deletionResult.ok) {
+    return err(`Could not synchronize pending trip deletions: ${deletionResult.error}`);
+  }
 
   const listResult = await remoteTripDataSource.fetchTripList();
   if (!listResult.ok) return listResult;

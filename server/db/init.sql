@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS trips (
     raw_bundle         JSONB        NOT NULL,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deleted_at         TIMESTAMPTZ,
     user_id            VARCHAR(50)  NOT NULL,
     CONSTRAINT trips_client_trip_id_key UNIQUE (client_trip_id)
 );

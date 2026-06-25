@@ -14,6 +14,9 @@ export interface TripRepository {
   updateSyncState(clientTripId: string, state: SyncState): Promise<Result<void>>;
   updateProcessingVersion(clientTripId: string, version: number): Promise<Result<void>>;
   deleteTrip(clientTripId: string): Promise<Result<void>>;
+  deleteTripAndQueueRemoteDeletion(clientTripId: string): Promise<Result<void>>;
+  getPendingRemoteDeletionIds(): Promise<Result<string[]>>;
+  completeRemoteDeletion(clientTripId: string): Promise<Result<void>>;
   deleteAllLocalData(): Promise<Result<void>>;
   tripExists(clientTripId: string): Promise<Result<boolean>>;
   hasUnsyncedData(): Promise<Result<boolean>>;

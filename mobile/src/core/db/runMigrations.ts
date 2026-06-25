@@ -118,12 +118,20 @@ const MIGRATION_0002 = `
   );
 `;
 
+const MIGRATION_0003 = `
+  CREATE TABLE IF NOT EXISTS pending_trip_deletions (
+    client_trip_id text PRIMARY KEY NOT NULL,
+    created_at text NOT NULL
+  );
+`;
+
 type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
 
 const MIGRATIONS: Migration[] = [
   [0, MIGRATION_0000],
   [1, migration_0001],
   [2, MIGRATION_0002],
+  [3, MIGRATION_0003],
 ];
 
 export async function runMigrations(): Promise<void> {

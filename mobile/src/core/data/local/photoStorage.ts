@@ -28,3 +28,11 @@ export async function saveRestoredPhoto(
 export async function deleteAllPhotos(): Promise<void> {
   await FileSystem.deleteAsync(PHOTOS_DIR, { idempotent: true });
 }
+
+export async function deletePhotosForWaypoints(waypointIds: string[]): Promise<void> {
+  await Promise.all(
+    waypointIds.map((waypointId) =>
+      FileSystem.deleteAsync(`${PHOTOS_DIR}${waypointId}/`, { idempotent: true }),
+    ),
+  );
+}

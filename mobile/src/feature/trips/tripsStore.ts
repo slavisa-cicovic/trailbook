@@ -7,6 +7,7 @@ import * as segmentDao from '@/core/data/local/segmentDao';
 import * as waypointDao from '@/core/data/local/waypointDao';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import { uploadTrip } from '@/core/domain/usecase/UploadTripUseCase';
+import { deleteTrip as deleteTripUseCase } from '@/core/domain/usecase/DeleteTripUseCase';
 
 export interface TripWithMeta {
   trip: Trip;
@@ -85,7 +86,7 @@ export const useTripsStore = create<TripsState & TripsActions>((set) => {
     },
 
     async deleteTrip(clientTripId) {
-      await tripDao.deleteByClientId(clientTripId);
+      await deleteTripUseCase(clientTripId);
       // trips:changed event fires → load() re-runs
     },
 

@@ -15,7 +15,8 @@ import * as rawActivityDao from '@/core/data/local/rawActivityDao';
 import * as rawDeviceDao from '@/core/data/local/rawDeviceDao';
 import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
 import * as reprocessingSnapshotDao from '@/core/data/local/reprocessingSnapshotDao';
-import { deleteAllPhotos } from '@/core/data/local/photoStorage';
+import * as pendingTripDeletionDao from '@/core/data/local/pendingTripDeletionDao';
+import { deleteAllPhotos, deletePhotosForWaypoints } from '@/core/data/local/photoStorage';
 import { sqlite } from '@/core/db';
 
 export class TripRepositoryImpl implements TripRepository {
@@ -56,6 +57,37 @@ export class TripRepositoryImpl implements TripRepository {
       await reprocessingSnapshotDao.deleteForTrip(clientTripId);
       await tripDao.deleteByClientId(clientTripId);
     });
+  }
+
+  async deleteTripAndQueueRemoteDeletion(clientTripId: string): Promise<Result<void>> {
+    return resultOfAsync(async () => {
+      const waypoints = await waypointDao.getForTrip(clientTripId);
+      const waypointIds = waypoints.map((waypoint) => waypoint.id);
+
+      await sqlite.withTransactionAsync(async () => {
+        await pendingTripDeletionDao.insert(clientTripId);
+        await waypointImageDao.deleteAllForTrip(waypointIds);
+        await reprocessingSnapshotDao.deleteForTrip(clientTripId);
+        await segmentDao.deleteForTrip(clientTripId);
+        await waypointDao.deleteForTrip(clientTripId);
+        await rawSessionEventDao.deleteForTrip(clientTripId);
+        await rawDeviceDao.deleteForTrip(clientTripId);
+        await rawActivityDao.deleteForTrip(clientTripId);
+        await rawLocationDao.deleteForTrip(clientTripId);
+        await captureMetaDao.deleteForTrip(clientTripId);
+        await tripDao.deleteByClientId(clientTripId);
+      });
+
+      await deletePhotosForWaypoints(waypointIds);
+    });
+  }
+
+  async getPendingRemoteDeletionIds(): Promise<Result<string[]>> {
+    return resultOfAsync(() => pendingTripDeletionDao.getAll());
+  }
+
+  async completeRemoteDeletion(clientTripId: string): Promise<Result<void>> {
+    return resultOfAsync(() => pendingTripDeletionDao.deleteByClientTripId(clientTripId));
   }
 
   async deleteAllLocalData(): Promise<Result<void>> {

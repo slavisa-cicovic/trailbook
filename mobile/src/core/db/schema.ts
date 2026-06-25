@@ -131,3 +131,8 @@ export const reprocessingSnapshots = sqliteTable('reprocessing_snapshots', {
   snapshotJson: text('snapshot_json').notNull(),
   createdAt: text('created_at').notNull(),
 });
+
+export const pendingTripDeletions = sqliteTable('pending_trip_deletions', {
+  clientTripId: text('client_trip_id').primaryKey(),
+  createdAt: text('created_at').notNull(),
+});

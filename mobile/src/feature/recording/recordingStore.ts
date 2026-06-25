@@ -37,14 +37,20 @@ const DEMO_TRIP_LIMIT = 3;
 const DEVICE_SAMPLE_INTERVAL_MS = 60_000;
 
 async function requireRecordingLocationPermissions(): Promise<Result<void>> {
-  const backgroundAvailable = await Location.isBackgroundLocationAvailableAsync();
-  if (!backgroundAvailable) {
-    return err('Background location is unavailable in this build.');
-  }
-
   const foreground = await Location.requestForegroundPermissionsAsync();
   if (!foreground.granted) {
     return err('Location permission denied.');
+  }
+
+  // Android keeps a user-initiated location foreground service running with
+  // while-in-use permission. Only iOS requires Always permission for this flow.
+  if (Platform.OS === 'android') {
+    return ok(undefined);
+  }
+
+  const backgroundAvailable = await Location.isBackgroundLocationAvailableAsync();
+  if (!backgroundAvailable) {
+    return err('Background location is unavailable in this build.');
   }
 
   let background = await Location.getBackgroundPermissionsAsync();

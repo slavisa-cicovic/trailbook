@@ -3,10 +3,14 @@ import type { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import type { TripBundleDto, TripListItemDto } from "./dto/sync-trip.dto";
+import { WaypointImagesService } from "./waypoint-images.service";
 
 @Injectable()
 export class TripsService {
-  constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
+  constructor(
+    @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(WaypointImagesService) private readonly waypointImagesService: WaypointImagesService,
+  ) {}
 
   async save(userId: string, bundle: TripBundleDto) {
     this.assertValidBundle(bundle);
@@ -50,7 +54,7 @@ export class TripsService {
         startedAt: true,
         title: true,
       },
-      where: { userId },
+      where: { deletedAt: null, userId },
     });
 
     return trips.map((trip) => ({
@@ -66,7 +70,7 @@ export class TripsService {
       where: { clientTripId },
     });
 
-    if (!trip) {
+    if (!trip || trip.deletedAt) {
       throw new NotFoundException(`Trip not found: ${clientTripId}`);
     }
 
@@ -75,6 +79,28 @@ export class TripsService {
     }
 
     return trip.rawBundle as unknown as TripBundleDto;
+  }
+
+  async delete(clientTripId: string, userId: string): Promise<void> {
+    const trip = await this.database.trip.findUnique({
+      select: { id: true, rawBundle: true, userId: true },
+      where: { clientTripId },
+    });
+
+    if (!trip) {
+      return;
+    }
+    if (trip.userId !== userId) {
+      throw new ForbiddenException("Access denied");
+    }
+
+    const bundle = trip.rawBundle as unknown as Partial<TripBundleDto>;
+    const waypointIds = (bundle.waypoints ?? []).map((waypoint) => waypoint.id);
+    await this.waypointImagesService.deleteImagesForWaypoints(waypointIds);
+    await this.database.trip.update({
+      data: { deletedAt: new Date() },
+      where: { id: trip.id },
+    });
   }
 
   private assertValidBundle(bundle: TripBundleDto) {

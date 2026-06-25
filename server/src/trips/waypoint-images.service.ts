@@ -134,6 +134,29 @@ export class WaypointImagesService {
     await this.database.waypointImage.delete({ where: { id: image.id } });
   }
 
+  async deleteImagesForWaypoints(waypointIds: string[]) {
+    if (waypointIds.length === 0) {
+      return;
+    }
+
+    const images = await this.database.waypointImage.findMany({
+      where: { waypointId: { in: waypointIds } },
+    });
+
+    for (const image of images) {
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: image.objectKey,
+        }),
+      );
+    }
+
+    await this.database.waypointImage.deleteMany({
+      where: { waypointId: { in: waypointIds } },
+    });
+  }
+
   private getRequiredEnv(name: string) {
     const value = process.env[name]?.trim();
     if (!value) {
