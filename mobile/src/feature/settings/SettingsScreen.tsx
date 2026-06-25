@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   View, Text, StyleSheet, Pressable,
 } from 'react-native';
@@ -11,7 +12,7 @@ import SettingsRow from '@/feature/settings/components/SettingsRow';
 import SettingsSection from '@/feature/settings/components/SettingsSection';
 import ScreenLayout from '@/components/layout/screen-layout';
 import BottomSheetModal from '@/components/ui/bottom-sheet-modal';
-import LoadingButton from '@/components/ui/loading-button';
+import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import ModalActions from '@/components/ui/modal-actions';
 import { useAppTheme } from '@/hooks/useAppTheme';
 
@@ -24,6 +25,7 @@ const THEME_OPTIONS: { label: string; value: ThemePreference }[] = [
 export default function SettingsScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
+  const { showAlert } = useCustomAlert();
 
   const status = useAuthStore((s) => s.status);
   const displayName = useAuthStore((s) => s.displayName);
@@ -45,6 +47,15 @@ export default function SettingsScreen() {
   const purchaseSimulationEnabled =
     (role === 'admin' || role === 'test_user') &&
     (__DEV__ || process.env.EXPO_PUBLIC_ENABLE_FAKE_PURCHASES === 'true');
+
+  useEffect(() => {
+    if (!statusMessage) return;
+    showAlert({
+      title: 'Trailbook',
+      message: statusMessage,
+      buttons: [{ text: 'OK', onPress: onStatusMessageShown }],
+    });
+  }, [onStatusMessageShown, showAlert, statusMessage]);
 
   return (
     <ScreenLayout
@@ -176,14 +187,6 @@ export default function SettingsScreen() {
         />
       </BottomSheetModal>
 
-      <BottomSheetModal
-        onClose={onStatusMessageShown}
-        subtitle={statusMessage ?? undefined}
-        title="Trailbook"
-        visible={statusMessage !== null}
-      >
-        <LoadingButton onPress={onStatusMessageShown}>OK</LoadingButton>
-      </BottomSheetModal>
     </ScreenLayout>
   );
 }

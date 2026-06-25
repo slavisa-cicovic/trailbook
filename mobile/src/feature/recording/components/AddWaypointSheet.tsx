@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import {
   Modal, View, Text, TextInput, Pressable, StyleSheet,
-  ScrollView, ActivityIndicator, Image, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, ActivityIndicator, Image, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import type { WaypointCategory, ImageSource } from '@/core/domain/model/waypoint';
 import { addWaypoint } from '@/core/domain/usecase/AddWaypointUseCase';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 
 type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
 
@@ -50,6 +51,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { theme } = useAppTheme();
+  const { showAlert } = useCustomAlert();
 
   function onSelectCategory(cat: WaypointCategory) {
     setCategory(cat);
@@ -58,7 +60,10 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
 
   async function onCamera() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Camera permission required'); return; }
+    if (status !== 'granted') {
+      showAlert({ title: 'Camera permission required' });
+      return;
+    }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8, allowsEditing: false });
     if (!result.canceled && result.assets[0]) {
       setPhotos((p) => [...p, { uri: result.assets[0]!.uri, source: 'CAMERA', capturedAt: new Date() }]);
@@ -67,7 +72,10 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
 
   async function onGallery() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Photo library permission required'); return; }
+    if (status !== 'granted') {
+      showAlert({ title: 'Photo library permission required' });
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
     if (!result.canceled && result.assets[0]) {
       setPhotos((p) => [...p, { uri: result.assets[0]!.uri, source: 'GALLERY', capturedAt: null }]);

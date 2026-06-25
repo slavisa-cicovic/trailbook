@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   TextInput,
   KeyboardAvoidingView,
   Platform,
@@ -14,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 
 const DEFAULT_LOGIN_EMAIL = process.env.EXPO_PUBLIC_DEV_LOGIN_EMAIL?.trim() || 'scaichat@gmail.com';
 
@@ -23,20 +23,24 @@ export default function LoginScreen() {
   const loginWithSocial = useAuthStore((s) => s.loginWithSocial);
   const loginAsDemo = useAuthStore((s) => s.loginAsDemo);
   const { theme } = useAppTheme();
+  const { showAlert } = useCustomAlert();
 
   async function onLoginPress() {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
-      Alert.alert('Sign in failed', 'Email is required.');
+      showAlert({ title: 'Sign in failed', message: 'Email is required.' });
       return;
     }
 
     setLoading(true);
     try {
       const result = await loginWithSocial('DEBUG', `debug-login:${normalizedEmail}`);
-      if (!result.ok) Alert.alert('Sign in failed', result.error);
+      if (!result.ok) showAlert({ title: 'Sign in failed', message: result.error });
     } catch (e) {
-      Alert.alert('Sign in failed', e instanceof Error ? e.message : String(e));
+      showAlert({
+        title: 'Sign in failed',
+        message: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setLoading(false);
     }
@@ -47,7 +51,7 @@ export default function LoginScreen() {
     try {
       await loginAsDemo();
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : String(e));
+      showAlert({ title: 'Error', message: e instanceof Error ? e.message : String(e) });
     } finally {
       setLoading(false);
     }

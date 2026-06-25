@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Alert,
   ScrollView,
   Modal,
   type LayoutChangeEvent,
@@ -28,6 +27,7 @@ import { BottomNav } from '@/components/ui/BottomNav';
 import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import type { Segment } from '@/core/domain/model/segment';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
 import type { Waypoint, WaypointCategory } from '@/core/domain/model/waypoint';
@@ -197,6 +197,7 @@ export default function TripDetailScreen() {
   const { clientTripId } = useLocalSearchParams<{ clientTripId: string }>();
   const router = useRouter();
   const { theme } = useAppTheme();
+  const { showAlert } = useCustomAlert();
   const mapRef = useRef<MapView>(null);
 
   const load = useTripDetailStore((s) => s.load);
@@ -260,14 +261,14 @@ export default function TripDetailScreen() {
     setReprocessing(true);
     const result = await reprocessTrip(clientTripId);
     setReprocessing(false);
-    if (!result.ok) Alert.alert('Reprocess failed', result.error);
+    if (!result.ok) showAlert({ title: 'Reprocess failed', message: result.error });
     else load(clientTripId);
   }
 
   async function onSync() {
     if (!clientTripId) return;
     const error = await syncTrip(clientTripId);
-    if (error) Alert.alert('Sync failed', error);
+    if (error) showAlert({ title: 'Sync failed', message: error });
     else load(clientTripId);
   }
 
@@ -600,7 +601,7 @@ export default function TripDetailScreen() {
                   icon="edit"
                   color={theme.mutedText}
                   bg={theme.accentMuted}
-                  onPress={() => Alert.alert('Edit', 'Coming soon')}
+                  onPress={() => showAlert({ title: 'Edit', message: 'Coming soon' })}
                 />
                 <ActionBtn
                   icon="autorenew"
@@ -621,7 +622,7 @@ export default function TripDetailScreen() {
                   icon="share"
                   color={theme.mutedText}
                   bg={theme.accentMuted}
-                  onPress={() => Alert.alert('Share', 'Coming soon')}
+                  onPress={() => showAlert({ title: 'Share', message: 'Coming soon' })}
                   disabled
                 />
               </View>
@@ -681,7 +682,9 @@ export default function TripDetailScreen() {
                             </Text>
                             <Pressable
                               hitSlop={8}
-                              onPress={() => Alert.alert('Edit segment', 'Coming soon')}
+                              onPress={() =>
+                                showAlert({ title: 'Edit segment', message: 'Coming soon' })
+                              }
                             >
                               <MaterialIcons name="edit" size={14} color={theme.mutedText} />
                             </Pressable>

@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
-import BottomSheetModal from '@/components/ui/bottom-sheet-modal';
 import Card from '@/components/ui/card';
+import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import LoadingButton from '@/components/ui/loading-button';
 import ScreenLayout from '@/components/layout/screen-layout';
 import { useAppTheme } from '@/hooks/useAppTheme';
@@ -25,6 +25,7 @@ interface ScenarioAction {
 export default function PurchasesSimulationScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
+  const { showAlert } = useCustomAlert();
   const role = useAuthStore((state) => state.role);
   const access = usePurchaseStore((state) => state.access);
   const busyAction = usePurchaseStore((state) => state.busyAction);
@@ -40,6 +41,15 @@ export default function PurchasesSimulationScreen() {
   useEffect(() => {
     if (allowed) void load();
   }, [allowed, load]);
+
+  useEffect(() => {
+    if (!message) return;
+    showAlert({
+      title: 'Trailbook',
+      message,
+      buttons: [{ text: 'OK', onPress: clearMessage }],
+    });
+  }, [clearMessage, message, showAlert]);
 
   if (!allowed) return <Redirect href="/settings" />;
 
@@ -159,14 +169,6 @@ export default function PurchasesSimulationScreen() {
         </View>
       </Card>
 
-      <BottomSheetModal
-        onClose={clearMessage}
-        subtitle={message ?? undefined}
-        title="Trailbook"
-        visible={message !== null}
-      >
-        <LoadingButton onPress={clearMessage}>OK</LoadingButton>
-      </BottomSheetModal>
     </ScreenLayout>
   );
 }

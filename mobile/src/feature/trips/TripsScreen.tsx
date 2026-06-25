@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator, ScrollView, Alert,
+  View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { TripCard } from './components/TripCard';
 import { FiltersPanel, FiltersToggle, DEFAULT_FILTERS, type Filters } from './components/FiltersPanel';
 import { TotalCard } from './components/TotalCard';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 
 type Tab = 'my_trips' | 'groups' | 'shared';
 
@@ -79,6 +80,7 @@ export default function TripsScreen() {
   const syncTrip = useTripsStore((s) => s.syncTrip);
   const router = useRouter();
   const { theme } = useAppTheme();
+  const { showAlert } = useCustomAlert();
 
   const [tab, setTab] = useState<Tab>('my_trips');
   const [showFilters, setShowFilters] = useState(false);
@@ -91,7 +93,7 @@ export default function TripsScreen() {
   async function handleSyncTrip(clientTripId: string) {
     const error = await syncTrip(clientTripId);
     if (error) {
-      Alert.alert('Sync failed', error);
+      showAlert({ title: 'Sync failed', message: error });
     }
   }
 

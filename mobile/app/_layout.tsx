@@ -10,6 +10,7 @@ import { useAuthStore } from '@/feature/auth/authStore';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
 import { useThemeStore } from '@/feature/settings/themeStore';
 import { getAppTheme, resolveAppThemeMode } from '@/constants/app-theme';
+import { CustomAlertProvider } from '@/components/ui/custom-alert-dialog';
 // Side-effect imports: register TaskManager tasks before any component mounts
 import '@/core/data/location/locationTask';
 import { registerSyncTask } from '@/core/data/sync/syncTask';
@@ -70,8 +71,10 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar style="auto" />
-      <AuthGate ready={ready} />
+      <CustomAlertProvider>
+        <StatusBar style="auto" />
+        <AuthGate ready={ready} />
+      </CustomAlertProvider>
     </GestureHandlerRootView>
   );
 }

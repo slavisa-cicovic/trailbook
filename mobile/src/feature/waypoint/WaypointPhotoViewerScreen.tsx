@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { Trip } from '@/core/domain/model/trip';
 import type { Waypoint, WaypointImage } from '@/core/domain/model/waypoint';
@@ -9,6 +9,7 @@ import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import * as rawLocationDao from '@/core/data/local/rawLocationDao';
 import { deleteWaypointPhoto } from '@/core/domain/usecase/DeleteWaypointPhotoUseCase';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import { WaypointPhotoViewer } from './components/WaypointPhotoViewer';
 
 interface ViewerModel {
@@ -27,6 +28,7 @@ export default function WaypointPhotoViewerScreen() {
   }>();
   const router = useRouter();
   const { theme } = useAppTheme();
+  const { showAlert } = useCustomAlert();
   const [model, setModel] = useState<ViewerModel | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -92,7 +94,7 @@ export default function WaypointPhotoViewerScreen() {
     const fallback = model.images[currentIndex + 1] ?? model.images[currentIndex - 1] ?? null;
     const result = await deleteWaypointPhoto(model.waypoint.id, selectedImageId);
     if (!result.ok) {
-      Alert.alert('Remove failed', result.error);
+      showAlert({ title: 'Remove failed', message: result.error });
       return;
     }
 
@@ -131,14 +133,18 @@ export default function WaypointPhotoViewerScreen() {
           : undefined
       }
       onRemoveCurrent={(selectedImageId) => {
-        Alert.alert('Remove photo?', 'This removes the photo from this waypoint.', [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Remove',
-            style: 'destructive',
-            onPress: () => void removeCurrentImage(selectedImageId),
-          },
-        ]);
+        showAlert({
+          title: 'Remove photo?',
+          message: 'This removes the photo from this waypoint.',
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Remove',
+              style: 'destructive',
+              onPress: () => void removeCurrentImage(selectedImageId),
+            },
+          ],
+        });
       }}
       previousWaypointTitle={model.previousWaypoint?.title}
       routeCoordinates={model.routeCoordinates}
