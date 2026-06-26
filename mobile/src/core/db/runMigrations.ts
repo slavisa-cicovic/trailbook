@@ -43,7 +43,8 @@ const MIGRATION_0000 = `
     id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
     trip_id text NOT NULL,
     timestamp text NOT NULL,
-    type text NOT NULL
+    type text NOT NULL,
+    payload_json text
   );
   CREATE INDEX IF NOT EXISTS raw_session_trip_id_idx ON raw_session_events (trip_id);
   CREATE TABLE IF NOT EXISTS segments (
@@ -125,6 +126,15 @@ const MIGRATION_0003 = `
   );
 `;
 
+async function migration_0004(sqlite: SQLiteDatabase): Promise<void> {
+  const cols = await sqlite.getAllAsync<{ name: string }>(
+    `SELECT name FROM pragma_table_info('raw_session_events')`,
+  );
+  if (cols.some((c) => c.name === 'payload_json')) return;
+
+  await sqlite.execAsync(`ALTER TABLE raw_session_events ADD COLUMN payload_json text;`);
+}
+
 type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
 
 const MIGRATIONS: Migration[] = [
@@ -132,6 +142,7 @@ const MIGRATIONS: Migration[] = [
   [1, migration_0001],
   [2, MIGRATION_0002],
   [3, MIGRATION_0003],
+  [4, migration_0004],
 ];
 
 export async function runMigrations(): Promise<void> {

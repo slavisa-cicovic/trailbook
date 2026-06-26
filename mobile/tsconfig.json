@@ -6,12 +6,6 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ],
-      "expo-location": [
-        "../node_modules/expo-location"
-      ],
-      "react-native-maps": [
-        "../node_modules/react-native-maps"
       ]
     },
     "types": [

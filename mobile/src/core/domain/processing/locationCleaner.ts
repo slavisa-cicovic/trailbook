@@ -25,7 +25,13 @@ export function cleanLocations(samples: RawLocationSample[]): GeoPoint[] {
   for (let i = 0; i < accurate.length; i++) {
     const s = accurate[i];
     if (cleaned.length === 0) {
-      cleaned.push({ timestamp: s.timestamp, latitude: s.latitude, longitude: s.longitude, speedMps: s.speedMps, altitudeM: s.altitudeM });
+      cleaned.push({
+        timestamp: s.timestamp,
+        latitude: s.latitude,
+        longitude: s.longitude,
+        speedMps: s.speedMps,
+        altitudeM: s.altitudeM,
+      });
       continue;
     }
     const prev = cleaned[cleaned.length - 1];
@@ -35,12 +41,17 @@ export function cleanLocations(samples: RawLocationSample[]): GeoPoint[] {
     const d = distanceM(prev.latitude, prev.longitude, s.latitude, s.longitude);
     const impliedSpeed = d / (dtMs / 1000);
 
-    // Only drop spike if the time window is short (GPS jump, not legitimate fast travel)
-    if (impliedSpeed > V1.speedSpikeThresholdMs && dtMs < V1.speedSpikeWindowMs) {
-      continue; // drop outlier
+    if (impliedSpeed > V1.speedSpikeThresholdMps) {
+      continue; // GPS teleport - drop regardless of time gap
     }
 
-    cleaned.push({ timestamp: s.timestamp, latitude: s.latitude, longitude: s.longitude, speedMps: s.speedMps, altitudeM: s.altitudeM });
+    cleaned.push({
+      timestamp: s.timestamp,
+      latitude: s.latitude,
+      longitude: s.longitude,
+      speedMps: s.speedMps,
+      altitudeM: s.altitudeM,
+    });
   }
 
   return cleaned;

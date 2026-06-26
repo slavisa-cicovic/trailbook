@@ -8,6 +8,7 @@ function toRow(e: RawSessionEvent) {
     tripId: e.tripId,
     timestamp: e.timestamp.toISOString(),
     type: e.type,
+    payload: e.payload ?? null,
   };
 }
 
@@ -16,6 +17,7 @@ function toDomain(row: typeof rawSessionEvents.$inferSelect): RawSessionEvent {
     tripId: row.tripId,
     timestamp: new Date(row.timestamp),
     type: row.type as SessionEventType,
+    payload: row.payload ?? undefined,
   };
 }
 

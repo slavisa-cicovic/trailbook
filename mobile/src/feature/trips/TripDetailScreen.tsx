@@ -32,6 +32,8 @@ import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
+import { cleanLocations } from '@/core/domain/processing/locationCleaner';
+import type { GeoPoint } from '@/core/domain/processing/types';
 import type { Segment } from '@/core/domain/model/segment';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
 import type { Waypoint, WaypointCategory } from '@/core/domain/model/waypoint';
@@ -57,7 +59,7 @@ const TRIP_POINT_PREVIEW_MAX_DISTANCE_METERS = 50_000;
 const TRIP_POINT_PREVIEW_TOUCH_RADIUS_PX = 32;
 const METERS_PER_DEGREE_LATITUDE = 111_320;
 
-function pointsForSegment(locations: RawLocationSample[], seg: Segment) {
+function pointsForSegment(locations: GeoPoint[], seg: Segment) {
   return locations
     .filter((l) => l.timestamp >= seg.startedAt && l.timestamp <= seg.endedAt)
     .map((l) => ({ latitude: l.latitude, longitude: l.longitude }));
@@ -249,9 +251,11 @@ export default function TripDetailScreen() {
     }, [clientTripId]),
   );
 
+  const cleanedLocations = useMemo(() => cleanLocations(locationSamples), [locationSamples]);
+
   useEffect(() => {
-    if (!locationSamples.length || !mapRef.current) return;
-    const coords = locationSamples.map((l) => ({ latitude: l.latitude, longitude: l.longitude }));
+    if (!cleanedLocations.length || !mapRef.current) return;
+    const coords = cleanedLocations.map((l) => ({ latitude: l.latitude, longitude: l.longitude }));
     const bottomPad = 180;
     setTimeout(() => {
       mapRef.current?.fitToCoordinates(coords, {
@@ -502,7 +506,7 @@ export default function TripDetailScreen() {
           onRegionChangeComplete={setCurrentRegion}
         >
           {segments.map((seg, i) => {
-            const pts = pointsForSegment(locationSamples, seg);
+            const pts = pointsForSegment(cleanedLocations, seg);
             return pts.length > 1 ? (
               <Polyline
                 key={i}

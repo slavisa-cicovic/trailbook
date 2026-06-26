@@ -63,6 +63,7 @@ export interface DeviceSampleDto {
 export interface SessionEventDto {
   timestamp: string;
   type: string;
+  payload?: Record<string, unknown> | null;
 }
 
 export interface WaypointDto {

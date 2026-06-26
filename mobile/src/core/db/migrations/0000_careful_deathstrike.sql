@@ -44,7 +44,8 @@ CREATE TABLE `raw_session_events` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`trip_id` text NOT NULL,
 	`timestamp` text NOT NULL,
-	`type` text NOT NULL
+	`type` text NOT NULL,
+	`payload_json` text
 );
 --> statement-breakpoint
 CREATE INDEX `raw_session_trip_id_idx` ON `raw_session_events` (`trip_id`);--> statement-breakpoint

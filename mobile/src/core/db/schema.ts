@@ -106,6 +106,7 @@ export const rawSessionEvents = sqliteTable(
     tripId: text('trip_id').notNull(),
     timestamp: text('timestamp').notNull(),
     type: text('type').notNull(),
+    payload: text('payload_json', { mode: 'json' }).$type<Record<string, unknown> | null>(),
   },
   (t) => [index('raw_session_trip_id_idx').on(t.tripId)],
 );

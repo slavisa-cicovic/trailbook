@@ -5,7 +5,7 @@ import { classifyIntervals } from './activityClassifier';
 import { detectSegments } from './segmentDetector';
 import { mergeAndFinalize } from './segmentMerger';
 
-export const CURRENT_PROCESSING_VERSION = 3;
+export const CURRENT_PROCESSING_VERSION = 4;
 
 function processV1(bundle: TripBundle): Segment[] {
   const tripId = bundle.trip.clientTripId;
@@ -27,6 +27,7 @@ export function process(bundle: TripBundle, version: number): Segment[] {
     case 1:
     case 2:
     case 3:
+    case 4:
     default:
       return processV1(bundle);
   }

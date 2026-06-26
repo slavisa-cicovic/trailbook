@@ -70,6 +70,7 @@ export interface DeviceSampleDto {
 export interface SessionEventDto {
   timestamp: string;
   type: string;
+  payload?: Record<string, unknown> | null;
 }
 
 export interface WaypointDto {
@@ -166,6 +167,7 @@ export function tripBundleToDto(bundle: TripBundle): TripBundleRequestDto {
       events: sessionEvents.map((e) => ({
         timestamp: e.timestamp.toISOString(),
         type: e.type,
+        payload: e.payload ?? null,
       })),
     },
     waypoints: waypoints.map((w) => ({
@@ -249,6 +251,7 @@ export function tripBundleDtoToDomain(dto: TripBundleRequestDto, localId: number
     tripId: t.clientTripId,
     timestamp: new Date(e.timestamp),
     type: e.type as RawSessionEvent['type'],
+    payload: e.payload ?? undefined,
   }));
 
   const waypoints: Waypoint[] = dto.waypoints.map((w) => ({
