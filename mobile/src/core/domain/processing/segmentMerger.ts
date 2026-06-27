@@ -143,15 +143,11 @@ function trimBoundaryStationary(segments: RawSegment[]): RawSegment[] {
 
   let result = [...segments];
 
-  if (result[0].type === 'STATIONARY') {
-    result = [{ ...result[1], startTime: result[0].startTime }, ...result.slice(2)];
+  while (result.length > 1 && result[0].type === 'STATIONARY') {
+    result = result.slice(1);
   }
-
-  if (result.length > 1 && result[result.length - 1].type === 'STATIONARY') {
-    result = [
-      ...result.slice(0, -2),
-      { ...result[result.length - 2], endTime: result[result.length - 1].endTime },
-    ];
+  while (result.length > 1 && result[result.length - 1].type === 'STATIONARY') {
+    result = result.slice(0, -1);
   }
 
   return result;
