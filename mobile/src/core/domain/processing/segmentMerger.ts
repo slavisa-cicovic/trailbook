@@ -1,6 +1,7 @@
 import type { Segment } from '../model/segment';
 import type { GeoPoint } from './types';
 import { V1 } from './types';
+import { shouldConnectGeoPoints } from './locationCleaner';
 
 interface RawSegment {
   startTime: Date;
@@ -26,6 +27,9 @@ function distanceInRange(points: GeoPoint[], from: Date, to: Date): number {
   );
   let total = 0;
   for (let i = 1; i < inRange.length; i++) {
+    if (!shouldConnectGeoPoints(inRange[i - 1], inRange[i])) {
+      continue;
+    }
     total += haversineM(
       inRange[i - 1].latitude,
       inRange[i - 1].longitude,

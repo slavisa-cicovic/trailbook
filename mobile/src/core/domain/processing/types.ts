@@ -17,8 +17,10 @@ export interface ClassifiedInterval {
 // Pipeline tuning constants (v1)
 export const V1 = {
   maxAccuracyM: 25,
-  speedSpikeThresholdMps: 120,  // 432 km/h — above any realistic ground transport
+  speedSpikeThresholdMps: 120,  // 432 km/h - above any realistic ground transport
   maxContinuousIntervalMs: 60_000,
+  routeGapSplitThresholdMs: 60_000,
+  routeGapSplitMinDistanceM: 100,
   stationaryMaxMps: 0.5,
   walkMaxMps: 2.5,
   bikeMaxMps: 7.0,
@@ -28,7 +30,7 @@ export const V1 = {
   minDriveDurationMs: 10_000,
   minBikeDurationMs: 30_000,
   minStationaryDurationMs: 30_000,
-  gapSplitThresholdMs: 5 * 60_000,
+  gapSplitThresholdMs: 60_000,
   mergeGapThresholdMs: 30_000,
   driveInterruptionMaxMs: 5 * 60_000,
   bikeMinAverageMps: 2.5,

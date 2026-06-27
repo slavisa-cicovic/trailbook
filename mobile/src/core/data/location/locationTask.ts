@@ -65,19 +65,26 @@ function compactTaskOptions(options: Location.LocationTaskOptions): LocationTask
 }
 
 function buildLocationTaskOptions(): Location.LocationTaskOptions {
-  return {
-    accuracy:
-      Platform.OS === 'ios'
-        ? Location.Accuracy.BestForNavigation
-        : Location.Accuracy.High,
+  const common: Location.LocationTaskOptions = {
     timeInterval: 3000,
     distanceInterval: 5,
-    showsBackgroundLocationIndicator: true,
     pausesUpdatesAutomatically: false,
-    activityType: Location.ActivityType.OtherNavigation,
-    deferredUpdatesDistance: 0,
-    deferredUpdatesInterval: 0,
-    deferredUpdatesTimeout: 0,
+  };
+
+  if (Platform.OS === 'ios') {
+    return {
+      ...common,
+      accuracy: Location.Accuracy.BestForNavigation,
+      showsBackgroundLocationIndicator: true,
+      activityType: Location.ActivityType.Fitness,
+      // No deferred updates — allowDeferredLocationUpdates is deprecated since iOS 13
+      // and breaks regular background delivery when set to 0/0.
+    };
+  }
+
+  return {
+    ...common,
+    accuracy: Location.Accuracy.High,
     foregroundService: {
       notificationTitle: 'Trailbook',
       notificationBody: 'Recording trip in progress...',

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '@/core/db';
 import { rawLocationSamples } from '@/core/db/schema';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
@@ -46,6 +46,25 @@ export async function getAllForTrip(tripId: string): Promise<RawLocationSample[]
     .from(rawLocationSamples)
     .where(eq(rawLocationSamples.tripId, tripId));
   return rows.map(toDomain);
+}
+
+export async function getSummaryForTrip(tripId: string): Promise<{
+  count: number;
+  lastTimestamp: Date | null;
+}> {
+  const rows = await db
+    .select({
+      count: sql<number>`count(*)`,
+      lastTimestamp: sql<string | null>`max(${rawLocationSamples.timestamp})`,
+    })
+    .from(rawLocationSamples)
+    .where(eq(rawLocationSamples.tripId, tripId));
+  const row = rows[0];
+
+  return {
+    count: Number(row?.count ?? 0),
+    lastTimestamp: row?.lastTimestamp ? new Date(row.lastTimestamp) : null,
+  };
 }
 
 export async function deleteForTrip(tripId: string): Promise<void> {

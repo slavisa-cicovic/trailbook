@@ -32,7 +32,7 @@ import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
-import { cleanLocations } from '@/core/domain/processing/locationCleaner';
+import { cleanLocations, splitLocationsOnRouteGaps } from '@/core/domain/processing/locationCleaner';
 import type { GeoPoint } from '@/core/domain/processing/types';
 import type { Segment } from '@/core/domain/model/segment';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
@@ -59,10 +59,12 @@ const TRIP_POINT_PREVIEW_MAX_DISTANCE_METERS = 50_000;
 const TRIP_POINT_PREVIEW_TOUCH_RADIUS_PX = 32;
 const METERS_PER_DEGREE_LATITUDE = 111_320;
 
-function pointsForSegment(locations: GeoPoint[], seg: Segment) {
-  return locations
-    .filter((l) => l.timestamp >= seg.startedAt && l.timestamp <= seg.endedAt)
-    .map((l) => ({ latitude: l.latitude, longitude: l.longitude }));
+function pointGroupsForSegment(locations: GeoPoint[], seg: Segment) {
+  const segmentLocations = locations
+    .filter((l) => l.timestamp >= seg.startedAt && l.timestamp <= seg.endedAt);
+  return splitLocationsOnRouteGaps(segmentLocations)
+    .map((group) => group.map((l) => ({ latitude: l.latitude, longitude: l.longitude })))
+    .filter((group) => group.length > 1);
 }
 
 function segmentForTimestamp(segments: Segment[], timestamp: Date) {
@@ -263,7 +265,7 @@ export default function TripDetailScreen() {
         animated: true,
       });
     }, 300);
-  }, [locationSamples, expanded]);
+  }, [cleanedLocations, expanded]);
 
   async function onReprocessToggle() {
     if (!clientTripId) return;
@@ -506,15 +508,15 @@ export default function TripDetailScreen() {
           onRegionChangeComplete={setCurrentRegion}
         >
           {segments.map((seg, i) => {
-            const pts = pointsForSegment(cleanedLocations, seg);
-            return pts.length > 1 ? (
+            const pointGroups = pointGroupsForSegment(cleanedLocations, seg);
+            return pointGroups.map((points, groupIndex) => (
               <Polyline
-                key={i}
-                coordinates={pts}
+                key={`${i}-${groupIndex}`}
+                coordinates={points}
                 strokeColor={SEGMENT_COLOR[seg.segmentType]}
                 strokeWidth={4}
               />
-            ) : null;
+            ));
           })}
           {waypoints.map((w) => (
             <Marker

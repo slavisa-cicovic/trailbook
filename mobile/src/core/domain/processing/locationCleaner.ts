@@ -2,7 +2,7 @@ import type { RawLocationSample } from '../model/rawSamples';
 import type { GeoPoint } from './types';
 import { V1 } from './types';
 
-function distanceM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+export function distanceM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6_371_000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -12,6 +12,38 @@ function distanceM(lat1: number, lon1: number, lat2: number, lon2: number): numb
       Math.cos((lat2 * Math.PI) / 180) *
       Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function shouldConnectGeoPoints(previous: GeoPoint, current: GeoPoint): boolean {
+  const dtMs = current.timestamp.getTime() - previous.timestamp.getTime();
+  if (dtMs <= 0) return false;
+
+  if (dtMs <= V1.routeGapSplitThresholdMs) return true;
+
+  const distance = distanceM(
+    previous.latitude,
+    previous.longitude,
+    current.latitude,
+    current.longitude,
+  );
+  return distance < V1.routeGapSplitMinDistanceM;
+}
+
+export function splitLocationsOnRouteGaps(locations: GeoPoint[]): GeoPoint[][] {
+  if (locations.length === 0) return [];
+
+  const chunks: GeoPoint[][] = [[locations[0]]];
+  for (let index = 1; index < locations.length; index += 1) {
+    const previous = locations[index - 1];
+    const current = locations[index];
+    if (shouldConnectGeoPoints(previous, current)) {
+      chunks[chunks.length - 1].push(current);
+    } else {
+      chunks.push([current]);
+    }
+  }
+
+  return chunks;
 }
 
 export function cleanLocations(samples: RawLocationSample[]): GeoPoint[] {
