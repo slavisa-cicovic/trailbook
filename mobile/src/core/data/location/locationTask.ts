@@ -74,11 +74,12 @@ function buildLocationTaskOptions(): Location.LocationTaskOptions {
   if (Platform.OS === 'ios') {
     return {
       ...common,
+      // iOS ignores timeInterval; only distanceInterval triggers updates.
+      // Use 1m so slow walking and near-stationary movement still produces samples.
+      distanceInterval: 1,
       accuracy: Location.Accuracy.BestForNavigation,
       showsBackgroundLocationIndicator: true,
       activityType: Location.ActivityType.Fitness,
-      // No deferred updates — allowDeferredLocationUpdates is deprecated since iOS 13
-      // and breaks regular background delivery when set to 0/0.
     };
   }
 
