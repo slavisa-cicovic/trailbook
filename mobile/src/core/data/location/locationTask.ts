@@ -75,9 +75,13 @@ function buildLocationTaskOptions(): Location.LocationTaskOptions {
     return {
       ...common,
       // iOS ignores timeInterval; only distanceInterval triggers updates.
-      // Use 1m so slow walking and near-stationary movement still produces samples.
-      distanceInterval: 1,
-      accuracy: Location.Accuracy.Highest,
+      // High = kCLLocationAccuracyNearestTenMeters (10m): allows iOS to use
+      // cell/WiFi positioning in addition to GPS, which is more reliable for
+      // background delivery than GPS-only accuracy levels.
+      // distanceInterval 12m matches the pre-Vellora build that had working
+      // iOS background location.
+      distanceInterval: 12,
+      accuracy: Location.Accuracy.High,
       showsBackgroundLocationIndicator: true,
       activityType: Location.ActivityType.Fitness,
     };
