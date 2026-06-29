@@ -77,7 +77,7 @@ function buildLocationTaskOptions(): Location.LocationTaskOptions {
       // iOS ignores timeInterval; only distanceInterval triggers updates.
       // Use 1m so slow walking and near-stationary movement still produces samples.
       distanceInterval: 1,
-      accuracy: Location.Accuracy.BestForNavigation,
+      accuracy: Location.Accuracy.Highest,
       showsBackgroundLocationIndicator: true,
       activityType: Location.ActivityType.Fitness,
     };
