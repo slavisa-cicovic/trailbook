@@ -11,6 +11,7 @@ module.exports = {
     userInterfaceStyle: "light",
     icon: "./assets/app-icon.png",
     plugins: [
+      "./plugins/withLocationTaskPatch",
       "expo-router",
       "expo-background-task",
       "expo-secure-store",
