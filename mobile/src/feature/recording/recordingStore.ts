@@ -25,6 +25,7 @@ import {
   startLocationTask,
   stopLocationTask,
   isLocationTaskRunning,
+  restartLocationTask,
 } from '@/core/data/location/locationTask';
 import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
 import { dbEvents } from '@/core/db/events';
@@ -35,6 +36,10 @@ import { uploadTrip } from '@/core/domain/usecase/UploadTripUseCase';
 
 const DEMO_TRIP_LIMIT = 3;
 const DEVICE_SAMPLE_INTERVAL_MS = 60_000;
+const IOS_STALE_LOCATION_RESTART_THRESHOLD_MS = 120_000;
+const IOS_STALE_LOCATION_RESTART_COOLDOWN_MS = 180_000;
+
+let lastIosStaleRestartAtMs = 0;
 
 async function sampleDeviceAndWatchdog(tripId: string): Promise<void> {
   const [deviceSample, locationSummary, taskRunning] = await Promise.all([
@@ -44,19 +49,32 @@ async function sampleDeviceAndWatchdog(tripId: string): Promise<void> {
   ]);
 
   await rawDeviceDao.insert(deviceSample);
+  const lastLocationAgeMs = locationSummary.lastTimestamp
+    ? Date.now() - locationSummary.lastTimestamp.getTime()
+    : null;
+
   await rawSessionEventDao.insert({
     tripId,
     timestamp: new Date(),
     type: 'LOCATION_TASK_WATCHDOG',
     payload: {
-      lastLocationAgeMs: locationSummary.lastTimestamp
-        ? Date.now() - locationSummary.lastTimestamp.getTime()
-        : null,
+      lastLocationAgeMs,
       lastLocationTimestamp: locationSummary.lastTimestamp?.toISOString() ?? null,
       rawLocationCount: locationSummary.count,
       taskRunning,
     },
   });
+
+  if (
+    Platform.OS === 'ios' &&
+    taskRunning === true &&
+    lastLocationAgeMs !== null &&
+    lastLocationAgeMs > IOS_STALE_LOCATION_RESTART_THRESHOLD_MS &&
+    Date.now() - lastIosStaleRestartAtMs > IOS_STALE_LOCATION_RESTART_COOLDOWN_MS
+  ) {
+    lastIosStaleRestartAtMs = Date.now();
+    await restartLocationTask(`stale-location-${Math.round(lastLocationAgeMs / 1000)}s`);
+  }
 }
 
 function startDeviceSampleInterval(tripId: string) {
@@ -258,6 +276,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
 
       await rawSessionEventDao.insert({ tripId: clientTripId, timestamp: now, type: 'RECORDING_STARTED' });
       await setActiveRecordingTripId(clientTripId);
+      lastIosStaleRestartAtMs = 0;
       await rawDeviceDao.insert(await sampleDeviceState(clientTripId));
       try {
         await startLocationTask();
