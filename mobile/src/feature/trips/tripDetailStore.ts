@@ -50,7 +50,7 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
         segmentDao.getForTrip(clientTripId),
         waypointDao.getForTrip(clientTripId),
         rawLocationDao.getAllForTrip(clientTripId),
-        rawDeviceDao.getAllForTrip(clientTripId),
+        rawDeviceDao.getBoundaryForTrip(clientTripId),
         tripRepository.hasReprocessingSnapshot(clientTripId),
       ]);
       if (!snapshotResult.ok) throw new Error(snapshotResult.error);

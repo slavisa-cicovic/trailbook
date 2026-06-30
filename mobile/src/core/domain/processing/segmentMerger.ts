@@ -71,8 +71,9 @@ export function mergeAndFinalize(
   // Post-process 1: remove leading/trailing STATIONARY when there is movement
   const trimmed = trimBoundaryStationary(merged);
 
-  // Post-process 2: absorb short isolated segments sandwiched between same-type neighbours
-  const absorbed = absorbIsolated(trimmed);
+  // Post-process 2: absorb short isolated segments sandwiched between same-type neighbours.
+  const stationaryCorrected = absorbWalkStationaryInterruptions(trimmed, geoPoints);
+  const absorbed = absorbIsolated(stationaryCorrected);
 
   // Finalize: assign index + distanceM
   return absorbed.map((seg, idx) => ({
@@ -177,4 +178,37 @@ function absorbIsolated(segments: RawSegment[]): RawSegment[] {
   }
 
   return result;
+}
+
+function absorbWalkStationaryInterruptions(
+  segments: RawSegment[],
+  geoPoints: GeoPoint[],
+): RawSegment[] {
+  if (segments.length < 3) return segments;
+
+  return segments.map((segment, index) => {
+    const previous = segments[index - 1];
+    const next = segments[index + 1];
+    if (
+      !previous ||
+      !next ||
+      previous.type !== 'WALK' ||
+      segment.type !== 'STATIONARY' ||
+      next.type !== 'WALK'
+    ) {
+      return segment;
+    }
+
+    const durationMs = segment.endTime.getTime() - segment.startTime.getTime();
+    if (durationMs > V1.walkStationaryInterruptionMaxMs) {
+      return segment;
+    }
+
+    const distanceM = distanceInRange(geoPoints, segment.startTime, segment.endTime);
+    if (distanceM < V1.walkStationaryInterruptionMinDistanceM) {
+      return segment;
+    }
+
+    return { ...segment, type: 'WALK' };
+  });
 }

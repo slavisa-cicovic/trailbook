@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 import { db } from '@/core/db';
 import { rawDeviceSamples } from '@/core/db/schema';
 import type { RawDeviceSample } from '@/core/domain/model/rawSamples';
@@ -37,6 +37,28 @@ export async function insertAll(samples: RawDeviceSample[]): Promise<void> {
 export async function getAllForTrip(tripId: string): Promise<RawDeviceSample[]> {
   const rows = await db.select().from(rawDeviceSamples).where(eq(rawDeviceSamples.tripId, tripId));
   return rows.map(toDomain);
+}
+
+export async function getBoundaryForTrip(tripId: string): Promise<RawDeviceSample[]> {
+  const [firstRows, lastRows] = await Promise.all([
+    db
+      .select()
+      .from(rawDeviceSamples)
+      .where(eq(rawDeviceSamples.tripId, tripId))
+      .orderBy(asc(rawDeviceSamples.timestamp))
+      .limit(1),
+    db
+      .select()
+      .from(rawDeviceSamples)
+      .where(eq(rawDeviceSamples.tripId, tripId))
+      .orderBy(desc(rawDeviceSamples.timestamp))
+      .limit(1),
+  ]);
+  const first = firstRows[0] ? toDomain(firstRows[0]) : null;
+  const last = lastRows[0] ? toDomain(lastRows[0]) : null;
+  if (!first) return [];
+  if (!last || first.timestamp.getTime() === last.timestamp.getTime()) return [first];
+  return [first, last];
 }
 
 export async function deleteForTrip(tripId: string): Promise<void> {

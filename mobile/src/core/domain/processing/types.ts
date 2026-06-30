@@ -30,9 +30,13 @@ export const V1 = {
   minDriveDurationMs: 10_000,
   minBikeDurationMs: 30_000,
   minStationaryDurationMs: 30_000,
+  dwellStationaryMinDurationMs: 60_000,
+  dwellStationaryRadiusM: 30,
   gapSplitThresholdMs: 60_000,
   mergeGapThresholdMs: 30_000,
   driveInterruptionMaxMs: 5 * 60_000,
+  walkStationaryInterruptionMaxMs: 4 * 60_000,
+  walkStationaryInterruptionMinDistanceM: 15,
   bikeMinAverageMps: 2.5,
   // Absorb an isolated segment that is sandwiched between two same-type segments
   // and shorter than this threshold (handles traffic stops, brief slowdowns, etc.)

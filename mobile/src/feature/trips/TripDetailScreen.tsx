@@ -57,6 +57,7 @@ const WAYPOINT_PREVIEW_GAP = 14;
 const TRIP_POINT_PREVIEW_MIN_DISTANCE_METERS = 120;
 const TRIP_POINT_PREVIEW_MAX_DISTANCE_METERS = 50_000;
 const TRIP_POINT_PREVIEW_TOUCH_RADIUS_PX = 32;
+const MAX_MAP_ROUTE_POINTS = 2_500;
 const METERS_PER_DEGREE_LATITUDE = 111_320;
 
 function pointGroupsForSegment(locations: GeoPoint[], seg: Segment) {
@@ -65,6 +66,15 @@ function pointGroupsForSegment(locations: GeoPoint[], seg: Segment) {
   return splitLocationsOnRouteGaps(segmentLocations)
     .map((group) => group.map((l) => ({ latitude: l.latitude, longitude: l.longitude })))
     .filter((group) => group.length > 1);
+}
+
+function thinLocationsForMap(locations: GeoPoint[]) {
+  if (locations.length <= MAX_MAP_ROUTE_POINTS) return locations;
+
+  const step = Math.ceil(locations.length / MAX_MAP_ROUTE_POINTS);
+  return locations.filter(
+    (_location, index) => index === 0 || index === locations.length - 1 || index % step === 0,
+  );
 }
 
 function segmentForTimestamp(segments: Segment[], timestamp: Date) {
@@ -241,10 +251,7 @@ export default function TripDetailScreen() {
     y: number;
   } | null>(null);
 
-  useEffect(() => {
-    if (clientTripId) load(clientTripId);
-    return () => reset();
-  }, [clientTripId]);
+  useEffect(() => () => reset(), [clientTripId, reset]);
 
   // Reload waypoints/images when returning from waypoint screen
   useFocusEffect(
@@ -254,10 +261,15 @@ export default function TripDetailScreen() {
   );
 
   const cleanedLocations = useMemo(() => cleanLocations(locationSamples), [locationSamples]);
+  const mapLocations = useMemo(() => thinLocationsForMap(cleanedLocations), [cleanedLocations]);
+  const segmentPointGroups = useMemo(
+    () => segments.map((seg) => pointGroupsForSegment(mapLocations, seg)),
+    [mapLocations, segments],
+  );
 
   useEffect(() => {
-    if (!cleanedLocations.length || !mapRef.current) return;
-    const coords = cleanedLocations.map((l) => ({ latitude: l.latitude, longitude: l.longitude }));
+    if (!mapLocations.length || !mapRef.current) return;
+    const coords = mapLocations.map((l) => ({ latitude: l.latitude, longitude: l.longitude }));
     const bottomPad = 180;
     setTimeout(() => {
       mapRef.current?.fitToCoordinates(coords, {
@@ -265,7 +277,7 @@ export default function TripDetailScreen() {
         animated: true,
       });
     }, 300);
-  }, [cleanedLocations, expanded]);
+  }, [mapLocations, expanded]);
 
   async function onReprocessToggle() {
     if (!clientTripId) return;
@@ -387,11 +399,11 @@ export default function TripDetailScreen() {
   const isSynced = trip?.syncState === 'SYNCED';
   const tripPointInfos = useMemo(
     () =>
-      locationSamples.map((sample, index) => {
+      mapLocations.map((sample, index) => {
         const segment = segmentForTimestamp(segments, sample.timestamp);
 
         return {
-          accuracyM: sample.accuracyM ?? null,
+          accuracyM: null,
           id: `${sample.timestamp.toISOString()}-${index}`,
           latitude: sample.latitude,
           longitude: sample.longitude,
@@ -400,7 +412,7 @@ export default function TripDetailScreen() {
           speedMps: sample.speedMps ?? null,
         };
       }),
-    [locationSamples, segments],
+    [mapLocations, segments],
   );
   const previewWaypoint = waypointPreview
     ? waypoints.find((waypoint) => waypoint.id === waypointPreview.waypointId)
@@ -508,7 +520,7 @@ export default function TripDetailScreen() {
           onRegionChangeComplete={setCurrentRegion}
         >
           {segments.map((seg, i) => {
-            const pointGroups = pointGroupsForSegment(cleanedLocations, seg);
+            const pointGroups = segmentPointGroups[i] ?? [];
             return pointGroups.map((points, groupIndex) => (
               <Polyline
                 key={`${i}-${groupIndex}`}

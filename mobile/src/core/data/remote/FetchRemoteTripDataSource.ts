@@ -1,7 +1,7 @@
 import type { TripBundle } from '@/core/domain/model/tripBundle';
 import type { Result } from '@/core/common/result';
 import { err } from '@/core/common/result';
-import { apiPost, apiGet, apiDelete } from './apiClient';
+import { apiPostGzip, apiGet, apiDelete } from './apiClient';
 import { tripBundleToDto, tripBundleDtoToDomain, type TripListItemDto, type TripBundleRequestDto } from './dto/tripBundleDto';
 
 export interface RemoteTripDataSource {
@@ -13,7 +13,7 @@ export interface RemoteTripDataSource {
 
 class FetchRemoteTripDataSource implements RemoteTripDataSource {
   async uploadTrip(bundle: TripBundle): Promise<Result<void>> {
-    return apiPost<void>('/trips', tripBundleToDto(bundle));
+    return apiPostGzip<void>('/trips', tripBundleToDto(bundle));
   }
 
   async fetchTripList(): Promise<Result<TripListItemDto[]>> {

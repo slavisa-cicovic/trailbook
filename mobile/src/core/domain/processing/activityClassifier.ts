@@ -81,6 +81,37 @@ function reconcileActivityWithSpeed(
   return activityType ?? speedType;
 }
 
+function detectDwellIntervals(geoPoints: GeoPoint[]) {
+  const dwellIntervalIndexes = new Set<number>();
+
+  for (let startIndex = 0; startIndex < geoPoints.length - 1; startIndex += 1) {
+    let endIndex = startIndex + 1;
+
+    while (endIndex < geoPoints.length) {
+      const durationMs =
+        geoPoints[endIndex].timestamp.getTime() - geoPoints[startIndex].timestamp.getTime();
+      const distanceFromAnchor = distanceM(
+        geoPoints[startIndex],
+        geoPoints[endIndex],
+      );
+
+      if (distanceFromAnchor > V1.dwellStationaryRadiusM) {
+        break;
+      }
+
+      if (durationMs >= V1.dwellStationaryMinDurationMs) {
+        for (let intervalIndex = startIndex; intervalIndex < endIndex; intervalIndex += 1) {
+          dwellIntervalIndexes.add(intervalIndex);
+        }
+      }
+
+      endIndex += 1;
+    }
+  }
+
+  return dwellIntervalIndexes;
+}
+
 export function classifyIntervals(
   geoPoints: GeoPoint[],
   activitySamples: RawActivitySample[],
@@ -103,6 +134,7 @@ export function classifyIntervals(
     return best;
   }
 
+  const dwellIntervalIndexes = detectDwellIntervals(geoPoints);
   const intervals: ClassifiedInterval[] = [];
 
   for (let i = 0; i < geoPoints.length - 1; i++) {
@@ -113,12 +145,16 @@ export function classifyIntervals(
       continue;
     }
 
-    const actSample = nearestActivity(p.timestamp);
-    const fromActivity = actSample ? bestActivityType(actSample) : null;
-    const type = reconcileActivityWithSpeed(
-      fromActivity,
-      intervalSpeedMps(p, next),
-    );
+    const type = dwellIntervalIndexes.has(i)
+      ? 'STATIONARY'
+      : (() => {
+          const actSample = nearestActivity(p.timestamp);
+          const fromActivity = actSample ? bestActivityType(actSample) : null;
+          return reconcileActivityWithSpeed(
+            fromActivity,
+            intervalSpeedMps(p, next),
+          );
+        })();
 
     // Merge with previous interval if same type
     const last = intervals[intervals.length - 1];

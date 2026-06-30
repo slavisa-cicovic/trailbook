@@ -1,3 +1,4 @@
+import { gzipSync, strToU8 } from 'fflate';
 import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
 import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
@@ -56,6 +57,30 @@ export function apiPost<T>(path: string, body: unknown): Promise<Result<T>> {
   return withToken((token) =>
     doRequest<T>(path, { method: 'POST', body: JSON.stringify(body) }, token),
   );
+}
+
+export function apiPostGzip<T>(path: string, body: unknown): Promise<Result<T>> {
+  return withToken((token) => {
+    const json = JSON.stringify(body);
+    const gzipped = gzipSync(strToU8(json));
+    const gzippedBody = gzipped.buffer.slice(
+      gzipped.byteOffset,
+      gzipped.byteOffset + gzipped.byteLength,
+    );
+
+    return doRequest<T>(
+      path,
+      {
+        method: 'POST',
+        body: gzippedBody,
+        headers: {
+          'Content-Encoding': 'gzip',
+          'Content-Type': 'application/json',
+        },
+      },
+      token,
+    );
+  });
 }
 
 export function apiGet<T>(path: string): Promise<Result<T>> {
