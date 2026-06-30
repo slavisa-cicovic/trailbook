@@ -18,7 +18,6 @@ import { TopAppBar } from '@/components/ui/TopAppBar';
 import { SessionCard } from './components/SessionCard';
 import { WaypointCard } from './components/WaypointCard';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
 
 
 export default function RecordingScreen() {
@@ -31,7 +30,6 @@ export default function RecordingScreen() {
   const [lastPointTime, setLastPointTime] = useState<Date | null>(null);
   const [initialRegion, setInitialRegion] = useState<Region | undefined>(undefined);
   const mapRef = useRef<MapView>(null);
-  const lastPersistedUserLocationAtMs = useRef(0);
 
   const isRecording = useRecordingStore((s) => s.isRecording);
   const isPaused = useRecordingStore((s) => s.isPaused);
@@ -121,32 +119,6 @@ export default function RecordingScreen() {
         longitudeDelta: 0.012,
       };
       focusMapOnRegion(nextRegion);
-    }
-
-    if (isRecording && activeTrip) {
-      console.warn('[Trailbook][map-user-location]', {
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
-      });
-
-      const nowMs = Date.now();
-      if (nowMs - lastPersistedUserLocationAtMs.current > 30_000) {
-        lastPersistedUserLocationAtMs.current = nowMs;
-        rawSessionEventDao.insert({
-          tripId: activeTrip.clientTripId,
-          timestamp: new Date(),
-          type: 'MAP_USER_LOCATION_RECEIVED',
-          payload: {
-            accuracyM: coordinate.accuracy,
-            latitude: coordinate.latitude,
-            longitude: coordinate.longitude,
-            speedMps: coordinate.speed,
-            timestamp: new Date(coordinate.timestamp).toISOString(),
-          },
-        }).catch((error) => {
-          console.error('[Trailbook][map-user-location] failed to persist', error);
-        });
-      }
     }
   }
 

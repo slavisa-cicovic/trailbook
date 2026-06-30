@@ -78,8 +78,6 @@ function buildLocationTaskOptions(): Location.LocationTaskOptions {
       // High = kCLLocationAccuracyNearestTenMeters (10m): allows iOS to use
       // cell/WiFi positioning in addition to GPS, which is more reliable for
       // background delivery than GPS-only accuracy levels.
-      // distanceInterval 12m matches the pre-Vellora build that had working
-      // iOS background location.
       distanceInterval: 12,
       accuracy: Location.Accuracy.High,
       showsBackgroundLocationIndicator: true,
@@ -258,46 +256,4 @@ export async function stopLocationTask(): Promise<void> {
     });
     throw error;
   }
-}
-
-export async function restartLocationTask(reason: string): Promise<void> {
-  const tripId = await getActiveRecordingTripId();
-  const options = buildLocationTaskOptions();
-
-  await recordLocationTaskEvent(tripId, 'LOCATION_TASK_STALE_RESTART_REQUESTED', {
-    options: compactTaskOptions(options),
-    reason,
-    taskName: LOCATION_TASK,
-  });
-
-  try {
-    const isRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
-    if (isRunning) {
-      await Location.stopLocationUpdatesAsync(LOCATION_TASK);
-    }
-
-    await Location.startLocationUpdatesAsync(LOCATION_TASK, options);
-
-    await recordLocationTaskEvent(tripId, 'LOCATION_TASK_STALE_RESTART_SUCCEEDED', {
-      options: compactTaskOptions(options),
-      previouslyRunning: isRunning,
-      reason,
-      taskName: LOCATION_TASK,
-    });
-    if (tripId) {
-      await recordTaskOptionsSnapshot(tripId, options);
-    }
-  } catch (error) {
-    await recordLocationTaskEvent(tripId, 'LOCATION_TASK_STALE_RESTART_FAILED', {
-      error: error instanceof Error ? error.message : String(error),
-      options: compactTaskOptions(options),
-      reason,
-      taskName: LOCATION_TASK,
-    });
-    throw error;
-  }
-}
-
-export async function isLocationTaskRunning(): Promise<boolean> {
-  return Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
 }
