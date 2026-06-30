@@ -271,7 +271,7 @@ export default function TripDetailScreen() {
     setTimeout(() => {
       mapRef.current?.fitToCoordinates(coords, {
         edgePadding: { top: 80, right: 40, bottom: bottomPad, left: 40 },
-        animated: true,
+        animated: false,
       });
     }, 300);
   }, [mapLocations, expanded]);
