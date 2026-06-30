@@ -2,6 +2,7 @@ import { asc, desc, eq } from 'drizzle-orm';
 import { db } from '@/core/db';
 import { rawDeviceSamples } from '@/core/db/schema';
 import type { RawDeviceSample } from '@/core/domain/model/rawSamples';
+import { runInChunks } from './chunkedInsert';
 
 function toRow(s: RawDeviceSample) {
   return {
@@ -31,7 +32,9 @@ export async function insert(sample: RawDeviceSample): Promise<void> {
 
 export async function insertAll(samples: RawDeviceSample[]): Promise<void> {
   if (samples.length === 0) return;
-  await db.insert(rawDeviceSamples).values(samples.map(toRow));
+  await runInChunks(samples.map(toRow), (chunk) =>
+    db.insert(rawDeviceSamples).values(chunk),
+  );
 }
 
 export async function getAllForTrip(tripId: string): Promise<RawDeviceSample[]> {

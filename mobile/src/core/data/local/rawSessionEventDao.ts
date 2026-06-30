@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/core/db';
 import { rawSessionEvents } from '@/core/db/schema';
 import type { RawSessionEvent, SessionEventType } from '@/core/domain/model/rawSamples';
+import { runInChunks } from './chunkedInsert';
 
 function toRow(e: RawSessionEvent) {
   return {
@@ -27,7 +28,9 @@ export async function insert(event: RawSessionEvent): Promise<void> {
 
 export async function insertAll(events: RawSessionEvent[]): Promise<void> {
   if (events.length === 0) return;
-  await db.insert(rawSessionEvents).values(events.map(toRow));
+  await runInChunks(events.map(toRow), (chunk) =>
+    db.insert(rawSessionEvents).values(chunk),
+  );
 }
 
 export async function getAllForTrip(tripId: string): Promise<RawSessionEvent[]> {

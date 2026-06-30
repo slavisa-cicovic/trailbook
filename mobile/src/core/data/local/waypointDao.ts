@@ -3,6 +3,7 @@ import { db } from '@/core/db';
 import { waypoints } from '@/core/db/schema';
 import { dbEvents } from '@/core/db/events';
 import type { Waypoint, WaypointCategory } from '@/core/domain/model/waypoint';
+import { runInChunks } from './chunkedInsert';
 
 function toRow(w: Waypoint) {
   return {
@@ -39,7 +40,7 @@ export async function insertWaypoint(w: Waypoint): Promise<void> {
 
 export async function insertAll(ws: Waypoint[]): Promise<void> {
   if (ws.length === 0) return;
-  await db.insert(waypoints).values(ws.map(toRow));
+  await runInChunks(ws.map(toRow), (chunk) => db.insert(waypoints).values(chunk));
   dbEvents.emit('waypoints:changed');
 }
 

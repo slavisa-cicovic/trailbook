@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '@/core/db';
 import { rawLocationSamples } from '@/core/db/schema';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
+import { runInChunks } from './chunkedInsert';
 
 function toRow(s: RawLocationSample) {
   return {
@@ -37,7 +38,9 @@ export async function insert(sample: RawLocationSample): Promise<void> {
 
 export async function insertAll(samples: RawLocationSample[]): Promise<void> {
   if (samples.length === 0) return;
-  await db.insert(rawLocationSamples).values(samples.map(toRow));
+  await runInChunks(samples.map(toRow), (chunk) =>
+    db.insert(rawLocationSamples).values(chunk),
+  );
 }
 
 export async function getAllForTrip(tripId: string): Promise<RawLocationSample[]> {

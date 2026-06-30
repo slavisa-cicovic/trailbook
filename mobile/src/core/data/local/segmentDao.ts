@@ -3,6 +3,7 @@ import { db } from '@/core/db';
 import { segments } from '@/core/db/schema';
 import { dbEvents } from '@/core/db/events';
 import type { Segment, SegmentType } from '@/core/domain/model/segment';
+import { runInChunks } from './chunkedInsert';
 
 function toRow(s: Segment) {
   return {
@@ -28,7 +29,7 @@ function toDomain(row: typeof segments.$inferSelect): Segment {
 
 export async function insertAll(segs: Segment[]): Promise<void> {
   if (segs.length === 0) return;
-  await db.insert(segments).values(segs.map(toRow));
+  await runInChunks(segs.map(toRow), (chunk) => db.insert(segments).values(chunk));
   dbEvents.emit('segments:changed');
 }
 

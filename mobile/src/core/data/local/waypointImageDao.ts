@@ -3,6 +3,7 @@ import { db } from '@/core/db';
 import { waypointImages } from '@/core/db/schema';
 import { dbEvents } from '@/core/db/events';
 import type { WaypointImage, ImageSource, ImageUploadState } from '@/core/domain/model/waypoint';
+import { runInChunks } from './chunkedInsert';
 
 function toRow(img: WaypointImage) {
   return {
@@ -43,7 +44,9 @@ export async function getForWaypoint(waypointId: string): Promise<WaypointImage[
 
 export async function deleteAllForTrip(waypointIds: string[]): Promise<void> {
   if (waypointIds.length === 0) return;
-  await db.delete(waypointImages).where(inArray(waypointImages.waypointId, waypointIds));
+  await runInChunks(waypointIds, (chunk) =>
+    db.delete(waypointImages).where(inArray(waypointImages.waypointId, chunk)),
+  );
   dbEvents.emit('waypointImages:changed');
 }
 
@@ -79,29 +82,42 @@ export async function countNotUploaded(): Promise<number> {
 
 export async function countForWaypoints(waypointIds: string[]): Promise<number> {
   if (waypointIds.length === 0) return 0;
-  const rows = await db
-    .select({ id: waypointImages.id })
-    .from(waypointImages)
-    .where(inArray(waypointImages.waypointId, waypointIds));
-  return rows.length;
+  let count = 0;
+  await runInChunks(waypointIds, async (chunk) => {
+    const rows = await db
+      .select({ id: waypointImages.id })
+      .from(waypointImages)
+      .where(inArray(waypointImages.waypointId, chunk));
+    count += rows.length;
+  });
+  return count;
 }
 
 export async function countNotUploadedForWaypoints(waypointIds: string[]): Promise<number> {
   if (waypointIds.length === 0) return 0;
-  const rows = await db
-    .select({ uploadState: waypointImages.uploadState })
-    .from(waypointImages)
-    .where(inArray(waypointImages.waypointId, waypointIds));
-  return rows.filter((row) => row.uploadState !== 'UPLOADED').length;
+  let count = 0;
+  await runInChunks(waypointIds, async (chunk) => {
+    const rows = await db
+      .select({ uploadState: waypointImages.uploadState })
+      .from(waypointImages)
+      .where(inArray(waypointImages.waypointId, chunk));
+    count += rows.filter((row) => row.uploadState !== 'UPLOADED').length;
+  });
+  return count;
 }
 
 export async function getNotUploadedForTrip(waypointIds: string[]): Promise<WaypointImage[]> {
   if (waypointIds.length === 0) return [];
-  const rows = await db
-    .select()
-    .from(waypointImages)
-    .where(
-      inArray(waypointImages.waypointId, waypointIds),
+  const rows: Array<typeof waypointImages.$inferSelect> = [];
+  await runInChunks(waypointIds, async (chunk) => {
+    rows.push(
+      ...(await db
+        .select()
+        .from(waypointImages)
+        .where(
+          inArray(waypointImages.waypointId, chunk),
+        )),
     );
+  });
   return rows.filter((r) => r.uploadState !== 'UPLOADED').map(toDomain);
 }

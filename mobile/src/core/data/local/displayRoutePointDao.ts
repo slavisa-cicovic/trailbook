@@ -2,6 +2,7 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from '@/core/db';
 import { displayRoutePoints } from '@/core/db/schema';
 import type { DisplayRoutePoint } from '@/core/domain/model/displayRoutePoint';
+import { runInChunks } from './chunkedInsert';
 
 function toRow(point: DisplayRoutePoint) {
   return {
@@ -31,7 +32,9 @@ export async function replaceForTrip(
 ): Promise<void> {
   await db.delete(displayRoutePoints).where(eq(displayRoutePoints.tripId, tripId));
   if (points.length === 0) return;
-  await db.insert(displayRoutePoints).values(points.map(toRow));
+  await runInChunks(points.map(toRow), (chunk) =>
+    db.insert(displayRoutePoints).values(chunk),
+  );
 }
 
 export async function getForTrip(tripId: string): Promise<DisplayRoutePoint[]> {
