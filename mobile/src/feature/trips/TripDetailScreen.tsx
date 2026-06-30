@@ -225,7 +225,6 @@ export default function TripDetailScreen() {
   const waypoints = useTripDetailStore((s) => s.waypoints);
   const imagesByWaypoint = useTripDetailStore((s) => s.imagesByWaypoint);
   const locationSamples = useTripDetailStore((s) => s.locationSamples);
-  const deviceSamples = useTripDetailStore((s) => s.deviceSamples);
   const hasReprocessingSnapshot = useTripDetailStore((s) => s.hasReprocessingSnapshot);
   const loading = useTripDetailStore((s) => s.loading);
 
@@ -386,14 +385,6 @@ export default function TripDetailScreen() {
 
   const totalDistanceM = segments.reduce((a, s) => a + (s.distanceM ?? 0), 0);
   const totalPhotos = Object.values(imagesByWaypoint).reduce((a, imgs) => a + imgs.length, 0);
-
-  const sortedDevice = [...deviceSamples].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
-  );
-  const firstDevice = sortedDevice[0];
-  const lastDevice = sortedDevice[sortedDevice.length - 1];
-  const batteryDelta =
-    firstDevice && lastDevice ? firstDevice.batteryPct - lastDevice.batteryPct : null;
 
   const isSyncing = syncingTripIds.includes(clientTripId ?? '');
   const isSynced = trip?.syncState === 'SYNCED';
@@ -674,17 +665,6 @@ export default function TripDetailScreen() {
                 <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
                 <StatCell label="DISTANCE" value={formatDistance(totalDistanceM)} theme={theme} />
               </View>
-
-              {batteryDelta !== null && batteryDelta > 0 && (
-                <View style={[styles.batteryCard, { backgroundColor: '#f0f7f0' }]}>
-                  <Text style={styles.batteryLabel}>BATTERY CONSUMPTION</Text>
-                  <Text style={styles.batteryValue}>{batteryDelta}%</Text>
-                  <Text style={styles.batteryDetail}>
-                    {firstDevice.batteryPct}%{firstDevice.isCharging ? ' charging' : ' unplugged'} →{' '}
-                    {lastDevice.batteryPct}%{lastDevice.isCharging ? ' charging' : ' unplugged'}
-                  </Text>
-                </View>
-              )}
 
               {segments.length > 0 && (
                 <View style={[styles.segmentsList, { borderColor: theme.border }]}>
@@ -974,17 +954,6 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 },
   statValue: { fontSize: 16, fontWeight: '700' },
   statDivider: { width: StyleSheet.hairlineWidth },
-
-  // Battery
-  batteryCard: {
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-    gap: 4,
-  },
-  batteryLabel: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, color: '#3a6b3a' },
-  batteryValue: { fontSize: 22, fontWeight: '700', color: '#3a6b3a' },
-  batteryDetail: { fontSize: 13, color: '#3a6b3a' },
 
   // Timeline
   segmentsList: {

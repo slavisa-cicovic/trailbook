@@ -8,8 +8,6 @@ import * as segmentDao from '@/core/data/local/segmentDao';
 import * as waypointDao from '@/core/data/local/waypointDao';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import * as rawLocationDao from '@/core/data/local/rawLocationDao';
-import * as rawDeviceDao from '@/core/data/local/rawDeviceDao';
-import type { RawDeviceSample } from '@/core/domain/model/rawSamples';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 
 interface TripDetailState {
@@ -18,7 +16,6 @@ interface TripDetailState {
   waypoints: Waypoint[];
   imagesByWaypoint: Record<string, WaypointImage[]>;
   locationSamples: RawLocationSample[];
-  deviceSamples: RawDeviceSample[];
   hasReprocessingSnapshot: boolean;
   loading: boolean;
   error: string | null;
@@ -35,7 +32,6 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
   waypoints: [],
   imagesByWaypoint: {},
   locationSamples: [],
-  deviceSamples: [],
   hasReprocessingSnapshot: false,
   loading: false,
   error: null,
@@ -46,11 +42,10 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
       const trip = await tripDao.getTripByClientId(clientTripId);
       if (!trip) { set({ loading: false, error: 'Trip not found' }); return; }
 
-      const [segments, waypoints, locationSamples, deviceSamples, snapshotResult] = await Promise.all([
+      const [segments, waypoints, locationSamples, snapshotResult] = await Promise.all([
         segmentDao.getForTrip(clientTripId),
         waypointDao.getForTrip(clientTripId),
         rawLocationDao.getAllForTrip(clientTripId),
-        rawDeviceDao.getBoundaryForTrip(clientTripId),
         tripRepository.hasReprocessingSnapshot(clientTripId),
       ]);
       if (!snapshotResult.ok) throw new Error(snapshotResult.error);
@@ -68,7 +63,6 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
         waypoints,
         imagesByWaypoint,
         locationSamples,
-        deviceSamples,
         hasReprocessingSnapshot: snapshotResult.value,
         loading: false,
       });
@@ -84,7 +78,6 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
       waypoints: [],
       imagesByWaypoint: {},
       locationSamples: [],
-      deviceSamples: [],
       hasReprocessingSnapshot: false,
       error: null,
     });
