@@ -127,6 +127,20 @@ export const segments = sqliteTable(
   (t) => [index('segments_trip_id_idx').on(t.tripId)],
 );
 
+export const displayRoutePoints = sqliteTable(
+  'display_route_points',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    tripId: text('trip_id').notNull(),
+    pointIndex: integer('point_index').notNull(),
+    timestamp: text('timestamp').notNull(),
+    latitude: real('latitude').notNull(),
+    longitude: real('longitude').notNull(),
+    speedMps: real('speed_mps'),
+  },
+  (t) => [index('display_route_points_trip_id_idx').on(t.tripId)],
+);
+
 export const reprocessingSnapshots = sqliteTable('reprocessing_snapshots', {
   tripId: text('trip_id').primaryKey(),
   snapshotJson: text('snapshot_json').notNull(),

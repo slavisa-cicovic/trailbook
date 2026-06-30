@@ -12,8 +12,10 @@ import * as tripDao from '@/core/data/local/tripDao';
 import * as waypointDao from '@/core/data/local/waypointDao';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import * as segmentDao from '@/core/data/local/segmentDao';
+import * as displayRoutePointDao from '@/core/data/local/displayRoutePointDao';
 import * as reprocessingSnapshotDao from '@/core/data/local/reprocessingSnapshotDao';
 import { sqlite } from '@/core/db';
+import { buildDisplayRoutePoints } from '@/core/domain/processing/displayRouteBuilder';
 
 export class RawCaptureRepositoryImpl implements RawCaptureRepository {
   async initCaptureMeta(meta: CaptureMeta): Promise<Result<void>> {
@@ -69,6 +71,7 @@ export class RawCaptureRepositoryImpl implements RawCaptureRepository {
         );
 
         await waypointImageDao.deleteAllForTrip(waypointIds);
+        await displayRoutePointDao.deleteForTrip(tripId);
         await segmentDao.deleteForTrip(tripId);
         await waypointDao.deleteForTrip(tripId);
         await rawSessionEventDao.deleteForTrip(tripId);
@@ -89,6 +92,10 @@ export class RawCaptureRepositoryImpl implements RawCaptureRepository {
         if (bundle.segments.length > 0) {
           await segmentDao.insertAll(bundle.segments);
         }
+        await displayRoutePointDao.replaceForTrip(
+          tripId,
+          buildDisplayRoutePoints(tripId, bundle.locations),
+        );
       });
     });
   }
@@ -100,6 +107,7 @@ export class RawCaptureRepositoryImpl implements RawCaptureRepository {
       await rawDeviceDao.deleteAll();
       await rawSessionEventDao.deleteAll();
       await captureMetaDao.deleteAll();
+      await displayRoutePointDao.deleteAll();
     });
   }
 }

@@ -14,10 +14,12 @@ import * as rawLocationDao from '@/core/data/local/rawLocationDao';
 import * as rawActivityDao from '@/core/data/local/rawActivityDao';
 import * as rawDeviceDao from '@/core/data/local/rawDeviceDao';
 import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
+import * as displayRoutePointDao from '@/core/data/local/displayRoutePointDao';
 import * as reprocessingSnapshotDao from '@/core/data/local/reprocessingSnapshotDao';
 import * as pendingTripDeletionDao from '@/core/data/local/pendingTripDeletionDao';
 import { deleteAllPhotos, deletePhotosForWaypoints } from '@/core/data/local/photoStorage';
 import { sqlite } from '@/core/db';
+import { buildDisplayRoutePoints } from '@/core/domain/processing/displayRouteBuilder';
 
 export class TripRepositoryImpl implements TripRepository {
   async createTrip(trip: Omit<Trip, 'id'>): Promise<Result<void>> {
@@ -55,6 +57,7 @@ export class TripRepositoryImpl implements TripRepository {
   async deleteTrip(clientTripId: string): Promise<Result<void>> {
     return resultOfAsync(async () => {
       await reprocessingSnapshotDao.deleteForTrip(clientTripId);
+      await displayRoutePointDao.deleteForTrip(clientTripId);
       await tripDao.deleteByClientId(clientTripId);
     });
   }
@@ -68,6 +71,7 @@ export class TripRepositoryImpl implements TripRepository {
         await pendingTripDeletionDao.insert(clientTripId);
         await waypointImageDao.deleteAllForTrip(waypointIds);
         await reprocessingSnapshotDao.deleteForTrip(clientTripId);
+        await displayRoutePointDao.deleteForTrip(clientTripId);
         await segmentDao.deleteForTrip(clientTripId);
         await waypointDao.deleteForTrip(clientTripId);
         await rawSessionEventDao.deleteForTrip(clientTripId);
@@ -95,6 +99,7 @@ export class TripRepositoryImpl implements TripRepository {
       await deleteAllPhotos();
       await waypointImageDao.deleteAll();
       await waypointDao.deleteAll();
+      await displayRoutePointDao.deleteAll();
       await segmentDao.deleteAll();
       await reprocessingSnapshotDao.deleteAll();
       await tripDao.deleteAll();
@@ -142,6 +147,11 @@ export class TripRepositoryImpl implements TripRepository {
     return resultOfAsync(async () => {
       await segmentDao.deleteForTrip(tripId);
       await segmentDao.insertAll(segs);
+      const locations = await rawLocationDao.getAllForTrip(tripId);
+      await displayRoutePointDao.replaceForTrip(
+        tripId,
+        buildDisplayRoutePoints(tripId, locations),
+      );
     });
   }
 

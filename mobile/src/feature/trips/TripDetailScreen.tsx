@@ -32,10 +32,9 @@ import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
-import { cleanLocations, splitLocationsOnRouteGaps } from '@/core/domain/processing/locationCleaner';
+import { splitLocationsOnRouteGaps } from '@/core/domain/processing/locationCleaner';
 import type { GeoPoint } from '@/core/domain/processing/types';
 import type { Segment } from '@/core/domain/model/segment';
-import type { RawLocationSample } from '@/core/domain/model/rawSamples';
 import type { Waypoint, WaypointCategory } from '@/core/domain/model/waypoint';
 import { CATEGORY_ICON } from '@/constants/waypointCategories';
 import {
@@ -57,7 +56,6 @@ const WAYPOINT_PREVIEW_GAP = 14;
 const TRIP_POINT_PREVIEW_MIN_DISTANCE_METERS = 120;
 const TRIP_POINT_PREVIEW_MAX_DISTANCE_METERS = 50_000;
 const TRIP_POINT_PREVIEW_TOUCH_RADIUS_PX = 32;
-const MAX_MAP_ROUTE_POINTS = 2_500;
 const METERS_PER_DEGREE_LATITUDE = 111_320;
 
 function pointGroupsForSegment(locations: GeoPoint[], seg: Segment) {
@@ -66,15 +64,6 @@ function pointGroupsForSegment(locations: GeoPoint[], seg: Segment) {
   return splitLocationsOnRouteGaps(segmentLocations)
     .map((group) => group.map((l) => ({ latitude: l.latitude, longitude: l.longitude })))
     .filter((group) => group.length > 1);
-}
-
-function thinLocationsForMap(locations: GeoPoint[]) {
-  if (locations.length <= MAX_MAP_ROUTE_POINTS) return locations;
-
-  const step = Math.ceil(locations.length / MAX_MAP_ROUTE_POINTS);
-  return locations.filter(
-    (_location, index) => index === 0 || index === locations.length - 1 || index % step === 0,
-  );
 }
 
 function segmentForTimestamp(segments: Segment[], timestamp: Date) {
@@ -224,7 +213,7 @@ export default function TripDetailScreen() {
   const segments = useTripDetailStore((s) => s.segments);
   const waypoints = useTripDetailStore((s) => s.waypoints);
   const imagesByWaypoint = useTripDetailStore((s) => s.imagesByWaypoint);
-  const locationSamples = useTripDetailStore((s) => s.locationSamples);
+  const routePoints = useTripDetailStore((s) => s.routePoints);
   const hasReprocessingSnapshot = useTripDetailStore((s) => s.hasReprocessingSnapshot);
   const loading = useTripDetailStore((s) => s.loading);
 
@@ -259,8 +248,17 @@ export default function TripDetailScreen() {
     }, [clientTripId]),
   );
 
-  const cleanedLocations = useMemo(() => cleanLocations(locationSamples), [locationSamples]);
-  const mapLocations = useMemo(() => thinLocationsForMap(cleanedLocations), [cleanedLocations]);
+  const mapLocations = useMemo<GeoPoint[]>(
+    () =>
+      routePoints.map((point) => ({
+        timestamp: point.timestamp,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        speedMps: point.speedMps,
+        altitudeM: undefined,
+      })),
+    [routePoints],
+  );
   const segmentPointGroups = useMemo(
     () => segments.map((seg) => pointGroupsForSegment(mapLocations, seg)),
     [mapLocations, segments],

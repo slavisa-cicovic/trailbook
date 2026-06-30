@@ -57,6 +57,16 @@ const MIGRATION_0000 = `
     distance_m real
   );
   CREATE INDEX IF NOT EXISTS segments_trip_id_idx ON segments (trip_id);
+  CREATE TABLE IF NOT EXISTS display_route_points (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    trip_id text NOT NULL,
+    point_index integer NOT NULL,
+    timestamp text NOT NULL,
+    latitude real NOT NULL,
+    longitude real NOT NULL,
+    speed_mps real
+  );
+  CREATE INDEX IF NOT EXISTS display_route_points_trip_id_idx ON display_route_points (trip_id);
   CREATE TABLE IF NOT EXISTS trips (
     id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
     client_trip_id text NOT NULL UNIQUE,
@@ -135,6 +145,19 @@ async function migration_0004(sqlite: SQLiteDatabase): Promise<void> {
   await sqlite.execAsync(`ALTER TABLE raw_session_events ADD COLUMN payload_json text;`);
 }
 
+const MIGRATION_0005 = `
+  CREATE TABLE IF NOT EXISTS display_route_points (
+    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+    trip_id text NOT NULL,
+    point_index integer NOT NULL,
+    timestamp text NOT NULL,
+    latitude real NOT NULL,
+    longitude real NOT NULL,
+    speed_mps real
+  );
+  CREATE INDEX IF NOT EXISTS display_route_points_trip_id_idx ON display_route_points (trip_id);
+`;
+
 type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
 
 const MIGRATIONS: Migration[] = [
@@ -143,6 +166,7 @@ const MIGRATIONS: Migration[] = [
   [2, MIGRATION_0002],
   [3, MIGRATION_0003],
   [4, migration_0004],
+  [5, MIGRATION_0005],
 ];
 
 export async function runMigrations(): Promise<void> {

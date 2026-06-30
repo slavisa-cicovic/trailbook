@@ -14,6 +14,7 @@ import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
 import * as rawDeviceDao from '@/core/data/local/rawDeviceDao';
 import * as rawLocationDao from '@/core/data/local/rawLocationDao';
 import * as rawActivityDao from '@/core/data/local/rawActivityDao';
+import * as displayRoutePointDao from '@/core/data/local/displayRoutePointDao';
 import * as waypointDao from '@/core/data/local/waypointDao';
 import { sampleDeviceState } from '@/core/data/devicestate/deviceStateSampler';
 import {
@@ -91,6 +92,7 @@ async function deleteIncompleteTrip(tripId: string) {
   await rawDeviceDao.deleteForTrip(tripId);
   await rawLocationDao.deleteForTrip(tripId);
   await rawActivityDao.deleteForTrip(tripId);
+  await displayRoutePointDao.deleteForTrip(tripId);
   await captureMetaDao.deleteForTrip(tripId);
   await tripDao.deleteByClientId(tripId);
 }
