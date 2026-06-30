@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, View, Text, Pressable, StyleSheet } from 'react-native';
 import MapView, { Polyline, Marker, type MapType, type Region, type UserLocationChangeEvent } from 'react-native-maps';
 import { TrailMap } from '@/components/ui/TrailMap';
 import * as Location from 'expo-location';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
 import { useAuthStore } from '@/feature/auth/authStore';
@@ -45,18 +46,66 @@ export default function RecordingScreen() {
   const displayName = useAuthStore((s) => s.displayName);
   const { theme } = useAppTheme();
 
+  const focusMapOnRegion = useCallback((region: Region, animated = true) => {
+    setInitialRegion(region);
+    if (animated) {
+      mapRef.current?.animateToRegion(region, 350);
+    }
+  }, []);
+
   useEffect(() => {
     Location.getLastKnownPositionAsync().then((pos) => {
       if (pos) {
-        setInitialRegion({
+        focusMapOnRegion({
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           latitudeDelta: 0.012,
           longitudeDelta: 0.012,
-        });
+        }, false);
       }
     }).catch(() => {});
-  }, []);
+  }, [focusMapOnRegion]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') {
+        return;
+      }
+
+      let cancelled = false;
+
+      async function refreshAndroidMapRegion() {
+        const lastRoutePoint = liveCoordinates.at(-1);
+        if (lastRoutePoint) {
+          focusMapOnRegion({
+            latitude: lastRoutePoint.latitude,
+            longitude: lastRoutePoint.longitude,
+            latitudeDelta: 0.012,
+            longitudeDelta: 0.012,
+          });
+          return;
+        }
+
+        const lastKnown = await Location.getLastKnownPositionAsync().catch(() => null);
+        if (cancelled || !lastKnown) {
+          return;
+        }
+
+        focusMapOnRegion({
+          latitude: lastKnown.coords.latitude,
+          longitude: lastKnown.coords.longitude,
+          latitudeDelta: 0.012,
+          longitudeDelta: 0.012,
+        });
+      }
+
+      void refreshAndroidMapRegion();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [focusMapOnRegion, liveCoordinates]),
+  );
 
   function handleUserLocationChange(event: UserLocationChangeEvent) {
     const coordinate = event.nativeEvent.coordinate;
@@ -71,8 +120,7 @@ export default function RecordingScreen() {
         latitudeDelta: 0.012,
         longitudeDelta: 0.012,
       };
-      setInitialRegion(nextRegion);
-      mapRef.current?.animateToRegion(nextRegion, 350);
+      focusMapOnRegion(nextRegion);
     }
 
     if (isRecording && activeTrip) {

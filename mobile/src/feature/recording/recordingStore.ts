@@ -52,6 +52,16 @@ async function sampleDeviceAndWatchdog(tripId: string): Promise<void> {
   const lastLocationAgeMs = locationSummary.lastTimestamp
     ? Date.now() - locationSummary.lastTimestamp.getTime()
     : null;
+  const restartCooldownRemainingMs = Math.max(
+    0,
+    IOS_STALE_LOCATION_RESTART_COOLDOWN_MS - (Date.now() - lastIosStaleRestartAtMs),
+  );
+  const restartEligible =
+    Platform.OS === 'ios' &&
+    taskRunning === true &&
+    lastLocationAgeMs !== null &&
+    lastLocationAgeMs > IOS_STALE_LOCATION_RESTART_THRESHOLD_MS &&
+    restartCooldownRemainingMs === 0;
 
   await rawSessionEventDao.insert({
     tripId,
@@ -60,20 +70,31 @@ async function sampleDeviceAndWatchdog(tripId: string): Promise<void> {
     payload: {
       lastLocationAgeMs,
       lastLocationTimestamp: locationSummary.lastTimestamp?.toISOString() ?? null,
+      platform: Platform.OS,
       rawLocationCount: locationSummary.count,
+      restartCooldownRemainingMs,
+      restartEligible,
+      restartThresholdMs: IOS_STALE_LOCATION_RESTART_THRESHOLD_MS,
       taskRunning,
     },
   });
 
-  if (
-    Platform.OS === 'ios' &&
-    taskRunning === true &&
-    lastLocationAgeMs !== null &&
-    lastLocationAgeMs > IOS_STALE_LOCATION_RESTART_THRESHOLD_MS &&
-    Date.now() - lastIosStaleRestartAtMs > IOS_STALE_LOCATION_RESTART_COOLDOWN_MS
-  ) {
+  if (restartEligible) {
     lastIosStaleRestartAtMs = Date.now();
-    await restartLocationTask(`stale-location-${Math.round(lastLocationAgeMs / 1000)}s`);
+    const reason = `stale-location-${Math.round(lastLocationAgeMs / 1000)}s`;
+    await rawSessionEventDao.insert({
+      tripId,
+      timestamp: new Date(),
+      type: 'LOCATION_TASK_STALE_RESTART_ELIGIBLE',
+      payload: {
+        lastLocationAgeMs,
+        lastLocationTimestamp: locationSummary.lastTimestamp?.toISOString() ?? null,
+        rawLocationCount: locationSummary.count,
+        reason,
+        taskRunning,
+      },
+    });
+    await restartLocationTask(reason);
   }
 }
 
