@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, Image, Pressable, StyleSheet,
   ActivityIndicator, Dimensions,
@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { Marker } from 'react-native-maps';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useWaypointDetailStore } from '@/feature/waypoint/waypointDetailStore';
 import { EditWaypointSheet } from './components/EditWaypointSheet';
 import { addPhotoToWaypoint } from '@/core/domain/usecase/AddPhotoToWaypointUseCase';
@@ -26,12 +26,14 @@ export default function WaypointDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
+  const mapRef = useRef<MapView>(null);
 
   const load = useWaypointDetailStore((s) => s.load);
   const reload = useWaypointDetailStore((s) => s.reload);
   const reset = useWaypointDetailStore((s) => s.reset);
   const waypoint = useWaypointDetailStore((s) => s.waypoint);
   const images = useWaypointDetailStore((s) => s.images);
+  const routePoints = useWaypointDetailStore((s) => s.routePoints);
   const prevId = useWaypointDetailStore((s) => s.prevId);
   const nextId = useWaypointDetailStore((s) => s.nextId);
   const loading = useWaypointDetailStore((s) => s.loading);
@@ -41,6 +43,25 @@ export default function WaypointDetailScreen() {
     if (waypointId) load(waypointId);
     return () => reset();
   }, [waypointId]);
+
+  const routeCoordinates = useMemo(
+    () => routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude })),
+    [routePoints],
+  );
+
+  useEffect(() => {
+    if (!waypoint || !mapRef.current) return;
+    const coordinates = routeCoordinates.length > 1
+      ? routeCoordinates
+      : [{ latitude: waypoint.latitude, longitude: waypoint.longitude }];
+
+    setTimeout(() => {
+      mapRef.current?.fitToCoordinates(coordinates, {
+        edgePadding: { top: 28, right: 28, bottom: 28, left: 28 },
+        animated: false,
+      });
+    }, 300);
+  }, [routeCoordinates, waypoint]);
 
   function navigateTo(id: string) {
     router.replace(`/waypoint/${id}`);
@@ -136,6 +157,7 @@ export default function WaypointDetailScreen() {
         <Text style={[styles.sectionTitle, { color: theme.primaryText, marginTop: 24 }]}>Location</Text>
         <View style={[styles.miniMapCard, { backgroundColor: theme.card }]}>
           <TrailMap
+            ref={mapRef}
             style={styles.miniMap}
             switcherPosition="none"
             scrollEnabled={false}
@@ -149,6 +171,13 @@ export default function WaypointDetailScreen() {
               longitudeDelta: 0.012,
             }}
           >
+            {routeCoordinates.length > 1 && (
+              <Polyline
+                coordinates={routeCoordinates}
+                strokeColor={theme.accent}
+                strokeWidth={4}
+              />
+            )}
             <Marker
               coordinate={{ latitude: waypoint.latitude, longitude: waypoint.longitude }}
               pinColor={theme.accent}
