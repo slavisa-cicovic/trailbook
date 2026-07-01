@@ -8,6 +8,7 @@ import {
   Animated,
   ScrollView,
   Modal,
+  TextInput,
   type LayoutChangeEvent,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -27,6 +28,7 @@ import {
   reprocessTrip,
   undoReprocessing,
 } from '@/core/domain/usecase/ReprocessTripUseCase';
+import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { BottomNav } from '@/components/ui/BottomNav';
 import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
@@ -220,11 +222,16 @@ export default function TripDetailScreen() {
   const allTrips = useTripsStore((s) => s.trips);
   const syncingTripIds = useTripsStore((s) => s.syncingTripIds);
   const syncTrip = useTripsStore((s) => s.syncTrip);
+  const reloadTrips = useTripsStore((s) => s.load);
   const currentIndex = allTrips.findIndex((t) => t.trip.clientTripId === clientTripId);
   const prevTrip = currentIndex > 0 ? allTrips[currentIndex - 1] : null;
   const nextTrip = currentIndex < allTrips.length - 1 ? allTrips[currentIndex + 1] : null;
 
   const [expanded, setExpanded] = useState(false);
+  const [editVisible, setEditVisible] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const [mapLayout, setMapLayout] = useState({ width: 0, height: 0 });
   const [currentRegion, setCurrentRegion] = useState<Region | null>(null);
@@ -275,6 +282,41 @@ export default function TripDetailScreen() {
       });
     }, 300);
   }, [mapLocations, expanded]);
+
+  function openEditSheet() {
+    if (!trip) return;
+    setEditTitle(trip.title);
+    setEditDescription(trip.description ?? '');
+    setExpanded(false);
+    setTimeout(() => setEditVisible(true), 250);
+  }
+
+  async function saveTripDetails() {
+    if (!trip || savingEdit) return;
+
+    const title = editTitle.trim();
+    const description = editDescription.trim();
+    if (!title) {
+      showAlert({ title: 'Title is required' });
+      return;
+    }
+
+    setSavingEdit(true);
+    const result = await tripRepository.updateDetails(
+      trip.clientTripId,
+      title,
+      description.length > 0 ? description : null,
+    );
+    setSavingEdit(false);
+
+    if (!result.ok) {
+      showAlert({ title: 'Save failed', message: result.error });
+      return;
+    }
+
+    setEditVisible(false);
+    await Promise.all([load(trip.clientTripId), reloadTrips()]);
+  }
 
   async function onReprocessToggle() {
     if (!clientTripId) return;
@@ -613,6 +655,11 @@ export default function TripDetailScreen() {
             <Text style={[styles.sheetTitle, { color: theme.primaryText }]} numberOfLines={1}>
               {trip?.title}
             </Text>
+            {trip?.description ? (
+              <Text style={[styles.sheetDescription, { color: theme.mutedText }]}>
+                {trip.description}
+              </Text>
+            ) : null}
             <ScrollView
               contentContainerStyle={styles.sheetBody}
               nestedScrollEnabled
@@ -624,7 +671,7 @@ export default function TripDetailScreen() {
                   icon="edit"
                   color={theme.mutedText}
                   bg={theme.accentMuted}
-                  onPress={() => showAlert({ title: 'Edit', message: 'Coming soon' })}
+                  onPress={openEditSheet}
                 />
                 <ActionBtn
                   accessibilityLabel={
@@ -712,6 +759,73 @@ export default function TripDetailScreen() {
                 </View>
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setEditVisible(false)}
+        transparent
+        visible={editVisible}
+      >
+        <View style={styles.editOverlay}>
+          <Pressable
+            accessibilityLabel="Close edit trip"
+            onPress={() => setEditVisible(false)}
+            style={styles.editBackdrop}
+          />
+          <View style={[styles.editCard, { backgroundColor: theme.card }]}>
+            <Text style={[styles.editTitle, { color: theme.primaryText }]}>Edit trip</Text>
+            <TextInput
+              autoCapitalize="sentences"
+              editable={!savingEdit}
+              onChangeText={setEditTitle}
+              placeholder="Trip title"
+              placeholderTextColor={theme.mutedText}
+              style={[
+                styles.editInput,
+                { borderColor: theme.border, color: theme.primaryText },
+              ]}
+              value={editTitle}
+            />
+            <TextInput
+              editable={!savingEdit}
+              multiline
+              onChangeText={setEditDescription}
+              placeholder="Description"
+              placeholderTextColor={theme.mutedText}
+              style={[
+                styles.editInput,
+                styles.editDescriptionInput,
+                { borderColor: theme.border, color: theme.primaryText },
+              ]}
+              textAlignVertical="top"
+              value={editDescription}
+            />
+            <View style={styles.editActions}>
+              <Pressable
+                disabled={savingEdit}
+                onPress={() => setEditVisible(false)}
+                style={[styles.editButton, { backgroundColor: theme.accentMuted }]}
+              >
+                <Text style={[styles.editCancelText, { color: theme.primaryText }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={savingEdit}
+                onPress={() => void saveTripDetails()}
+                style={[
+                  styles.editButton,
+                  { backgroundColor: theme.accent, opacity: savingEdit ? 0.65 : 1 },
+                ]}
+              >
+                {savingEdit ? (
+                  <ActivityIndicator color={theme.card} size="small" />
+                ) : (
+                  <Text style={[styles.editSaveText, { color: theme.card }]}>Save</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -929,6 +1043,7 @@ const styles = StyleSheet.create({
   },
   sheetBody: { gap: 14, paddingTop: 14, paddingBottom: 12 },
   sheetTitle: { fontSize: 20, fontWeight: '700', color: '#243224', marginBottom: 2 },
+  sheetDescription: { fontSize: 14, lineHeight: 20, marginBottom: 2 },
 
   // Action buttons
   actionRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
@@ -939,6 +1054,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // Edit dialog
+  editOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+    backgroundColor: 'rgba(20, 28, 20, 0.36)',
+  },
+  editBackdrop: { ...StyleSheet.absoluteFillObject },
+  editCard: {
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: 'rgba(235, 225, 207, 0.92)',
+    padding: 18,
+    gap: 12,
+    shadowColor: '#142014',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  editTitle: { fontSize: 20, fontWeight: '800', marginBottom: 2 },
+  editInput: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  editDescriptionInput: {
+    minHeight: 104,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  editActions: { flexDirection: 'row', gap: 10, justifyContent: 'flex-end', marginTop: 4 },
+  editButton: {
+    minWidth: 96,
+    minHeight: 46,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  editCancelText: { fontSize: 14, fontWeight: '800' },
+  editSaveText: { fontSize: 14, fontWeight: '800' },
 
   // Stats
   statsRow: {

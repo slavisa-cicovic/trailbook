@@ -13,6 +13,7 @@ export interface TripRepository {
   updateStatus(clientTripId: string, status: TripStatus): Promise<Result<void>>;
   updateSyncState(clientTripId: string, state: SyncState): Promise<Result<void>>;
   updateProcessingVersion(clientTripId: string, version: number): Promise<Result<void>>;
+  updateDetails(clientTripId: string, title: string, description: string | null): Promise<Result<void>>;
   deleteTrip(clientTripId: string): Promise<Result<void>>;
   deleteTripAndQueueRemoteDeletion(clientTripId: string): Promise<Result<void>>;
   getPendingRemoteDeletionIds(): Promise<Result<string[]>>;

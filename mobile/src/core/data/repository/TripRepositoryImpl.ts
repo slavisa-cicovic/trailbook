@@ -54,6 +54,14 @@ export class TripRepositoryImpl implements TripRepository {
     return resultOfAsync(() => tripDao.updateProcessingVersion(clientTripId, version));
   }
 
+  async updateDetails(
+    clientTripId: string,
+    title: string,
+    description: string | null,
+  ): Promise<Result<void>> {
+    return resultOfAsync(() => tripDao.updateDetails(clientTripId, title, description));
+  }
+
   async deleteTrip(clientTripId: string): Promise<Result<void>> {
     return resultOfAsync(async () => {
       await reprocessingSnapshotDao.deleteForTrip(clientTripId);

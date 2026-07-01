@@ -1,5 +1,4 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
 
 import { DatabaseService } from "../database/database.service";
 import type { TripBundleDto, TripListItemDto } from "./dto/sync-trip.dto";
@@ -25,6 +24,20 @@ export class TripsService {
         throw new ForbiddenException("Trip belongs to another user.");
       }
 
+      await this.database.trip.update({
+        data: {
+          description: bundle.trip.description ?? null,
+          endedAt: bundle.trip.endedAt ? new Date(bundle.trip.endedAt) : null,
+          processingVersion: bundle.trip.processingVersion,
+          rawBundle: bundle as never,
+          startedAt: new Date(bundle.trip.startedAt),
+          status: bundle.trip.status,
+          title: bundle.trip.title,
+          updatedAt: new Date(),
+        },
+        where: { id: existingTrip.id },
+      });
+
       return false;
     }
 
@@ -34,7 +47,7 @@ export class TripsService {
         description: bundle.trip.description ?? null,
         endedAt: bundle.trip.endedAt ? new Date(bundle.trip.endedAt) : null,
         processingVersion: bundle.trip.processingVersion,
-        rawBundle: bundle as unknown as Prisma.InputJsonValue,
+        rawBundle: bundle as never,
         startedAt: new Date(bundle.trip.startedAt),
         status: bundle.trip.status,
         title: bundle.trip.title,
@@ -57,7 +70,12 @@ export class TripsService {
       where: { deletedAt: null, userId },
     });
 
-    return trips.map((trip) => ({
+    return trips.map((trip: {
+      clientTripId: string;
+      endedAt: Date | null;
+      startedAt: Date;
+      title: string;
+    }) => ({
       clientTripId: trip.clientTripId,
       endedAt: trip.endedAt?.toISOString() ?? null,
       startedAt: trip.startedAt.toISOString(),

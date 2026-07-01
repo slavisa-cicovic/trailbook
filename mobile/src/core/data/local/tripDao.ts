@@ -84,6 +84,18 @@ export async function updateProcessingVersion(clientTripId: string, version: num
   dbEvents.emit('trips:changed');
 }
 
+export async function updateDetails(
+  clientTripId: string,
+  title: string,
+  description: string | null,
+): Promise<void> {
+  await db
+    .update(trips)
+    .set({ title, description, syncState: 'PENDING' })
+    .where(eq(trips.clientTripId, clientTripId));
+  dbEvents.emit('trips:changed');
+}
+
 export async function deleteByClientId(clientTripId: string): Promise<void> {
   await db.delete(trips).where(eq(trips.clientTripId, clientTripId));
   dbEvents.emit('trips:changed');
