@@ -38,11 +38,15 @@ public class TrailbookNativeLocationModule: Module {
     Events("onLocations")
 
     AsyncFunction("start") { (tripId: String) in
-      try self.start(tripId: tripId)
+      try self.runOnMain {
+        try self.startOnMain(tripId: tripId)
+      }
     }
 
     AsyncFunction("stop") {
-      self.stop()
+      try self.runOnMain {
+        self.stopOnMain()
+      }
     }
 
     AsyncFunction("drainEvents") { () -> [[String: Any]] in
@@ -54,7 +58,22 @@ public class TrailbookNativeLocationModule: Module {
     }
   }
 
-  private func start(tripId: String) throws {
+  @discardableResult
+  private func runOnMain<T>(_ operation: @escaping () throws -> T) throws -> T {
+    if Thread.isMainThread {
+      return try operation()
+    }
+
+    var result: Result<T, Error>!
+    DispatchQueue.main.sync {
+      result = Result {
+        try operation()
+      }
+    }
+    return try result.get()
+  }
+
+  private func startOnMain(tripId: String) throws {
     let authorizationStatus = CLLocationManager.authorizationStatus()
     guard authorizationStatus == .authorizedAlways else {
       throw NSError(
@@ -64,7 +83,7 @@ public class TrailbookNativeLocationModule: Module {
       )
     }
 
-    stop()
+    stopOnMain()
 
     activeTripId = tripId
     let manager = CLLocationManager()
@@ -85,12 +104,13 @@ public class TrailbookNativeLocationModule: Module {
     manager.pausesLocationUpdatesAutomatically = false
     manager.allowsBackgroundLocationUpdates = true
     manager.showsBackgroundLocationIndicator = true
-    manager.startUpdatingLocation()
     locationDelegate = delegate
     locationManager = manager
+    manager.startUpdatingLocation()
+    manager.requestLocation()
   }
 
-  private func stop() {
+  private func stopOnMain() {
     locationManager?.stopUpdatingLocation()
     locationManager?.delegate = nil
     locationManager = nil
