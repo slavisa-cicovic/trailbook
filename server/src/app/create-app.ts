@@ -64,8 +64,10 @@ function jsonBodyParser(limit: string) {
           return;
         }
 
-        const contentEncoding = request.headers["content-encoding"]?.toLowerCase();
-        const shouldGunzip = contentEncoding === "gzip" || isGzipBuffer(bodyBuffer);
+        // express.raw inflates gzip bodies by default, but some clients/proxies
+        // can still pass compressed bytes through. Trust the actual bytes, not
+        // only Content-Encoding, to avoid double-gunzip on already inflated JSON.
+        const shouldGunzip = isGzipBuffer(bodyBuffer);
         const jsonBuffer = shouldGunzip ? await gunzipAsync(bodyBuffer) : bodyBuffer;
 
         if (jsonBuffer.byteLength > limitBytes) {

@@ -75,13 +75,13 @@ function buildLocationTaskOptions(): Location.LocationTaskOptions {
     return {
       ...common,
       // iOS ignores timeInterval; only distanceInterval triggers updates.
-      // High = kCLLocationAccuracyNearestTenMeters (10m): allows iOS to use
-      // cell/WiFi positioning in addition to GPS, which is more reliable for
-      // background delivery than GPS-only accuracy levels.
-      distanceInterval: 12,
-      accuracy: Location.Accuracy.High,
+      // The app records user-initiated routes and is currently auto-only, so
+      // prefer navigation semantics over fitness. Fitness/High can stop
+      // delivering after initial stationary samples on iOS.
+      distanceInterval: 5,
+      accuracy: Location.Accuracy.BestForNavigation,
       showsBackgroundLocationIndicator: true,
-      activityType: Location.ActivityType.Fitness,
+      activityType: Location.ActivityType.OtherNavigation,
     };
   }
 

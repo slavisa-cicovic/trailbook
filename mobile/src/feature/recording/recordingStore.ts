@@ -26,13 +26,15 @@ import {
   startLocationTask,
   stopLocationTask,
 } from '@/core/data/location/locationTask';
+import {
+  startNativeIosLocationCapture,
+  stopNativeIosLocationCapture,
+} from '@/core/data/location/nativeIosLocationCapture';
 import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
 import { dbEvents } from '@/core/db/events';
 import { process, CURRENT_PROCESSING_VERSION } from '@/core/domain/processing';
 import { rawCaptureRepository } from '@/core/data/repository/RawCaptureRepositoryImpl';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
-import { uploadTrip } from '@/core/domain/usecase/UploadTripUseCase';
-import { buildActivitySampleFromSpeed } from '@/core/data/activity/activitySampler';
 
 const DEMO_TRIP_LIMIT = 3;
 const DEVICE_SAMPLE_INTERVAL_MS = 60_000;
@@ -134,110 +136,29 @@ interface RecordingActions {
 let deviceSampleInterval: ReturnType<typeof setInterval> | null = null;
 let rawDataHandler: (() => void) | null = null;
 let waypointsHandler: (() => void) | null = null;
-let iosForegroundLocationSubscription: Location.LocationSubscription | null = null;
 
-async function stopIosForegroundLocationWatch(tripId: string | null): Promise<void> {
-  if (!iosForegroundLocationSubscription) {
-    return;
-  }
-
-  iosForegroundLocationSubscription.remove();
-  iosForegroundLocationSubscription = null;
-
-  if (tripId) {
-    await rawSessionEventDao.insert({
-      tripId,
-      timestamp: new Date(),
-      type: 'FOREGROUND_LOCATION_WATCH_STOPPED',
-    });
-  }
-}
-
-async function startIosForegroundLocationWatch(tripId: string): Promise<void> {
-  if (Platform.OS !== 'ios') {
-    return;
-  }
-
-  await stopIosForegroundLocationWatch(tripId);
-
-  const options: Location.LocationOptions = {
-    accuracy: Location.Accuracy.High,
-    distanceInterval: 5,
-    timeInterval: 3000,
-  };
-
-  await rawSessionEventDao.insert({
-    tripId,
-    timestamp: new Date(),
-    type: 'FOREGROUND_LOCATION_WATCH_START_REQUESTED',
-    payload: options,
-  });
-
-  try {
-    iosForegroundLocationSubscription = await Location.watchPositionAsync(
-      options,
-      async (location) => {
-        const timestamp = new Date(location.timestamp);
-
-        await rawLocationDao.insert({
-          tripId,
-          timestamp,
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          accuracyM: location.coords.accuracy != null && location.coords.accuracy >= 0 ? location.coords.accuracy : undefined,
-          altitudeM: location.coords.altitude != null && location.coords.altitude > -999 ? location.coords.altitude : undefined,
-          speedMps: location.coords.speed != null && location.coords.speed >= 0 ? location.coords.speed : undefined,
-          bearingDeg: location.coords.heading != null && location.coords.heading >= 0 ? location.coords.heading : undefined,
-          provider: 'foreground-watch',
-        });
-
-        const activitySample = buildActivitySampleFromSpeed(tripId, location.coords.speed, timestamp);
-        await rawActivityDao.insert(activitySample);
-        dbEvents.emit('rawData:changed');
-      },
-      (reason) => {
-        rawSessionEventDao.insert({
-          tripId,
-          timestamp: new Date(),
-          type: 'FOREGROUND_LOCATION_CALLBACK_FAILED',
-          payload: { reason },
-        }).catch((error) => {
-          console.error('[RecordingStore] failed to persist foreground location error', error);
-        });
-      },
-    );
-
-    await rawSessionEventDao.insert({
-      tripId,
-      timestamp: new Date(),
-      type: 'FOREGROUND_LOCATION_WATCH_START_SUCCEEDED',
-      payload: options,
-    });
-  } catch (error) {
-    await rawSessionEventDao.insert({
-      tripId,
-      timestamp: new Date(),
-      type: 'FOREGROUND_LOCATION_WATCH_START_FAILED',
-      payload: {
-        error: error instanceof Error ? error.message : String(error),
-        options,
-      },
-    });
-  }
-}
-
-async function startLocationCapture(tripId: string): Promise<void> {
+async function startLocationCapture(): Promise<void> {
   if (Platform.OS === 'ios') {
-    await startIosForegroundLocationWatch(tripId);
+    const startedNative = await startNativeIosLocationCapture(await getActiveRecordingTripId() ?? '');
+    if (startedNative) {
+      return;
+    }
+
+    await startLocationTask();
     return;
   }
 
   await startLocationTask();
 }
 
-async function stopLocationCapture(tripId: string): Promise<void> {
+async function stopLocationCapture(): Promise<void> {
   if (Platform.OS === 'ios') {
-    await stopIosForegroundLocationWatch(tripId);
+    const stoppedNative = await stopNativeIosLocationCapture();
+    if (stoppedNative) {
+      return;
+    }
+
+    await stopLocationTask();
     return;
   }
 
@@ -315,7 +236,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       activeWaypoints,
     });
     subscribeToLiveUpdates(tripId);
-    await startLocationCapture(tripId);
+    await startLocationCapture();
     startDeviceSampleInterval(tripId);
   },
 
@@ -352,10 +273,10 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       await setActiveRecordingTripId(clientTripId);
       await rawDeviceDao.insert(await sampleDeviceState(clientTripId));
       try {
-        await startLocationCapture(clientTripId);
+        await startLocationCapture();
         await sampleDevice(clientTripId);
       } catch (locErr) {
-        await stopLocationCapture(clientTripId).catch(() => {});
+        await stopLocationCapture().catch(() => {});
         await clearActiveRecordingTripId();
         await deleteIncompleteTrip(clientTripId);
         throw new Error(
@@ -386,7 +307,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
     if (!activeTrip || isPaused) return err('Nothing to pause');
 
     try {
-      await stopLocationCapture(activeTrip.clientTripId);
+      await stopLocationCapture();
       stopDeviceSampleInterval();
       await rawSessionEventDao.insert({ tripId: activeTrip.clientTripId, timestamp: new Date(), type: 'RECORDING_PAUSED' });
       await tripDao.updateStatus(activeTrip.clientTripId, 'PAUSED');
@@ -406,7 +327,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
     try {
       const permissionResult = await requireRecordingLocationPermissions();
       if (!permissionResult.ok) return permissionResult;
-      await startLocationCapture(activeTrip.clientTripId);
+      await startLocationCapture();
       await rawSessionEventDao.insert({ tripId: activeTrip.clientTripId, timestamp: new Date(), type: 'RECORDING_RESUMED' });
       await tripDao.updateStatus(activeTrip.clientTripId, 'RECORDING');
       startDeviceSampleInterval(activeTrip.clientTripId);
@@ -424,7 +345,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
     if (!activeTrip) return err('No active trip');
 
     try {
-      await stopLocationCapture(activeTrip.clientTripId);
+      await stopLocationCapture();
       unsubscribeFromLiveUpdates();
 
       stopDeviceSampleInterval();
@@ -443,9 +364,6 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
         await tripRepository.replaceSegments(activeTrip.clientTripId, segments);
         await tripRepository.updateProcessingVersion(activeTrip.clientTripId, CURRENT_PROCESSING_VERSION);
       }
-
-      // fire-and-forget: upload runs in foreground, failures retried by background task
-      uploadTrip(activeTrip.clientTripId).catch(() => {});
 
       return ok(undefined);
     } catch (e) {

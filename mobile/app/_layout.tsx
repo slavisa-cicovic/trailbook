@@ -13,7 +13,7 @@ import { resolveAppThemeMode } from '@/constants/app-theme';
 import { CustomAlertProvider } from '@/components/ui/custom-alert-dialog';
 // Side-effect imports: register TaskManager tasks before any component mounts
 import '@/core/data/location/locationTask';
-import { registerSyncTask } from '@/core/data/sync/syncTask';
+import { unregisterSyncTask } from '@/core/data/sync/syncTask';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -61,8 +61,8 @@ export default function RootLayout() {
   useEffect(() => {
     runMigrations()
       .then(() => Promise.all([initAuth(), initTheme()]))
+      .then(() => unregisterSyncTask())
       .then(() => initRecording())
-      .then(() => registerSyncTask())
       .then(() => setReady(true))
       .catch((e) => console.error('Startup failed', e));
   }, []);
