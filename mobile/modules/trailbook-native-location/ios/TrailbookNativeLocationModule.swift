@@ -1,7 +1,7 @@
 import CoreLocation
 import ExpoModulesCore
 
-public class TrailbookNativeLocationModule: Module, CLLocationManagerDelegate {
+public class TrailbookNativeLocationModule: NSObject, Module, CLLocationManagerDelegate {
   private var locationManager: CLLocationManager?
   private var activeTripId: String?
   private let fileQueue = DispatchQueue(label: "trailbook.native-location.file")
