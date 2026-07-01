@@ -131,10 +131,36 @@ function normalizeSlowBikeSegments(
       return { ...segment, type: 'STATIONARY' };
     }
     if (averageSpeedMps < V1.bikeMinAverageMps) {
+      const reportedAverageSpeedMps = averageReportedSpeedInRange(
+        geoPoints,
+        segment.startTime,
+        segment.endTime,
+      );
+      if (
+        reportedAverageSpeedMps !== null &&
+        reportedAverageSpeedMps >= V1.walkMaxMps
+      ) {
+        return segment;
+      }
       return { ...segment, type: 'WALK' };
     }
     return segment;
   });
+}
+
+function averageReportedSpeedInRange(points: GeoPoint[], from: Date, to: Date): number | null {
+  const speeds = points
+    .filter(
+      (point) =>
+        point.timestamp.getTime() >= from.getTime() &&
+        point.timestamp.getTime() <= to.getTime() &&
+        point.speedMps !== undefined &&
+        point.speedMps >= 0,
+    )
+    .map((point) => point.speedMps as number);
+
+  if (!speeds.length) return null;
+  return speeds.reduce((sum, speed) => sum + speed, 0) / speeds.length;
 }
 
 function trimBoundaryStationary(segments: RawSegment[]): RawSegment[] {
