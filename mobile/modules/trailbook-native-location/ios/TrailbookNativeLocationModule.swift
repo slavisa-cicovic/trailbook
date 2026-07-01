@@ -1,8 +1,30 @@
 import CoreLocation
 import ExpoModulesCore
 
-public class TrailbookNativeLocationModule: NSObject, Module, CLLocationManagerDelegate {
+private final class TrailbookLocationDelegate: NSObject, CLLocationManagerDelegate {
+  private let onLocations: ([CLLocation]) -> Void
+  private let onError: (Error) -> Void
+
+  init(
+    onLocations: @escaping ([CLLocation]) -> Void,
+    onError: @escaping (Error) -> Void
+  ) {
+    self.onLocations = onLocations
+    self.onError = onError
+  }
+
+  func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    onLocations(locations)
+  }
+
+  func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    onError(error)
+  }
+}
+
+public class TrailbookNativeLocationModule: Module {
   private var locationManager: CLLocationManager?
+  private var locationDelegate: TrailbookLocationDelegate?
   private var activeTripId: String?
   private let fileQueue = DispatchQueue(label: "trailbook.native-location.file")
   private let timestampFormatter: ISO8601DateFormatter = {
@@ -46,7 +68,17 @@ public class TrailbookNativeLocationModule: NSObject, Module, CLLocationManagerD
 
     activeTripId = tripId
     let manager = CLLocationManager()
-    manager.delegate = self
+    let delegate = TrailbookLocationDelegate(
+      onLocations: { [weak self] locations in
+        self?.handleLocations(locations)
+      },
+      onError: { [weak self] error in
+        self?.sendEvent("onLocations", [
+          "error": error.localizedDescription
+        ])
+      }
+    )
+    manager.delegate = delegate
     manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
     manager.distanceFilter = 5
     manager.activityType = .otherNavigation
@@ -54,6 +86,7 @@ public class TrailbookNativeLocationModule: NSObject, Module, CLLocationManagerD
     manager.allowsBackgroundLocationUpdates = true
     manager.showsBackgroundLocationIndicator = true
     manager.startUpdatingLocation()
+    locationDelegate = delegate
     locationManager = manager
   }
 
@@ -61,10 +94,11 @@ public class TrailbookNativeLocationModule: NSObject, Module, CLLocationManagerD
     locationManager?.stopUpdatingLocation()
     locationManager?.delegate = nil
     locationManager = nil
+    locationDelegate = nil
     activeTripId = nil
   }
 
-  public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+  private func handleLocations(_ locations: [CLLocation]) {
     guard let tripId = activeTripId else {
       return
     }
@@ -75,12 +109,6 @@ public class TrailbookNativeLocationModule: NSObject, Module, CLLocationManagerD
 
     appendEvents(events)
     sendEvent("onLocations", ["count": events.count])
-  }
-
-  public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-    sendEvent("onLocations", [
-      "error": error.localizedDescription
-    ])
   }
 
   private func locationEvent(tripId: String, location: CLLocation) -> [String: Any] {
