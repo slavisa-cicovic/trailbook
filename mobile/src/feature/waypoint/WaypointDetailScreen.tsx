@@ -237,6 +237,10 @@ export default function WaypointDetailScreen() {
     currentWaypointIndex >= 0 && currentWaypointIndex < contextWaypointIds.length - 1
       ? contextWaypointIds[currentWaypointIndex + 1]
       : null;
+  const waypointCounterLabel =
+    currentWaypointIndex >= 0 && contextWaypointIds.length > 0
+      ? `${waypoint.title} (${currentWaypointIndex + 1}/${contextWaypointIds.length})`
+      : waypoint.title;
 
   return (
     <SafeAreaView
@@ -354,7 +358,7 @@ export default function WaypointDetailScreen() {
 
           <Pressable style={styles.pillCenter} onPress={() => setShowEditSheet(true)}>
             <MaterialIcons name={CATEGORY_ICON[waypoint.category]} size={18} color={theme.accent} />
-            <Text style={styles.pillTitle} numberOfLines={1}>{waypoint.title}</Text>
+            <Text style={styles.pillTitle} numberOfLines={1}>{waypointCounterLabel}</Text>
           </Pressable>
 
           <Pressable
