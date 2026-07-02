@@ -37,6 +37,7 @@ export interface TripRepository {
     processingVersion: number,
   ): Promise<Result<void>>;
   undoReprocessing(tripId: string): Promise<Result<void>>;
+  acceptReprocessing(tripId: string): Promise<Result<void>>;
   hasReprocessingSnapshot(tripId: string): Promise<Result<boolean>>;
 
   getTripBundle(clientTripId: string): Promise<Result<TripBundle | null>>;

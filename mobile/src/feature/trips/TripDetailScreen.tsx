@@ -78,7 +78,32 @@ function pointGroupsForSegment(locations: GeoPoint[], seg: Segment) {
     .filter((l) => l.timestamp >= seg.startedAt && l.timestamp <= seg.endedAt);
   return splitLocationsOnRouteGaps(segmentLocations)
     .map((group) => group.map((l) => ({ latitude: l.latitude, longitude: l.longitude })))
+    .map((group) => (seg.segmentType === 'WALK' ? smoothWalkPointGroup(group) : group))
     .filter((group) => group.length > 1);
+}
+
+function smoothWalkPointGroup(
+  points: Array<{ latitude: number; longitude: number }>,
+): Array<{ latitude: number; longitude: number }> {
+  if (points.length < 4) return points;
+
+  const smoothed = [points[0]];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+
+    smoothed.push({
+      latitude: current.latitude * 0.75 + next.latitude * 0.25,
+      longitude: current.longitude * 0.75 + next.longitude * 0.25,
+    });
+    smoothed.push({
+      latitude: current.latitude * 0.25 + next.latitude * 0.75,
+      longitude: current.longitude * 0.25 + next.longitude * 0.75,
+    });
+  }
+  smoothed.push(points[points.length - 1]);
+
+  return smoothed;
 }
 
 function segmentForTimestamp(segments: Segment[], timestamp: Date) {

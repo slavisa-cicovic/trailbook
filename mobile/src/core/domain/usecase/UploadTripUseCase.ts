@@ -31,6 +31,7 @@ export async function uploadTrip(clientTripId: string): Promise<Result<void>> {
     }
 
     await tripRepository.updateSyncState(clientTripId, 'SYNCED');
+    await tripRepository.acceptReprocessing(clientTripId);
     return ok(undefined);
   } else {
     await tripRepository.updateSyncState(clientTripId, 'FAILED');

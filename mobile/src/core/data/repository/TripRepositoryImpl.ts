@@ -212,6 +212,10 @@ export class TripRepositoryImpl implements TripRepository {
     });
   }
 
+  async acceptReprocessing(tripId: string): Promise<Result<void>> {
+    return resultOfAsync(() => reprocessingSnapshotDao.deleteForTrip(tripId));
+  }
+
   async hasReprocessingSnapshot(tripId: string): Promise<Result<boolean>> {
     return resultOfAsync(() => reprocessingSnapshotDao.existsForTrip(tripId));
   }
