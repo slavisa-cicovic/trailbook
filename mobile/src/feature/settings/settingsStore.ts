@@ -39,7 +39,7 @@ export const useSettingsStore = create<SettingsUiState & SettingsActions>((set) 
     const result = await deleteLocalTrips(isRecording);
     if (result.ok) {
       useTripsStore.getState().load();
-      set({ isWorking: false, statusMessage: 'All local trips deleted' });
+      set({ isWorking: false, statusMessage: 'Your local trips deleted' });
     } else {
       set({ isWorking: false, statusMessage: result.error });
     }

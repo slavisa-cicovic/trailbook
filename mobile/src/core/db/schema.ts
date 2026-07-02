@@ -5,6 +5,7 @@ import { sqliteTable, text, integer, real, index } from 'drizzle-orm/sqlite-core
 export const trips = sqliteTable('trips', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   clientTripId: text('client_trip_id').notNull().unique(),
+  ownerUserId: text('owner_user_id').notNull(),
   title: text('title').notNull(),
   description: text('description'),
   startedAt: text('started_at').notNull(),
@@ -158,6 +159,7 @@ export const tripGroups = sqliteTable(
   'trip_groups',
   {
     id: text('id').primaryKey(),
+    ownerUserId: text('owner_user_id').notNull(),
     title: text('title').notNull(),
     description: text('description'),
     createdAt: text('created_at').notNull(),
@@ -172,6 +174,7 @@ export const tripGroupMembers = sqliteTable(
   'trip_group_members',
   {
     id: text('id').primaryKey(),
+    ownerUserId: text('owner_user_id').notNull(),
     groupId: text('group_id').notNull(),
     tripClientId: text('trip_client_id').notNull(),
     orderIndex: integer('order_index').notNull(),

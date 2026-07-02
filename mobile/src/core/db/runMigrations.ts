@@ -70,6 +70,7 @@ const MIGRATION_0000 = `
   CREATE TABLE IF NOT EXISTS trips (
     id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
     client_trip_id text NOT NULL UNIQUE,
+    owner_user_id text NOT NULL DEFAULT 'legacy',
     title text NOT NULL,
     description text,
     started_at text NOT NULL,
@@ -101,6 +102,15 @@ const MIGRATION_0000 = `
   );
   CREATE INDEX IF NOT EXISTS waypoints_trip_id_idx ON waypoints (trip_id);
 `;
+
+async function migration_0007(sqlite: SQLiteDatabase): Promise<void> {
+  const cols = await sqlite.getAllAsync<{ name: string }>(
+    `SELECT name FROM pragma_table_info('trips')`,
+  );
+  if (cols.some((c) => c.name === 'owner_user_id')) return;
+
+  await sqlite.execAsync(`ALTER TABLE trips ADD COLUMN owner_user_id text NOT NULL DEFAULT 'legacy';`);
+}
 
 // Adds client_trip_id to trips if the DB pre-dates migration 0000 (old schema).
 async function migration_0001(sqlite: SQLiteDatabase): Promise<void> {
@@ -161,6 +171,7 @@ const MIGRATION_0005 = `
 const MIGRATION_0006 = `
   CREATE TABLE IF NOT EXISTS trip_groups (
     id text PRIMARY KEY NOT NULL,
+    owner_user_id text NOT NULL DEFAULT 'legacy',
     title text NOT NULL,
     description text,
     created_at text NOT NULL,
@@ -171,6 +182,7 @@ const MIGRATION_0006 = `
   CREATE INDEX IF NOT EXISTS trip_groups_deleted_updated_idx ON trip_groups (deleted_at, updated_at);
   CREATE TABLE IF NOT EXISTS trip_group_members (
     id text PRIMARY KEY NOT NULL,
+    owner_user_id text NOT NULL DEFAULT 'legacy',
     group_id text NOT NULL,
     trip_client_id text NOT NULL,
     order_index integer NOT NULL,
@@ -185,6 +197,24 @@ const MIGRATION_0006 = `
     ON trip_group_members (trip_client_id, removed_at);
 `;
 
+async function migration_0008(sqlite: SQLiteDatabase): Promise<void> {
+  const groupCols = await sqlite.getAllAsync<{ name: string }>(
+    `SELECT name FROM pragma_table_info('trip_groups')`,
+  );
+  if (!groupCols.some((c) => c.name === 'owner_user_id')) {
+    await sqlite.execAsync(`ALTER TABLE trip_groups ADD COLUMN owner_user_id text NOT NULL DEFAULT 'legacy';`);
+  }
+
+  const memberCols = await sqlite.getAllAsync<{ name: string }>(
+    `SELECT name FROM pragma_table_info('trip_group_members')`,
+  );
+  if (!memberCols.some((c) => c.name === 'owner_user_id')) {
+    await sqlite.execAsync(
+      `ALTER TABLE trip_group_members ADD COLUMN owner_user_id text NOT NULL DEFAULT 'legacy';`,
+    );
+  }
+}
+
 type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
 
 const MIGRATIONS: Migration[] = [
@@ -195,6 +225,8 @@ const MIGRATIONS: Migration[] = [
   [4, migration_0004],
   [5, MIGRATION_0005],
   [6, MIGRATION_0006],
+  [7, migration_0007],
+  [8, migration_0008],
 ];
 
 export async function runMigrations(): Promise<void> {

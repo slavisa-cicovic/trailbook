@@ -205,8 +205,8 @@ export default function SettingsScreen() {
       <BottomSheetModal
         visible={showDeleteConfirm}
         onClose={onDismissDeleteConfirm}
-        title="Delete all local trips?"
-        subtitle="This permanently removes all trips, waypoints and photos from this device."
+        title="Delete your local trips?"
+        subtitle="This permanently removes your trips, groups, waypoints and photos from this device."
       >
         <ModalActions
           primaryLabel="Delete"

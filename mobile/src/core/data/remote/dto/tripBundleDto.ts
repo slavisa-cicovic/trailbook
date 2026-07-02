@@ -193,11 +193,16 @@ export function tripBundleToDto(bundle: TripBundle): TripBundleRequestDto {
 
 // ── DTO → Domain (restore — PLAN 10) ─────────────────────────────────────────
 
-export function tripBundleDtoToDomain(dto: TripBundleRequestDto, localId: number): TripBundle {
+export function tripBundleDtoToDomain(
+  dto: TripBundleRequestDto,
+  localId: number,
+  ownerUserId: string,
+): TripBundle {
   const t = dto.trip;
   const trip: Trip = {
     id: localId,
     clientTripId: t.clientTripId,
+    ownerUserId,
     title: t.title,
     description: t.description,
     startedAt: new Date(t.startedAt),

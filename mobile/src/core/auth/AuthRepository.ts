@@ -18,9 +18,11 @@ export interface AuthRepository {
   saveTokens(accessToken: string, refreshToken: string): Promise<void>;
   refreshAccessToken(): Promise<Result<string>>;
   isDemo(): Promise<boolean>;
+  getLocalUserId(): Promise<string | null>;
   getDisplayName(): Promise<string | null>;
   init(): Promise<{
     status: 'authenticated' | 'demo' | 'unauthenticated';
+    userId: string | null;
     displayName: string | null;
     email: string | null;
     role: string | null;

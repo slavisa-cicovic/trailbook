@@ -3,6 +3,7 @@ import type { Result } from '@/core/common/result';
 import { err } from '@/core/common/result';
 import { apiPostGzip, apiGet, apiDelete } from './apiClient';
 import { tripBundleToDto, tripBundleDtoToDomain, type TripListItemDto, type TripBundleRequestDto } from './dto/tripBundleDto';
+import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
 
 export interface RemoteTripDataSource {
   uploadTrip(bundle: TripBundle): Promise<Result<void>>;
@@ -23,7 +24,9 @@ class FetchRemoteTripDataSource implements RemoteTripDataSource {
   async fetchTrip(clientTripId: string): Promise<Result<TripBundle>> {
     const result = await apiGet<TripBundleRequestDto>(`/trips/${clientTripId}`);
     if (!result.ok) return err(result.error);
-    return { ok: true, value: tripBundleDtoToDomain(result.value, 0) };
+    const ownerUserId = await authRepository.getLocalUserId();
+    if (!ownerUserId) return err('No authenticated local user');
+    return { ok: true, value: tripBundleDtoToDomain(result.value, 0, ownerUserId) };
   }
 
   async deleteTrip(clientTripId: string): Promise<Result<void>> {

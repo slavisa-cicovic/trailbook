@@ -4,6 +4,7 @@ export type SyncState = 'PENDING' | 'SYNCED' | 'FAILED';
 export interface Trip {
   id: number;
   clientTripId: string;
+  ownerUserId: string;
   title: string;
   description: string | null;
   startedAt: Date;

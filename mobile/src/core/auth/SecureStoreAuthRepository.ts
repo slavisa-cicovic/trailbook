@@ -9,6 +9,7 @@ const KEYS = {
   accessToken: 'trailbook.access_token',
   refreshToken: 'trailbook.refresh_token',
   isDemo: 'trailbook.is_demo',
+  userId: 'trailbook.user_id',
   displayName: 'trailbook.display_name',
   email: 'trailbook.email',
   role: 'trailbook.role',
@@ -20,6 +21,7 @@ export class SecureStoreAuthRepository implements AuthRepository {
     if (!result.ok) return err(result.error);
     const { accessToken, refreshToken, user } = result.value;
     await this.saveTokens(accessToken, refreshToken);
+    await SecureStore.setItemAsync(KEYS.userId, user.id);
     await SecureStore.setItemAsync(KEYS.displayName, user.displayName);
     await SecureStore.setItemAsync(KEYS.email, user.email);
     await SecureStore.setItemAsync(KEYS.role, user.role);
@@ -29,6 +31,7 @@ export class SecureStoreAuthRepository implements AuthRepository {
 
   async loginAsDemo(): Promise<void> {
     await SecureStore.setItemAsync(KEYS.isDemo, 'true');
+    await SecureStore.setItemAsync(KEYS.userId, 'demo');
     await SecureStore.setItemAsync(KEYS.displayName, 'Demo User');
     await SecureStore.deleteItemAsync(KEYS.email);
     await SecureStore.deleteItemAsync(KEYS.role);
@@ -42,6 +45,7 @@ export class SecureStoreAuthRepository implements AuthRepository {
     await SecureStore.deleteItemAsync(KEYS.accessToken);
     await SecureStore.deleteItemAsync(KEYS.refreshToken);
     await SecureStore.deleteItemAsync(KEYS.isDemo);
+    await SecureStore.deleteItemAsync(KEYS.userId);
     await SecureStore.deleteItemAsync(KEYS.displayName);
     await SecureStore.deleteItemAsync(KEYS.email);
     await SecureStore.deleteItemAsync(KEYS.role);
@@ -73,26 +77,35 @@ export class SecureStoreAuthRepository implements AuthRepository {
     return (await SecureStore.getItemAsync(KEYS.isDemo)) === 'true';
   }
 
+  async getLocalUserId(): Promise<string | null> {
+    if (await this.isDemo()) return 'demo';
+    return SecureStore.getItemAsync(KEYS.userId);
+  }
+
   async getDisplayName(): Promise<string | null> {
     return SecureStore.getItemAsync(KEYS.displayName);
   }
 
   async init(): Promise<{
     status: 'authenticated' | 'demo' | 'unauthenticated';
+    userId: string | null;
     displayName: string | null;
     email: string | null;
     role: string | null;
   }> {
-    const [isDemo, accessToken, displayName, email, role] = await Promise.all([
+    const [isDemo, accessToken, userId, displayName, email, role] = await Promise.all([
       SecureStore.getItemAsync(KEYS.isDemo),
       SecureStore.getItemAsync(KEYS.accessToken),
+      SecureStore.getItemAsync(KEYS.userId),
       SecureStore.getItemAsync(KEYS.displayName),
       SecureStore.getItemAsync(KEYS.email),
       SecureStore.getItemAsync(KEYS.role),
     ]);
-    if (isDemo === 'true') return { status: 'demo', displayName, email: null, role: null };
-    if (accessToken) return { status: 'authenticated', displayName, email, role };
-    return { status: 'unauthenticated', displayName: null, email: null, role: null };
+    if (isDemo === 'true') {
+      return { status: 'demo', userId: 'demo', displayName, email: null, role: null };
+    }
+    if (accessToken && userId) return { status: 'authenticated', userId, displayName, email, role };
+    return { status: 'unauthenticated', userId: null, displayName: null, email: null, role: null };
   }
 }
 

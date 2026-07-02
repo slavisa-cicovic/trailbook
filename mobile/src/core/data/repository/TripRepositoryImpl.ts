@@ -17,7 +17,8 @@ import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
 import * as displayRoutePointDao from '@/core/data/local/displayRoutePointDao';
 import * as reprocessingSnapshotDao from '@/core/data/local/reprocessingSnapshotDao';
 import * as pendingTripDeletionDao from '@/core/data/local/pendingTripDeletionDao';
-import { deleteAllPhotos, deletePhotosForWaypoints } from '@/core/data/local/photoStorage';
+import * as tripGroupDao from '@/core/data/local/tripGroupDao';
+import { deletePhotosForWaypoints } from '@/core/data/local/photoStorage';
 import { sqlite } from '@/core/db';
 import { buildDisplayRoutePoints } from '@/core/domain/processing/displayRouteBuilder';
 
@@ -104,13 +105,25 @@ export class TripRepositoryImpl implements TripRepository {
 
   async deleteAllLocalData(): Promise<Result<void>> {
     return resultOfAsync(async () => {
-      await deleteAllPhotos();
-      await waypointImageDao.deleteAll();
-      await waypointDao.deleteAll();
-      await displayRoutePointDao.deleteAll();
-      await segmentDao.deleteAll();
-      await reprocessingSnapshotDao.deleteAll();
-      await tripDao.deleteAll();
+      const trips = await tripDao.getAllTrips();
+      await tripGroupDao.deleteAllForCurrentUser();
+      for (const trip of trips) {
+        const waypoints = await waypointDao.getForTrip(trip.clientTripId);
+        const waypointIds = waypoints.map((waypoint) => waypoint.id);
+
+        await waypointImageDao.deleteAllForTrip(waypointIds);
+        await reprocessingSnapshotDao.deleteForTrip(trip.clientTripId);
+        await displayRoutePointDao.deleteForTrip(trip.clientTripId);
+        await segmentDao.deleteForTrip(trip.clientTripId);
+        await waypointDao.deleteForTrip(trip.clientTripId);
+        await rawSessionEventDao.deleteForTrip(trip.clientTripId);
+        await rawDeviceDao.deleteForTrip(trip.clientTripId);
+        await rawActivityDao.deleteForTrip(trip.clientTripId);
+        await rawLocationDao.deleteForTrip(trip.clientTripId);
+        await captureMetaDao.deleteForTrip(trip.clientTripId);
+        await tripDao.deleteByClientId(trip.clientTripId);
+        await deletePhotosForWaypoints(waypointIds);
+      }
     });
   }
 
