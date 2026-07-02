@@ -60,6 +60,12 @@ const TRIP_POINT_PREVIEW_MAX_DISTANCE_METERS = 50_000;
 const TRIP_POINT_PREVIEW_TOUCH_RADIUS_PX = 32;
 const METERS_PER_DEGREE_LATITUDE = 111_320;
 
+function waitForNextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
 function pointGroupsForSegment(locations: GeoPoint[], seg: Segment) {
   const segmentLocations = locations
     .filter((l) => l.timestamp >= seg.startedAt && l.timestamp <= seg.endedAt);
@@ -321,6 +327,9 @@ export default function TripDetailScreen() {
   async function onReprocessToggle() {
     if (!clientTripId) return;
     setReprocessing(true);
+    setExpanded(false);
+    await waitForNextFrame();
+
     const result = hasReprocessingSnapshot
       ? await undoReprocessing(clientTripId)
       : await reprocessTrip(clientTripId);
@@ -333,7 +342,6 @@ export default function TripDetailScreen() {
       return;
     }
 
-    setExpanded(false);
     await load(clientTripId);
   }
 
@@ -637,6 +645,20 @@ export default function TripDetailScreen() {
 
       <BottomNav />
 
+      {reprocessing && (
+        <View style={styles.processingOverlay}>
+          <View style={[styles.processingCard, { backgroundColor: theme.card }]}>
+            <ActivityIndicator color={theme.accent} size="large" />
+            <Text style={[styles.processingTitle, { color: theme.primaryText }]}>
+              Processing route...
+            </Text>
+            <Text style={[styles.processingText, { color: theme.mutedText }]}>
+              Please wait while Trailbook rebuilds segments.
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* ── DETAILS SHEET (Modal) ── */}
       <Modal
         animationType="slide"
@@ -682,6 +704,7 @@ export default function TripDetailScreen() {
                   bg={hasReprocessingSnapshot ? theme.dangerMuted : theme.accentMuted}
                   onPress={() => void onReprocessToggle()}
                   loading={reprocessing}
+                  spinWhenLoading
                 />
                 <ActionBtn
                   accessibilityLabel={isSynced ? 'Trip synced' : 'Sync trip'}
@@ -965,6 +988,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    elevation: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(20, 28, 20, 0.34)',
+  },
+  processingCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 24,
+    paddingHorizontal: 22,
+    paddingVertical: 24,
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#142014',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  processingTitle: { fontSize: 18, fontWeight: '800', marginTop: 4 },
+  processingText: { fontSize: 14, lineHeight: 20, textAlign: 'center' },
 
   // Collapsed pill
   pillWrap: {
