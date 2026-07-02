@@ -21,11 +21,10 @@ import { useTripGroupsStore } from '@/feature/trips/tripGroupsStore';
 import {
   normalizeGroupTripSort,
   sortGroupTrips,
-  waypointHref,
   type GroupTripSort,
 } from '@/feature/trips/groupNavigation';
 import { savePhotoNavigationContext, type PhotoViewerItem } from './photoNavigationContext';
-import { getTripNavigationContext, saveTripNavigationContext } from '@/feature/trips/tripNavigationContext';
+import { getTripNavigationContext } from '@/feature/trips/tripNavigationContext';
 import * as displayRoutePointDao from '@/core/data/local/displayRoutePointDao';
 import * as tripDao from '@/core/data/local/tripDao';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
@@ -44,6 +43,7 @@ export default function WaypointDetailScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
   const mapRef = useRef<MapView>(null);
+  const fittedRouteTripIdRef = useRef<string | null>(null);
 
   const load = useWaypointDetailStore((s) => s.load);
   const reload = useWaypointDetailStore((s) => s.reload);
@@ -59,6 +59,7 @@ export default function WaypointDetailScreen() {
 
   const [showEditSheet, setShowEditSheet] = useState(false);
   const [tripTitle, setTripTitle] = useState<string | null>(null);
+  const [currentWaypointId, setCurrentWaypointId] = useState(waypointId);
   const groupSort = normalizeGroupTripSort(groupSortParam);
   const activeGroupId = Array.isArray(groupId) ? groupId[0] : groupId;
   const tripsById = useMemo(
@@ -80,16 +81,23 @@ export default function WaypointDetailScreen() {
     if (activeGroup) return groupTrips.map((item) => item.trip.clientTripId);
     return waypoint ? [waypoint.tripId] : [];
   }, [activeGroup, activeTripContextId, groupTrips, waypoint]);
-  const [contextWaypointIds, setContextWaypointIds] = useState<string[]>([]);
+  const [contextWaypoints, setContextWaypoints] = useState<Array<{ id: string; tripId: string }>>([]);
 
   useEffect(() => {
-    if (waypointId) load(waypointId);
+    setCurrentWaypointId(waypointId);
+  }, [waypointId]);
+
+  useEffect(() => {
+    if (currentWaypointId) load(currentWaypointId);
     if (activeGroupId) {
       loadTrips();
       loadGroups();
     }
+  }, [currentWaypointId, activeGroupId, load, loadGroups, loadTrips]);
+
+  useEffect(() => {
     return () => reset();
-  }, [waypointId, activeGroupId, load, loadGroups, loadTrips, reset]);
+  }, [reset]);
 
   const routeCoordinates = useMemo(
     () => routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude })),
@@ -116,12 +124,12 @@ export default function WaypointDetailScreen() {
     let cancelled = false;
     async function loadContextWaypoints() {
       if (contextTripIds.length === 0) {
-        setContextWaypointIds([]);
+        setContextWaypoints([]);
         return;
       }
       const waypointGroups = await Promise.all(contextTripIds.map((tripId) => waypointDao.getForTrip(tripId)));
       if (cancelled) return;
-      setContextWaypointIds(
+      setContextWaypoints(
         waypointGroups
           .flat()
           .sort((left, right) => {
@@ -129,7 +137,7 @@ export default function WaypointDetailScreen() {
             if (tripDelta !== 0) return tripDelta;
             return left.createdAt.getTime() - right.createdAt.getTime();
           })
-          .map((item) => item.id),
+          .map((item) => ({ id: item.id, tripId: item.tripId })),
       );
     }
 
@@ -141,6 +149,8 @@ export default function WaypointDetailScreen() {
 
   useEffect(() => {
     if (!waypoint || !mapRef.current) return;
+    if (fittedRouteTripIdRef.current === waypoint.tripId) return;
+
     const coordinates = routeCoordinates.length > 1
       ? routeCoordinates
       : [{ latitude: waypoint.latitude, longitude: waypoint.longitude }];
@@ -150,13 +160,12 @@ export default function WaypointDetailScreen() {
         edgePadding: { top: 28, right: 28, bottom: 28, left: 28 },
         animated: false,
       });
+      fittedRouteTripIdRef.current = waypoint.tripId;
     }, 300);
   }, [routeCoordinates, waypoint]);
 
   function navigateTo(id: string) {
-    const nextTripContextId =
-      activeTripContextId ?? saveTripNavigationContext(contextTripIds.length > 0 ? contextTripIds : [waypoint!.tripId]);
-    router.replace(waypointHref(id, activeGroupId, activeGroup ? groupSort : null, nextTripContextId));
+    setCurrentWaypointId(id);
   }
 
   async function buildPhotoContext(): Promise<PhotoViewerItem[]> {
@@ -231,15 +240,17 @@ export default function WaypointDetailScreen() {
   }
 
   const pillBottom = insets.bottom + 12;
-  const currentWaypointIndex = waypoint ? contextWaypointIds.indexOf(waypoint.id) : -1;
-  const contextPrevId = currentWaypointIndex > 0 ? contextWaypointIds[currentWaypointIndex - 1] : null;
+  const currentWaypointIndex = waypoint
+    ? contextWaypoints.findIndex((item) => item.id === waypoint.id)
+    : -1;
+  const contextPrevId = currentWaypointIndex > 0 ? contextWaypoints[currentWaypointIndex - 1].id : null;
   const contextNextId =
-    currentWaypointIndex >= 0 && currentWaypointIndex < contextWaypointIds.length - 1
-      ? contextWaypointIds[currentWaypointIndex + 1]
+    currentWaypointIndex >= 0 && currentWaypointIndex < contextWaypoints.length - 1
+      ? contextWaypoints[currentWaypointIndex + 1].id
       : null;
   const waypointCounterLabel =
-    currentWaypointIndex >= 0 && contextWaypointIds.length > 0
-      ? `${waypoint.title} (${currentWaypointIndex + 1}/${contextWaypointIds.length})`
+    currentWaypointIndex >= 0 && contextWaypoints.length > 0
+      ? `${waypoint.title} (${currentWaypointIndex + 1}/${contextWaypoints.length})`
       : waypoint.title;
 
   return (

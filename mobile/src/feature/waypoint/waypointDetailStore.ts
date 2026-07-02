@@ -9,6 +9,7 @@ interface WaypointDetailState {
   waypoint: Waypoint | null;
   images: WaypointImage[];
   routePoints: DisplayRoutePoint[];
+  routeTripId: string | null;
   prevId: string | null;
   nextId: string | null;
   loading: boolean;
@@ -25,21 +26,24 @@ export const useWaypointDetailStore = create<WaypointDetailState & WaypointDetai
   waypoint: null,
   images: [],
   routePoints: [],
+  routeTripId: null,
   prevId: null,
   nextId: null,
   loading: false,
   error: null,
 
   async load(waypointId) {
-    set({ loading: true, error: null });
+    const current = get();
+    set({ loading: !current.waypoint, error: null });
     try {
       const waypoint = await waypointDao.getById(waypointId);
       if (!waypoint) { set({ loading: false, error: 'Waypoint not found' }); return; }
 
+      const shouldLoadRoute = current.routeTripId !== waypoint.tripId || current.routePoints.length === 0;
       const [images, siblings, routePoints] = await Promise.all([
         waypointImageDao.getForWaypoint(waypointId),
         waypointDao.getForTrip(waypoint.tripId),
-        displayRoutePointDao.getForTrip(waypoint.tripId),
+        shouldLoadRoute ? displayRoutePointDao.getForTrip(waypoint.tripId) : Promise.resolve(current.routePoints),
       ]);
 
       const sorted = siblings.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -47,7 +51,7 @@ export const useWaypointDetailStore = create<WaypointDetailState & WaypointDetai
       const prevId = idx > 0 ? sorted[idx - 1].id : null;
       const nextId = idx < sorted.length - 1 ? sorted[idx + 1].id : null;
 
-      set({ waypoint, images, routePoints, prevId, nextId, loading: false });
+      set({ waypoint, images, routePoints, routeTripId: waypoint.tripId, prevId, nextId, loading: false });
     } catch (e) {
       set({ loading: false, error: e instanceof Error ? e.message : String(e) });
     }
@@ -59,6 +63,14 @@ export const useWaypointDetailStore = create<WaypointDetailState & WaypointDetai
   },
 
   reset() {
-    set({ waypoint: null, images: [], routePoints: [], prevId: null, nextId: null, error: null });
+    set({
+      waypoint: null,
+      images: [],
+      routePoints: [],
+      routeTripId: null,
+      prevId: null,
+      nextId: null,
+      error: null,
+    });
   },
 }));
