@@ -13,6 +13,16 @@ import { FiltersPanel, FiltersToggle, DEFAULT_FILTERS, type Filters } from './co
 import { TotalCard } from './components/TotalCard';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
+import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
+import { useTripGroupsStore } from './tripGroupsStore';
+import { AddToGroupModal } from './components/AddToGroupModal';
+import { GroupCard } from './components/GroupCard';
+import {
+  GROUP_TRIP_SORTS,
+  groupTripHref,
+  sortGroupTrips,
+  type GroupTripSort,
+} from './groupNavigation';
 
 type Tab = 'my_trips' | 'groups' | 'shared';
 
@@ -78,6 +88,14 @@ export default function TripsScreen() {
   const load = useTripsStore((s) => s.load);
   const deleteTrip = useTripsStore((s) => s.deleteTrip);
   const syncTrip = useTripsStore((s) => s.syncTrip);
+  const groups = useTripGroupsStore((s) => s.groups);
+  const groupsLoading = useTripGroupsStore((s) => s.loading);
+  const syncingGroupIds = useTripGroupsStore((s) => s.syncingGroupIds);
+  const loadGroups = useTripGroupsStore((s) => s.load);
+  const createGroup = useTripGroupsStore((s) => s.createGroup);
+  const addTripsToGroup = useTripGroupsStore((s) => s.addTripsToGroup);
+  const deleteGroup = useTripGroupsStore((s) => s.deleteGroup);
+  const syncGroup = useTripGroupsStore((s) => s.syncGroup);
   const router = useRouter();
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
@@ -85,16 +103,110 @@ export default function TripsScreen() {
   const [tab, setTab] = useState<Tab>('my_trips');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [isDemo, setIsDemo] = useState(true);
+  const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
+  const [addToGroupVisible, setAddToGroupVisible] = useState(false);
+  const [groupSort, setGroupSort] = useState<GroupTripSort>('newest');
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    loadGroups();
+    authRepository.isDemo().then(setIsDemo);
+  }, [load, loadGroups]);
+
+  useEffect(() => {
+    if (isDemo && tab === 'groups') setTab('my_trips');
+  }, [isDemo, tab]);
 
   const filteredTrips = useMemo(() => applyFilters(trips, filters), [trips, filters]);
+  const visibleTabs = useMemo(
+    () => TABS.filter((item) => item.key !== 'groups' || !isDemo),
+    [isDemo],
+  );
+  const tripsById = useMemo(
+    () => new Map(trips.map((item) => [item.trip.clientTripId, item])),
+    [trips],
+  );
+  const selectionMode = selectedTripIds.length > 0;
 
   async function handleSyncTrip(clientTripId: string) {
     const error = await syncTrip(clientTripId);
     if (error) {
       showAlert({ title: 'Sync failed', message: error });
     }
+  }
+
+  function toggleTripSelection(item: TripWithMeta) {
+    if (item.trip.syncState !== 'SYNCED') {
+      showAlert({ title: 'Sync required', message: 'Sync trip before adding it to a group.' });
+      return;
+    }
+    setSelectedTripIds((current) =>
+      current.includes(item.trip.clientTripId)
+        ? current.filter((id) => id !== item.trip.clientTripId)
+        : [...current, item.trip.clientTripId],
+    );
+  }
+
+  function handleTripPress(item: TripWithMeta) {
+    if (selectionMode) {
+      toggleTripSelection(item);
+      return;
+    }
+    router.push(`/trips/${item.trip.clientTripId}`);
+  }
+
+  async function handleCreateGroup(title: string, description: string | null) {
+    const error = await createGroup(title, description, selectedTripIds);
+    if (error) {
+      showAlert({ title: 'Could not create group', message: error });
+      return;
+    }
+    setAddToGroupVisible(false);
+    setSelectedTripIds([]);
+  }
+
+  async function handleAddToExisting(groupId: string) {
+    const error = await addTripsToGroup(groupId, selectedTripIds);
+    if (error) {
+      showAlert({ title: 'Could not update group', message: error });
+      return;
+    }
+    setAddToGroupVisible(false);
+    setSelectedTripIds([]);
+  }
+
+  async function handleSyncGroup(groupId: string) {
+    const error = await syncGroup(groupId);
+    if (error) showAlert({ title: 'Group sync failed', message: error });
+  }
+
+  function openGroup(groupId: string) {
+    const group = groups.find((item) => item.group.id === groupId);
+    const firstTrip = sortGroupTrips(group, tripsById, groupSort)[0];
+    if (!firstTrip) {
+      showAlert({ title: 'Empty group', message: 'This group has no locally available trips.' });
+      return;
+    }
+    router.push(groupTripHref(firstTrip.trip.clientTripId, groupId, groupSort));
+  }
+
+  function confirmDeleteGroup(groupId: string) {
+    showAlert({
+      title: 'Delete group?',
+      message: 'Trips will not be deleted.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const error = await deleteGroup(groupId);
+            if (error) showAlert({ title: 'Delete failed', message: error });
+          },
+        },
+      ],
+    });
   }
 
   function ListHeader() {
@@ -105,7 +217,7 @@ export default function TripsScreen() {
         </Text>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <Pressable
               key={t.key}
               style={[
@@ -124,24 +236,75 @@ export default function TripsScreen() {
           ))}
         </ScrollView>
 
-        <View style={styles.filterRow}>
-          <FiltersToggle open={showFilters} onToggle={() => setShowFilters((v) => !v)} filters={filters} />
-        </View>
-        {showFilters && (
-          <FiltersPanel
-            open={showFilters}
-            filters={filters}
-            onChange={setFilters}
-            onToggle={() => setShowFilters((v) => !v)}
-          />
+        {tab === 'my_trips' && (
+          <>
+            {selectionMode && (
+              <View style={[styles.selectionBar, { backgroundColor: theme.card }]}>
+                <Text style={[styles.selectionText, { color: theme.primaryText }]}>
+                  {selectedTripIds.length} selected
+                </Text>
+                <Pressable
+                  style={[styles.selectionAction, { backgroundColor: theme.accentMuted }]}
+                  onPress={() => setSelectedTripIds([])}
+                >
+                  <Text style={[styles.selectionActionText, { color: theme.mutedText }]}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.selectionAction, { backgroundColor: theme.accent }]}
+                  onPress={() => setAddToGroupVisible(true)}
+                >
+                  <Text style={[styles.selectionActionText, { color: theme.background }]}>Add to group</Text>
+                </Pressable>
+              </View>
+            )}
+
+            <View style={styles.filterRow}>
+              <FiltersToggle open={showFilters} onToggle={() => setShowFilters((v) => !v)} filters={filters} />
+            </View>
+            {showFilters && (
+              <FiltersPanel
+                open={showFilters}
+                filters={filters}
+                onChange={setFilters}
+                onToggle={() => setShowFilters((v) => !v)}
+              />
+            )}
+            <TotalCard trips={filteredTrips} />
+          </>
         )}
 
-        {tab === 'my_trips' && <TotalCard trips={filteredTrips} />}
-
-        {tab !== 'my_trips' && (
+        {tab === 'shared' && (
           <View style={[styles.placeholder, { backgroundColor: theme.card }]}>
             <Text style={[styles.placeholderText, { color: theme.mutedText }]}>Coming soon</Text>
           </View>
+        )}
+
+        {tab === 'groups' && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.groupSortRow}
+          >
+            {GROUP_TRIP_SORTS.map((option) => (
+              <Pressable
+                key={option.key}
+                style={[
+                  styles.groupSortChip,
+                  { backgroundColor: option.key === groupSort ? theme.accent : theme.accentMuted },
+                ]}
+                onPress={() => setGroupSort(option.key)}
+              >
+                <Text
+                  style={[
+                    styles.groupSortText,
+                    { color: option.key === groupSort ? theme.background : theme.mutedText },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
         )}
       </View>
     );
@@ -155,11 +318,42 @@ export default function TripsScreen() {
           <View style={styles.loadingContainer}>
             <ActivityIndicator color={theme.accent} style={{ marginTop: 40 }} />
           </View>
-        ) : tab !== 'my_trips' ? (
+        ) : tab === 'groups' ? (
+          <FlatList
+            data={groups}
+            keyExtractor={(item) => item.group.id}
+            renderItem={({ item }) => (
+              <GroupCard
+                item={item}
+                tripsById={tripsById}
+                syncing={syncingGroupIds.includes(item.group.id)}
+                onDelete={() => confirmDeleteGroup(item.group.id)}
+                onOpen={() => openGroup(item.group.id)}
+                onSync={() => void handleSyncGroup(item.group.id)}
+              />
+            )}
+            ListHeaderComponent={ListHeader}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                {groupsLoading ? (
+                  <ActivityIndicator color={theme.accent} />
+                ) : (
+                  <>
+                    <Text style={[styles.emptyTitle, { color: theme.primaryText }]}>No groups yet</Text>
+                    <Text style={[styles.emptySub, { color: theme.mutedText }]}>
+                      Long press synced trips to create a group.
+                    </Text>
+                  </>
+                )}
+              </View>
+            }
+            contentContainerStyle={styles.listContent}
+          />
+        ) : tab === 'shared' ? (
           <FlatList
             data={[]}
-            keyExtractor={() => ''}
-            renderItem={null}
+            keyExtractor={() => 'shared-placeholder'}
+            renderItem={() => null}
             ListHeaderComponent={ListHeader}
             contentContainerStyle={styles.listContent}
           />
@@ -170,10 +364,13 @@ export default function TripsScreen() {
             renderItem={({ item }) => (
               <TripCard
                 item={item}
-                onPress={() => router.push(`/trips/${item.trip.clientTripId}`)}
+                onPress={() => handleTripPress(item)}
+                onLongPress={() => toggleTripSelection(item)}
                 onDelete={() => void deleteTrip(item.trip.clientTripId)}
                 onSync={() => void handleSyncTrip(item.trip.clientTripId)}
                 syncing={syncingTripIds.includes(item.trip.clientTripId)}
+                selected={selectedTripIds.includes(item.trip.clientTripId)}
+                selectionMode={selectionMode}
               />
             )}
             ListHeaderComponent={ListHeader}
@@ -189,6 +386,14 @@ export default function TripsScreen() {
           />
         )}
 
+        <AddToGroupModal
+          visible={addToGroupVisible}
+          selectedCount={selectedTripIds.length}
+          groups={groups}
+          onClose={() => setAddToGroupVisible(false)}
+          onCreate={(title, description) => void handleCreateGroup(title, description)}
+          onAddToExisting={(groupId) => void handleAddToExisting(groupId)}
+        />
         <BottomNav />
       </SafeAreaView>
     </GestureHandlerRootView>
@@ -207,8 +412,25 @@ const styles = StyleSheet.create({
 
   filterRow: { marginBottom: 2 },
 
+  selectionBar: {
+    marginHorizontal: 20,
+    marginBottom: 14,
+    padding: 12,
+    borderRadius: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectionText: { flex: 1, fontSize: 15, fontWeight: '800' },
+  selectionAction: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14 },
+  selectionActionText: { fontSize: 13, fontWeight: '800' },
+
   placeholder: { borderRadius: 20, padding: 40, margin: 20, alignItems: 'center' },
   placeholderText: { fontSize: 15, fontWeight: '600' },
+
+  groupSortRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 14 },
+  groupSortChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18 },
+  groupSortText: { fontSize: 13, fontWeight: '800' },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 16 },
   empty: { alignItems: 'center', paddingTop: 40, gap: 8 },

@@ -158,6 +158,33 @@ const MIGRATION_0005 = `
   CREATE INDEX IF NOT EXISTS display_route_points_trip_id_idx ON display_route_points (trip_id);
 `;
 
+const MIGRATION_0006 = `
+  CREATE TABLE IF NOT EXISTS trip_groups (
+    id text PRIMARY KEY NOT NULL,
+    title text NOT NULL,
+    description text,
+    created_at text NOT NULL,
+    updated_at text NOT NULL,
+    deleted_at text,
+    sync_state text NOT NULL DEFAULT 'PENDING'
+  );
+  CREATE INDEX IF NOT EXISTS trip_groups_deleted_updated_idx ON trip_groups (deleted_at, updated_at);
+  CREATE TABLE IF NOT EXISTS trip_group_members (
+    id text PRIMARY KEY NOT NULL,
+    group_id text NOT NULL,
+    trip_client_id text NOT NULL,
+    order_index integer NOT NULL,
+    added_at text NOT NULL,
+    updated_at text NOT NULL,
+    removed_at text,
+    sync_state text NOT NULL DEFAULT 'PENDING'
+  );
+  CREATE INDEX IF NOT EXISTS trip_group_members_group_idx
+    ON trip_group_members (group_id, removed_at, order_index);
+  CREATE INDEX IF NOT EXISTS trip_group_members_trip_idx
+    ON trip_group_members (trip_client_id, removed_at);
+`;
+
 type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
 
 const MIGRATIONS: Migration[] = [
@@ -167,6 +194,7 @@ const MIGRATIONS: Migration[] = [
   [3, MIGRATION_0003],
   [4, migration_0004],
   [5, MIGRATION_0005],
+  [6, MIGRATION_0006],
 ];
 
 export async function runMigrations(): Promise<void> {

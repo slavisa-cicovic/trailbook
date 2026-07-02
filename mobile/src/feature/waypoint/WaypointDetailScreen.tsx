@@ -11,18 +11,35 @@ import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useWaypointDetailStore } from '@/feature/waypoint/waypointDetailStore';
 import { EditWaypointSheet } from './components/EditWaypointSheet';
 import { addPhotoToWaypoint } from '@/core/domain/usecase/AddPhotoToWaypointUseCase';
-import { BottomNav } from '@/components/ui/BottomNav';
 import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { CATEGORY_ICON } from '@/constants/waypointCategories';
+import * as waypointDao from '@/core/data/local/waypointDao';
+import { useTripsStore } from '@/feature/trips/tripsStore';
+import { useTripGroupsStore } from '@/feature/trips/tripGroupsStore';
+import {
+  normalizeGroupTripSort,
+  sortGroupTrips,
+  waypointHref,
+  type GroupTripSort,
+} from '@/feature/trips/groupNavigation';
+import { savePhotoNavigationContext, type PhotoViewerItem } from './photoNavigationContext';
+import { getTripNavigationContext, saveTripNavigationContext } from '@/feature/trips/tripNavigationContext';
+import * as displayRoutePointDao from '@/core/data/local/displayRoutePointDao';
+import * as tripDao from '@/core/data/local/tripDao';
+import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PHOTO_HEIGHT = Math.round(SCREEN_WIDTH * 0.65);
-const BOTTOM_NAV_HEIGHT = 64;
 
 export default function WaypointDetailScreen() {
-  const { waypointId } = useLocalSearchParams<{ waypointId: string }>();
+  const { waypointId, groupId, groupSort: groupSortParam, tripContextId } = useLocalSearchParams<{
+    waypointId: string;
+    groupId?: string;
+    groupSort?: GroupTripSort;
+    tripContextId?: string;
+  }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
@@ -34,20 +51,93 @@ export default function WaypointDetailScreen() {
   const waypoint = useWaypointDetailStore((s) => s.waypoint);
   const images = useWaypointDetailStore((s) => s.images);
   const routePoints = useWaypointDetailStore((s) => s.routePoints);
-  const prevId = useWaypointDetailStore((s) => s.prevId);
-  const nextId = useWaypointDetailStore((s) => s.nextId);
   const loading = useWaypointDetailStore((s) => s.loading);
+  const trips = useTripsStore((s) => s.trips);
+  const loadTrips = useTripsStore((s) => s.load);
+  const groups = useTripGroupsStore((s) => s.groups);
+  const loadGroups = useTripGroupsStore((s) => s.load);
 
   const [showEditSheet, setShowEditSheet] = useState(false);
+  const [tripTitle, setTripTitle] = useState<string | null>(null);
+  const groupSort = normalizeGroupTripSort(groupSortParam);
+  const activeGroupId = Array.isArray(groupId) ? groupId[0] : groupId;
+  const tripsById = useMemo(
+    () => new Map(trips.map((item) => [item.trip.clientTripId, item])),
+    [trips],
+  );
+  const activeGroup = useMemo(
+    () => (activeGroupId ? groups.find((item) => item.group.id === activeGroupId) : undefined),
+    [activeGroupId, groups],
+  );
+  const groupTrips = useMemo(
+    () => (activeGroup ? sortGroupTrips(activeGroup, tripsById, groupSort) : []),
+    [activeGroup, groupSort, tripsById],
+  );
+  const activeTripContextId = Array.isArray(tripContextId) ? tripContextId[0] : tripContextId;
+  const contextTripIds = useMemo(() => {
+    const saved = getTripNavigationContext(activeTripContextId);
+    if (saved) return saved;
+    if (activeGroup) return groupTrips.map((item) => item.trip.clientTripId);
+    return waypoint ? [waypoint.tripId] : [];
+  }, [activeGroup, activeTripContextId, groupTrips, waypoint]);
+  const [contextWaypointIds, setContextWaypointIds] = useState<string[]>([]);
+
   useEffect(() => {
     if (waypointId) load(waypointId);
+    if (activeGroupId) {
+      loadTrips();
+      loadGroups();
+    }
     return () => reset();
-  }, [waypointId]);
+  }, [waypointId, activeGroupId, load, loadGroups, loadTrips, reset]);
 
   const routeCoordinates = useMemo(
     () => routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude })),
     [routePoints],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadTripTitle() {
+      if (!waypoint) {
+        setTripTitle(null);
+        return;
+      }
+      const trip = await tripDao.getTripByClientId(waypoint.tripId);
+      if (!cancelled) setTripTitle(trip?.title ?? null);
+    }
+    void loadTripTitle();
+    return () => {
+      cancelled = true;
+    };
+  }, [waypoint]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadContextWaypoints() {
+      if (contextTripIds.length === 0) {
+        setContextWaypointIds([]);
+        return;
+      }
+      const waypointGroups = await Promise.all(contextTripIds.map((tripId) => waypointDao.getForTrip(tripId)));
+      if (cancelled) return;
+      setContextWaypointIds(
+        waypointGroups
+          .flat()
+          .sort((left, right) => {
+            const tripDelta = contextTripIds.indexOf(left.tripId) - contextTripIds.indexOf(right.tripId);
+            if (tripDelta !== 0) return tripDelta;
+            return left.createdAt.getTime() - right.createdAt.getTime();
+          })
+          .map((item) => item.id),
+      );
+    }
+
+    void loadContextWaypoints();
+    return () => {
+      cancelled = true;
+    };
+  }, [contextTripIds]);
 
   useEffect(() => {
     if (!waypoint || !mapRef.current) return;
@@ -64,7 +154,56 @@ export default function WaypointDetailScreen() {
   }, [routeCoordinates, waypoint]);
 
   function navigateTo(id: string) {
-    router.replace(`/waypoint/${id}`);
+    const nextTripContextId =
+      activeTripContextId ?? saveTripNavigationContext(contextTripIds.length > 0 ? contextTripIds : [waypoint!.tripId]);
+    router.replace(waypointHref(id, activeGroupId, activeGroup ? groupSort : null, nextTripContextId));
+  }
+
+  async function buildPhotoContext(): Promise<PhotoViewerItem[]> {
+    if (!waypoint) return [];
+    const photoTripIds = contextTripIds.length > 0 ? contextTripIds : [waypoint.tripId];
+    const items: PhotoViewerItem[] = [];
+
+    for (const tripId of photoTripIds) {
+      const [trip, tripWaypoints, routePoints] = await Promise.all([
+        tripDao.getTripByClientId(tripId),
+        waypointDao.getForTrip(tripId),
+        displayRoutePointDao.getForTrip(tripId),
+      ]);
+      if (!trip) continue;
+
+      const routeCoordinates = routePoints.map((point) => ({
+        latitude: point.latitude,
+        longitude: point.longitude,
+      }));
+      const sortedWaypoints = tripWaypoints.sort(
+        (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+      );
+
+      for (const tripWaypoint of sortedWaypoints) {
+        const waypointImages = await waypointImageDao.getForWaypoint(tripWaypoint.id);
+        for (const image of waypointImages) {
+          items.push({
+            ...image,
+            routeCoordinates,
+            tripTitle: trip.title,
+            waypointCoordinate: {
+              latitude: tripWaypoint.latitude,
+              longitude: tripWaypoint.longitude,
+            },
+            waypointTitle: tripWaypoint.title,
+          });
+        }
+      }
+    }
+
+    return items;
+  }
+
+  async function openPhoto(imageId: string) {
+    const contextItems = await buildPhotoContext();
+    const contextId = savePhotoNavigationContext(contextItems);
+    router.push(`/waypoint/${waypoint!.id}/photo/${imageId}?photoContextId=${contextId}`);
   }
 
   async function onAddPhoto() {
@@ -91,7 +230,13 @@ export default function WaypointDetailScreen() {
     );
   }
 
-  const pillBottom = BOTTOM_NAV_HEIGHT + insets.bottom + 12;
+  const pillBottom = insets.bottom + 12;
+  const currentWaypointIndex = waypoint ? contextWaypointIds.indexOf(waypoint.id) : -1;
+  const contextPrevId = currentWaypointIndex > 0 ? contextWaypointIds[currentWaypointIndex - 1] : null;
+  const contextNextId =
+    currentWaypointIndex >= 0 && currentWaypointIndex < contextWaypointIds.length - 1
+      ? contextWaypointIds[currentWaypointIndex + 1]
+      : null;
 
   return (
     <SafeAreaView
@@ -99,6 +244,11 @@ export default function WaypointDetailScreen() {
       style={[styles.screen, { backgroundColor: theme.background }]}
     >
       <TopAppBar onBack={() => router.back()} title="Waypoint" />
+      {tripTitle ? (
+        <Text style={[styles.tripTitle, { color: theme.primaryText }]} numberOfLines={1}>
+          {tripTitle}
+        </Text>
+      ) : null}
 
       {/* Scrollable content */}
       <ScrollView
@@ -133,7 +283,7 @@ export default function WaypointDetailScreen() {
             {images.map((img) => (
               <Pressable
                 key={img.id}
-                onPress={() => router.push(`/waypoint/${waypoint.id}/photo/${img.id}`)}
+                onPress={() => void openPhoto(img.id)}
               >
                 <Image
                   source={{ uri: img.localUri }}
@@ -153,8 +303,6 @@ export default function WaypointDetailScreen() {
           </View>
         )}
 
-        {/* Location section */}
-        <Text style={[styles.sectionTitle, { color: theme.primaryText, marginTop: 24 }]}>Location</Text>
         <View style={[styles.miniMapCard, { backgroundColor: theme.card }]}>
           <TrailMap
             ref={mapRef}
@@ -193,11 +341,15 @@ export default function WaypointDetailScreen() {
       >
         <View style={styles.pill}>
           <Pressable
-            style={[styles.navBtn, !prevId && styles.navBtnDisabled]}
-            onPress={() => prevId && navigateTo(prevId)}
-            disabled={!prevId}
+            style={[styles.navBtn, !contextPrevId && styles.navBtnDisabled]}
+            onPress={() => contextPrevId && navigateTo(contextPrevId)}
+            disabled={!contextPrevId}
           >
-            <MaterialIcons name="chevron-left" size={24} color={prevId ? '#243224' : '#9aa596'} />
+            <MaterialIcons
+              name="chevron-left"
+              size={24}
+              color={contextPrevId ? '#243224' : '#9aa596'}
+            />
           </Pressable>
 
           <Pressable style={styles.pillCenter} onPress={() => setShowEditSheet(true)}>
@@ -206,16 +358,18 @@ export default function WaypointDetailScreen() {
           </Pressable>
 
           <Pressable
-            style={[styles.navBtn, !nextId && styles.navBtnDisabled]}
-            onPress={() => nextId && navigateTo(nextId)}
-            disabled={!nextId}
+            style={[styles.navBtn, !contextNextId && styles.navBtnDisabled]}
+            onPress={() => contextNextId && navigateTo(contextNextId)}
+            disabled={!contextNextId}
           >
-            <MaterialIcons name="chevron-right" size={24} color={nextId ? '#243224' : '#9aa596'} />
+            <MaterialIcons
+              name="chevron-right"
+              size={24}
+              color={contextNextId ? '#243224' : '#9aa596'}
+            />
           </Pressable>
         </View>
       </View>
-
-      <BottomNav />
 
       <EditWaypointSheet
         waypoint={waypoint}
@@ -240,7 +394,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 6,
   },
-  sectionTitle: { fontSize: 22, fontWeight: '800' },
+  tripTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+  },
+  sectionTitle: { fontSize: 18, fontWeight: '800' },
   addPhotoBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -270,8 +431,8 @@ const styles = StyleSheet.create({
   miniMapCard: {
     borderRadius: 20,
     overflow: 'hidden',
-    height: 180,
-    marginTop: 10,
+    height: 260,
+    marginTop: 22,
   },
   miniMap: { flex: 1 },
 

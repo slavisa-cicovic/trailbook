@@ -8,6 +8,7 @@ import { remoteWaypointImageDataSource } from '@/core/data/remote/FetchRemoteWay
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import { saveRestoredPhoto } from '@/core/data/local/photoStorage';
 import { dbEvents } from '@/core/db/events';
+import { tripGroupRepository } from '@/core/data/repository/TripGroupRepositoryImpl';
 
 interface RemoteImageInfo {
   imageId: string;
@@ -70,6 +71,9 @@ export async function restoreTrips(): Promise<Result<void>> {
       }
     }
   }
+
+  const groupsResult = await tripGroupRepository.restore();
+  if (!groupsResult.ok) return err(groupsResult.error);
 
   dbEvents.emit('trips:changed');
   return ok(undefined);

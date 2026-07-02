@@ -37,12 +37,24 @@ function modeLabel(segments: TripWithMeta['segments']): string {
 interface Props {
   item: TripWithMeta;
   onPress(): void;
+  onLongPress?(): void;
   onDelete(): void;
   onSync(): void;
   syncing?: boolean;
+  selected?: boolean;
+  selectionMode?: boolean;
 }
 
-export function TripCard({ item, onPress, onDelete, onSync, syncing = false }: Props) {
+export function TripCard({
+  item,
+  onPress,
+  onLongPress,
+  onDelete,
+  onSync,
+  syncing = false,
+  selected = false,
+  selectionMode = false,
+}: Props) {
   const { trip, segments, totalDistanceM, waypointCount, photoCount } = item;
   const swipeRef = useRef<Swipeable>(null);
   const { theme, resolvedMode } = useAppTheme();
@@ -97,10 +109,24 @@ export function TripCard({ item, onPress, onDelete, onSync, syncing = false }: P
   }
 
   return (
-    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2} rightThreshold={40}>
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
+    <Swipeable
+      ref={swipeRef}
+      enabled={!selectionMode}
+      renderRightActions={renderRightActions}
+      friction={2}
+      rightThreshold={40}
+    >
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: selected ? theme.accentMuted : theme.card,
+            borderColor: selected ? theme.accent : 'transparent',
+          },
+        ]}
+      >
         <View style={styles.header}>
-          <Pressable style={styles.titlePressable} onPress={onPress}>
+          <Pressable style={styles.titlePressable} onPress={onPress} onLongPress={onLongPress}>
             <Text style={[styles.title, { color: theme.primaryText }]} numberOfLines={1}>
               {trip.title}
             </Text>
@@ -115,7 +141,7 @@ export function TripCard({ item, onPress, onDelete, onSync, syncing = false }: P
           </Pressable>
         </View>
 
-        <Pressable style={styles.grid} onPress={onPress}>
+        <Pressable style={styles.grid} onPress={onPress} onLongPress={onLongPress}>
           <StatCell label="MODE" value={modeLabel(segments)} theme={theme} />
           <StatCell label="DISTANCE" value={formatDistance(totalDistanceM)} theme={theme} />
           <StatCell label="WAYPOINTS" value={String(waypointCount)} theme={theme} />
@@ -140,7 +166,7 @@ function StatCell({ label, value, theme }: { label: string; value: string; theme
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 20, padding: 20, marginBottom: 10 },
+  card: { borderRadius: 20, padding: 20, marginBottom: 10, borderWidth: 2 },
   header: {
     flexDirection: 'row', alignItems: 'flex-start',
     justifyContent: 'space-between', marginBottom: 16, gap: 8,

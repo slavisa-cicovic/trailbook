@@ -6,6 +6,7 @@ type DbEvents = {
   'waypointImages:changed': void;
   'segments:changed': void;
   'rawData:changed': void;
+  'tripGroups:changed': void;
 };
 
 export const dbEvents = mitt<DbEvents>();

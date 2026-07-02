@@ -18,18 +18,18 @@ import MapView, {
   type LongPressEvent,
   type Region,
 } from 'react-native-maps';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { useTripDetailStore } from '@/feature/trips/tripDetailStore';
 import { useTripsStore } from '@/feature/trips/tripsStore';
+import { useTripGroupsStore } from '@/feature/trips/tripGroupsStore';
 import { SEGMENT_COLOR, SEGMENT_LABEL } from '@/constants/segmentColors';
 import {
   reprocessTrip,
   undoReprocessing,
 } from '@/core/domain/usecase/ReprocessTripUseCase';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
-import { BottomNav } from '@/components/ui/BottomNav';
 import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
 import { useAppTheme } from '@/hooks/useAppTheme';
@@ -52,6 +52,13 @@ import {
   TRIP_POINT_PREVIEW_WIDTH,
   type TripPointInfo,
 } from './components/TripPointInfoPreview';
+import {
+  groupTripHref,
+  normalizeGroupTripSort,
+  sortGroupTrips,
+  waypointHref,
+} from './groupNavigation';
+import { saveTripNavigationContext } from './tripNavigationContext';
 
 const WAYPOINT_PREVIEW_MARGIN = 12;
 const WAYPOINT_PREVIEW_GAP = 14;
@@ -209,10 +216,15 @@ function getTripPointPreviewMaxDistanceMeters(
 }
 
 export default function TripDetailScreen() {
-  const { clientTripId } = useLocalSearchParams<{ clientTripId: string }>();
+  const { clientTripId, groupId, groupSort: groupSortParam } = useLocalSearchParams<{
+    clientTripId: string;
+    groupId?: string;
+    groupSort?: string;
+  }>();
   const router = useRouter();
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
 
   const load = useTripDetailStore((s) => s.load);
@@ -229,9 +241,25 @@ export default function TripDetailScreen() {
   const syncingTripIds = useTripsStore((s) => s.syncingTripIds);
   const syncTrip = useTripsStore((s) => s.syncTrip);
   const reloadTrips = useTripsStore((s) => s.load);
-  const currentIndex = allTrips.findIndex((t) => t.trip.clientTripId === clientTripId);
-  const prevTrip = currentIndex > 0 ? allTrips[currentIndex - 1] : null;
-  const nextTrip = currentIndex < allTrips.length - 1 ? allTrips[currentIndex + 1] : null;
+  const groups = useTripGroupsStore((s) => s.groups);
+  const loadGroups = useTripGroupsStore((s) => s.load);
+  const groupSort = normalizeGroupTripSort(groupSortParam);
+  const activeGroupId = Array.isArray(groupId) ? groupId[0] : groupId;
+  const tripsById = useMemo(
+    () => new Map(allTrips.map((item) => [item.trip.clientTripId, item])),
+    [allTrips],
+  );
+  const activeGroup = useMemo(
+    () => (activeGroupId ? groups.find((item) => item.group.id === activeGroupId) : undefined),
+    [activeGroupId, groups],
+  );
+  const navigationTrips = useMemo(
+    () => (activeGroup ? sortGroupTrips(activeGroup, tripsById, groupSort) : allTrips),
+    [activeGroup, allTrips, groupSort, tripsById],
+  );
+  const currentIndex = navigationTrips.findIndex((t) => t.trip.clientTripId === clientTripId);
+  const prevTrip = currentIndex > 0 ? navigationTrips[currentIndex - 1] : null;
+  const nextTrip = currentIndex < navigationTrips.length - 1 ? navigationTrips[currentIndex + 1] : null;
 
   const [expanded, setExpanded] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
@@ -258,6 +286,7 @@ export default function TripDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       if (clientTripId) load(clientTripId);
+      if (activeGroupId) loadGroups();
     }, [clientTripId]),
   );
 
@@ -280,7 +309,7 @@ export default function TripDetailScreen() {
   useEffect(() => {
     if (!mapLocations.length || !mapRef.current) return;
     const coords = mapLocations.map((l) => ({ latitude: l.latitude, longitude: l.longitude }));
-    const bottomPad = 180;
+    const bottomPad = 120;
     setTimeout(() => {
       mapRef.current?.fitToCoordinates(coords, {
         edgePadding: { top: 80, right: 40, bottom: bottomPad, left: 40 },
@@ -356,13 +385,20 @@ export default function TripDetailScreen() {
     setExpanded(false);
     setWaypointPreview(null);
     setTripPointPreview(null);
-    router.replace(`/trips/${id}`);
+    router.replace(groupTripHref(id, activeGroupId, activeGroup ? groupSort : null));
   }
 
   function navigateToWaypoint(waypointId: string) {
     setWaypointPreview(null);
     setTripPointPreview(null);
-    router.push(`/waypoint/${waypointId}`);
+    const tripContextId = saveTripNavigationContext(
+      navigationTrips.length > 0
+        ? navigationTrips.map((item) => item.trip.clientTripId)
+        : clientTripId
+        ? [clientTripId]
+        : [],
+    );
+    router.push(waypointHref(waypointId, activeGroupId, activeGroup ? groupSort : null, tripContextId));
   }
 
   async function handleWaypointPress(waypoint: Waypoint) {
@@ -605,7 +641,7 @@ export default function TripDetailScreen() {
         )}
 
         {trip && (
-          <View pointerEvents="box-none" style={styles.pillWrap}>
+          <View pointerEvents="box-none" style={[styles.pillWrap, { bottom: insets.bottom + 12 }]}>
             <View style={styles.pill}>
               <Pressable
                 style={[styles.navBtn, !prevTrip && styles.navBtnDisabled]}
@@ -642,8 +678,6 @@ export default function TripDetailScreen() {
           </View>
         )}
       </View>
-
-      <BottomNav />
 
       {reprocessing && (
         <View style={styles.processingOverlay}>
@@ -1019,7 +1053,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 14,
     right: 14,
-    bottom: 16,
   },
   pill: {
     minHeight: 58,

@@ -3,6 +3,7 @@ import type { AuthRepository, AuthUser, SocialProvider } from './AuthRepository'
 import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
 import * as authApiClient from '@/core/data/remote/authApiClient';
+import { setApiAuthTokenProvider } from '@/core/data/remote/apiClient';
 
 const KEYS = {
   accessToken: 'trailbook.access_token',
@@ -96,3 +97,4 @@ export class SecureStoreAuthRepository implements AuthRepository {
 }
 
 export const authRepository = new SecureStoreAuthRepository();
+setApiAuthTokenProvider(authRepository);

@@ -151,3 +151,37 @@ export const pendingTripDeletions = sqliteTable('pending_trip_deletions', {
   clientTripId: text('client_trip_id').primaryKey(),
   createdAt: text('created_at').notNull(),
 });
+
+// ─── GROUPS ─────────────────────────────────────────────────────────────────
+
+export const tripGroups = sqliteTable(
+  'trip_groups',
+  {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at'),
+    syncState: text('sync_state').notNull().default('PENDING'),
+  },
+  (t) => [index('trip_groups_deleted_updated_idx').on(t.deletedAt, t.updatedAt)],
+);
+
+export const tripGroupMembers = sqliteTable(
+  'trip_group_members',
+  {
+    id: text('id').primaryKey(),
+    groupId: text('group_id').notNull(),
+    tripClientId: text('trip_client_id').notNull(),
+    orderIndex: integer('order_index').notNull(),
+    addedAt: text('added_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    removedAt: text('removed_at'),
+    syncState: text('sync_state').notNull().default('PENDING'),
+  },
+  (t) => [
+    index('trip_group_members_group_idx').on(t.groupId, t.removedAt, t.orderIndex),
+    index('trip_group_members_trip_idx').on(t.tripClientId, t.removedAt),
+  ],
+);

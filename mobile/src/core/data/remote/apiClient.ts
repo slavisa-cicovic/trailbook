@@ -1,10 +1,20 @@
 import { gzipSync, strToU8 } from 'fflate';
 import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
-import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
 import { API_BASE_URL } from './apiConfig';
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
+
+interface ApiAuthTokenProvider {
+  getAccessToken(): Promise<string | null>;
+  refreshAccessToken(): Promise<Result<string>>;
+}
+
+let authTokenProvider: ApiAuthTokenProvider | null = null;
+
+export function setApiAuthTokenProvider(provider: ApiAuthTokenProvider): void {
+  authTokenProvider = provider;
+}
 
 export async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -45,7 +55,8 @@ async function doRequest<T>(
   const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, { ...options, headers });
 
   if (res.status === 401) {
-    const refreshResult = await authRepository.refreshAccessToken();
+    if (!authTokenProvider) return err('No auth token provider');
+    const refreshResult = await authTokenProvider.refreshAccessToken();
     if (!refreshResult.ok) return err(`Unauthorized: ${refreshResult.error}`);
 
     const retryHeaders = { ...headers, Authorization: `Bearer ${refreshResult.value}` };
@@ -72,7 +83,8 @@ async function doRequest<T>(
 async function withToken<T>(
   fn: (token: string) => Promise<Result<T>>,
 ): Promise<Result<T>> {
-  const token = await authRepository.getAccessToken();
+  if (!authTokenProvider) return err('No auth token provider');
+  const token = await authTokenProvider.getAccessToken();
   if (!token) return err('No access token');
   try {
     return await fn(token);

@@ -2,7 +2,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   Image,
   Platform,
   Pressable,
@@ -17,7 +16,7 @@ import {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { WaypointImage } from '@/core/domain/model/waypoint';
+import type { PhotoViewerItem } from '../photoNavigationContext';
 
 interface MapCoordinate {
   latitude: number;
@@ -25,18 +24,10 @@ interface MapCoordinate {
 }
 
 interface WaypointPhotoViewerProps {
-  images: WaypointImage[];
-  nextWaypointTitle?: string | null;
+  images: PhotoViewerItem[];
   onBack: () => void;
-  onNextWaypoint?: () => void;
-  onPreviousWaypoint?: () => void;
   onRemoveCurrent?: (imageId: string) => void;
-  previousWaypointTitle?: string | null;
-  routeCoordinates: MapCoordinate[];
   selectedImageId: string | null;
-  tripTitle: string;
-  waypointCoordinate: MapCoordinate;
-  waypointTitle: string;
 }
 
 interface ZoomablePhotoProps {
@@ -211,21 +202,12 @@ function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps)
 
 export function WaypointPhotoViewer({
   images,
-  nextWaypointTitle = null,
   onBack,
-  onNextWaypoint,
-  onPreviousWaypoint,
   onRemoveCurrent,
-  previousWaypointTitle = null,
-  routeCoordinates,
   selectedImageId,
-  tripTitle,
-  waypointCoordinate,
-  waypointTitle,
 }: WaypointPhotoViewerProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
-  const [transitionOpacity] = useState(() => new Animated.Value(0));
   const scrollRef = useRef<ScrollView | null>(null);
   const initialIndex = useMemo(
     () => images.findIndex((image) => image.id === selectedImageId),
@@ -233,19 +215,18 @@ export function WaypointPhotoViewer({
   );
   const [currentIndex, setCurrentIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
   const [zoomedImageId, setZoomedImageId] = useState<string | null>(null);
-  const [transitionTitle, setTransitionTitle] = useState<string | null>(null);
-  const [transitionDirection, setTransitionDirection] = useState<'Next' | 'Previous' | null>(null);
   const [routeExpanded, setRouteExpanded] = useState(false);
   const currentImage = images[currentIndex] ?? null;
-  const leadingPageCount = onPreviousWaypoint ? 1 : 0;
-  const trailingPageIndex = leadingPageCount + images.length;
   const previewRouteCoordinates = useMemo(
-    () => downsampleRouteCoordinates(routeCoordinates),
-    [routeCoordinates],
+    () => downsampleRouteCoordinates(currentImage?.routeCoordinates ?? []),
+    [currentImage?.routeCoordinates],
   );
   const routePreviewRegion = useMemo(
-    () => buildRoutePreviewRegion([...previewRouteCoordinates, waypointCoordinate]),
-    [previewRouteCoordinates, waypointCoordinate],
+    () =>
+      currentImage
+        ? buildRoutePreviewRegion([...previewRouteCoordinates, currentImage.waypointCoordinate])
+        : null,
+    [currentImage, previewRouteCoordinates],
   );
   const routePreviewSize = routePreviewRegion ? getRoutePreviewSize(routePreviewRegion) : null;
 
@@ -256,44 +237,16 @@ export function WaypointPhotoViewer({
       setZoomedImageId(null);
       setRouteExpanded(false);
       scrollRef.current?.scrollTo({
-        x: (nextIndex + leadingPageCount) * screenWidth,
+        x: nextIndex * screenWidth,
         animated: false,
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [initialIndex, leadingPageCount, screenWidth]);
-
-  function startWaypointTransition(
-    title: string,
-    direction: 'Next' | 'Previous',
-    onTransitionEnd: (() => void) | undefined,
-  ) {
-    setTransitionTitle(title);
-    setTransitionDirection(direction);
-    setRouteExpanded(false);
-    transitionOpacity.setValue(0);
-    Animated.timing(transitionOpacity, {
-      toValue: 1,
-      duration: 160,
-      useNativeDriver: true,
-    }).start(() => onTransitionEnd?.());
-  }
+  }, [initialIndex, screenWidth]);
 
   function handleMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const nextPageIndex = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
-    if (onPreviousWaypoint && nextPageIndex === 0) {
-      startWaypointTransition(
-        previousWaypointTitle ?? 'Previous waypoint',
-        'Previous',
-        onPreviousWaypoint,
-      );
-      return;
-    }
-    if (onNextWaypoint && nextPageIndex === trailingPageIndex) {
-      startWaypointTransition(nextWaypointTitle ?? 'Next waypoint', 'Next', onNextWaypoint);
-      return;
-    }
-    setCurrentIndex(clamp(nextPageIndex - leadingPageCount, 0, images.length - 1));
+    setCurrentIndex(clamp(nextPageIndex, 0, images.length - 1));
   }
 
   return (
@@ -308,9 +261,6 @@ export function WaypointPhotoViewer({
         showsHorizontalScrollIndicator={false}
         style={styles.pager}
       >
-        {onPreviousWaypoint ? (
-          <View style={[styles.slide, { width: screenWidth, height: screenHeight }]} />
-        ) : null}
         {images.map((image) => (
           <View key={image.id} style={[styles.slide, { width: screenWidth, height: screenHeight }]}>
             <ZoomablePhoto
@@ -321,13 +271,10 @@ export function WaypointPhotoViewer({
             />
           </View>
         ))}
-        {onNextWaypoint ? (
-          <View style={[styles.slide, { width: screenWidth, height: screenHeight }]} />
-        ) : null}
       </ScrollView>
 
       <View pointerEvents="box-none" style={styles.topOverlay}>
-        <Text numberOfLines={1} style={styles.topInfo}>{tripTitle}</Text>
+        <Text numberOfLines={1} style={styles.topInfo}>{currentImage?.tripTitle ?? ''}</Text>
       </View>
 
       {routeExpanded && routePreviewRegion && routePreviewSize ? (
@@ -347,7 +294,9 @@ export function WaypointPhotoViewer({
                 strokeWidth={4}
               />
             )}
-            <Marker coordinate={waypointCoordinate} pinColor="#e53935" tracksViewChanges={false} />
+            {currentImage && (
+              <Marker coordinate={currentImage.waypointCoordinate} pinColor="#e53935" tracksViewChanges={false} />
+            )}
           </MapView>
           <Pressable
             accessibilityLabel="Back to photo"
@@ -399,7 +348,9 @@ export function WaypointPhotoViewer({
                 strokeWidth={3}
               />
             )}
-            <Marker coordinate={waypointCoordinate} pinColor="#e53935" tracksViewChanges={false} />
+            {currentImage && (
+              <Marker coordinate={currentImage.waypointCoordinate} pinColor="#e53935" tracksViewChanges={false} />
+            )}
           </MapView>
         </Pressable>
       ) : null}
@@ -412,7 +363,7 @@ export function WaypointPhotoViewer({
           <MaterialIcons color="#fffdf8" name="arrow-back" size={24} />
         </Pressable>
         <Text numberOfLines={1} style={styles.bottomInfo}>
-          {images.length === 0 ? '0 / 0' : `${currentIndex + 1} / ${images.length}`} · {waypointTitle}
+          {images.length === 0 ? '0 / 0' : `${currentIndex + 1} / ${images.length}`} · {currentImage?.waypointTitle ?? ''}
         </Text>
         {currentImage && onRemoveCurrent ? (
           <Pressable
@@ -426,12 +377,6 @@ export function WaypointPhotoViewer({
         ) : null}
       </View>
 
-      {transitionTitle && transitionDirection ? (
-        <Animated.View pointerEvents="none" style={[styles.transitionOverlay, { opacity: transitionOpacity }]}>
-          <Text style={styles.transitionEyebrow}>{transitionDirection} waypoint</Text>
-          <Text numberOfLines={2} style={styles.transitionTitle}>{transitionTitle}</Text>
-        </Animated.View>
-      ) : null}
     </View>
   );
 }

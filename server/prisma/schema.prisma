@@ -27,6 +27,37 @@ model Trip {
   @@map("trips")
 }
 
+model TripGroup {
+  id            BigInt    @id @default(autoincrement())
+  clientGroupId String    @unique @map("client_group_id") @db.VarChar(36)
+  userId        String    @map("user_id") @db.VarChar(50)
+  title         String    @db.VarChar(500)
+  description   String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([userId], map: "trip_groups_user_id_idx")
+  @@map("trip_groups")
+}
+
+model TripGroupMember {
+  id             BigInt    @id @default(autoincrement())
+  clientMemberId String    @unique @map("client_member_id") @db.VarChar(36)
+  clientGroupId  String    @map("client_group_id") @db.VarChar(36)
+  clientTripId   String    @map("client_trip_id") @db.VarChar(36)
+  userId         String    @map("user_id") @db.VarChar(50)
+  orderIndex     Int       @map("order_index")
+  addedAt        DateTime  @map("added_at") @db.Timestamptz(6)
+  removedAt      DateTime? @map("removed_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId], map: "trip_group_members_user_id_idx")
+  @@index([clientGroupId], map: "trip_group_members_group_idx")
+  @@index([clientTripId], map: "trip_group_members_trip_idx")
+  @@map("trip_group_members")
+}
+
 model User {
   id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email          String          @unique @db.VarChar(255)
