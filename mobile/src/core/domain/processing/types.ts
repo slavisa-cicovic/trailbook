@@ -32,6 +32,8 @@ export const V1 = {
   minStationaryDurationMs: 30_000,
   dwellStationaryMinDurationMs: 60_000,
   dwellStationaryRadiusM: 30,
+  stationaryGapMinDurationMs: 120_000,
+  stationaryGapMaxDistanceM: 50,
   gapSplitThresholdMs: 60_000,
   mergeGapThresholdMs: 30_000,
   driveInterruptionMaxMs: 5 * 60_000,

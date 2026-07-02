@@ -145,16 +145,14 @@ export function classifyIntervals(
       continue;
     }
 
-    const type = dwellIntervalIndexes.has(i)
-      ? 'STATIONARY'
-      : (() => {
-          const actSample = nearestActivity(p.timestamp);
-          const fromActivity = actSample ? bestActivityType(actSample) : null;
-          return reconcileActivityWithSpeed(
-            fromActivity,
-            intervalSpeedMps(p, next),
-          );
-        })();
+    const actSample = nearestActivity(p.timestamp);
+    const fromActivity = actSample ? bestActivityType(actSample) : null;
+    const speedMps = intervalSpeedMps(p, next);
+    const type =
+      dwellIntervalIndexes.has(i) &&
+      !(fromActivity === 'WALK' && speedMps !== undefined && speedMps > V1.stationaryMaxMps)
+        ? 'STATIONARY'
+        : reconcileActivityWithSpeed(fromActivity, speedMps);
 
     // Merge with previous interval if same type
     const last = intervals[intervals.length - 1];

@@ -68,8 +68,10 @@ export function mergeAndFinalize(
     }
   }
 
+  const withStationaryGaps = insertStationaryGaps(merged, geoPoints);
+
   // Post-process 1: remove leading/trailing STATIONARY when there is movement
-  const trimmed = trimBoundaryStationary(merged);
+  const trimmed = trimBoundaryStationary(withStationaryGaps);
 
   // Post-process 2: absorb short isolated segments sandwiched between same-type neighbours.
   const stationaryCorrected = absorbWalkStationaryInterruptions(trimmed, geoPoints);
@@ -161,6 +163,63 @@ function averageReportedSpeedInRange(points: GeoPoint[], from: Date, to: Date): 
 
   if (!speeds.length) return null;
   return speeds.reduce((sum, speed) => sum + speed, 0) / speeds.length;
+}
+
+function insertStationaryGaps(segments: RawSegment[], geoPoints: GeoPoint[]): RawSegment[] {
+  if (segments.length < 2) return segments;
+
+  const result: RawSegment[] = [];
+  for (let index = 0; index < segments.length; index += 1) {
+    const current = segments[index];
+    const previous = result[result.length - 1];
+
+    if (previous) {
+      const gapMs = current.startTime.getTime() - previous.endTime.getTime();
+      if (gapMs >= V1.stationaryGapMinDurationMs) {
+        const before = findNearestPointAtOrBefore(geoPoints, previous.endTime);
+        const after = findNearestPointAtOrAfter(geoPoints, current.startTime);
+        const boundaryDistanceM =
+          before && after
+            ? haversineM(before.latitude, before.longitude, after.latitude, after.longitude)
+            : null;
+
+        if (
+          boundaryDistanceM !== null &&
+          boundaryDistanceM <= V1.stationaryGapMaxDistanceM &&
+          previous.type !== 'STATIONARY' &&
+          current.type !== 'STATIONARY'
+        ) {
+          result.push({
+            startTime: previous.endTime,
+            endTime: current.startTime,
+            type: 'STATIONARY',
+          });
+        }
+      }
+    }
+
+    result.push(current);
+  }
+
+  return result;
+}
+
+function findNearestPointAtOrBefore(points: GeoPoint[], timestamp: Date): GeoPoint | null {
+  for (let index = points.length - 1; index >= 0; index -= 1) {
+    if (points[index].timestamp.getTime() <= timestamp.getTime()) {
+      return points[index];
+    }
+  }
+  return null;
+}
+
+function findNearestPointAtOrAfter(points: GeoPoint[], timestamp: Date): GeoPoint | null {
+  for (const point of points) {
+    if (point.timestamp.getTime() >= timestamp.getTime()) {
+      return point;
+    }
+  }
+  return null;
 }
 
 function trimBoundaryStationary(segments: RawSegment[]): RawSegment[] {
