@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
-import { apiDelete, apiPost, apiGet } from './apiClient';
+import { apiDelete, apiPost, apiGet, fetchWithTimeout } from './apiClient';
 
 interface UploadUrlResponse {
   putUrl: string;
@@ -64,7 +64,7 @@ class FetchRemoteWaypointImageDataSource implements RemoteWaypointImageDataSourc
 
   async downloadImage(getUrl: string): Promise<Result<Uint8Array>> {
     try {
-      const res = await fetch(getUrl);
+      const res = await fetchWithTimeout(getUrl);
       if (!res.ok) return err(`HTTP ${res.status}`);
       const ab = await res.arrayBuffer();
       return ok(new Uint8Array(ab));

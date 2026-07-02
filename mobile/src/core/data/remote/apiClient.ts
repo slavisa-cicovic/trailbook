@@ -4,6 +4,31 @@ import { ok, err } from '@/core/common/result';
 import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
 import { API_BASE_URL } from './apiConfig';
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
+
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: init.signal ?? controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Network request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function doRequest<T>(
   path: string,
   options: RequestInit,
@@ -17,14 +42,17 @@ async function doRequest<T>(
     headers['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, { ...options, headers });
 
   if (res.status === 401) {
     const refreshResult = await authRepository.refreshAccessToken();
     if (!refreshResult.ok) return err(`Unauthorized: ${refreshResult.error}`);
 
     const retryHeaders = { ...headers, Authorization: `Bearer ${refreshResult.value}` };
-    const retryRes = await fetch(`${API_BASE_URL}${path}`, { ...options, headers: retryHeaders });
+    const retryRes = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: retryHeaders,
+    });
     if (!retryRes.ok) {
       const text = await retryRes.text().catch(() => retryRes.status.toString());
       return err(`HTTP ${retryRes.status}: ${text}`);
