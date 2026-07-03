@@ -18,11 +18,16 @@ model Trip {
   status            String    @db.VarChar(50)
   processingVersion Int       @default(0) @map("processing_version")
   rawBundle         Json      @map("raw_bundle") @db.JsonB
+  shareToken        String?   @unique @map("share_token") @db.VarChar(64)
+  sharePinHash      String?   @map("share_pin_hash") @db.VarChar(64)
+  shareEnabled      Boolean   @default(false) @map("share_enabled")
+  sharedAt          DateTime? @map("shared_at") @db.Timestamptz(6)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([shareToken], map: "trips_share_token_idx")
   @@index([startedAt(sort: Desc)], map: "trips_started_at_idx")
   @@index([userId], map: "trips_user_id_idx")
   @@map("trips")

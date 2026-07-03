@@ -41,4 +41,5 @@ export interface TripRepository {
   hasReprocessingSnapshot(tripId: string): Promise<Result<boolean>>;
 
   getTripBundle(clientTripId: string): Promise<Result<TripBundle | null>>;
+  createShareLink(clientTripId: string): Promise<Result<{ shareUrl: string; pin: string }>>;
 }

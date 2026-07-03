@@ -1,3 +1,5 @@
+import { createHash, randomBytes, randomInt } from "node:crypto";
+
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 
 import { DatabaseService } from "../database/database.service";
@@ -99,6 +101,74 @@ export class TripsService {
     return trip.rawBundle as unknown as TripBundleDto;
   }
 
+  async createShareLink(
+    clientTripId: string,
+    userId: string,
+  ): Promise<{ shareUrl: string; token: string; pin: string }> {
+    const trip = await this.database.trip.findUnique({
+      select: {
+        id: true,
+        deletedAt: true,
+        sharePinHash: true,
+        shareToken: true,
+        userId: true,
+      },
+      where: { clientTripId },
+    });
+
+    if (!trip || trip.deletedAt) {
+      throw new NotFoundException(`Trip not found: ${clientTripId}`);
+    }
+
+    if (trip.userId !== userId) {
+      throw new ForbiddenException("Access denied");
+    }
+
+    const token = trip.shareToken ?? randomBytes(24).toString("base64url");
+    const pin = generateSharePin();
+    await this.database.trip.update({
+      data: {
+        shareEnabled: true,
+        sharePinHash: hashSharePin(pin),
+        sharedAt: new Date(),
+        shareToken: token,
+      },
+      where: { id: trip.id },
+    });
+
+    return {
+      pin,
+      shareUrl: `${getShareBaseUrl()}/shared/trips/${token}`,
+      token,
+    };
+  }
+
+  async getShared(token: string, pin: string): Promise<TripBundleDto> {
+    if (!/^\d{6}$/.test(pin)) {
+      throw new ForbiddenException("Invalid share PIN");
+    }
+
+    const trip = await this.database.trip.findUnique({
+      select: {
+        deletedAt: true,
+        rawBundle: true,
+        shareEnabled: true,
+        sharePinHash: true,
+      },
+      where: { shareToken: token },
+    });
+
+    if (!trip || trip.deletedAt || !trip.shareEnabled || !trip.sharePinHash) {
+      throw new NotFoundException("Shared trip not found");
+    }
+
+    if (trip.sharePinHash !== hashSharePin(pin)) {
+      throw new ForbiddenException("Invalid share PIN");
+    }
+
+    return trip.rawBundle as unknown as TripBundleDto;
+  }
+
   async delete(clientTripId: string, userId: string): Promise<void> {
     const trip = await this.database.trip.findUnique({
       select: { id: true, rawBundle: true, userId: true },
@@ -153,4 +223,21 @@ export class TripsService {
     bundle.waypoints ??= [];
     bundle.segments ??= [];
   }
+}
+
+function getShareBaseUrl(): string {
+  const webAppUrl = process.env.WEB_APP_URL?.trim();
+  if (!webAppUrl) {
+    throw new BadRequestException("WEB_APP_URL is not configured.");
+  }
+
+  return webAppUrl.replace(/\/+$/, "");
+}
+
+function generateSharePin(): string {
+  return randomInt(0, 1_000_000).toString().padStart(6, "0");
+}
+
+function hashSharePin(pin: string): string {
+  return createHash("sha256").update(pin).digest("hex");
 }

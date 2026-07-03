@@ -36,6 +36,12 @@ export class TripsController {
     return this.tripsService.get(clientTripId, user.id);
   }
 
+  @Post(":clientTripId/share")
+  async share(@Param("clientTripId") clientTripId: string, @Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.tripsService.createShareLink(clientTripId, user.id);
+  }
+
   @Delete(":clientTripId")
   @HttpCode(204)
   async delete(@Param("clientTripId") clientTripId: string, @Req() request: Request) {

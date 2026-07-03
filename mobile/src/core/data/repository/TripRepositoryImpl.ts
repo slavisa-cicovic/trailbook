@@ -18,6 +18,7 @@ import * as displayRoutePointDao from '@/core/data/local/displayRoutePointDao';
 import * as reprocessingSnapshotDao from '@/core/data/local/reprocessingSnapshotDao';
 import * as pendingTripDeletionDao from '@/core/data/local/pendingTripDeletionDao';
 import * as tripGroupDao from '@/core/data/local/tripGroupDao';
+import { remoteTripDataSource } from '@/core/data/remote/FetchRemoteTripDataSource';
 import { deletePhotosForWaypoints } from '@/core/data/local/photoStorage';
 import { sqlite } from '@/core/db';
 import { buildDisplayRoutePoints } from '@/core/domain/processing/displayRouteBuilder';
@@ -268,6 +269,10 @@ export class TripRepositoryImpl implements TripRepository {
         segments: segs,
       };
     });
+  }
+
+  async createShareLink(clientTripId: string): Promise<Result<{ shareUrl: string; pin: string }>> {
+    return remoteTripDataSource.createShareLink(clientTripId);
   }
 }
 

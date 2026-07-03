@@ -9,6 +9,7 @@ import {
   ScrollView,
   Modal,
   TextInput,
+  Share,
   type LayoutChangeEvent,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -29,6 +30,7 @@ import {
   reprocessTrip,
   undoReprocessing,
 } from '@/core/domain/usecase/ReprocessTripUseCase';
+import { createTripShareLink } from '@/core/domain/usecase/ShareTripUseCase';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
@@ -267,6 +269,7 @@ export default function TripDetailScreen() {
   const [editDescription, setEditDescription] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [mapLayout, setMapLayout] = useState({ width: 0, height: 0 });
   const [currentRegion, setCurrentRegion] = useState<Region | null>(null);
   const [waypointPreview, setWaypointPreview] = useState<{
@@ -379,6 +382,31 @@ export default function TripDetailScreen() {
     const error = await syncTrip(clientTripId);
     if (error) showAlert({ title: 'Sync failed', message: error });
     else load(clientTripId);
+  }
+
+  async function onShare() {
+    if (!clientTripId || sharing) return;
+
+    setSharing(true);
+    const result = await createTripShareLink(clientTripId);
+    setSharing(false);
+
+    if (!result.ok) {
+      showAlert({ title: 'Share failed', message: result.error });
+      return;
+    }
+
+    try {
+      await Share.share({
+        message: `${result.value.shareUrl}\nPIN: ${result.value.pin}`,
+        title: trip?.title ?? 'Trailbook trip',
+      });
+    } catch (error) {
+      showAlert({
+        title: 'Share failed',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   function navigateToTrip(id: string) {
@@ -753,10 +781,11 @@ export default function TripDetailScreen() {
                 <ActionBtn
                   accessibilityLabel="Share trip"
                   icon="share"
-                  color={theme.mutedText}
+                  color={isSynced ? theme.accent : theme.mutedText}
                   bg={theme.accentMuted}
-                  onPress={() => showAlert({ title: 'Share', message: 'Coming soon' })}
-                  disabled
+                  onPress={() => void onShare()}
+                  loading={sharing}
+                  disabled={!isSynced || sharing}
                 />
               </View>
 
