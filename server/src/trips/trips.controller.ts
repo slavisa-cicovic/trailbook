@@ -5,6 +5,10 @@ import { AuthService } from "../auth/auth.service";
 import type { TripBundleDto } from "./dto/sync-trip.dto";
 import { TripsService } from "./trips.service";
 
+interface ShareWithUserRequestDto {
+  email?: string;
+}
+
 @Controller("trips")
 export class TripsController {
   constructor(
@@ -30,10 +34,38 @@ export class TripsController {
     };
   }
 
+  @Get("shared-with-me")
+  async sharedWithMe(@Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.tripsService.listSharedWithUser(user.id);
+  }
+
+  @Get("shared-with-me/:clientTripId")
+  async sharedWithMeDetail(@Param("clientTripId") clientTripId: string, @Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.tripsService.getSharedWithUser(clientTripId, user.id);
+  }
+
   @Get(":clientTripId")
   async get(@Param("clientTripId") clientTripId: string, @Req() request: Request) {
     const user = await this.authService.requireAuthenticatedUser(request);
     return this.tripsService.get(clientTripId, user.id);
+  }
+
+  @Post(":clientTripId/share/users")
+  async shareWithUser(
+    @Param("clientTripId") clientTripId: string,
+    @Body() input: ShareWithUserRequestDto,
+    @Req() request: Request,
+  ) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.tripsService.shareWithUser(clientTripId, user.id, input.email ?? "");
+  }
+
+  @Post(":clientTripId/share")
+  async share(@Param("clientTripId") clientTripId: string, @Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.tripsService.createShareLink(clientTripId, user.id);
   }
 
   @Delete(":clientTripId")

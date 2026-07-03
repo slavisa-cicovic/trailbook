@@ -9,6 +9,7 @@ import {
   ScrollView,
   Modal,
   TextInput,
+  Share,
   type LayoutChangeEvent,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -29,6 +30,8 @@ import {
   reprocessTrip,
   undoReprocessing,
 } from '@/core/domain/usecase/ReprocessTripUseCase';
+import { createTripShareLink } from '@/core/domain/usecase/ShareTripUseCase';
+import { shareTripWithUser } from '@/core/domain/usecase/ShareTripWithUserUseCase';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
@@ -37,8 +40,8 @@ import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import { splitLocationsOnRouteGaps } from '@/core/domain/processing/locationCleaner';
 import type { GeoPoint } from '@/core/domain/processing/types';
 import type { Segment } from '@/core/domain/model/segment';
-import type { Waypoint, WaypointCategory } from '@/core/domain/model/waypoint';
-import { CATEGORY_ICON } from '@/constants/waypointCategories';
+import type { Waypoint } from '@/core/domain/model/waypoint';
+import { WaypointPin } from './components/WaypointPin';
 import {
   WaypointPhotoPreview,
   WAYPOINT_PREVIEW_HEIGHT,
@@ -215,7 +218,8 @@ function getTripPointPreviewMaxDistanceMeters(
   );
 }
 
-export default function TripDetailScreen() {
+export default function TripDetailScreen({ source = 'local' }: { source?: 'local' | 'shared' }) {
+  const readOnly = source === 'shared';
   const { clientTripId, groupId, groupSort: groupSortParam } = useLocalSearchParams<{
     clientTripId: string;
     groupId?: string;
@@ -228,6 +232,7 @@ export default function TripDetailScreen() {
   const mapRef = useRef<MapView>(null);
 
   const load = useTripDetailStore((s) => s.load);
+  const loadShared = useTripDetailStore((s) => s.loadShared);
   const reset = useTripDetailStore((s) => s.reset);
   const trip = useTripDetailStore((s) => s.trip);
   const segments = useTripDetailStore((s) => s.segments);
@@ -235,6 +240,7 @@ export default function TripDetailScreen() {
   const imagesByWaypoint = useTripDetailStore((s) => s.imagesByWaypoint);
   const routePoints = useTripDetailStore((s) => s.routePoints);
   const hasReprocessingSnapshot = useTripDetailStore((s) => s.hasReprocessingSnapshot);
+  const sharedBy = useTripDetailStore((s) => s.sharedBy);
   const loading = useTripDetailStore((s) => s.loading);
 
   const allTrips = useTripsStore((s) => s.trips);
@@ -254,8 +260,8 @@ export default function TripDetailScreen() {
     [activeGroupId, groups],
   );
   const navigationTrips = useMemo(
-    () => (activeGroup ? sortGroupTrips(activeGroup, tripsById, groupSort) : allTrips),
-    [activeGroup, allTrips, groupSort, tripsById],
+    () => (readOnly ? [] : activeGroup ? sortGroupTrips(activeGroup, tripsById, groupSort) : allTrips),
+    [activeGroup, allTrips, groupSort, readOnly, tripsById],
   );
   const currentIndex = navigationTrips.findIndex((t) => t.trip.clientTripId === clientTripId);
   const prevTrip = currentIndex > 0 ? navigationTrips[currentIndex - 1] : null;
@@ -267,6 +273,10 @@ export default function TripDetailScreen() {
   const [editDescription, setEditDescription] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareUserVisible, setShareUserVisible] = useState(false);
+  const [shareUserEmail, setShareUserEmail] = useState('');
+  const [sharingWithUser, setSharingWithUser] = useState(false);
   const [mapLayout, setMapLayout] = useState({ width: 0, height: 0 });
   const [currentRegion, setCurrentRegion] = useState<Region | null>(null);
   const [waypointPreview, setWaypointPreview] = useState<{
@@ -285,9 +295,15 @@ export default function TripDetailScreen() {
   // Reload waypoints/images when returning from waypoint screen
   useFocusEffect(
     useCallback(() => {
-      if (clientTripId) load(clientTripId);
+      if (!clientTripId) return;
+      if (readOnly) {
+        loadShared(clientTripId);
+        return;
+      }
+
+      load(clientTripId);
       if (activeGroupId) loadGroups();
-    }, [clientTripId]),
+    }, [activeGroupId, clientTripId, load, loadGroups, loadShared, readOnly]),
   );
 
   const mapLocations = useMemo<GeoPoint[]>(
@@ -319,6 +335,7 @@ export default function TripDetailScreen() {
   }, [mapLocations, expanded]);
 
   function openEditSheet() {
+    if (readOnly) return;
     if (!trip) return;
     setEditTitle(trip.title);
     setEditDescription(trip.description ?? '');
@@ -327,6 +344,7 @@ export default function TripDetailScreen() {
   }
 
   async function saveTripDetails() {
+    if (readOnly) return;
     if (!trip || savingEdit) return;
 
     const title = editTitle.trim();
@@ -354,6 +372,7 @@ export default function TripDetailScreen() {
   }
 
   async function onReprocessToggle() {
+    if (readOnly) return;
     if (!clientTripId) return;
     setReprocessing(true);
     setExpanded(false);
@@ -375,13 +394,68 @@ export default function TripDetailScreen() {
   }
 
   async function onSync() {
+    if (readOnly) return;
     if (!clientTripId) return;
     const error = await syncTrip(clientTripId);
     if (error) showAlert({ title: 'Sync failed', message: error });
     else load(clientTripId);
   }
 
+  async function onShare() {
+    if (readOnly) return;
+    if (!clientTripId || sharing) return;
+
+    setSharing(true);
+    const result = await createTripShareLink(clientTripId);
+    setSharing(false);
+
+    if (!result.ok) {
+      showAlert({ title: 'Share failed', message: result.error });
+      return;
+    }
+
+    try {
+      await Share.share({
+        message: `${result.value.shareUrl}\nPIN: ${result.value.pin}`,
+        title: trip?.title ?? 'Trailbook trip',
+      });
+    } catch (error) {
+      showAlert({
+        title: 'Share failed',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  function openShareUserSheet() {
+    if (readOnly) return;
+    setShareUserEmail('');
+    setExpanded(false);
+    setTimeout(() => setShareUserVisible(true), 250);
+  }
+
+  async function onShareWithUser() {
+    if (readOnly) return;
+    if (!clientTripId || sharingWithUser) return;
+
+    setSharingWithUser(true);
+    const result = await shareTripWithUser(clientTripId, shareUserEmail);
+    setSharingWithUser(false);
+
+    if (!result.ok) {
+      showAlert({ title: 'Share failed', message: result.error });
+      return;
+    }
+
+    setShareUserVisible(false);
+    showAlert({
+      title: 'Trip shared',
+      message: `Shared with ${result.value.recipientEmail}.`,
+    });
+  }
+
   function navigateToTrip(id: string) {
+    if (readOnly) return;
     setExpanded(false);
     setWaypointPreview(null);
     setTripPointPreview(null);
@@ -643,17 +717,19 @@ export default function TripDetailScreen() {
         {trip && (
           <View pointerEvents="box-none" style={[styles.pillWrap, { bottom: insets.bottom + 12 }]}>
             <View style={styles.pill}>
-              <Pressable
-                style={[styles.navBtn, !prevTrip && styles.navBtnDisabled]}
-                onPress={() => prevTrip && navigateToTrip(prevTrip.trip.clientTripId)}
-                disabled={!prevTrip}
-              >
-                <MaterialIcons
-                  name="chevron-left"
-                  size={24}
-                  color={prevTrip ? '#243224' : '#9aa596'}
-                />
-              </Pressable>
+              {!readOnly ? (
+                <Pressable
+                  style={[styles.navBtn, !prevTrip && styles.navBtnDisabled]}
+                  onPress={() => prevTrip && navigateToTrip(prevTrip.trip.clientTripId)}
+                  disabled={!prevTrip}
+                >
+                  <MaterialIcons
+                    name="chevron-left"
+                    size={24}
+                    color={prevTrip ? '#243224' : '#9aa596'}
+                  />
+                </Pressable>
+              ) : null}
 
               <Pressable style={styles.pillCenter} onPress={() => setExpanded(true)}>
                 <Text style={styles.pillTitle} numberOfLines={1}>{trip.title}</Text>
@@ -663,17 +739,19 @@ export default function TripDetailScreen() {
                 </View>
               </Pressable>
 
-              <Pressable
-                style={[styles.navBtn, !nextTrip && styles.navBtnDisabled]}
-                onPress={() => nextTrip && navigateToTrip(nextTrip.trip.clientTripId)}
-                disabled={!nextTrip}
-              >
-                <MaterialIcons
-                  name="chevron-right"
-                  size={24}
-                  color={nextTrip ? '#243224' : '#9aa596'}
-                />
-              </Pressable>
+              {!readOnly ? (
+                <Pressable
+                  style={[styles.navBtn, !nextTrip && styles.navBtnDisabled]}
+                  onPress={() => nextTrip && navigateToTrip(nextTrip.trip.clientTripId)}
+                  disabled={!nextTrip}
+                >
+                  <MaterialIcons
+                    name="chevron-right"
+                    size={24}
+                    color={nextTrip ? '#243224' : '#9aa596'}
+                  />
+                </Pressable>
+              ) : null}
             </View>
           </View>
         )}
@@ -711,6 +789,11 @@ export default function TripDetailScreen() {
             <Text style={[styles.sheetTitle, { color: theme.primaryText }]} numberOfLines={1}>
               {trip?.title}
             </Text>
+            {readOnly && sharedBy ? (
+              <Text style={[styles.sharedByText, { color: theme.accent }]}>
+                Shared by {sharedBy}
+              </Text>
+            ) : null}
             {trip?.description ? (
               <Text style={[styles.sheetDescription, { color: theme.mutedText }]}>
                 {trip.description}
@@ -721,44 +804,56 @@ export default function TripDetailScreen() {
               nestedScrollEnabled
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.actionRow}>
-                <ActionBtn
-                  accessibilityLabel="Edit trip"
-                  icon="edit"
-                  color={theme.mutedText}
-                  bg={theme.accentMuted}
-                  onPress={openEditSheet}
-                />
-                <ActionBtn
-                  accessibilityLabel={
-                    hasReprocessingSnapshot ? 'Undo reprocessing' : 'Reprocess trip'
-                  }
-                  icon={hasReprocessingSnapshot ? 'undo' : 'redo'}
-                  color={hasReprocessingSnapshot ? theme.danger : theme.accent}
-                  bg={hasReprocessingSnapshot ? theme.dangerMuted : theme.accentMuted}
-                  onPress={() => void onReprocessToggle()}
-                  loading={reprocessing}
-                  spinWhenLoading
-                />
-                <ActionBtn
-                  accessibilityLabel={isSynced ? 'Trip synced' : 'Sync trip'}
-                  icon="sync"
-                  color={isSynced ? theme.mutedText : theme.danger}
-                  bg={isSynced ? theme.accentMuted : theme.dangerMuted}
-                  onPress={() => void onSync()}
-                  loading={isSyncing}
-                  spinWhenLoading
-                  disabled={isSynced}
-                />
-                <ActionBtn
-                  accessibilityLabel="Share trip"
-                  icon="share"
-                  color={theme.mutedText}
-                  bg={theme.accentMuted}
-                  onPress={() => showAlert({ title: 'Share', message: 'Coming soon' })}
-                  disabled
-                />
-              </View>
+              {!readOnly ? (
+                <View style={styles.actionRow}>
+                  <ActionBtn
+                    accessibilityLabel="Edit trip"
+                    icon="edit"
+                    color={theme.mutedText}
+                    bg={theme.accentMuted}
+                    onPress={openEditSheet}
+                  />
+                  <ActionBtn
+                    accessibilityLabel={
+                      hasReprocessingSnapshot ? 'Undo reprocessing' : 'Reprocess trip'
+                    }
+                    icon={hasReprocessingSnapshot ? 'undo' : 'redo'}
+                    color={hasReprocessingSnapshot ? theme.danger : theme.accent}
+                    bg={hasReprocessingSnapshot ? theme.dangerMuted : theme.accentMuted}
+                    onPress={() => void onReprocessToggle()}
+                    loading={reprocessing}
+                    spinWhenLoading
+                  />
+                  <ActionBtn
+                    accessibilityLabel={isSynced ? 'Trip synced' : 'Sync trip'}
+                    icon="sync"
+                    color={isSynced ? theme.mutedText : theme.danger}
+                    bg={isSynced ? theme.accentMuted : theme.dangerMuted}
+                    onPress={() => void onSync()}
+                    loading={isSyncing}
+                    spinWhenLoading
+                    disabled={isSynced}
+                  />
+                  <ActionBtn
+                    accessibilityLabel="Share trip link"
+                    icon="share"
+                    color={isSynced ? theme.accent : theme.mutedText}
+                    bg={theme.accentMuted}
+                    onPress={() => void onShare()}
+                    loading={sharing}
+                    disabled={!isSynced || sharing}
+                  />
+                  <ActionBtn
+                    accessibilityLabel="Share with Trailbook user"
+                    icon="person-add"
+                    color={isSynced ? theme.accent : theme.mutedText}
+                    bg={theme.accentMuted}
+                    onPress={openShareUserSheet}
+                    loading={sharingWithUser}
+                    disabled={!isSynced || sharingWithUser}
+                  />
+                </View>
+              ) : null}
 
               <View style={[styles.statsRow, { borderColor: theme.border }]}>
                 <StatCell label="WAYPOINTS" value={String(waypoints.length)} theme={theme} />
@@ -792,14 +887,16 @@ export default function TripDetailScreen() {
                             <Text style={[styles.timelineName, { color: theme.primaryText }]}>
                               {SEGMENT_LABEL[seg.segmentType]}
                             </Text>
-                            <Pressable
-                              hitSlop={8}
-                              onPress={() =>
-                                showAlert({ title: 'Edit segment', message: 'Coming soon' })
-                              }
-                            >
-                              <MaterialIcons name="edit" size={14} color={theme.mutedText} />
-                            </Pressable>
+                            {!readOnly ? (
+                              <Pressable
+                                hitSlop={8}
+                                onPress={() =>
+                                  showAlert({ title: 'Edit segment', message: 'Coming soon' })
+                                }
+                              >
+                                <MaterialIcons name="edit" size={14} color={theme.mutedText} />
+                              </Pressable>
+                            ) : null}
                           </View>
                           <Text style={[styles.timelineMeta, { color: theme.mutedText }]}>
                             {formatTimeRange(seg.startedAt, seg.endedAt)}
@@ -880,6 +977,66 @@ export default function TripDetailScreen() {
                   <ActivityIndicator color={theme.card} size="small" />
                 ) : (
                   <Text style={[styles.editSaveText, { color: theme.card }]}>Save</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setShareUserVisible(false)}
+        transparent
+        visible={shareUserVisible}
+      >
+        <View style={styles.editOverlay}>
+          <Pressable
+            accessibilityLabel="Close share trip"
+            onPress={() => setShareUserVisible(false)}
+            style={styles.editBackdrop}
+          />
+          <View style={[styles.editCard, { backgroundColor: theme.card }]}>
+            <Text style={[styles.editTitle, { color: theme.primaryText }]}>
+              Share with Trailbook user
+            </Text>
+            <Text style={[styles.shareUserHint, { color: theme.mutedText }]}>
+              Enter the email of an existing Trailbook user. Shared trips are read-only for them.
+            </Text>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!sharingWithUser}
+              keyboardType="email-address"
+              onChangeText={setShareUserEmail}
+              placeholder="user@example.com"
+              placeholderTextColor={theme.mutedText}
+              style={[
+                styles.editInput,
+                { borderColor: theme.border, color: theme.primaryText },
+              ]}
+              value={shareUserEmail}
+            />
+            <View style={styles.editActions}>
+              <Pressable
+                disabled={sharingWithUser}
+                onPress={() => setShareUserVisible(false)}
+                style={[styles.editButton, { backgroundColor: theme.accentMuted }]}
+              >
+                <Text style={[styles.editCancelText, { color: theme.primaryText }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={sharingWithUser}
+                onPress={() => void onShareWithUser()}
+                style={[
+                  styles.editButton,
+                  { backgroundColor: theme.accent, opacity: sharingWithUser ? 0.65 : 1 },
+                ]}
+              >
+                {sharingWithUser ? (
+                  <ActivityIndicator color={theme.card} size="small" />
+                ) : (
+                  <Text style={[styles.editSaveText, { color: theme.card }]}>Share</Text>
                 )}
               </Pressable>
             </View>
@@ -980,33 +1137,6 @@ function StatCell({
     </View>
   );
 }
-
-// ── Waypoint marker helpers ────────────────────────────────────────────────
-
-
-function WaypointPin({ category }: { category: WaypointCategory }) {
-  return (
-    <View style={pinStyles.circle}>
-      <MaterialIcons name={CATEGORY_ICON[category]} size={18} color="#fff" />
-    </View>
-  );
-}
-
-const pinStyles = StyleSheet.create({
-  circle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#5c3d1e',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-});
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
@@ -1125,6 +1255,13 @@ const styles = StyleSheet.create({
   sheetBody: { gap: 14, paddingTop: 14, paddingBottom: 12 },
   sheetTitle: { fontSize: 20, fontWeight: '700', color: '#243224', marginBottom: 2 },
   sheetDescription: { fontSize: 14, lineHeight: 20, marginBottom: 2 },
+  sharedByText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
 
   // Action buttons
   actionRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
@@ -1157,6 +1294,7 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   editTitle: { fontSize: 20, fontWeight: '800', marginBottom: 2 },
+  shareUserHint: { fontSize: 14, lineHeight: 20, marginBottom: 2 },
   editInput: {
     minHeight: 48,
     borderWidth: 1,

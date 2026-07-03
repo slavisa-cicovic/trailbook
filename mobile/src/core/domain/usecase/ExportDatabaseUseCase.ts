@@ -1,5 +1,4 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import type { Result } from '@/core/common/result';
 import { err, ok } from '@/core/common/result';
 import { sqlite } from '@/core/db';
@@ -12,6 +11,7 @@ function timestampForFileName(date: Date) {
 
 export async function exportDatabase(): Promise<Result<void>> {
   try {
+    const Sharing = await import('expo-sharing');
     const sharingAvailable = await Sharing.isAvailableAsync();
     if (!sharingAvailable) return err('Sharing is not available on this device');
 

@@ -18,14 +18,38 @@ model Trip {
   status            String    @db.VarChar(50)
   processingVersion Int       @default(0) @map("processing_version")
   rawBundle         Json      @map("raw_bundle") @db.JsonB
+  shareToken        String?   @unique @map("share_token") @db.VarChar(64)
+  sharePinHash      String?   @map("share_pin_hash") @db.VarChar(64)
+  shareEnabled      Boolean   @default(false) @map("share_enabled")
+  sharedAt          DateTime? @map("shared_at") @db.Timestamptz(6)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userShares        TripUserShare[]
 
+  @@index([shareToken], map: "trips_share_token_idx")
   @@index([startedAt(sort: Desc)], map: "trips_started_at_idx")
   @@index([userId], map: "trips_user_id_idx")
   @@map("trips")
+}
+
+model TripUserShare {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientTripId    String    @map("client_trip_id") @db.VarChar(36)
+  ownerUserId     String    @map("owner_user_id") @db.Uuid
+  recipientUserId String    @map("recipient_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
+  trip            Trip      @relation(fields: [clientTripId], references: [clientTripId], onDelete: Cascade)
+  owner           User      @relation("TripUserShareOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  recipient       User      @relation("TripUserShareRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@unique([clientTripId, recipientUserId], map: "trip_user_shares_trip_recipient_key")
+  @@index([ownerUserId], map: "trip_user_shares_owner_idx")
+  @@index([recipientUserId], map: "trip_user_shares_recipient_idx")
+  @@index([clientTripId], map: "trip_user_shares_trip_idx")
+  @@map("trip_user_shares")
 }
 
 model TripGroup {
@@ -70,6 +94,8 @@ model User {
   trips          Trip[]
   tripGroups     TripGroup[]
   tripGroupMembers TripGroupMember[]
+  ownedTripShares TripUserShare[] @relation("TripUserShareOwner")
+  receivedTripShares TripUserShare[] @relation("TripUserShareRecipient")
   refreshTokens  RefreshToken[]
   purchaseAccess PurchaseAccess?
   purchaseEvents PurchaseEvent[]
