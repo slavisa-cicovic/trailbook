@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { deleteLocalTrips } from '@/core/domain/usecase/DeleteLocalTripsUseCase';
+import { exportDatabase } from '@/core/domain/usecase/ExportDatabaseUseCase';
 import { restoreTrips } from '@/core/domain/usecase/RestoreTripsUseCase';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
@@ -15,6 +16,7 @@ interface SettingsActions {
   onDeleteLocalClick(): void;
   onDismissDeleteConfirm(): void;
   onConfirmDeleteLocal(): Promise<void>;
+  onExportDatabase(): Promise<void>;
   onRestoreFromBackend(): Promise<void>;
   onLogout(): Promise<void>;
   onStatusMessageShown(): void;
@@ -43,6 +45,15 @@ export const useSettingsStore = create<SettingsUiState & SettingsActions>((set) 
     } else {
       set({ isWorking: false, statusMessage: result.error });
     }
+  },
+
+  async onExportDatabase() {
+    set({ isWorking: true, statusMessage: null });
+    const result = await exportDatabase();
+    set({
+      isWorking: false,
+      statusMessage: result.ok ? null : result.error,
+    });
   },
 
   async onRestoreFromBackend() {

@@ -43,6 +43,7 @@ export default function SettingsScreen() {
   const onDeleteLocalClick = useSettingsStore((s) => s.onDeleteLocalClick);
   const onDismissDeleteConfirm = useSettingsStore((s) => s.onDismissDeleteConfirm);
   const onConfirmDeleteLocal = useSettingsStore((s) => s.onConfirmDeleteLocal);
+  const onExportDatabase = useSettingsStore((s) => s.onExportDatabase);
   const onRestoreFromBackend = useSettingsStore((s) => s.onRestoreFromBackend);
   const onLogout = useSettingsStore((s) => s.onLogout);
   const onStatusMessageShown = useSettingsStore((s) => s.onStatusMessageShown);
@@ -195,6 +196,15 @@ export default function SettingsScreen() {
               onPress={() => router.push('/purchases')}
               title="Purchases simulation"
               value="Open"
+            />
+            <SettingsDivider />
+            <SettingsRow
+              disabled={isWorking}
+              iconName="storage"
+              loading={isWorking}
+              onPress={() => void onExportDatabase()}
+              title="Export database"
+              value="Share"
             />
           </SettingsSection>
         ) : null}
