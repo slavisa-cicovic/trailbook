@@ -274,6 +274,13 @@ export class TripRepositoryImpl implements TripRepository {
   async createShareLink(clientTripId: string): Promise<Result<{ shareUrl: string; pin: string }>> {
     return remoteTripDataSource.createShareLink(clientTripId);
   }
+
+  async shareWithUser(
+    clientTripId: string,
+    email: string,
+  ): Promise<Result<{ recipientEmail: string }>> {
+    return remoteTripDataSource.shareWithUser(clientTripId, email);
+  }
 }
 
 export const tripRepository = new TripRepositoryImpl();

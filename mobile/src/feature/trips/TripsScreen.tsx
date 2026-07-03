@@ -17,6 +17,8 @@ import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
 import { useTripGroupsStore } from './tripGroupsStore';
 import { AddToGroupModal } from './components/AddToGroupModal';
 import { GroupCard } from './components/GroupCard';
+import { SharedTripCard } from './components/SharedTripCard';
+import { useSharedTripsStore } from './sharedTripsStore';
 import {
   GROUP_TRIP_SORTS,
   groupTripHref,
@@ -96,6 +98,10 @@ export default function TripsScreen() {
   const addTripsToGroup = useTripGroupsStore((s) => s.addTripsToGroup);
   const deleteGroup = useTripGroupsStore((s) => s.deleteGroup);
   const syncGroup = useTripGroupsStore((s) => s.syncGroup);
+  const sharedTrips = useSharedTripsStore((s) => s.sharedTrips);
+  const sharedTripsLoading = useSharedTripsStore((s) => s.loading);
+  const sharedTripsError = useSharedTripsStore((s) => s.error);
+  const loadSharedTrips = useSharedTripsStore((s) => s.loadSharedTrips);
   const router = useRouter();
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
@@ -111,8 +117,9 @@ export default function TripsScreen() {
   useEffect(() => {
     load();
     loadGroups();
+    loadSharedTrips();
     authRepository.isDemo().then(setIsDemo);
-  }, [load, loadGroups]);
+  }, [load, loadGroups, loadSharedTrips]);
 
   useEffect(() => {
     if (isDemo && tab === 'groups') setTab('my_trips');
@@ -274,9 +281,15 @@ export default function TripsScreen() {
         )}
 
         {tab === 'shared' && (
-          <View style={[styles.placeholder, { backgroundColor: theme.card }]}>
-            <Text style={[styles.placeholderText, { color: theme.mutedText }]}>Coming soon</Text>
-          </View>
+          <>
+            {sharedTripsError ? (
+              <View style={[styles.placeholder, { backgroundColor: theme.card }]}>
+                <Text style={[styles.placeholderText, { color: theme.mutedText }]}>
+                  {sharedTripsError}
+                </Text>
+              </View>
+            ) : null}
+          </>
         )}
 
         {tab === 'groups' && (
@@ -351,10 +364,31 @@ export default function TripsScreen() {
           />
         ) : tab === 'shared' ? (
           <FlatList
-            data={[]}
-            keyExtractor={() => 'shared-placeholder'}
-            renderItem={() => null}
+            data={sharedTrips}
+            keyExtractor={(item) => item.clientTripId}
+            renderItem={({ item }) => (
+              <SharedTripCard
+                item={item}
+                onPress={() => router.push(`/trips/shared/${item.clientTripId}`)}
+              />
+            )}
             ListHeaderComponent={ListHeader}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                {sharedTripsLoading ? (
+                  <ActivityIndicator color={theme.accent} />
+                ) : (
+                  <>
+                    <Text style={[styles.emptyTitle, { color: theme.primaryText }]}>
+                      No shared trips
+                    </Text>
+                    <Text style={[styles.emptySub, { color: theme.mutedText }]}>
+                      Trips shared by other Trailbook users will appear here.
+                    </Text>
+                  </>
+                )}
+              </View>
+            }
             contentContainerStyle={styles.listContent}
           />
         ) : (

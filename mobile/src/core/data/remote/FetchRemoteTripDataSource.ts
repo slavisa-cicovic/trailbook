@@ -10,7 +10,41 @@ export interface RemoteTripDataSource {
   fetchTripList(): Promise<Result<TripListItemDto[]>>;
   fetchTrip(clientTripId: string): Promise<Result<TripBundle>>;
   createShareLink(clientTripId: string): Promise<Result<{ shareUrl: string; pin: string }>>;
+  shareWithUser(clientTripId: string, email: string): Promise<Result<{ recipientEmail: string }>>;
+  fetchSharedWithMe(): Promise<Result<SharedTripListItemDto[]>>;
+  fetchSharedWithMeDetail(clientTripId: string): Promise<Result<SharedTripDetailDto>>;
   deleteTrip(clientTripId: string): Promise<Result<void>>;
+}
+
+export interface SharedTripListItemDto {
+  clientTripId: string;
+  title: string;
+  description: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  owner: {
+    displayName: string;
+    email: string;
+  };
+  waypointCount: number;
+  photoCount: number;
+  distanceM: number;
+}
+
+export interface SharedTripDetailDto {
+  bundle: TripBundleRequestDto;
+  imagesByWaypointId: Record<
+    string,
+    Array<{
+      getUrl: string;
+      imageId: string;
+      objectKey: string;
+    }>
+  >;
+  owner: {
+    displayName: string;
+    email: string;
+  };
 }
 
 class FetchRemoteTripDataSource implements RemoteTripDataSource {
@@ -37,6 +71,18 @@ class FetchRemoteTripDataSource implements RemoteTripDataSource {
     );
     if (!result.ok) return err(result.error);
     return { ok: true, value: result.value };
+  }
+
+  async shareWithUser(clientTripId: string, email: string): Promise<Result<{ recipientEmail: string }>> {
+    return apiPost<{ recipientEmail: string }>(`/trips/${clientTripId}/share/users`, { email });
+  }
+
+  async fetchSharedWithMe(): Promise<Result<SharedTripListItemDto[]>> {
+    return apiGet<SharedTripListItemDto[]>('/trips/shared-with-me');
+  }
+
+  async fetchSharedWithMeDetail(clientTripId: string): Promise<Result<SharedTripDetailDto>> {
+    return apiGet<SharedTripDetailDto>(`/trips/shared-with-me/${clientTripId}`);
   }
 
   async deleteTrip(clientTripId: string): Promise<Result<void>> {

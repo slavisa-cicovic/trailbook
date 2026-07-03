@@ -6,6 +6,38 @@ import { DatabaseService } from "../database/database.service";
 import type { TripBundleDto, TripListItemDto } from "./dto/sync-trip.dto";
 import { WaypointImagesService } from "./waypoint-images.service";
 
+interface SharedWaypointImageDto {
+  getUrl: string;
+  imageId: string;
+  objectKey: string;
+}
+
+type SharedImagesByWaypointIdDto = Record<string, SharedWaypointImageDto[]>;
+
+export interface SharedTripListItemDto {
+  clientTripId: string;
+  title: string;
+  description: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  owner: {
+    displayName: string;
+    email: string;
+  };
+  waypointCount: number;
+  photoCount: number;
+  distanceM: number;
+}
+
+export interface SharedTripDetailDto {
+  bundle: TripBundleDto;
+  imagesByWaypointId: SharedImagesByWaypointIdDto;
+  owner: {
+    displayName: string;
+    email: string;
+  };
+}
+
 @Injectable()
 export class TripsService {
   constructor(
@@ -101,6 +133,133 @@ export class TripsService {
     return trip.rawBundle as unknown as TripBundleDto;
   }
 
+  async shareWithUser(
+    clientTripId: string,
+    ownerUserId: string,
+    recipientEmail: string,
+  ): Promise<{ recipientUserId: string; recipientEmail: string }> {
+    const normalizedEmail = recipientEmail.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new BadRequestException("Recipient email is required.");
+    }
+
+    const trip = await this.database.trip.findUnique({
+      select: { deletedAt: true, id: true, userId: true },
+      where: { clientTripId },
+    });
+    if (!trip || trip.deletedAt) {
+      throw new NotFoundException(`Trip not found: ${clientTripId}`);
+    }
+    if (trip.userId !== ownerUserId) {
+      throw new ForbiddenException("Access denied");
+    }
+
+    const recipient = await this.database.user.findUnique({
+      select: { email: true, id: true },
+      where: { email: normalizedEmail },
+    });
+    if (!recipient) {
+      throw new NotFoundException("Recipient user not found.");
+    }
+    if (recipient.id === ownerUserId) {
+      throw new BadRequestException("You cannot share a trip with yourself.");
+    }
+
+    await this.database.tripUserShare.upsert({
+      create: {
+        clientTripId,
+        ownerUserId,
+        recipientUserId: recipient.id,
+      },
+      update: {
+        ownerUserId,
+        revokedAt: null,
+      },
+      where: {
+        clientTripId_recipientUserId: {
+          clientTripId,
+          recipientUserId: recipient.id,
+        },
+      },
+    });
+
+    return { recipientEmail: recipient.email, recipientUserId: recipient.id };
+  }
+
+  async listSharedWithUser(userId: string): Promise<SharedTripListItemDto[]> {
+    const shares = await this.database.tripUserShare.findMany({
+      include: {
+        owner: { select: { displayName: true, email: true } },
+        trip: {
+          select: {
+            clientTripId: true,
+            deletedAt: true,
+            description: true,
+            endedAt: true,
+            rawBundle: true,
+            startedAt: true,
+            title: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      where: { recipientUserId: userId, revokedAt: null },
+    });
+
+    return Promise.all(shares
+      .filter((share) => !share.trip.deletedAt)
+      .map(async (share) => {
+        const bundle = share.trip.rawBundle as unknown as Partial<TripBundleDto>;
+        const segments = bundle.segments ?? [];
+        const waypoints = bundle.waypoints ?? [];
+        const imagesByWaypointId = await this.getImagesByWaypointId({
+          ...bundle,
+          waypoints,
+        } as TripBundleDto);
+
+        return {
+          clientTripId: share.trip.clientTripId,
+          description: share.trip.description,
+          distanceM: segments.reduce((total, segment) => total + (segment.distanceM ?? 0), 0),
+          endedAt: share.trip.endedAt?.toISOString() ?? null,
+          owner: share.owner,
+          photoCount: Object.values(imagesByWaypointId).reduce(
+            (total, images) => total + images.length,
+            0,
+          ),
+          startedAt: share.trip.startedAt.toISOString(),
+          title: share.trip.title,
+          waypointCount: waypoints.length,
+        };
+      }));
+  }
+
+  async getSharedWithUser(clientTripId: string, userId: string): Promise<SharedTripDetailDto> {
+    const share = await this.database.tripUserShare.findFirst({
+      include: {
+        owner: { select: { displayName: true, email: true } },
+        trip: {
+          select: {
+            deletedAt: true,
+            rawBundle: true,
+          },
+        },
+      },
+      where: { clientTripId, recipientUserId: userId, revokedAt: null },
+    });
+
+    if (!share || share.trip.deletedAt) {
+      throw new NotFoundException("Shared trip not found.");
+    }
+
+    const bundle = share.trip.rawBundle as unknown as TripBundleDto;
+    return {
+      bundle,
+      imagesByWaypointId: await this.getImagesByWaypointId(bundle),
+      owner: share.owner,
+    };
+  }
+
   async createShareLink(
     clientTripId: string,
     userId: string,
@@ -189,6 +348,17 @@ export class TripsService {
       data: { deletedAt: new Date() },
       where: { id: trip.id },
     });
+  }
+
+  private async getImagesByWaypointId(bundle: TripBundleDto): Promise<SharedImagesByWaypointIdDto> {
+    const entries = await Promise.all(
+      bundle.waypoints.map(async (waypoint) => {
+        const images = await this.waypointImagesService.getImages(waypoint.id);
+        return [waypoint.id, images] as const;
+      }),
+    );
+
+    return Object.fromEntries(entries);
   }
 
   private assertValidBundle(bundle: TripBundleDto) {
