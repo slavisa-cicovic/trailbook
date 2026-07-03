@@ -215,6 +215,12 @@ async function migration_0008(sqlite: SQLiteDatabase): Promise<void> {
   }
 }
 
+async function migration_0009(sqlite: SQLiteDatabase): Promise<void> {
+  // display_route_points is derived from raw samples + segments. Clear it once
+  // so existing trips are rebuilt with the current pedestrian spike filter.
+  await sqlite.execAsync(`DELETE FROM display_route_points;`);
+}
+
 type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
 
 const MIGRATIONS: Migration[] = [
@@ -227,6 +233,7 @@ const MIGRATIONS: Migration[] = [
   [6, MIGRATION_0006],
   [7, migration_0007],
   [8, migration_0008],
+  [9, migration_0009],
 ];
 
 export async function runMigrations(): Promise<void> {

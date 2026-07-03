@@ -171,7 +171,7 @@ export class TripRepositoryImpl implements TripRepository {
       const locations = await rawLocationDao.getAllForTrip(tripId);
       await displayRoutePointDao.replaceForTrip(
         tripId,
-        buildDisplayRoutePoints(tripId, locations),
+        buildDisplayRoutePoints(tripId, locations, segs),
       );
     });
   }
@@ -204,6 +204,11 @@ export class TripRepositoryImpl implements TripRepository {
         });
         await segmentDao.deleteForTrip(tripId);
         await segmentDao.insertAll(segs);
+        const locations = await rawLocationDao.getAllForTrip(tripId);
+        await displayRoutePointDao.replaceForTrip(
+          tripId,
+          buildDisplayRoutePoints(tripId, locations, segs),
+        );
         await tripDao.updateProcessingVersion(tripId, processingVersion);
         await tripDao.updateSyncState(tripId, 'PENDING');
       });
@@ -218,6 +223,11 @@ export class TripRepositoryImpl implements TripRepository {
 
         await segmentDao.deleteForTrip(tripId);
         await segmentDao.insertAll(snapshot.segments);
+        const locations = await rawLocationDao.getAllForTrip(tripId);
+        await displayRoutePointDao.replaceForTrip(
+          tripId,
+          buildDisplayRoutePoints(tripId, locations, snapshot.segments),
+        );
         await tripDao.updateProcessingVersion(tripId, snapshot.processingVersion);
         await tripDao.updateSyncState(tripId, 'PENDING');
         await reprocessingSnapshotDao.deleteForTrip(tripId);

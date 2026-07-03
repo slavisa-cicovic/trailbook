@@ -44,12 +44,12 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
       const trip = await tripDao.getTripByClientId(clientTripId);
       if (!trip) { set({ loading: false, error: 'Trip not found' }); return; }
 
-      const [segments, waypoints, routePoints, snapshotResult] = await Promise.all([
+      const [segments, waypoints, snapshotResult] = await Promise.all([
         segmentDao.getForTrip(clientTripId),
         waypointDao.getForTrip(clientTripId),
-        loadDisplayRouteForTrip(clientTripId),
         tripRepository.hasReprocessingSnapshot(clientTripId),
       ]);
+      const routePoints = await loadDisplayRouteForTrip(clientTripId, segments);
       if (!snapshotResult.ok) throw new Error(snapshotResult.error);
 
       const imagesByWaypoint: Record<string, WaypointImage[]> = {};
@@ -86,12 +86,15 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
   },
 }));
 
-async function loadDisplayRouteForTrip(tripId: string): Promise<DisplayRoutePoint[]> {
+async function loadDisplayRouteForTrip(
+  tripId: string,
+  segments: Segment[],
+): Promise<DisplayRoutePoint[]> {
   const existing = await displayRoutePointDao.getForTrip(tripId);
   if (existing.length > 0) return existing;
 
   const rawLocations = await rawLocationDao.getAllForTrip(tripId);
-  const routePoints = buildDisplayRoutePoints(tripId, rawLocations);
+  const routePoints = buildDisplayRoutePoints(tripId, rawLocations, segments);
   await displayRoutePointDao.replaceForTrip(tripId, routePoints);
   return routePoints;
 }

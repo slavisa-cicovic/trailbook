@@ -94,7 +94,7 @@ export class RawCaptureRepositoryImpl implements RawCaptureRepository {
         }
         await displayRoutePointDao.replaceForTrip(
           tripId,
-          buildDisplayRoutePoints(tripId, bundle.locations),
+          buildDisplayRoutePoints(tripId, bundle.locations, bundle.segments),
         );
       });
     });
