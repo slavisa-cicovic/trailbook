@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -109,27 +109,38 @@ export function SharedTripView({ token }: SharedTripViewProps) {
 function SharedTripContent({ data }: { data: SharedTripData }) {
   const { bundle, imagesByWaypointId } = data;
   const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
-  const totalDistanceM = bundle.segments.reduce(
-    (total, segment) => total + (segment.distanceM ?? 0),
-    0,
+  const setActiveSegment = useCallback((index: number | null) => {
+    setActiveSegmentIndex(index);
+  }, []);
+  const totalDistanceM = useMemo(
+    () => bundle.segments.reduce((total, segment) => total + (segment.distanceM ?? 0), 0),
+    [bundle.segments],
   );
-  const totalPhotos = Object.values(imagesByWaypointId).reduce(
-    (total, images) => total + images.length,
-    0,
+  const totalPhotos = useMemo(
+    () => Object.values(imagesByWaypointId).reduce((total, images) => total + images.length, 0),
+    [imagesByWaypointId],
   );
-  const points = bundle.raw.locations.map((location) => ({
-    latitude: location.latitude,
-    longitude: location.longitude,
-    timestamp: location.timestamp,
-  }));
-  const waypoints = bundle.waypoints.map((waypoint) => ({
-    description: waypoint.description,
-    id: waypoint.id,
-    images: imagesByWaypointId[waypoint.id] ?? [],
-    latitude: waypoint.latitude,
-    longitude: waypoint.longitude,
-    title: waypoint.title,
-  }));
+  const points = useMemo(
+    () =>
+      bundle.raw.locations.map((location) => ({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        timestamp: location.timestamp,
+      })),
+    [bundle.raw.locations],
+  );
+  const waypoints = useMemo(
+    () =>
+      bundle.waypoints.map((waypoint) => ({
+        description: waypoint.description,
+        id: waypoint.id,
+        images: imagesByWaypointId[waypoint.id] ?? [],
+        latitude: waypoint.latitude,
+        longitude: waypoint.longitude,
+        title: waypoint.title,
+      })),
+    [bundle.waypoints, imagesByWaypointId],
+  );
 
   return (
     <SharedShell>
@@ -198,6 +209,7 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
           <Grid size={{ xs: 12, lg: 8 }}>
             <SharedTripMap
               activeSegmentIndex={activeSegmentIndex}
+              onActiveSegmentIndexChange={setActiveSegment}
               points={points}
               segments={bundle.segments}
               waypoints={waypoints}

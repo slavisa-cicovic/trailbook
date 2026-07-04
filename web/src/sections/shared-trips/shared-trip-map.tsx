@@ -30,6 +30,7 @@ interface SharedSegment {
 
 interface SharedTripMapProps {
   activeSegmentIndex: number | null;
+  onActiveSegmentIndexChange: (index: number | null) => void;
   points: RoutePoint[];
   segments: SharedSegment[];
   waypoints: SharedWaypoint[];
@@ -45,8 +46,19 @@ const SEGMENT_COLOR: Record<string, string> = {
   UNKNOWN: "#e0e0e0",
 };
 
-export function SharedTripMap({ activeSegmentIndex, points, segments, waypoints }: SharedTripMapProps) {
+interface StyledPolyline {
+  setOptions(options: { strokeOpacity: number; strokeWeight: number; zIndex: number }): void;
+}
+
+export function SharedTripMap({
+  activeSegmentIndex,
+  onActiveSegmentIndexChange,
+  points,
+  segments,
+  waypoints,
+}: SharedTripMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
+  const polylinesRef = useRef<Array<{ index: number; polyline: StyledPolyline }>>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const segmentKey = useMemo(
@@ -86,6 +98,7 @@ export function SharedTripMap({ activeSegmentIndex, points, segments, waypoints 
         });
         const bounds = new mapsApi.LatLngBounds();
         const infoWindow = new mapsApi.InfoWindow();
+        polylinesRef.current = [];
 
         for (const point of points) {
           bounds.extend({ lat: point.latitude, lng: point.longitude });
@@ -102,15 +115,18 @@ export function SharedTripMap({ activeSegmentIndex, points, segments, waypoints 
 
             if (segmentPoints.length < 2) continue;
 
-            new mapsApi.Polyline({
+            const polyline = new mapsApi.Polyline({
               geodesic: true,
               map,
               path: segmentPoints.map((point) => ({ lat: point.latitude, lng: point.longitude })),
               strokeColor: SEGMENT_COLOR[segment.segmentType] ?? SEGMENT_COLOR.UNKNOWN,
-              strokeOpacity: activeSegmentIndex === null || activeSegmentIndex === segment.index ? 1 : 0.42,
-              strokeWeight: activeSegmentIndex === segment.index ? 9 : 5,
-              zIndex: activeSegmentIndex === segment.index ? 2 : 1,
+              strokeOpacity: 1,
+              strokeWeight: 5,
+              zIndex: 1,
             });
+            polylinesRef.current.push({ index: segment.index, polyline });
+            polyline.addListener("mouseover", () => onActiveSegmentIndexChange(segment.index));
+            polyline.addListener("mouseout", () => onActiveSegmentIndexChange(null));
           }
         } else if (points.length > 0) {
           new mapsApi.Polyline({
@@ -152,8 +168,19 @@ export function SharedTripMap({ activeSegmentIndex, points, segments, waypoints 
 
     return () => {
       disposed = true;
+      polylinesRef.current = [];
     };
-  }, [activeSegmentIndex, points, segmentKey, segments, waypointKey, waypoints]);
+  }, [onActiveSegmentIndexChange, points, segmentKey, segments, waypointKey, waypoints]);
+
+  useEffect(() => {
+    for (const { index, polyline } of polylinesRef.current) {
+      polyline.setOptions({
+        strokeOpacity: activeSegmentIndex === null || activeSegmentIndex === index ? 1 : 0.42,
+        strokeWeight: activeSegmentIndex === index ? 9 : 5,
+        zIndex: activeSegmentIndex === index ? 2 : 1,
+      });
+    }
+  }, [activeSegmentIndex]);
 
   if (points.length === 0 && waypoints.length === 0) {
     return (
