@@ -76,11 +76,12 @@ export default function WaypointDetailScreen() {
   );
   const activeTripContextId = Array.isArray(tripContextId) ? tripContextId[0] : tripContextId;
   const contextTripIds = useMemo(() => {
+    if (!activeGroupId) return waypoint ? [waypoint.tripId] : [];
+    if (activeGroup) return groupTrips.map((item) => item.trip.clientTripId);
     const saved = getTripNavigationContext(activeTripContextId);
     if (saved) return saved;
-    if (activeGroup) return groupTrips.map((item) => item.trip.clientTripId);
     return waypoint ? [waypoint.tripId] : [];
-  }, [activeGroup, activeTripContextId, groupTrips, waypoint]);
+  }, [activeGroup, activeGroupId, activeTripContextId, groupTrips, waypoint]);
   const [contextWaypoints, setContextWaypoints] = useState<Array<{ id: string; tripId: string }>>([]);
 
   useEffect(() => {

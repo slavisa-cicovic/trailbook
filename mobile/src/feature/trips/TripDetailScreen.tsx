@@ -466,11 +466,11 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     setWaypointPreview(null);
     setTripPointPreview(null);
     const tripContextId = saveTripNavigationContext(
-      navigationTrips.length > 0
+      activeGroup && navigationTrips.length > 0
         ? navigationTrips.map((item) => item.trip.clientTripId)
         : clientTripId
-        ? [clientTripId]
-        : [],
+          ? [clientTripId]
+          : [],
     );
     router.push(waypointHref(waypointId, activeGroupId, activeGroup ? groupSort : null, tripContextId));
   }
