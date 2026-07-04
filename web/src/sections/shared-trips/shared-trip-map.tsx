@@ -10,6 +10,10 @@ interface Coordinate {
   longitude: number;
 }
 
+interface RoutePoint extends Coordinate {
+  timestamp: string;
+}
+
 interface SharedWaypoint extends Coordinate {
   id: string;
   title: string;
@@ -17,15 +21,38 @@ interface SharedWaypoint extends Coordinate {
   images: Array<{ getUrl: string; imageId: string }>;
 }
 
+interface SharedSegment {
+  endedAt: string;
+  index: number;
+  segmentType: string;
+  startedAt: string;
+}
+
 interface SharedTripMapProps {
-  points: Coordinate[];
+  activeSegmentIndex: number | null;
+  points: RoutePoint[];
+  segments: SharedSegment[];
   waypoints: SharedWaypoint[];
 }
 
-export function SharedTripMap({ points, waypoints }: SharedTripMapProps) {
+const SEGMENT_COLOR: Record<string, string> = {
+  WALK: "#4caf50",
+  BIKE: "#2196f3",
+  DRIVE: "#ff9800",
+  BOAT: "#009688",
+  PLANE: "#9c27b0",
+  STATIONARY: "#9e9e9e",
+  UNKNOWN: "#e0e0e0",
+};
+
+export function SharedTripMap({ activeSegmentIndex, points, segments, waypoints }: SharedTripMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const segmentKey = useMemo(
+    () => segments.map((segment) => `${segment.segmentType}:${segment.startedAt}:${segment.endedAt}`).join("|"),
+    [segments],
+  );
   const waypointKey = useMemo(
     () => waypoints.map((waypoint) => `${waypoint.id}:${waypoint.images.length}`).join("|"),
     [waypoints],
@@ -64,12 +91,33 @@ export function SharedTripMap({ points, waypoints }: SharedTripMapProps) {
           bounds.extend({ lat: point.latitude, lng: point.longitude });
         }
 
-        if (points.length > 0) {
+        if (segments.length > 0) {
+          for (const segment of segments) {
+            const startedAt = Date.parse(segment.startedAt);
+            const endedAt = Date.parse(segment.endedAt);
+            const segmentPoints = points.filter((point) => {
+              const timestamp = Date.parse(point.timestamp);
+              return timestamp >= startedAt && timestamp <= endedAt;
+            });
+
+            if (segmentPoints.length < 2) continue;
+
+            new mapsApi.Polyline({
+              geodesic: true,
+              map,
+              path: segmentPoints.map((point) => ({ lat: point.latitude, lng: point.longitude })),
+              strokeColor: SEGMENT_COLOR[segment.segmentType] ?? SEGMENT_COLOR.UNKNOWN,
+              strokeOpacity: activeSegmentIndex === null || activeSegmentIndex === segment.index ? 1 : 0.42,
+              strokeWeight: activeSegmentIndex === segment.index ? 9 : 5,
+              zIndex: activeSegmentIndex === segment.index ? 2 : 1,
+            });
+          }
+        } else if (points.length > 0) {
           new mapsApi.Polyline({
             geodesic: true,
             map,
             path: points.map((point) => ({ lat: point.latitude, lng: point.longitude })),
-            strokeColor: "#2f6b3f",
+            strokeColor: SEGMENT_COLOR.UNKNOWN,
             strokeOpacity: 1,
             strokeWeight: 5,
           });
@@ -105,7 +153,7 @@ export function SharedTripMap({ points, waypoints }: SharedTripMapProps) {
     return () => {
       disposed = true;
     };
-  }, [points, waypointKey, waypoints]);
+  }, [activeSegmentIndex, points, segmentKey, segments, waypointKey, waypoints]);
 
   if (points.length === 0 && waypoints.length === 0) {
     return (

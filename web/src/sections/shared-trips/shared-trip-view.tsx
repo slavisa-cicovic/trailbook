@@ -108,6 +108,7 @@ export function SharedTripView({ token }: SharedTripViewProps) {
 
 function SharedTripContent({ data }: { data: SharedTripData }) {
   const { bundle, imagesByWaypointId } = data;
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
   const totalDistanceM = bundle.segments.reduce(
     (total, segment) => total + (segment.distanceM ?? 0),
     0,
@@ -119,6 +120,7 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
   const points = bundle.raw.locations.map((location) => ({
     latitude: location.latitude,
     longitude: location.longitude,
+    timestamp: location.timestamp,
   }));
   const waypoints = bundle.waypoints.map((waypoint) => ({
     description: waypoint.description,
@@ -192,44 +194,76 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
           </Stack>
         </Paper>
 
-        <SharedTripMap points={points} waypoints={waypoints} />
-
-        <Paper elevation={0} sx={{ border: "1px solid #e4dac9", borderRadius: 4, p: 3 }}>
-          <Stack spacing={2}>
-            <Typography variant="h5">Timeline</Typography>
-            {bundle.segments.length === 0 ? (
-              <Typography color="text.secondary">This trip has no segments.</Typography>
-            ) : (
-              bundle.segments.map((segment) => (
-                <Stack
-                  alignItems="center"
-                  direction="row"
-                  justifyContent="space-between"
-                  key={`${segment.index}-${segment.startedAt}`}
-                  spacing={2}
-                  sx={{
-                    bgcolor: "#fffaf1",
-                    border: "1px solid #eadfcd",
-                    borderRadius: 3,
-                    p: 2,
-                  }}
-                >
-                  <Stack spacing={0.5}>
-                    <Chip
-                      label={formatSegmentType(segment.segmentType)}
-                      size="small"
-                      sx={{ alignSelf: "flex-start", fontWeight: 800 }}
-                    />
-                    <Typography color="text.secondary" variant="body2">
-                      {formatDateTime(segment.startedAt)} - {formatDateTime(segment.endedAt)}
-                    </Typography>
-                  </Stack>
-                  <Typography fontWeight={900}>{formatDistance(segment.distanceM ?? 0)}</Typography>
-                </Stack>
-              ))
-            )}
-          </Stack>
-        </Paper>
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, lg: 8 }}>
+            <SharedTripMap
+              activeSegmentIndex={activeSegmentIndex}
+              points={points}
+              segments={bundle.segments}
+              waypoints={waypoints}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, lg: 4 }}>
+            <Paper
+              elevation={0}
+              sx={{
+                border: "1px solid #e4dac9",
+                borderRadius: 4,
+                maxHeight: { lg: 760 },
+                overflow: "auto",
+                p: 3,
+                position: { lg: "sticky" },
+                top: { lg: 24 },
+              }}
+            >
+              <Stack spacing={2}>
+                <Typography variant="h5">Timeline</Typography>
+                {bundle.segments.length === 0 ? (
+                  <Typography color="text.secondary">This trip has no segments.</Typography>
+                ) : (
+                  bundle.segments.map((segment) => (
+                    <Stack
+                      alignItems="center"
+                      component="button"
+                      direction="row"
+                      justifyContent="space-between"
+                      key={`${segment.index}-${segment.startedAt}`}
+                      onBlur={() => setActiveSegmentIndex(null)}
+                      onFocus={() => setActiveSegmentIndex(segment.index)}
+                      onMouseEnter={() => setActiveSegmentIndex(segment.index)}
+                      onMouseLeave={() => setActiveSegmentIndex(null)}
+                      spacing={2}
+                      sx={{
+                        bgcolor: activeSegmentIndex === segment.index ? "#fff1d3" : "#fffaf1",
+                        border: `1px solid ${activeSegmentIndex === segment.index ? "#d9912f" : "#eadfcd"}`,
+                        borderRadius: 3,
+                        color: "inherit",
+                        cursor: "default",
+                        font: "inherit",
+                        p: 2,
+                        textAlign: "left",
+                        transition: "background-color 160ms ease, border-color 160ms ease",
+                        width: "100%",
+                      }}
+                    >
+                      <Stack spacing={0.5}>
+                        <Chip
+                          label={formatSegmentType(segment.segmentType)}
+                          size="small"
+                          sx={{ alignSelf: "flex-start", fontWeight: 800 }}
+                        />
+                        <Typography color="text.secondary" variant="body2">
+                          {formatDateTime(segment.startedAt)} - {formatDateTime(segment.endedAt)}
+                        </Typography>
+                      </Stack>
+                      <Typography fontWeight={900}>{formatDistance(segment.distanceM ?? 0)}</Typography>
+                    </Stack>
+                  ))
+                )}
+              </Stack>
+            </Paper>
+          </Grid>
+        </Grid>
       </Stack>
     </SharedShell>
   );
