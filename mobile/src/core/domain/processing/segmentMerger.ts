@@ -53,7 +53,9 @@ export function mergeAndFinalize(
 
   // Sparse slow movement should not be labelled as cycling solely because one
   // reported speed crossed the walk threshold.
-  const movementNormalized = normalizeSlowBikeSegments(driveStable, geoPoints);
+  const movementNormalized = absorbDriveAdjacentBikeSegments(
+    normalizeSlowBikeSegments(driveStable, geoPoints),
+  );
 
   // Merge consecutive same-type segments with gap < threshold.
   const merged: RawSegment[] = [{ ...movementNormalized[0] }];
@@ -75,7 +77,9 @@ export function mergeAndFinalize(
 
   // Post-process 2: absorb short isolated segments sandwiched between same-type neighbours.
   const stationaryCorrected = absorbWalkStationaryInterruptions(trimmed, geoPoints);
-  const absorbed = absorbIsolated(stationaryCorrected);
+  const movingStationaryCorrected = reclassifyMovingStationarySegments(stationaryCorrected, geoPoints);
+  const remerged = mergeConsecutiveSameType(movingStationaryCorrected, geoPoints);
+  const absorbed = absorbIsolated(remerged);
 
   // Finalize: assign index + distanceM
   return absorbed.map((seg, idx) => ({
@@ -86,6 +90,103 @@ export function mergeAndFinalize(
     endedAt: seg.endTime,
     distanceM: distanceInRange(geoPoints, seg.startTime, seg.endTime),
   }));
+}
+
+function mergeConsecutiveSameType(segments: RawSegment[], geoPoints: GeoPoint[]): RawSegment[] {
+  if (segments.length <= 1) return segments;
+
+  const result: RawSegment[] = [{ ...segments[0] }];
+  for (const segment of segments.slice(1)) {
+    const previous = result[result.length - 1];
+    const gapMs = segment.startTime.getTime() - previous.endTime.getTime();
+    if (
+      previous.type === segment.type &&
+      (gapMs <= V1.mergeGapThresholdMs || shouldMergeSparseSameType(previous, segment, geoPoints))
+    ) {
+      previous.endTime = segment.endTime;
+    } else {
+      result.push({ ...segment });
+    }
+  }
+  return result;
+}
+
+function shouldMergeSparseSameType(
+  previous: RawSegment,
+  current: RawSegment,
+  geoPoints: GeoPoint[],
+) {
+  if (previous.type !== 'WALK' || current.type !== 'WALK') return false;
+
+  const gapMs = current.startTime.getTime() - previous.endTime.getTime();
+  if (gapMs <= V1.mergeGapThresholdMs || gapMs > V1.walkSparseMergeMaxMs) return false;
+
+  const before = findNearestPointAtOrBefore(geoPoints, previous.endTime);
+  const after = findNearestPointAtOrAfter(geoPoints, current.startTime);
+  if (!before || !after) return false;
+
+  return (
+    haversineM(before.latitude, before.longitude, after.latitude, after.longitude) <=
+    V1.walkSparseMergeMaxDistanceM
+  );
+}
+
+function classifyByAverageSpeed(speedMps: number): Segment['segmentType'] {
+  if (speedMps < V1.stationaryMaxMps) return 'STATIONARY';
+  if (speedMps < V1.walkMaxMps) return 'WALK';
+  if (speedMps < V1.bikeMaxMps) return 'BIKE';
+  return 'DRIVE';
+}
+
+function reclassifyMovingStationarySegments(
+  segments: RawSegment[],
+  geoPoints: GeoPoint[],
+): RawSegment[] {
+  return segments.map((segment, index) => {
+    if (segment.type !== 'STATIONARY') return segment;
+
+    const durationSeconds =
+      (segment.endTime.getTime() - segment.startTime.getTime()) / 1000;
+    if (durationSeconds <= 0) return segment;
+
+    const distanceM = distanceInRange(geoPoints, segment.startTime, segment.endTime);
+    if (distanceM <= V1.stationarySegmentMaxDistanceM) return segment;
+
+    const averageSpeedMps = distanceM / durationSeconds;
+    const speedType = classifyByAverageSpeed(averageSpeedMps);
+    if (speedType === 'STATIONARY') return segment;
+
+    const previous = segments[index - 1];
+    const next = segments[index + 1];
+    if (
+      speedType === 'BIKE' &&
+      averageSpeedMps >= V1.walkMaxMps &&
+      (previous?.type === 'DRIVE' || next?.type === 'DRIVE')
+    ) {
+      return { ...segment, type: 'DRIVE' };
+    }
+
+    return { ...segment, type: speedType };
+  });
+}
+
+function absorbDriveAdjacentBikeSegments(segments: RawSegment[]): RawSegment[] {
+  if (segments.length < 2) return segments.map((segment) => ({ ...segment }));
+
+  return segments.map((segment, index) => {
+    if (segment.type !== 'BIKE') return segment;
+
+    const durationMs = segment.endTime.getTime() - segment.startTime.getTime();
+    if (durationMs > V1.driveAdjacentBikeMaxMs) return segment;
+
+    const previous = segments[index - 1];
+    const next = segments[index + 1];
+    if (previous?.type === 'DRIVE' || next?.type === 'DRIVE') {
+      return { ...segment, type: 'DRIVE' };
+    }
+
+    return segment;
+  });
 }
 
 function absorbDriveInterruptions(segments: RawSegment[]): RawSegment[] {

@@ -81,6 +81,10 @@ function reconcileActivityWithSpeed(
   return activityType ?? speedType;
 }
 
+function isMovingActivity(type: SegmentType | null) {
+  return type === 'WALK' || type === 'BIKE' || type === 'DRIVE' || type === 'BOAT' || type === 'PLANE';
+}
+
 function detectDwellIntervals(geoPoints: GeoPoint[]) {
   const dwellIntervalIndexes = new Set<number>();
 
@@ -148,9 +152,12 @@ export function classifyIntervals(
     const actSample = nearestActivity(p.timestamp);
     const fromActivity = actSample ? bestActivityType(actSample) : null;
     const speedMps = intervalSpeedMps(p, next);
+    const hasMovingSignal =
+      isMovingActivity(fromActivity) &&
+      speedMps !== undefined &&
+      speedMps > V1.stationaryMaxMps;
     const type =
-      dwellIntervalIndexes.has(i) &&
-      !(fromActivity === 'WALK' && speedMps !== undefined && speedMps > V1.stationaryMaxMps)
+      dwellIntervalIndexes.has(i) && !hasMovingSignal
         ? 'STATIONARY'
         : reconcileActivityWithSpeed(fromActivity, speedMps);
 
