@@ -1,9 +1,10 @@
-import { eq, ne, and } from 'drizzle-orm';
+import { eq, ne, and, gte, lt, inArray, like, desc, asc, sql } from 'drizzle-orm';
 import { db } from '@/core/db';
-import { trips } from '@/core/db/schema';
+import { segments, trips } from '@/core/db/schema';
 import { dbEvents } from '@/core/db/events';
 import type { Trip, TripStatus, SyncState } from '@/core/domain/model/trip';
 import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
+import type { Filters } from '@/feature/trips/tripFilters';
 
 type NewTrip = Omit<Trip, 'id' | 'ownerUserId'> & { ownerUserId?: string };
 
@@ -67,6 +68,86 @@ export async function getAllTrips(): Promise<Trip[]> {
   if (!ownerUserId) return [];
   const rows = await db.select().from(trips).where(eq(trips.ownerUserId, ownerUserId));
   return rows.map(toDomain);
+}
+
+export async function getTripsByClientIds(clientTripIds: string[]): Promise<Trip[]> {
+  const ownerUserId = await getCurrentOwnerUserId();
+  if (!ownerUserId || clientTripIds.length === 0) return [];
+  const rows = await db
+    .select()
+    .from(trips)
+    .where(and(eq(trips.ownerUserId, ownerUserId), inArray(trips.clientTripId, clientTripIds)));
+  const byId = new Map(rows.map((row) => [row.clientTripId, toDomain(row)]));
+  return clientTripIds.map((clientTripId) => byId.get(clientTripId)).filter((trip): trip is Trip => Boolean(trip));
+}
+
+function startOfDay(date: Date) {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function periodBounds(period: Filters['period']): { from?: Date; to?: Date } {
+  const now = new Date();
+  const today = startOfDay(now);
+
+  if (period === 'today') return { from: today };
+
+  if (period === 'yesterday') {
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    return { from: yesterday, to: today };
+  }
+
+  if (period === 'last_week') {
+    const lastWeek = new Date(today);
+    lastWeek.setDate(today.getDate() - 7);
+    return { from: lastWeek };
+  }
+
+  return {};
+}
+
+export async function listTripIds(filters: Filters): Promise<string[]> {
+  const ownerUserId = await getCurrentOwnerUserId();
+  if (!ownerUserId) return [];
+
+  const conditions = [eq(trips.ownerUserId, ownerUserId)];
+  const search = filters.search.trim();
+  if (search) conditions.push(like(trips.title, `%${search}%`));
+
+  const { from, to } = periodBounds(filters.period);
+  if (from) conditions.push(gte(trips.startedAt, from.toISOString()));
+  if (to) conditions.push(lt(trips.startedAt, to.toISOString()));
+
+  if (filters.activities.length > 0) {
+    const segmentRows = await db
+      .selectDistinct({ tripId: segments.tripId })
+      .from(segments)
+      .where(inArray(segments.segmentType, filters.activities));
+    const tripIds = segmentRows.map((row) => row.tripId);
+    if (tripIds.length === 0) return [];
+    conditions.push(inArray(trips.clientTripId, tripIds));
+  }
+
+  const orderBy =
+    filters.sort === 'oldest'
+      ? asc(trips.startedAt)
+      : filters.sort === 'distance'
+        ? desc(sql<number>`coalesce(sum(${segments.distanceM}), 0)`)
+        : filters.sort === 'duration'
+          ? desc(sql<number>`coalesce(strftime('%s', ${trips.endedAt}) - strftime('%s', ${trips.startedAt}), 0)`)
+          : desc(trips.startedAt);
+
+  const rows = await db
+    .select({ clientTripId: trips.clientTripId })
+    .from(trips)
+    .leftJoin(segments, eq(segments.tripId, trips.clientTripId))
+    .where(and(...conditions))
+    .groupBy(trips.clientTripId)
+    .orderBy(orderBy);
+
+  return rows.map((row) => row.clientTripId);
 }
 
 export async function getActiveTrip(): Promise<Trip | null> {

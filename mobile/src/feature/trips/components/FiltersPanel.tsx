@@ -2,20 +2,13 @@ import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-
 import { MaterialIcons } from '@expo/vector-icons';
 import type { SegmentType } from '@/core/domain/model/segment';
 import { useAppTheme } from '@/hooks/useAppTheme';
-
-export type Period = 'all' | 'today' | 'yesterday' | 'last_week';
-export type SortKey = 'newest' | 'oldest' | 'distance' | 'duration';
-
-export interface Filters {
-  search: string;
-  period: Period;
-  activities: SegmentType[];
-  sort: SortKey;
-}
-
-export const DEFAULT_FILTERS: Filters = {
-  search: '', period: 'all', activities: [], sort: 'newest',
-};
+import {
+  DEFAULT_FILTERS,
+  isDefaultTripFilters,
+  type Filters,
+  type Period,
+  type SortKey,
+} from '../tripFilters';
 
 const PERIODS: { key: Period; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -46,25 +39,39 @@ interface Props {
   onToggle(): void;
 }
 
-export function FiltersToggle({ open, onToggle, filters }: { open: boolean; onToggle(): void; filters: Filters }) {
+export function FiltersToggle({
+  filters,
+  onReset,
+  onToggle,
+  open,
+}: {
+  filters: Filters;
+  onReset(): void;
+  onToggle(): void;
+  open: boolean;
+}) {
   const { theme } = useAppTheme();
-  const active = !isDefault(filters);
+  const active = !isDefaultTripFilters(filters);
+  const color = active ? theme.danger : theme.primaryText;
   return (
     <Pressable style={[styles.toggleBtn, { backgroundColor: theme.card }]} onPress={onToggle}>
-      <MaterialIcons name="tune" size={18} color={active ? theme.accent : theme.primaryText} />
-      <Text style={[styles.toggleText, { color: active ? theme.accent : theme.primaryText }]}>Filters</Text>
-      {active && <View style={[styles.activeDot, { backgroundColor: theme.accent }]} />}
-      <MaterialIcons name={open ? 'expand-less' : 'expand-more'} size={18} color={active ? theme.accent : theme.primaryText} />
+      <MaterialIcons name="tune" size={18} color={color} />
+      <Text style={[styles.toggleText, { color }]}>Filters</Text>
+      {active ? (
+        <Pressable
+          accessibilityLabel="Reset filters"
+          hitSlop={10}
+          onPress={(event) => {
+            event.stopPropagation();
+            onReset();
+          }}
+          style={[styles.resetInlineBtn, { backgroundColor: theme.dangerMuted }]}
+        >
+          <MaterialIcons name="close" size={14} color={theme.danger} />
+        </Pressable>
+      ) : null}
+      <MaterialIcons name={open ? 'expand-less' : 'expand-more'} size={18} color={color} />
     </Pressable>
-  );
-}
-
-function isDefault(f: Filters) {
-  return (
-    f.search === '' &&
-    f.period === 'all' &&
-    f.activities.length === 0 &&
-    f.sort === 'newest'
   );
 }
 
@@ -151,16 +158,6 @@ export function FiltersPanel({ filters, onChange }: Props) {
           })}
         </View>
       </ScrollView>
-
-      {!isDefault(filters) && (
-        <Pressable
-          style={[styles.resetBtn, { backgroundColor: theme.dangerMuted }]}
-          onPress={() => onChange(DEFAULT_FILTERS)}
-        >
-          <MaterialIcons name="close" size={15} color={theme.danger} />
-          <Text style={[styles.resetText, { color: theme.danger }]}>Reset filters</Text>
-        </Pressable>
-      )}
     </View>
   );
 }
@@ -177,6 +174,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   toggleText: { fontSize: 14, fontWeight: '700' },
+  resetInlineBtn: {
+    alignItems: 'center',
+    borderRadius: 12,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
 
   panel: {
     borderRadius: 20,
@@ -207,15 +211,4 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   chipText: { fontSize: 14, fontWeight: '600' },
-  resetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 8,
-    paddingVertical: 12,
-    borderRadius: 14,
-  },
-  resetText: { fontSize: 14, fontWeight: '600' },
-  activeDot: { width: 7, height: 7, borderRadius: 4 },
 });

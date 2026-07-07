@@ -8,6 +8,7 @@ import * as waypointDao from '@/core/data/local/waypointDao';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import { uploadTrip } from '@/core/domain/usecase/UploadTripUseCase';
 import { deleteTrip as deleteTripUseCase } from '@/core/domain/usecase/DeleteTripUseCase';
+import type { Filters } from './tripFilters';
 
 export interface TripWithMeta {
   trip: Trip;
@@ -24,7 +25,7 @@ interface TripsState {
 }
 
 interface TripsActions {
-  load(): Promise<void>;
+  load(filters?: Filters): Promise<void>;
   deleteTrip(clientTripId: string): Promise<void>;
   syncTrip(clientTripId: string): Promise<string | null>;
 }
@@ -75,13 +76,14 @@ export const useTripsStore = create<TripsState & TripsActions>((set) => {
     loading: false,
     syncingTripIds: [],
 
-    async load() {
+    async load(filters) {
       set({ loading: true });
-      const allTrips = await tripDao.getAllTrips();
-      const sorted = allTrips.sort(
-        (a, b) => b.startedAt.getTime() - a.startedAt.getTime(),
-      );
-      const withMeta = await Promise.all(sorted.map(buildMeta));
+      const listedTrips = filters
+        ? await tripDao.getTripsByClientIds(await tripDao.listTripIds(filters))
+        : (await tripDao.getAllTrips()).sort(
+            (a, b) => b.startedAt.getTime() - a.startedAt.getTime(),
+          );
+      const withMeta = await Promise.all(listedTrips.map(buildMeta));
       set({ trips: withMeta, loading: false });
     },
 

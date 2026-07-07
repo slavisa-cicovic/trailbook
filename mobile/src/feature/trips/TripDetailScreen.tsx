@@ -62,6 +62,7 @@ import {
   waypointHref,
 } from './groupNavigation';
 import { saveTripNavigationContext } from './tripNavigationContext';
+import { useTripFiltersStore } from './tripFiltersStore';
 
 const WAYPOINT_PREVIEW_MARGIN = 12;
 const WAYPOINT_PREVIEW_GAP = 14;
@@ -249,6 +250,8 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
   const reloadTrips = useTripsStore((s) => s.load);
   const groups = useTripGroupsStore((s) => s.groups);
   const loadGroups = useTripGroupsStore((s) => s.load);
+  const filters = useTripFiltersStore((s) => s.filters);
+  const loadFilters = useTripFiltersStore((s) => s.loadFilters);
   const groupSort = normalizeGroupTripSort(groupSortParam);
   const activeGroupId = Array.isArray(groupId) ? groupId[0] : groupId;
   const tripsById = useMemo(
@@ -260,12 +263,31 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     [activeGroupId, groups],
   );
   const navigationTrips = useMemo(
-    () => (readOnly ? [] : activeGroup ? sortGroupTrips(activeGroup, tripsById, groupSort) : allTrips),
+    () =>
+      readOnly
+        ? []
+        : activeGroup
+          ? sortGroupTrips(activeGroup, tripsById, groupSort)
+          : allTrips,
     [activeGroup, allTrips, groupSort, readOnly, tripsById],
   );
   const currentIndex = navigationTrips.findIndex((t) => t.trip.clientTripId === clientTripId);
-  const prevTrip = currentIndex > 0 ? navigationTrips[currentIndex - 1] : null;
-  const nextTrip = currentIndex < navigationTrips.length - 1 ? navigationTrips[currentIndex + 1] : null;
+  const isNewestFirstNavigation =
+    activeGroup ? groupSort === 'newest' : filters.sort === 'newest';
+  const prevTrip = isNewestFirstNavigation
+    ? currentIndex >= 0 && currentIndex < navigationTrips.length - 1
+      ? navigationTrips[currentIndex + 1]
+      : null
+    : currentIndex > 0
+      ? navigationTrips[currentIndex - 1]
+      : null;
+  const nextTrip = isNewestFirstNavigation
+    ? currentIndex > 0
+      ? navigationTrips[currentIndex - 1]
+      : null
+    : currentIndex >= 0 && currentIndex < navigationTrips.length - 1
+      ? navigationTrips[currentIndex + 1]
+      : null;
 
   const [expanded, setExpanded] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
@@ -291,6 +313,16 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
   } | null>(null);
 
   useEffect(() => () => reset(), [clientTripId, reset]);
+
+  useEffect(() => {
+    loadFilters();
+  }, [loadFilters]);
+
+  useEffect(() => {
+    if (!readOnly && !activeGroup) {
+      reloadTrips(filters);
+    }
+  }, [activeGroup, filters, readOnly, reloadTrips]);
 
   // Reload waypoints/images when returning from waypoint screen
   useFocusEffect(

@@ -9,7 +9,7 @@ import { useTripsStore, type TripWithMeta } from '@/feature/trips/tripsStore';
 import { BottomNav } from '@/components/ui/BottomNav';
 import { TopAppBar } from '@/components/ui/TopAppBar';
 import { TripCard } from './components/TripCard';
-import { FiltersPanel, FiltersToggle, DEFAULT_FILTERS, type Filters } from './components/FiltersPanel';
+import { FiltersPanel, FiltersToggle } from './components/FiltersPanel';
 import { TotalCard } from './components/TotalCard';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
@@ -25,6 +25,8 @@ import {
   sortGroupTrips,
   type GroupTripSort,
 } from './groupNavigation';
+import { DEFAULT_FILTERS } from './tripFilters';
+import { useTripFiltersStore } from './tripFiltersStore';
 
 type Tab = 'my_trips' | 'groups' | 'shared';
 
@@ -34,54 +36,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'shared', label: 'Shared with me' },
 ];
 
-
-function startOfDay(d: Date) {
-  const r = new Date(d); r.setHours(0, 0, 0, 0); return r;
-}
-
-function applyFilters(trips: TripWithMeta[], f: Filters): TripWithMeta[] {
-  let result = [...trips];
-
-  if (f.search.trim()) {
-    const q = f.search.toLowerCase();
-    result = result.filter((t) => t.trip.title.toLowerCase().includes(q));
-  }
-
-  const now = new Date();
-  const today = startOfDay(now);
-  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-  const lastWeek = new Date(today); lastWeek.setDate(today.getDate() - 7);
-
-  if (f.period === 'today') {
-    result = result.filter((t) => t.trip.startedAt >= today);
-  } else if (f.period === 'yesterday') {
-    result = result.filter((t) => t.trip.startedAt >= yesterday && t.trip.startedAt < today);
-  } else if (f.period === 'last_week') {
-    result = result.filter((t) => t.trip.startedAt >= lastWeek);
-  }
-
-  if (f.activities.length > 0) {
-    result = result.filter((t) =>
-      t.segments.some((s) => f.activities.includes(s.segmentType)),
-    );
-  }
-
-  if (f.sort === 'oldest') {
-    result = result.sort((a, b) => a.trip.startedAt.getTime() - b.trip.startedAt.getTime());
-  } else if (f.sort === 'distance') {
-    result = result.sort((a, b) => b.totalDistanceM - a.totalDistanceM);
-  } else if (f.sort === 'duration') {
-    result = result.sort((a, b) => {
-      const da = a.trip.endedAt ? a.trip.endedAt.getTime() - a.trip.startedAt.getTime() : 0;
-      const db = b.trip.endedAt ? b.trip.endedAt.getTime() - b.trip.startedAt.getTime() : 0;
-      return db - da;
-    });
-  } else {
-    result = result.sort((a, b) => b.trip.startedAt.getTime() - a.trip.startedAt.getTime());
-  }
-
-  return result;
-}
 
 export default function TripsScreen() {
   const trips = useTripsStore((s) => s.trips);
@@ -102,30 +56,36 @@ export default function TripsScreen() {
   const sharedTripsLoading = useSharedTripsStore((s) => s.loading);
   const sharedTripsError = useSharedTripsStore((s) => s.error);
   const loadSharedTrips = useSharedTripsStore((s) => s.loadSharedTrips);
+  const filters = useTripFiltersStore((s) => s.filters);
+  const loadFilters = useTripFiltersStore((s) => s.loadFilters);
+  const setFilters = useTripFiltersStore((s) => s.setFilters);
   const router = useRouter();
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
 
   const [tab, setTab] = useState<Tab>('my_trips');
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [isDemo, setIsDemo] = useState(true);
   const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
   const [addToGroupVisible, setAddToGroupVisible] = useState(false);
   const [groupSort, setGroupSort] = useState<GroupTripSort>('newest');
 
   useEffect(() => {
-    load();
     loadGroups();
     loadSharedTrips();
+    loadFilters();
     authRepository.isDemo().then(setIsDemo);
-  }, [load, loadGroups, loadSharedTrips]);
+  }, [loadFilters, loadGroups, loadSharedTrips]);
+
+  useEffect(() => {
+    load(filters);
+  }, [filters, load]);
 
   useEffect(() => {
     if (isDemo && tab === 'groups') setTab('my_trips');
   }, [isDemo, tab]);
 
-  const filteredTrips = useMemo(() => applyFilters(trips, filters), [trips, filters]);
+  const filteredTrips = trips;
   const visibleTabs = useMemo(
     () => TABS.filter((item) => item.key !== 'groups' || !isDemo),
     [isDemo],
@@ -266,7 +226,12 @@ export default function TripsScreen() {
             )}
 
             <View style={styles.filterRow}>
-              <FiltersToggle open={showFilters} onToggle={() => setShowFilters((v) => !v)} filters={filters} />
+              <FiltersToggle
+                open={showFilters}
+                onToggle={() => setShowFilters((value) => !value)}
+                onReset={() => setFilters(DEFAULT_FILTERS)}
+                filters={filters}
+              />
             </View>
             {showFilters && (
               <FiltersPanel
