@@ -158,11 +158,20 @@ model RefreshToken {
 }
 
 model WaypointImage {
-  id         String   @id @db.VarChar(36)
-  waypointId String   @map("waypoint_id") @db.VarChar(36)
-  objectKey  String   @map("object_key")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                 String    @id @db.VarChar(36)
+  waypointId         String    @map("waypoint_id") @db.VarChar(36)
+  imageUuid          String    @default(dbgenerated("gen_random_uuid()")) @map("image_uuid") @db.VarChar(36)
+  objectKey          String    @map("object_key")
+  contentType        String?   @map("content_type") @db.VarChar(100)
+  sizeBytes          Int?      @map("size_bytes")
+  uploadStatus       String    @default("pending") @map("upload_status") @db.VarChar(50)
+  uploadAttemptCount Int       @default(0) @map("upload_attempt_count")
+  lastUploadError    String?   @map("last_upload_error")
+  uploadedAt         DateTime? @map("uploaded_at") @db.Timestamptz(6)
+  remoteVerifiedAt   DateTime? @map("remote_verified_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  @@index([imageUuid], map: "waypoint_images_image_uuid_idx")
   @@index([waypointId], map: "waypoint_images_waypoint_id_idx")
   @@map("waypoint_images")
 }

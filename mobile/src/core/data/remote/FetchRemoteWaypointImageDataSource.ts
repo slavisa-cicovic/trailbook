@@ -19,23 +19,43 @@ interface ImageMetaDto {
 }
 
 export interface RemoteWaypointImageDataSource {
-  requestUploadUrl(waypointId: string, imageId: string): Promise<Result<{ putUrl: string; objectKey: string }>>;
-  uploadToStorage(putUrl: string, localUri: string): Promise<Result<void>>;
-  completeUpload(waypointId: string, imageId: string): Promise<Result<{ objectKey: string }>>;
+  requestUploadUrl(
+    waypointId: string,
+    imageId: string,
+    contentType: string,
+    sizeBytes: number,
+  ): Promise<Result<{ putUrl: string; objectKey: string }>>;
+  uploadToStorage(putUrl: string, localUri: string, contentType: string): Promise<Result<void>>;
+  completeUpload(
+    waypointId: string,
+    imageId: string,
+    storageKey: string,
+    contentType: string,
+    sizeBytes: number,
+  ): Promise<Result<{ objectKey: string }>>;
   getImages(waypointId: string): Promise<Result<ImageMetaDto[]>>;
   downloadImage(getUrl: string): Promise<Result<Uint8Array>>;
   deleteImage(waypointId: string, imageId: string): Promise<Result<void>>;
 }
 
 class FetchRemoteWaypointImageDataSource implements RemoteWaypointImageDataSource {
-  async requestUploadUrl(waypointId: string, imageId: string): Promise<Result<{ putUrl: string; objectKey: string }>> {
-    return apiPost<UploadUrlResponse>(`/waypoints/${waypointId}/images`, { imageId });
+  async requestUploadUrl(
+    waypointId: string,
+    imageId: string,
+    contentType: string,
+    sizeBytes: number,
+  ): Promise<Result<{ putUrl: string; objectKey: string }>> {
+    return apiPost<UploadUrlResponse>(`/waypoints/${waypointId}/images`, {
+      contentType,
+      imageId,
+      sizeBytes,
+    });
   }
 
-  async uploadToStorage(putUrl: string, localUri: string): Promise<Result<void>> {
+  async uploadToStorage(putUrl: string, localUri: string, contentType: string): Promise<Result<void>> {
     try {
       const result = await FileSystem.uploadAsync(putUrl, localUri, {
-        headers: { 'Content-Type': 'image/jpeg' },
+        headers: { 'Content-Type': contentType },
         httpMethod: 'PUT',
         uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
       });
@@ -51,10 +71,13 @@ class FetchRemoteWaypointImageDataSource implements RemoteWaypointImageDataSourc
   async completeUpload(
     waypointId: string,
     imageId: string,
+    storageKey: string,
+    contentType: string,
+    sizeBytes: number,
   ): Promise<Result<{ objectKey: string }>> {
     return apiPost<CompleteUploadResponse>(
       `/waypoints/${waypointId}/images/${imageId}/complete`,
-      {},
+      { contentType, sizeBytes, storageKey },
     );
   }
 
