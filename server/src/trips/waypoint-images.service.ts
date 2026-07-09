@@ -37,10 +37,7 @@ interface CompleteUploadInput {
 @Injectable()
 export class WaypointImagesService {
   private readonly bucket = this.getRequiredEnv("S3_BUCKET");
-  private readonly credentials = {
-    accessKeyId: this.getRequiredEnv("S3_ACCESS_KEY_ID"),
-    secretAccessKey: this.getRequiredEnv("S3_SECRET_ACCESS_KEY"),
-  };
+  private readonly credentials = this.getOptionalS3Credentials();
   private readonly forcePathStyle = this.getBooleanEnv("S3_FORCE_PATH_STYLE", false);
   private readonly maxSizeBytes = this.getNumberEnv("MEDIA_UPLOAD_MAX_SIZE_BYTES", 10 * 1024 * 1024);
   private readonly allowedContentTypes = this.getListEnv("MEDIA_UPLOAD_ALLOWED_CONTENT_TYPES", [
@@ -320,6 +317,26 @@ export class WaypointImagesService {
       throw new InternalServerErrorException(`${name} is not configured.`);
     }
     return value;
+  }
+
+  private getOptionalS3Credentials() {
+    const accessKeyId = process.env.S3_ACCESS_KEY_ID?.trim();
+    const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY?.trim();
+
+    if (!accessKeyId && !secretAccessKey) {
+      return undefined;
+    }
+
+    if (!accessKeyId || !secretAccessKey) {
+      throw new InternalServerErrorException(
+        "Both S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY must be configured, or neither when using IAM role credentials.",
+      );
+    }
+
+    return {
+      accessKeyId,
+      secretAccessKey,
+    };
   }
 
   private getBooleanEnv(name: string, fallback: boolean) {
