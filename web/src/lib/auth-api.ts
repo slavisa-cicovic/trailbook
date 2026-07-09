@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from "./api-base-url";
+
 export interface RegisterInput {
   displayName: string;
   email: string;
@@ -121,18 +123,6 @@ export interface UserTripDetail {
 
 export type SocialAuthProvider = "google" | "apple" | "facebook";
 export type SocialAuthAvailability = Record<SocialAuthProvider, boolean>;
-
-function getApiBaseUrl() {
-  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
-    return process.env.NEXT_PUBLIC_API_BASE_URL;
-  }
-
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.hostname}:3001/api`;
-  }
-
-  return "http://localhost:3001/api";
-}
 
 export function getSocialAuthStartUrl(provider: SocialAuthProvider) {
   return `${getApiBaseUrl()}/auth/${provider}`;

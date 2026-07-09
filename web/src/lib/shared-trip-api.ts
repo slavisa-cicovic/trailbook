@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from "./api-base-url";
+
 export interface SharedTripData {
   bundle: {
     trip: {
@@ -48,18 +50,6 @@ export interface SharedTripData {
       objectKey: string;
     }>
   >;
-}
-
-function getApiBaseUrl() {
-  const configured = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-  if (configured) return normalizeApiBaseUrl(configured);
-
-  return "http://localhost:3001/api/v1";
-}
-
-function normalizeApiBaseUrl(url: string) {
-  const trimmed = url.replace(/\/+$/, "");
-  return trimmed.endsWith("/api") ? `${trimmed}/v1` : trimmed;
 }
 
 export async function getSharedTrip(token: string, pin: string): Promise<SharedTripData> {
