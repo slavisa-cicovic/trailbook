@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { AdminModule } from "./admin/admin.module";
 import { AuthModule } from "./auth/auth.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
@@ -8,6 +9,6 @@ import { TripGroupsModule } from "./trip-groups/trip-groups.module";
 import { TripsModule } from "./trips/trips.module";
 
 @Module({
-  imports: [DatabaseModule, HealthModule, AuthModule, PurchasesModule, TripsModule, TripGroupsModule],
+  imports: [DatabaseModule, HealthModule, AuthModule, AdminModule, PurchasesModule, TripsModule, TripGroupsModule],
 })
 export class AppModule {}
