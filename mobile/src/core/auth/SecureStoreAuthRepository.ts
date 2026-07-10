@@ -29,6 +29,20 @@ export class SecureStoreAuthRepository implements AuthRepository {
     return ok({ id: user.id, email: user.email, displayName: user.displayName, role: user.role });
   }
 
+  async loginWithOAuthSession(input: {
+    accessToken: string;
+    refreshToken: string;
+    user: AuthUser;
+  }): Promise<Result<AuthUser>> {
+    await this.saveTokens(input.accessToken, input.refreshToken);
+    await SecureStore.setItemAsync(KEYS.userId, input.user.id);
+    await SecureStore.setItemAsync(KEYS.displayName, input.user.displayName);
+    await SecureStore.setItemAsync(KEYS.email, input.user.email);
+    await SecureStore.setItemAsync(KEYS.role, input.user.role);
+    await SecureStore.deleteItemAsync(KEYS.isDemo);
+    return ok(input.user);
+  }
+
   async loginAsDemo(): Promise<void> {
     await SecureStore.setItemAsync(KEYS.isDemo, 'true');
     await SecureStore.setItemAsync(KEYS.userId, 'demo');

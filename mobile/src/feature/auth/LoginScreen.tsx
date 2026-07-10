@@ -5,25 +5,47 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  TextInput,
   KeyboardAvoidingView,
   Platform,
   Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
+import { API_BASE_URL } from '@/core/data/remote/apiConfig';
 
 const DEFAULT_LOGIN_EMAIL = process.env.EXPO_PUBLIC_DEV_LOGIN_EMAIL?.trim() || 'scaichat@gmail.com';
+const OAUTH_RETURN_TO = 'trailbook:///auth/callback';
+const PROVIDERS = [
+  { label: 'Continue with Google', provider: 'google' },
+  { label: 'Continue with Apple', provider: 'apple' },
+  { label: 'Continue with Facebook', provider: 'facebook' },
+] as const;
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState(DEFAULT_LOGIN_EMAIL);
+  const [email] = useState(DEFAULT_LOGIN_EMAIL);
   const loginWithSocial = useAuthStore((s) => s.loginWithSocial);
   const loginAsDemo = useAuthStore((s) => s.loginAsDemo);
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
+
+  async function onOAuthPress(provider: (typeof PROVIDERS)[number]['provider']) {
+    setLoading(true);
+    try {
+      const url = `${API_BASE_URL}/auth/${provider}?returnTo=${encodeURIComponent(OAUTH_RETURN_TO)}`;
+      await Linking.openURL(url);
+    } catch (e) {
+      showAlert({
+        title: 'Sign in failed',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function onLoginPress() {
     const normalizedEmail = email.trim().toLowerCase();
@@ -74,41 +96,33 @@ export default function LoginScreen() {
             Sign in to sync your recorded trips.
           </Text>
 
-          <View style={styles.form}>
-            <Text style={[styles.label, { color: theme.mutedText }]}>Email</Text>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!loading}
-              inputMode="email"
-              keyboardType="email-address"
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              placeholderTextColor={theme.mutedText}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.card,
-                  borderColor: theme.border,
-                  color: theme.primaryText,
-                },
-              ]}
-              value={email}
-            />
-          </View>
-
           <View style={styles.buttons}>
-            <Pressable
-              style={[styles.button, { backgroundColor: theme.accent }, loading && styles.disabled]}
-              onPress={() => void onLoginPress()}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color={theme.background} size="small" />
-              ) : (
-                <Text style={[styles.primaryButtonText, { color: theme.background }]}>Sign in</Text>
-              )}
-            </Pressable>
+            {PROVIDERS.map((provider) => (
+              <Pressable
+                key={provider.provider}
+                style={[styles.button, { backgroundColor: theme.accent }, loading && styles.disabled]}
+                onPress={() => void onOAuthPress(provider.provider)}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={theme.background} size="small" />
+                ) : (
+                  <Text style={[styles.primaryButtonText, { color: theme.background }]}>
+                    {provider.label}
+                  </Text>
+                )}
+              </Pressable>
+            ))}
+
+            {process.env.EXPO_PUBLIC_DEV_LOGIN_ENABLED === 'true' ? (
+              <Pressable
+                style={[styles.button, { backgroundColor: theme.accentMuted }, loading && styles.disabled]}
+                onPress={() => void onLoginPress()}
+                disabled={loading}
+              >
+                <Text style={[styles.secondaryButtonText, { color: theme.primaryText }]}>Debug sign in</Text>
+              </Pressable>
+            ) : null}
 
             <Pressable
               style={[styles.button, { backgroundColor: theme.accentMuted }, loading && styles.disabled]}
@@ -119,10 +133,8 @@ export default function LoginScreen() {
             </Pressable>
           </View>
 
-          <Text
-            style={[styles.hint, { color: theme.mutedText }]}
-          >
-            Sign in currently uses the local debug auth provider.
+          <Text style={[styles.hint, { color: theme.mutedText }]}>
+            Social sign in opens your browser and returns to Trailbook after authorization.
           </Text>
         </View>
       </KeyboardAvoidingView>
@@ -146,15 +158,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   tagline: { fontSize: 15, marginBottom: 32, textAlign: 'center' },
-  form: { width: '100%', marginBottom: 16 },
-  label: { fontSize: 12, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
-  input: {
-    borderRadius: 14,
-    borderWidth: 1,
-    fontSize: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
   buttons: { width: '100%', gap: 12 },
   button: {
     paddingVertical: 16,

@@ -18,6 +18,11 @@ interface AuthState {
 interface AuthActions {
   init(): Promise<void>;
   loginWithSocial(provider: SocialProvider, idToken: string): Promise<Result<void>>;
+  loginWithOAuthSession(input: {
+    accessToken: string;
+    refreshToken: string;
+    user: { id: string; email: string; displayName: string; role: string };
+  }): Promise<Result<void>>;
   loginAsDemo(): Promise<void>;
   logout(): Promise<void>;
 }
@@ -37,6 +42,20 @@ export const useAuthStore = create<AuthState & AuthActions>((set) => ({
 
   async loginWithSocial(provider, idToken) {
     const result = await authRepository.loginWithSocial(provider, idToken);
+    if (!result.ok) return err(result.error);
+    set({
+      status: 'authenticated',
+      userId: result.value.id,
+      displayName: result.value.displayName,
+      email: result.value.email,
+      isDemo: false,
+      role: result.value.role,
+    });
+    return ok(undefined);
+  },
+
+  async loginWithOAuthSession(input) {
+    const result = await authRepository.loginWithOAuthSession(input);
     if (!result.ok) return err(result.error);
     set({
       status: 'authenticated',

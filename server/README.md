@@ -74,9 +74,9 @@ Social auth environment:
 
 Expected callback URLs:
 
-- Google: `${AUTH_BASE_URL}/api/auth/google/callback`
-- Apple: `${AUTH_BASE_URL}/api/auth/apple/callback`
-- Facebook: `${AUTH_BASE_URL}/api/auth/facebook/callback`
+- Google: `${AUTH_BASE_URL}/api/v1/auth/google/callback`
+- Apple: `${AUTH_BASE_URL}/api/v1/auth/apple/callback`
+- Facebook: `${AUTH_BASE_URL}/api/v1/auth/facebook/callback`
 
 Test bootstrap:
 

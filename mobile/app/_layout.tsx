@@ -26,8 +26,9 @@ function AuthGate({ ready }: { ready: boolean }) {
     if (!ready || status === 'loading') return;
 
     const inLogin = segments[0] === 'login';
+    const inAuthCallback = segments[0] === 'auth';
 
-    if (status === 'unauthenticated' && !inLogin) {
+    if (status === 'unauthenticated' && !inLogin && !inAuthCallback) {
       router.replace('/login');
     } else if ((status === 'authenticated' || status === 'demo') && inLogin) {
       router.replace('/recording');

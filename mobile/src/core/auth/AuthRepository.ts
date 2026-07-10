@@ -11,6 +11,11 @@ export interface AuthUser {
 
 export interface AuthRepository {
   loginWithSocial(provider: SocialProvider, idToken: string): Promise<Result<AuthUser>>;
+  loginWithOAuthSession(input: {
+    accessToken: string;
+    refreshToken: string;
+    user: AuthUser;
+  }): Promise<Result<AuthUser>>;
   loginAsDemo(): Promise<void>;
   logout(): Promise<void>;
   getAccessToken(): Promise<string | null>;
