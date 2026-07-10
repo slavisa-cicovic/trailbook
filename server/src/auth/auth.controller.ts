@@ -63,6 +63,25 @@ export class AuthController {
     @Query("state") state: string | undefined,
     @Res() response: Response,
   ) {
+    await this.completeOAuthResponse(provider, code, state, response);
+  }
+
+  @Post(":provider/callback")
+  async completeOAuthPost(
+    @Param("provider") provider: string,
+    @Body("code") code: string | undefined,
+    @Body("state") state: string | undefined,
+    @Res() response: Response,
+  ) {
+    await this.completeOAuthResponse(provider, code, state, response);
+  }
+
+  private async completeOAuthResponse(
+    provider: string,
+    code: string | undefined,
+    state: string | undefined,
+    response: Response,
+  ) {
     const result = await this.authService.completeOAuthCallback(provider, code, state);
 
     if (result.returnTo) {

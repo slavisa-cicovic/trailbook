@@ -75,7 +75,7 @@ export class AuthService {
       const params = new URLSearchParams({
         client_id: this.getRequiredEnv("APPLE_CLIENT_ID"),
         redirect_uri: redirectUri,
-        response_mode: "query",
+        response_mode: "form_post",
         response_type: "code",
         scope: "name email",
         state,
