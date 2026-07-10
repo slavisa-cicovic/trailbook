@@ -13,13 +13,11 @@ import {
 const providers: Array<{ label: string; provider: SocialAuthProvider }> = [
   { label: "Continue with Google", provider: "google" },
   { label: "Continue with Apple", provider: "apple" },
-  { label: "Continue with Facebook", provider: "facebook" },
 ];
 
 const defaultAvailability: SocialAuthAvailability = {
   google: false,
   apple: false,
-  facebook: false,
 };
 
 export function SocialSigninButtons() {

@@ -10,7 +10,7 @@ const DEBUG_PREFIX = "debug-login:";
 const GOOGLE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 const APPLE_JWKS = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
 
-type AuthProvider = "google" | "apple" | "facebook" | "debug";
+type AuthProvider = "google" | "apple" | "debug";
 
 interface SocialProfile {
   email: string;
@@ -45,7 +45,6 @@ export class AuthService {
           process.env.APPLE_KEY_ID &&
           process.env.APPLE_PRIVATE_KEY,
       ),
-      facebook: Boolean(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET),
     };
   }
 
@@ -83,14 +82,7 @@ export class AuthService {
       return `https://appleid.apple.com/auth/authorize?${params.toString()}`;
     }
 
-    const params = new URLSearchParams({
-      client_id: this.getRequiredEnv("FACEBOOK_APP_ID"),
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: "email,public_profile",
-      state,
-    });
-    return `https://www.facebook.com/v20.0/dialog/oauth?${params.toString()}`;
+    throw new BadRequestException("Unsupported auth provider.");
   }
 
   async completeOAuthCallback(providerInput: string, code: string | undefined, stateToken: string | undefined) {
@@ -222,7 +214,7 @@ export class AuthService {
       return this.profileFromJwt(payload);
     }
 
-    return this.fetchFacebookProfile(credential);
+    throw new BadRequestException("Unsupported auth provider.");
   }
 
   private async exchangeOAuthCode(provider: AuthProvider, code: string): Promise<SocialProfile> {
@@ -250,17 +242,7 @@ export class AuthService {
       return this.verifySocialCredential("apple", tokenResponse.id_token);
     }
 
-    const params = new URLSearchParams({
-      client_id: this.getRequiredEnv("FACEBOOK_APP_ID"),
-      client_secret: this.getRequiredEnv("FACEBOOK_APP_SECRET"),
-      code,
-      redirect_uri: this.getProviderCallbackUrl("facebook"),
-    });
-    const tokenResponse = await this.fetchJson<{ access_token?: string }>(
-      `https://graph.facebook.com/v20.0/oauth/access_token?${params.toString()}`,
-    );
-    if (!tokenResponse.access_token) throw new UnauthorizedException("Facebook did not return an access token.");
-    return this.fetchFacebookProfile(tokenResponse.access_token);
+    throw new BadRequestException("Unsupported auth provider.");
   }
 
   private async loginOrCreateUser(profile: SocialProfile, provider: AuthProvider) {
@@ -305,35 +287,6 @@ export class AuthService {
     return {
       email,
       displayName: name || this.displayNameFromEmail(email),
-    };
-  }
-
-  private async fetchFacebookProfile(accessToken: string): Promise<SocialProfile> {
-    const appId = this.getRequiredEnv("FACEBOOK_APP_ID");
-    const appSecret = this.getRequiredEnv("FACEBOOK_APP_SECRET");
-    const debugParams = new URLSearchParams({
-      access_token: `${appId}|${appSecret}`,
-      input_token: accessToken,
-    });
-    const debug = await this.fetchJson<{ data?: { app_id?: string; is_valid?: boolean } }>(
-      `https://graph.facebook.com/debug_token?${debugParams.toString()}`,
-    );
-    if (!debug.data?.is_valid || debug.data.app_id !== appId) {
-      throw new UnauthorizedException("Invalid Facebook access token.");
-    }
-
-    const profileParams = new URLSearchParams({
-      access_token: accessToken,
-      fields: "id,name,email",
-    });
-    const profile = await this.fetchJson<{ email?: string; name?: string }>(
-      `https://graph.facebook.com/me?${profileParams.toString()}`,
-    );
-    const email = profile.email?.trim().toLowerCase();
-    if (!email) throw new UnauthorizedException("Facebook did not return an email address.");
-    return {
-      email,
-      displayName: profile.name?.trim() || this.displayNameFromEmail(email),
     };
   }
 
@@ -450,7 +403,7 @@ export class AuthService {
 
   private normalizeProvider(provider: string): AuthProvider {
     const normalized = provider.trim().toLowerCase();
-    if (normalized === "google" || normalized === "apple" || normalized === "facebook" || normalized === "debug") {
+    if (normalized === "google" || normalized === "apple" || normalized === "debug") {
       return normalized;
     }
     throw new BadRequestException("Unsupported auth provider.");

@@ -1,6 +1,6 @@
 import type { Result } from '@/core/common/result';
 
-export type SocialProvider = 'GOOGLE' | 'APPLE' | 'FACEBOOK' | 'DEBUG';
+export type SocialProvider = 'GOOGLE' | 'APPLE' | 'DEBUG';
 
 export interface AuthUser {
   id: string;

@@ -121,7 +121,7 @@ export interface UserTripDetail {
   }>;
 }
 
-export type SocialAuthProvider = "google" | "apple" | "facebook";
+export type SocialAuthProvider = "google" | "apple";
 export type SocialAuthAvailability = Record<SocialAuthProvider, boolean>;
 
 export function getSocialAuthStartUrl(provider: SocialAuthProvider) {

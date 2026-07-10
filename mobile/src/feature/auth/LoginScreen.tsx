@@ -22,7 +22,6 @@ const OAUTH_RETURN_TO = 'trailbook:///auth/callback';
 const PROVIDERS = [
   { label: 'Continue with Google', provider: 'google' },
   { label: 'Continue with Apple', provider: 'apple' },
-  { label: 'Continue with Facebook', provider: 'facebook' },
 ] as const;
 
 const isExpoGo = Constants.appOwnership === 'expo';

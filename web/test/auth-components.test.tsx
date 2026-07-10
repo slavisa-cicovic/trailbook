@@ -121,7 +121,6 @@ describe("web auth components", () => {
     vi.mocked(authApi.getSocialAuthProviders).mockResolvedValue({
       google: false,
       apple: false,
-      facebook: false,
     });
   });
 
@@ -249,7 +248,6 @@ describe("web auth components", () => {
     vi.mocked(authApi.getSocialAuthProviders).mockResolvedValue({
       google: true,
       apple: false,
-      facebook: false,
     });
 
     render(React.createElement(SocialSigninButtons));
@@ -262,7 +260,6 @@ describe("web auth components", () => {
 
     expect(screen.getByText("Continue with Apple").closest("a")).toHaveAttribute("disabled");
     expect(screen.getByText("Continue with Apple").closest("a")).not.toHaveAttribute("href");
-    expect(screen.getByText("Continue with Facebook").closest("a")).toHaveAttribute("disabled");
-    expect(screen.getByText("Continue with Facebook").closest("a")).not.toHaveAttribute("href");
+    expect(screen.queryByText("Continue with Facebook")).not.toBeInTheDocument();
   });
 });
