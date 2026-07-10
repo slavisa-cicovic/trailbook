@@ -11,6 +11,7 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
@@ -23,6 +24,10 @@ const PROVIDERS = [
   { label: 'Continue with Apple', provider: 'apple' },
   { label: 'Continue with Facebook', provider: 'facebook' },
 ] as const;
+
+const isExpoGo = Constants.appOwnership === 'expo';
+const isDebugLoginEnabled =
+  isExpoGo || process.env.EXPO_PUBLIC_DEV_LOGIN_ENABLED === 'true';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
@@ -114,7 +119,7 @@ export default function LoginScreen() {
               </Pressable>
             ))}
 
-            {process.env.EXPO_PUBLIC_DEV_LOGIN_ENABLED === 'true' ? (
+            {isDebugLoginEnabled ? (
               <Pressable
                 style={[styles.button, { backgroundColor: theme.accentMuted }, loading && styles.disabled]}
                 onPress={() => void onLoginPress()}
@@ -134,7 +139,9 @@ export default function LoginScreen() {
           </View>
 
           <Text style={[styles.hint, { color: theme.mutedText }]}>
-            Social sign in opens your browser and returns to Trailbook after authorization.
+            {isExpoGo
+              ? 'Expo Go uses debug sign in because OAuth deep links return to the native app.'
+              : 'Social sign in opens your browser and returns to Trailbook after authorization.'}
           </Text>
         </View>
       </KeyboardAvoidingView>
