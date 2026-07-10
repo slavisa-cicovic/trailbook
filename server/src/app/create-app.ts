@@ -90,6 +90,10 @@ function isAllowedDevOrigin(origin: string) {
   return /^http:\/\/(localhost|127\.0\.0\.1):3000$/.test(origin) || /^http:\/\/192\.168\.\d+\.\d+:3000$/.test(origin) || /^http:\/\/10\.\d+\.\d+\.\d+:3000$/.test(origin) || /^http:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+:3000$/.test(origin);
 }
 
+function isAllowedOAuthProviderOrigin(origin: string) {
+  return origin === "https://appleid.apple.com";
+}
+
 function getAllowedOrigins() {
   const configuredOrigins = [
     process.env.WEB_ALLOWED_ORIGIN,
@@ -122,7 +126,7 @@ export async function createApp(): Promise<INestApplication> {
   });
   app.enableCors({
     origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
-      if (!origin || allowedOrigins.has(origin) || isAllowedDevOrigin(origin)) {
+      if (!origin || allowedOrigins.has(origin) || isAllowedDevOrigin(origin) || isAllowedOAuthProviderOrigin(origin)) {
         callback(null, true);
         return;
       }
