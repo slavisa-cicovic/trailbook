@@ -82,6 +82,11 @@ export class AuthController {
     state: string | undefined,
     response: Response,
   ) {
+    if (!code || !state) {
+      response.status(400).json({ message: "Missing OAuth callback parameters." });
+      return;
+    }
+
     const result = await this.authService.completeOAuthCallback(provider, code, state);
 
     if (result.returnTo) {
