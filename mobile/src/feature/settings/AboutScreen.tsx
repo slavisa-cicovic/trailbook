@@ -15,7 +15,7 @@ import { API_BASE_URL } from '@/core/data/remote/apiConfig';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 
-const AUTHOR_EMAIL = 'sc-trailbook@gmail.com';
+const AUTHOR_EMAIL = 'sc.trailbook@gmail.com';
 const PRIVACY_STATUS = 'To be published before public release';
 const LICENSES_STATUS = 'To be added before public release';
 
