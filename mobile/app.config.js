@@ -47,6 +47,7 @@ module.exports = {
       icon: "./assets/app-icon.png",
       supportsTablet: false,
       bundleIdentifier: "com.slavisacicovic.trailbook",
+      usesAppleSignIn: true,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSLocationWhenInUseUsageDescription:
