@@ -145,7 +145,6 @@ model PurchaseAccess {
   updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([provider, originalTransactionId], map: "purchase_access_provider_original_transaction_key")
   @@map("purchase_access")
 }
 

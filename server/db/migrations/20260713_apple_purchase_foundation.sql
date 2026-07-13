@@ -19,8 +19,12 @@ ALTER TABLE purchase_access
     ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
 
-CREATE UNIQUE INDEX IF NOT EXISTS purchase_access_provider_original_transaction_key
-    ON purchase_access (provider, original_transaction_id);
+ALTER TABLE purchase_access
+    DROP CONSTRAINT IF EXISTS purchase_access_provider_original_transaction_key;
+DROP INDEX IF EXISTS purchase_access_provider_original_transaction_key;
+CREATE UNIQUE INDEX IF NOT EXISTS purchase_access_apple_original_transaction_key
+    ON purchase_access (original_transaction_id)
+    WHERE provider = 'apple' AND original_transaction_id IS NOT NULL;
 
 ALTER TABLE purchase_events
     DROP CONSTRAINT IF EXISTS purchase_events_provider_transaction_key;

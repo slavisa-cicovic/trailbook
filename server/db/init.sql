@@ -34,10 +34,12 @@ CREATE TABLE IF NOT EXISTS purchase_access (
     verified_at             TIMESTAMPTZ,
     entitlements            JSONB        NOT NULL DEFAULT '[]'::jsonb,
     created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    CONSTRAINT purchase_access_provider_original_transaction_key
-        UNIQUE (provider, original_transaction_id)
+    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS purchase_access_apple_original_transaction_key
+    ON purchase_access (original_transaction_id)
+    WHERE provider = 'apple' AND original_transaction_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS purchase_events (
     id                      UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
