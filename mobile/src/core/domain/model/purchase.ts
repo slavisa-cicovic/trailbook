@@ -1,7 +1,14 @@
 export type PurchaseBillingType = 'monthly' | 'yearly' | 'lifetime';
 export type PurchaseProviderName = 'fake' | 'apple' | 'google';
 export type PurchaseEnvironmentName = 'local' | 'sandbox' | 'production';
-export type PurchaseSubscriptionStatus = 'active' | 'expired' | 'canceled' | 'lifetime';
+export type PurchaseSubscriptionStatus =
+  | 'active'
+  | 'billing_retry'
+  | 'canceled'
+  | 'expired'
+  | 'in_grace_period'
+  | 'lifetime'
+  | 'revoked';
 export type PurchaseResult =
   | 'success'
   | 'canceled_by_user'
@@ -21,6 +28,7 @@ export type FakePurchaseScenario =
   | 'restore';
 
 export interface PurchaseProduct {
+  billingPeriodLabel?: string;
   billingType: PurchaseBillingType;
   description: string;
   entitlements: string[];
@@ -42,4 +50,10 @@ export interface PurchaseAccess {
 
 export interface PurchaseSimulationResult extends PurchaseAccess {
   purchaseResult: PurchaseResult;
+}
+
+export interface ApplePurchaseVerificationInput {
+  appAccountToken: string;
+  productId: string;
+  transactionId: string;
 }

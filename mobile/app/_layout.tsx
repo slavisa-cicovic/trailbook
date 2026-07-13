@@ -14,6 +14,7 @@ import { CustomAlertProvider } from '@/components/ui/custom-alert-dialog';
 // Side-effect imports: register TaskManager tasks before any component mounts
 import '@/core/data/location/locationTask';
 import { unregisterSyncTask } from '@/core/data/sync/syncTask';
+import { AppleIapProvider } from '@/feature/purchases/AppleIapProvider';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -71,8 +72,10 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <CustomAlertProvider>
-        <StatusBar style="auto" />
-        <AuthGate ready={ready} />
+        <AppleIapProvider>
+          <StatusBar style="auto" />
+          <AuthGate ready={ready} />
+        </AppleIapProvider>
       </CustomAlertProvider>
     </GestureHandlerRootView>
   );

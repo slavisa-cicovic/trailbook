@@ -15,6 +15,7 @@ module.exports = {
       "expo-router",
       "expo-background-task",
       "expo-secure-store",
+      "expo-iap",
       [
         "expo-image-picker",
         {

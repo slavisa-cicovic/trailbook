@@ -120,6 +120,7 @@ export default function SettingsScreen() {
             }
             iconName="workspace-premium"
             loading={!isDemo && purchaseBusyAction === 'access'}
+            onPress={!isDemo ? () => router.push('/premium') : undefined}
             title="Purchase"
             value={isDemo ? 'Demo' : purchaseAccess?.subscriptionStatus}
           />

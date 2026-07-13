@@ -15,6 +15,10 @@ interface PurchaseState {
   refreshAccess(): Promise<void>;
   runScenario(actionKey: string, productId: string, scenario: FakePurchaseScenario): Promise<void>;
   clearMessage(): void;
+  setAccess(access: PurchaseAccess): void;
+  setBusyAction(action: string | null): void;
+  setMessage(message: string | null): void;
+  setProducts(products: PurchaseProduct[]): void;
 }
 
 export const usePurchaseStore = create<PurchaseState>((set) => ({
@@ -75,5 +79,21 @@ export const usePurchaseStore = create<PurchaseState>((set) => ({
 
   clearMessage() {
     set({ message: null });
+  },
+
+  setAccess(access) {
+    set({ access });
+  },
+
+  setBusyAction(busyAction) {
+    set({ busyAction });
+  },
+
+  setMessage(message) {
+    set({ message });
+  },
+
+  setProducts(products) {
+    set({ products });
   },
 }));

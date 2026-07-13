@@ -1,6 +1,7 @@
 import type { PurchaseRepository } from '@/core/domain/usecase/PurchaseRepository';
 import type {
   FakePurchaseScenario,
+  ApplePurchaseVerificationInput,
   PurchaseAccess,
   PurchaseProduct,
   PurchaseSimulationResult,
@@ -24,11 +25,19 @@ export class PurchaseRepositoryImpl implements PurchaseRepository {
     return this.remoteDataSource.fetchFakeProducts();
   }
 
+  getAppleAccountToken(): Promise<Result<string>> {
+    return this.remoteDataSource.fetchAppleAccountToken();
+  }
+
   simulateFakePurchase(input: {
     productId: string;
     scenario: FakePurchaseScenario;
   }): Promise<Result<PurchaseSimulationResult>> {
     return this.remoteDataSource.simulateFakePurchase(input);
+  }
+
+  verifyApplePurchase(input: ApplePurchaseVerificationInput): Promise<Result<PurchaseAccess>> {
+    return this.remoteDataSource.verifyApplePurchase(input);
   }
 }
 
