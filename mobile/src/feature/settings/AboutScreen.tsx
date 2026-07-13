@@ -1,4 +1,4 @@
-import Constants from 'expo-constants';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Application from 'expo-application';
 import { useRouter } from 'expo-router';
 import {
@@ -36,7 +36,9 @@ function getBuildVersion() {
 }
 
 function getRuntimeLabel() {
-  return Constants.appOwnership === 'expo' ? 'Expo Go' : 'Native build';
+  return Constants.executionEnvironment === ExecutionEnvironment.StoreClient
+    ? 'Expo Go'
+    : 'Native build';
 }
 
 function formatPlatformVersion() {
