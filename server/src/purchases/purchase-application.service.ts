@@ -1,15 +1,16 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import type { AuthenticatedUser } from "../auth/auth.service";
 import { DatabaseService } from "../database/database.service";
-import { FAKE_PURCHASE_PRODUCTS, findFakePurchaseProduct } from "./purchase-catalog";
+import { FAKE_PURCHASE_PRODUCTS, findPurchaseProduct } from "./purchase-catalog";
 import { FakePurchaseProvider } from "./fake-purchase.provider";
 import type {
   FakePurchaseScenario,
@@ -42,9 +43,11 @@ export class PurchaseApplicationService {
 
     if (
       access.subscriptionStatus !== "lifetime" &&
+      (access.subscriptionStatus === "active" ||
+        access.subscriptionStatus === "canceled" ||
+        access.subscriptionStatus === "in_grace_period") &&
       access.currentPeriodEndsAt &&
-      access.currentPeriodEndsAt.getTime() <= Date.now() &&
-      access.subscriptionStatus !== "expired"
+      access.currentPeriodEndsAt.getTime() <= Date.now()
     ) {
       await this.database.purchaseAccess.update({
         data: {
@@ -99,50 +102,70 @@ export class PurchaseApplicationService {
     return { ...access, purchaseResult: event.result };
   }
 
-  private async applyEvent(event: NormalizedPurchaseEvent): Promise<PurchaseAccessResponse> {
-    const existing = await this.database.purchaseEvent.findFirst({
-      where: {
-        OR: [
-          { idempotencyKey: event.idempotencyKey },
-          { provider: event.provider, transactionId: event.transactionId },
-        ],
-      },
+  async applyEvent(event: NormalizedPurchaseEvent): Promise<PurchaseAccessResponse> {
+    const existing = await this.database.purchaseEvent.findUnique({
+      where: { idempotencyKey: event.idempotencyKey },
     });
-    if (existing) return this.getCurrentAccess(existing.userId);
+    if (existing) {
+      if (existing.userId !== event.userId) this.throwAppleOwnershipConflict();
+      return this.getCurrentAccess(existing.userId);
+    }
 
-    const product = findFakePurchaseProduct(event.providerProductId);
-    if (!product) throw new BadRequestException("Unknown purchase product.");
-
-    await this.database.$transaction(async (tx) => {
-      const current = await tx.purchaseAccess.findUnique({ where: { userId: event.userId } });
-      const nextAccess = this.getNextAccess(current, event, product);
-
-      if (nextAccess) {
-        await tx.purchaseAccess.upsert({
-          create: { userId: event.userId, ...nextAccess },
-          update: nextAccess,
-          where: { userId: event.userId },
-        });
-      }
-
-      await tx.purchaseEvent.create({
-        data: {
-          environment: event.environment,
-          eventType: event.eventType,
-          expiresAt: this.parseDate(event.expiresAt),
-          idempotencyKey: event.idempotencyKey,
+    if (event.provider === "apple" && event.originalTransactionId) {
+      const owner = await this.database.purchaseEvent.findFirst({
+        select: { userId: true },
+        where: {
           originalTransactionId: event.originalTransactionId,
-          provider: event.provider,
-          providerProductId: event.providerProductId,
-          purchasedAt: this.parseDate(event.purchasedAt),
-          rawPayload: event.rawPayload as Prisma.InputJsonValue,
-          result: event.result,
-          revokedAt: this.parseDate(event.revokedAt),
-          transactionId: event.transactionId,
-          userId: event.userId,
+          provider: "apple",
         },
       });
-    });
+      if (owner && owner.userId !== event.userId) this.throwAppleOwnershipConflict();
+    }
+
+    const product = findPurchaseProduct(event.providerProductId);
+    if (!product) throw new BadRequestException("Unknown purchase product.");
+
+    try {
+      await this.database.$transaction(async (tx) => {
+        const current = await tx.purchaseAccess.findUnique({ where: { userId: event.userId } });
+        const nextAccess = this.getNextAccess(current, event, product);
+
+        if (nextAccess) {
+          await tx.purchaseAccess.upsert({
+            create: { userId: event.userId, ...nextAccess },
+            update: nextAccess,
+            where: { userId: event.userId },
+          });
+        }
+
+        await tx.purchaseEvent.create({
+          data: {
+            environment: event.environment,
+            eventType: event.eventType,
+            expiresAt: this.parseDate(event.expiresAt),
+            idempotencyKey: event.idempotencyKey,
+            originalTransactionId: event.originalTransactionId,
+            provider: event.provider,
+            providerProductId: event.providerProductId,
+            purchasedAt: this.parseDate(event.purchasedAt),
+            rawPayload: event.rawPayload as Prisma.InputJsonValue,
+            result: event.result,
+            revokedAt: this.parseDate(event.revokedAt),
+            transactionId: event.transactionId,
+            userId: event.userId,
+          },
+        });
+      });
+    } catch (error) {
+      if (
+        event.provider === "apple" &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        this.throwAppleOwnershipConflict();
+      }
+      throw error;
+    }
 
     return this.getCurrentAccess(event.userId);
   }
@@ -163,6 +186,7 @@ export class PurchaseApplicationService {
       event.eventType === "REVOKED"
     ) {
       return {
+        autoRenewEnabled: event.autoRenewEnabled,
         currentPeriodEndsAt: this.parseDate(event.expiresAt) ?? new Date(),
         entitlements: [],
         environment: event.environment,
@@ -170,7 +194,9 @@ export class PurchaseApplicationService {
         planCode: product.planCode,
         provider: event.provider,
         providerProductId: event.providerProductId,
-        subscriptionStatus: "expired",
+        revokedAt: this.parseDate(event.revokedAt),
+        subscriptionStatus: event.subscriptionStatus ?? "expired",
+        verifiedAt: this.parseDate(event.verifiedAt),
       };
     }
 
@@ -179,6 +205,7 @@ export class PurchaseApplicationService {
 
     if (
       event.eventType === "RENEWED" &&
+      event.provider === "fake" &&
       current?.providerProductId === event.providerProductId &&
       current.currentPeriodEndsAt
     ) {
@@ -201,6 +228,7 @@ export class PurchaseApplicationService {
     }
 
     return {
+      autoRenewEnabled: event.autoRenewEnabled,
       currentPeriodEndsAt,
       entitlements: product.entitlements,
       environment: event.environment,
@@ -208,12 +236,15 @@ export class PurchaseApplicationService {
       planCode: product.planCode,
       provider: event.provider,
       providerProductId: event.providerProductId,
+      revokedAt: this.parseDate(event.revokedAt),
       subscriptionStatus:
-        event.eventType === "CANCELED"
+        event.subscriptionStatus ??
+        (event.eventType === "CANCELED"
           ? "canceled"
           : isLifetime
             ? "lifetime"
-            : "active",
+            : "active"),
+      verifiedAt: this.parseDate(event.verifiedAt),
     };
   }
 
@@ -255,7 +286,23 @@ export class PurchaseApplicationService {
   }
 
   private parseStatus(value: string) {
-    if (value === "expired" || value === "canceled" || value === "lifetime") return value;
+    if (
+      value === "billing_retry" ||
+      value === "canceled" ||
+      value === "expired" ||
+      value === "in_grace_period" ||
+      value === "lifetime" ||
+      value === "revoked"
+    ) {
+      return value;
+    }
     return "active";
+  }
+
+  private throwAppleOwnershipConflict(): never {
+    throw new ConflictException({
+      code: "APPLE_PURCHASE_ALREADY_LINKED_TO_ANOTHER_ACCOUNT",
+      message: "This Apple purchase is already linked to another Trailbook account.",
+    });
   }
 }

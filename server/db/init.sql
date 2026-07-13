@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     email        VARCHAR(255) UNIQUE NOT NULL,
     display_name VARCHAR(100) NOT NULL,
     role         VARCHAR(50)  NOT NULL DEFAULT 'user',
+    apple_app_account_token UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
@@ -27,10 +28,15 @@ CREATE TABLE IF NOT EXISTS purchase_access (
     environment             VARCHAR(50),
     provider_product_id     VARCHAR(255),
     original_transaction_id VARCHAR(255),
+    auto_renew_enabled      BOOLEAN,
     current_period_ends_at  TIMESTAMPTZ,
+    revoked_at              TIMESTAMPTZ,
+    verified_at             TIMESTAMPTZ,
     entitlements            JSONB        NOT NULL DEFAULT '[]'::jsonb,
     created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT purchase_access_provider_original_transaction_key
+        UNIQUE (provider, original_transaction_id)
 );
 
 CREATE TABLE IF NOT EXISTS purchase_events (
@@ -48,14 +54,38 @@ CREATE TABLE IF NOT EXISTS purchase_events (
     revoked_at              TIMESTAMPTZ,
     idempotency_key         VARCHAR(500) NOT NULL UNIQUE,
     raw_payload             JSONB        NOT NULL,
-    created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    CONSTRAINT purchase_events_provider_transaction_key UNIQUE (provider, transaction_id)
+    created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS purchase_events_user_created_at_idx
     ON purchase_events (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS purchase_events_original_transaction_idx
     ON purchase_events (provider, original_transaction_id);
+CREATE INDEX IF NOT EXISTS purchase_events_provider_transaction_idx
+    ON purchase_events (provider, transaction_id);
+
+CREATE TABLE IF NOT EXISTS apple_purchase_notifications (
+    id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id           UUID         REFERENCES users(id) ON DELETE SET NULL,
+    notification_uuid VARCHAR(100) UNIQUE,
+    payload_hash      VARCHAR(64)  NOT NULL UNIQUE,
+    signed_payload    TEXT         NOT NULL,
+    environment       VARCHAR(50),
+    notification_type VARCHAR(100),
+    subtype           VARCHAR(100),
+    processing_status VARCHAR(50)  NOT NULL DEFAULT 'received',
+    attempt_count     INT          NOT NULL DEFAULT 0,
+    last_error        TEXT,
+    decoded_payload   JSONB,
+    received_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    last_attempt_at   TIMESTAMPTZ,
+    processed_at      TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS apple_purchase_notifications_status_received_idx
+    ON apple_purchase_notifications (processing_status, received_at);
+CREATE INDEX IF NOT EXISTS apple_purchase_notifications_user_received_idx
+    ON apple_purchase_notifications (user_id, received_at DESC);
 
 CREATE TABLE IF NOT EXISTS trips (
     id                 BIGSERIAL    PRIMARY KEY,

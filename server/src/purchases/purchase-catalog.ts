@@ -13,7 +13,7 @@ export const FAKE_PURCHASE_PRODUCTS: PurchaseProduct[] = [
     description: "Monthly Trailbook premium access for local purchase simulation.",
     entitlements: [...PAID_ENTITLEMENTS],
     planCode: "premium_monthly",
-    priceLabel: "$4.99 / month",
+    priceLabel: "EUR 3.99 / month",
     productId: "trailbook_premium_monthly",
     provider: "fake",
     title: "Trailbook Premium Monthly",
@@ -43,3 +43,5 @@ export const FAKE_PURCHASE_PRODUCTS: PurchaseProduct[] = [
 export function findFakePurchaseProduct(productId: string) {
   return FAKE_PURCHASE_PRODUCTS.find((product) => product.productId === productId) ?? null;
 }
+
+export const findPurchaseProduct = findFakePurchaseProduct;

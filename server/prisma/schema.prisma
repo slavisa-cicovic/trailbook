@@ -8,24 +8,24 @@ datasource db {
 }
 
 model Trip {
-  id                BigInt    @id @default(autoincrement())
-  clientTripId      String    @unique @map("client_trip_id") @db.VarChar(36)
-  userId            String    @map("user_id") @db.Uuid
-  title             String    @db.VarChar(500)
+  id                BigInt          @id @default(autoincrement())
+  clientTripId      String          @unique @map("client_trip_id") @db.VarChar(36)
+  userId            String          @map("user_id") @db.Uuid
+  title             String          @db.VarChar(500)
   description       String?
-  startedAt         DateTime  @map("started_at") @db.Timestamptz(6)
-  endedAt           DateTime? @map("ended_at") @db.Timestamptz(6)
-  status            String    @db.VarChar(50)
-  processingVersion Int       @default(0) @map("processing_version")
-  rawBundle         Json      @map("raw_bundle") @db.JsonB
-  shareToken        String?   @unique @map("share_token") @db.VarChar(64)
-  sharePinHash      String?   @map("share_pin_hash") @db.VarChar(64)
-  shareEnabled      Boolean   @default(false) @map("share_enabled")
-  sharedAt          DateTime? @map("shared_at") @db.Timestamptz(6)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startedAt         DateTime        @map("started_at") @db.Timestamptz(6)
+  endedAt           DateTime?       @map("ended_at") @db.Timestamptz(6)
+  status            String          @db.VarChar(50)
+  processingVersion Int             @default(0) @map("processing_version")
+  rawBundle         Json            @map("raw_bundle") @db.JsonB
+  shareToken        String?         @unique @map("share_token") @db.VarChar(64)
+  sharePinHash      String?         @map("share_pin_hash") @db.VarChar(64)
+  shareEnabled      Boolean         @default(false) @map("share_enabled")
+  sharedAt          DateTime?       @map("shared_at") @db.Timestamptz(6)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime?       @map("deleted_at") @db.Timestamptz(6)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   userShares        TripUserShare[]
 
   @@index([shareToken], map: "trips_share_token_idx")
@@ -86,21 +86,46 @@ model TripGroupMember {
 }
 
 model User {
-  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email          String          @unique @db.VarChar(255)
-  displayName    String          @map("display_name") @db.VarChar(100)
-  role           String          @default("user") @db.VarChar(50)
-  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  trips          Trip[]
-  tripGroups     TripGroup[]
-  tripGroupMembers TripGroupMember[]
-  ownedTripShares TripUserShare[] @relation("TripUserShareOwner")
-  receivedTripShares TripUserShare[] @relation("TripUserShareRecipient")
-  refreshTokens  RefreshToken[]
-  purchaseAccess PurchaseAccess?
-  purchaseEvents PurchaseEvent[]
+  id                         String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                      String                      @unique @db.VarChar(255)
+  displayName                String                      @map("display_name") @db.VarChar(100)
+  role                       String                      @default("user") @db.VarChar(50)
+  appleAppAccountToken       String                      @unique @default(dbgenerated("gen_random_uuid()")) @map("apple_app_account_token") @db.Uuid
+  createdAt                  DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  trips                      Trip[]
+  tripGroups                 TripGroup[]
+  tripGroupMembers           TripGroupMember[]
+  ownedTripShares            TripUserShare[]             @relation("TripUserShareOwner")
+  receivedTripShares         TripUserShare[]             @relation("TripUserShareRecipient")
+  refreshTokens              RefreshToken[]
+  purchaseAccess             PurchaseAccess?
+  purchaseEvents             PurchaseEvent[]
+  applePurchaseNotifications ApplePurchaseNotification[]
 
   @@map("users")
+}
+
+model ApplePurchaseNotification {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String?   @map("user_id") @db.Uuid
+  notificationUuid String?   @unique @map("notification_uuid") @db.VarChar(100)
+  payloadHash      String    @unique @map("payload_hash") @db.VarChar(64)
+  signedPayload    String    @map("signed_payload") @db.Text
+  environment      String?   @db.VarChar(50)
+  notificationType String?   @map("notification_type") @db.VarChar(100)
+  subtype          String?   @db.VarChar(100)
+  processingStatus String    @default("received") @map("processing_status") @db.VarChar(50)
+  attemptCount     Int       @default(0) @map("attempt_count")
+  lastError        String?   @map("last_error") @db.Text
+  decodedPayload   Json?     @map("decoded_payload") @db.JsonB
+  receivedAt       DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  lastAttemptAt    DateTime? @map("last_attempt_at") @db.Timestamptz(6)
+  processedAt      DateTime? @map("processed_at") @db.Timestamptz(6)
+  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([processingStatus, receivedAt], map: "apple_purchase_notifications_status_received_idx")
+  @@index([userId, receivedAt(sort: Desc)], map: "apple_purchase_notifications_user_received_idx")
+  @@map("apple_purchase_notifications")
 }
 
 model PurchaseAccess {
@@ -111,12 +136,16 @@ model PurchaseAccess {
   environment           String?   @db.VarChar(50)
   providerProductId     String?   @map("provider_product_id") @db.VarChar(255)
   originalTransactionId String?   @map("original_transaction_id") @db.VarChar(255)
+  autoRenewEnabled      Boolean?  @map("auto_renew_enabled")
   currentPeriodEndsAt   DateTime? @map("current_period_ends_at") @db.Timestamptz(6)
+  revokedAt             DateTime? @map("revoked_at") @db.Timestamptz(6)
+  verifiedAt            DateTime? @map("verified_at") @db.Timestamptz(6)
   entitlements          Json      @db.JsonB
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([provider, originalTransactionId], map: "purchase_access_provider_original_transaction_key")
   @@map("purchase_access")
 }
 
@@ -138,7 +167,7 @@ model PurchaseEvent {
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([provider, transactionId])
+  @@index([provider, transactionId], map: "purchase_events_provider_transaction_idx")
   @@index([userId, createdAt(sort: Desc)], map: "purchase_events_user_created_at_idx")
   @@index([provider, originalTransactionId], map: "purchase_events_original_transaction_idx")
   @@map("purchase_events")

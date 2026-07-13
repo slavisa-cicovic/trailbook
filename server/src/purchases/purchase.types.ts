@@ -1,7 +1,14 @@
 export type PurchaseProviderName = "fake" | "apple" | "google";
 export type PurchaseEnvironmentName = "local" | "sandbox" | "production";
 export type PurchaseBillingType = "monthly" | "yearly" | "lifetime";
-export type PurchaseSubscriptionStatus = "active" | "expired" | "canceled" | "lifetime";
+export type PurchaseSubscriptionStatus =
+  | "active"
+  | "billing_retry"
+  | "canceled"
+  | "expired"
+  | "in_grace_period"
+  | "lifetime"
+  | "revoked";
 export type PurchaseResultName =
   | "success"
   | "canceled_by_user"
@@ -55,6 +62,7 @@ export interface PurchaseSimulationResponse extends PurchaseAccessResponse {
 }
 
 export interface NormalizedPurchaseEvent {
+  autoRenewEnabled?: boolean;
   environment: PurchaseEnvironmentName;
   eventType: PurchaseEventType;
   expiresAt?: string;
@@ -66,6 +74,15 @@ export interface NormalizedPurchaseEvent {
   rawPayload: unknown;
   result: PurchaseResultName;
   revokedAt?: string;
+  subscriptionStatus?: PurchaseSubscriptionStatus;
+  transactionId: string;
+  userId: string;
+  verifiedAt?: string;
+}
+
+export interface ApplePurchaseVerificationInput {
+  appAccountToken: string;
+  productId: string;
   transactionId: string;
   userId: string;
 }
