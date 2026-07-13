@@ -111,6 +111,20 @@ export class PurchaseApplicationService {
       return this.getCurrentAccess(existing.userId);
     }
 
+    if (event.provider === "apple") {
+      const existingTransaction = await this.database.purchaseEvent.findFirst({
+        select: { userId: true },
+        where: {
+          provider: "apple",
+          transactionId: event.transactionId,
+        },
+      });
+      if (existingTransaction) {
+        if (existingTransaction.userId !== event.userId) this.throwAppleOwnershipConflict();
+        return this.getCurrentAccess(existingTransaction.userId);
+      }
+    }
+
     if (event.provider === "apple" && event.originalTransactionId) {
       const owner = await this.database.purchaseEvent.findFirst({
         select: { userId: true },
@@ -162,7 +176,17 @@ export class PurchaseApplicationService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
-        this.throwAppleOwnershipConflict();
+        const existingTransaction = await this.database.purchaseEvent.findFirst({
+          select: { userId: true },
+          where: {
+            provider: "apple",
+            transactionId: event.transactionId,
+          },
+        });
+        if (existingTransaction) {
+          if (existingTransaction.userId !== event.userId) this.throwAppleOwnershipConflict();
+          return this.getCurrentAccess(existingTransaction.userId);
+        }
       }
       throw error;
     }

@@ -36,14 +36,53 @@ describe("PurchaseApplicationService Apple idempotency", () => {
       );
     });
   });
+
+  test("accepts the same Apple transaction received through another channel", async () => {
+    let transactionCalled = false;
+    const service = createService({
+      existingTransactionUserId: "user-1",
+      onTransaction: () => {
+        transactionCalled = true;
+      },
+    });
+
+    const access = await service.applyEvent(appleEvent("user-1"));
+
+    assert.equal(transactionCalled, false);
+    assert.equal(access.planCode, "demo");
+  });
+
+  test("rejects the same Apple transaction for another account", async () => {
+    const service = createService({ existingTransactionUserId: "user-2" });
+
+    await assert.rejects(service.applyEvent(appleEvent("user-1")), (error: unknown) => {
+      if (!error || typeof error !== "object" || !("getResponse" in error)) return false;
+      const response = (error as { getResponse(): unknown }).getResponse();
+      return Boolean(
+        response &&
+          typeof response === "object" &&
+          "code" in response &&
+          response.code === "APPLE_PURCHASE_ALREADY_LINKED_TO_ANOTHER_ACCOUNT",
+      );
+    });
+  });
 });
 
-function createService(input: { existingUserId: string; onTransaction?: () => void }) {
+function createService(input: {
+  existingTransactionUserId?: string;
+  existingUserId?: string;
+  onTransaction?: () => void;
+}) {
   const database = {
     $transaction: async () => input.onTransaction?.(),
     purchaseAccess: { findUnique: async () => null },
     purchaseEvent: {
-      findUnique: async () => ({ userId: input.existingUserId }),
+      findFirst: async (query: { where: { transactionId?: string } }) =>
+        query.where.transactionId && input.existingTransactionUserId
+          ? { userId: input.existingTransactionUserId }
+          : null,
+      findUnique: async () =>
+        input.existingUserId ? { userId: input.existingUserId } : null,
     },
   } as unknown as DatabaseService;
   return new PurchaseApplicationService(database, {} as FakePurchaseProvider);

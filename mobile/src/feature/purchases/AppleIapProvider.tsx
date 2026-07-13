@@ -230,7 +230,11 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
         });
       } catch (error) {
         setBusyAction(null);
-        setMessage(`Unable to start Apple purchase: ${errorMessage(error)}`);
+        setMessage(
+          isUserCancelledPurchase(error)
+            ? 'Purchase canceled. No charge was made.'
+            : `Unable to start Apple purchase: ${errorMessage(error)}`,
+        );
       }
     },
     async restore() {
@@ -315,4 +319,12 @@ function isKnownProduct(product: PurchaseProduct) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isUserCancelledPurchase(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    if ((error as { code?: unknown }).code === 'user-cancelled') return true;
+  }
+
+  return /user cancel(?:led|ed)/i.test(errorMessage(error));
 }
