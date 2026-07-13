@@ -16,6 +16,13 @@ import type {
   PurchaseProduct,
 } from '@/core/domain/model/purchase';
 import { useAuthStore } from '@/feature/auth/authStore';
+import {
+  listPendingAppleTransactions,
+  recordPendingAppleTransactionFailure,
+  removePendingAppleTransaction,
+  retryDelayMs,
+  savePendingAppleTransaction,
+} from './pendingAppleTransactions';
 import { usePurchaseStore } from './purchaseStore';
 
 export const APPLE_MONTHLY_PRODUCT_ID = 'trailbook_premium_monthly';
@@ -25,6 +32,7 @@ const APPLE_PRODUCT_IDS = [APPLE_MONTHLY_PRODUCT_ID, APPLE_YEARLY_PRODUCT_ID];
 interface AppleIapContextValue {
   available: boolean;
   connected: boolean;
+  pendingProductIds: string[];
   purchase(productId: string): Promise<void>;
   restore(): Promise<void>;
 }
@@ -32,6 +40,7 @@ interface AppleIapContextValue {
 const unavailableAppleIap: AppleIapContextValue = {
   available: false,
   connected: false,
+  pendingProductIds: [],
   async purchase() {},
   async restore() {},
 };
@@ -64,6 +73,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
   const { isEligibleForIntroOfferIOS, useIAP } =
     require('expo-iap') as typeof import('expo-iap');
   const authStatus = useAuthStore((state) => state.status);
+  const userId = useAuthStore((state) => state.userId);
   const refreshAccess = usePurchaseStore((state) => state.refreshAccess);
   const setAccess = usePurchaseStore((state) => state.setAccess);
   const setBusyAction = usePurchaseStore((state) => state.setBusyAction);
@@ -72,13 +82,74 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
   const [introOfferEligible, setIntroOfferEligible] = useState<boolean | null>(
     null,
   );
+  const [pendingProductIds, setPendingProductIds] = useState<string[]>([]);
   const processingTransactions = useRef(new Set<string>());
+  const notifiedPendingTransactions = useRef(new Set<string>());
+  const retryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const finishTransactionRef = useRef<
     ReturnType<typeof useIAP>['finishTransaction'] | null
   >(null);
   const processPurchaseRef = useRef<(purchase: Purchase) => Promise<void>>(
     async () => {},
   );
+
+  async function refreshPendingProducts() {
+    if (!userId) {
+      setPendingProductIds([]);
+      return;
+    }
+    const pending = await listPendingAppleTransactions();
+    setPendingProductIds([
+      ...new Set(
+        pending
+          .filter((transaction) => transaction.userId === userId)
+          .map((transaction) => transaction.productId),
+      ),
+    ]);
+  }
+
+  async function keepPurchasePending(
+    purchase: Purchase,
+    transactionId: string,
+    reason: string,
+    retry: boolean,
+  ) {
+    const pending = await recordPendingAppleTransactionFailure(
+      transactionId,
+      reason,
+      retry,
+    );
+    await refreshPendingProducts();
+    processingTransactions.current.delete(transactionId);
+    setBusyAction(null);
+    if (!notifiedPendingTransactions.current.has(transactionId)) {
+      notifiedPendingTransactions.current.add(transactionId);
+      setMessage(`Purchase verification pending: ${reason}`);
+    }
+
+    if (!retry || retryTimers.current.has(transactionId)) return;
+
+    const attemptCount =
+      pending.find((transaction) => transaction.transactionId === transactionId)
+        ?.attemptCount ?? 1;
+    schedulePurchaseRetry(purchase, transactionId, retryDelayMs(attemptCount));
+  }
+
+  function schedulePurchaseRetry(
+    purchase: Purchase,
+    transactionId: string,
+    delayMs: number,
+  ) {
+    if (retryTimers.current.has(transactionId)) return;
+    const timer = setTimeout(
+      () => {
+        retryTimers.current.delete(transactionId);
+        void processPurchaseRef.current(purchase);
+      },
+      Math.max(0, delayMs),
+    );
+    retryTimers.current.set(transactionId, timer);
+  }
 
   async function processPurchase(purchase: Purchase) {
     if (!APPLE_PRODUCT_IDS.includes(purchase.productId)) return;
@@ -87,13 +158,70 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     if (!transactionId || processingTransactions.current.has(transactionId))
       return;
 
+    if (!userId) {
+      setMessage(
+        'Purchase verification pending: sign in to your Trailbook account.',
+      );
+      return;
+    }
+
+    const existingPending = (await listPendingAppleTransactions()).find(
+      (transaction) => transaction.transactionId === transactionId,
+    );
+    if (existingPending && existingPending.userId !== userId) {
+      setMessage(
+        'Purchase verification pending: sign in with the Trailbook account that started this purchase.',
+      );
+      return;
+    }
+    if (existingPending?.attemptCount) {
+      await refreshPendingProducts();
+      if (!existingPending.retryable) return;
+      const nextAttemptAt = existingPending.nextAttemptAt
+        ? new Date(existingPending.nextAttemptAt).getTime()
+        : 0;
+      if (nextAttemptAt > Date.now()) {
+        schedulePurchaseRetry(
+          purchase,
+          transactionId,
+          nextAttemptAt - Date.now(),
+        );
+        return;
+      }
+    }
+
+    const appAccountToken =
+      'appAccountToken' in purchase ? purchase.appAccountToken : null;
+    await savePendingAppleTransaction({
+      appAccountToken,
+      productId: purchase.productId,
+      transactionId,
+      userId,
+    });
+    await refreshPendingProducts();
+
     processingTransactions.current.add(transactionId);
     setBusyAction(`verify:${purchase.productId}`);
     const accountTokenResult = await purchaseRepository.getAppleAccountToken();
     if (!accountTokenResult.ok) {
-      processingTransactions.current.delete(transactionId);
-      setBusyAction(null);
-      setMessage(`Purchase verification pending: ${accountTokenResult.error}`);
+      await keepPurchasePending(
+        purchase,
+        transactionId,
+        accountTokenResult.error,
+        true,
+      );
+      return;
+    }
+    if (
+      appAccountToken &&
+      appAccountToken.toLowerCase() !== accountTokenResult.value.toLowerCase()
+    ) {
+      await keepPurchasePending(
+        purchase,
+        transactionId,
+        'sign in with the Trailbook account that started this purchase.',
+        false,
+      );
       return;
     }
 
@@ -103,22 +231,36 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       transactionId,
     });
     if (!verificationResult.ok) {
-      processingTransactions.current.delete(transactionId);
-      setBusyAction(null);
-      setMessage(`Purchase verification pending: ${verificationResult.error}`);
+      await keepPurchasePending(
+        purchase,
+        transactionId,
+        verificationResult.error,
+        isRetryableVerificationError(verificationResult.error),
+      );
       return;
     }
 
     try {
-      await finishTransactionRef.current?.({ purchase, isConsumable: false });
+      const finishTransaction = finishTransactionRef.current;
+      if (!finishTransaction) {
+        throw new Error('StoreKit transaction finalizer is unavailable.');
+      }
+      await finishTransaction({ purchase, isConsumable: false });
+      await removePendingAppleTransaction(transactionId);
+      await refreshPendingProducts();
+      const timer = retryTimers.current.get(transactionId);
+      if (timer) clearTimeout(timer);
+      retryTimers.current.delete(transactionId);
+      notifiedPendingTransactions.current.delete(transactionId);
       setAccess(verificationResult.value);
       setBusyAction(null);
       setMessage('Trailbook Premium is active.');
     } catch (error) {
-      processingTransactions.current.delete(transactionId);
-      setBusyAction(null);
-      setMessage(
-        `Purchase verified, but StoreKit finalization failed: ${errorMessage(error)}`,
+      await keepPurchasePending(
+        purchase,
+        transactionId,
+        `StoreKit finalization failed: ${errorMessage(error)}`,
+        true,
       );
     }
   }
@@ -150,6 +292,21 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     void iap.getAvailablePurchases();
     void refreshAccess();
   }, [authStatus, iap.connected]);
+
+  useEffect(() => {
+    void refreshPendingProducts();
+    for (const timer of retryTimers.current.values()) clearTimeout(timer);
+    retryTimers.current.clear();
+    notifiedPendingTransactions.current.clear();
+  }, [userId]);
+
+  useEffect(
+    () => () => {
+      for (const timer of retryTimers.current.values()) clearTimeout(timer);
+      retryTimers.current.clear();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (authStatus !== 'authenticated') {
@@ -205,6 +362,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
   const value: AppleIapContextValue = {
     available: true,
     connected: iap.connected,
+    pendingProductIds,
     async purchase(productId) {
       if (!APPLE_PRODUCT_IDS.includes(productId)) {
         setMessage('This Apple product is not supported by Trailbook.');
@@ -327,4 +485,11 @@ function isUserCancelledPurchase(error: unknown) {
   }
 
   return /user cancel(?:led|ed)/i.test(errorMessage(error));
+}
+
+function isRetryableVerificationError(error: string) {
+  const statusMatch = error.match(/HTTP (\d{3})/i);
+  if (!statusMatch) return true;
+  const status = Number(statusMatch[1]);
+  return status === 408 || status === 429 || status >= 500;
 }

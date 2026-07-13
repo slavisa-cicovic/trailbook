@@ -73,6 +73,19 @@ export default function PremiumScreen() {
         </Card>
       ) : null}
 
+      {iap.pendingProductIds.length > 0 ? (
+        <Card
+          style={[
+            styles.card,
+            { backgroundColor: theme.card, borderColor: theme.border },
+          ]}
+          title="Purchase verification pending"
+          titleStyle={{ color: theme.primaryText }}
+          subtitle="Apple completed the purchase. Trailbook will keep retrying backend verification and finish the transaction automatically."
+          subtitleStyle={{ color: theme.mutedText }}
+        />
+      ) : null}
+
       {!iap.available ? (
         <Card
           style={[
@@ -104,6 +117,7 @@ export default function PremiumScreen() {
           connected={iap.connected}
           key={product.productId}
           onPurchase={() => void iap.purchase(product.productId)}
+          pending={iap.pendingProductIds.includes(product.productId)}
           product={product}
         />
       ))}
@@ -143,11 +157,13 @@ function ProductCard({
   busyAction,
   connected,
   onPurchase,
+  pending,
   product,
 }: {
   busyAction: string | null;
   connected: boolean;
   onPurchase: () => void;
+  pending: boolean;
   product: PurchaseProduct;
 }) {
   const { theme } = useAppTheme();
@@ -174,14 +190,14 @@ function ProductCard({
         ) : null}
       </View>
       <LoadingButton
-        disabled={!connected || busyAction !== null}
+        disabled={!connected || busyAction !== null || pending}
         loading={
           busyAction === action || busyAction === `verify:${product.productId}`
         }
         loadingLabel="Processing…"
         onPress={onPurchase}
       >
-        Choose {product.billingType}
+        {pending ? 'Verification pending…' : `Choose ${product.billingType}`}
       </LoadingButton>
     </Card>
   );
