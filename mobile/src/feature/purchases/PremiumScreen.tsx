@@ -6,7 +6,10 @@ import ScreenLayout from '@/components/layout/screen-layout';
 import Card from '@/components/ui/card';
 import LoadingButton from '@/components/ui/loading-button';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
-import type { PurchaseProduct } from '@/core/domain/model/purchase';
+import {
+  hasPremiumAccess,
+  type PurchaseProduct,
+} from '@/core/domain/model/purchase';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAppleIap } from './AppleIapProvider';
@@ -56,7 +59,7 @@ export default function PremiumScreen() {
         </Text>
       </View>
 
-      {access?.entitlements.includes('premium') ? (
+      {hasPremiumAccess(access) ? (
         <Card
           style={[
             styles.card,

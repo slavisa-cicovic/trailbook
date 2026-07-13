@@ -8,13 +8,18 @@ import {
   useState,
 } from 'react';
 import { Platform } from 'react-native';
-import type { ProductSubscription, Purchase } from 'expo-iap';
+import type {
+  ActiveSubscription,
+  ProductSubscription,
+  Purchase,
+} from 'expo-iap';
 
 import { purchaseRepository } from '@/core/data/repository/PurchaseRepositoryImpl';
 import type {
   PurchaseBillingType,
   PurchaseProduct,
 } from '@/core/domain/model/purchase';
+import { hasPremiumAccess } from '@/core/domain/model/purchase';
 import { useAuthStore } from '@/feature/auth/authStore';
 import {
   listPendingAppleTransactions,
@@ -28,6 +33,12 @@ import { usePurchaseStore } from './purchaseStore';
 export const APPLE_MONTHLY_PRODUCT_ID = 'trailbook_premium_monthly';
 export const APPLE_YEARLY_PRODUCT_ID = 'trailbook_premium_yearly';
 const APPLE_PRODUCT_IDS = [APPLE_MONTHLY_PRODUCT_ID, APPLE_YEARLY_PRODUCT_ID];
+type ApplePurchaseProcessingResult =
+  | 'ignored'
+  | 'ownership-conflict'
+  | 'pending'
+  | 'retry-required'
+  | 'verified';
 
 interface AppleIapContextValue {
   available: boolean;
@@ -70,8 +81,13 @@ export function useAppleIap() {
 
 function NativeAppleIapProvider({ children }: PropsWithChildren) {
   // Runtime require keeps Expo Go from loading a native module it cannot provide.
-  const { isEligibleForIntroOfferIOS, useIAP } =
-    require('expo-iap') as typeof import('expo-iap');
+  const {
+    getActiveSubscriptions,
+    getAvailablePurchases,
+    isEligibleForIntroOfferIOS,
+    restorePurchases: restoreApplePurchases,
+    useIAP,
+  } = require('expo-iap') as typeof import('expo-iap');
   const authStatus = useAuthStore((state) => state.status);
   const userId = useAuthStore((state) => state.userId);
   const refreshAccess = usePurchaseStore((state) => state.refreshAccess);
@@ -89,9 +105,12 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
   const finishTransactionRef = useRef<
     ReturnType<typeof useIAP>['finishTransaction'] | null
   >(null);
-  const processPurchaseRef = useRef<(purchase: Purchase) => Promise<void>>(
-    async () => {},
-  );
+  const processPurchaseRef = useRef<
+    (
+      purchase: Purchase,
+      notify?: boolean,
+    ) => Promise<ApplePurchaseProcessingResult>
+  >(async () => 'ignored');
 
   async function refreshPendingProducts() {
     if (!userId) {
@@ -113,6 +132,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     transactionId: string,
     reason: string,
     retry: boolean,
+    notify: boolean,
   ) {
     const pending = await recordPendingAppleTransactionFailure(
       transactionId,
@@ -122,7 +142,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     await refreshPendingProducts();
     processingTransactions.current.delete(transactionId);
     setBusyAction(null);
-    if (!notifiedPendingTransactions.current.has(transactionId)) {
+    if (notify && !notifiedPendingTransactions.current.has(transactionId)) {
       notifiedPendingTransactions.current.add(transactionId);
       setMessage(`Purchase verification pending: ${reason}`);
     }
@@ -151,32 +171,35 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     retryTimers.current.set(transactionId, timer);
   }
 
-  async function processPurchase(purchase: Purchase) {
-    if (!APPLE_PRODUCT_IDS.includes(purchase.productId)) return;
-    if (purchase.store !== 'apple') return;
+  async function processPurchase(
+    purchase: Purchase,
+    notify = true,
+  ): Promise<ApplePurchaseProcessingResult> {
+    if (!APPLE_PRODUCT_IDS.includes(purchase.productId)) return 'ignored';
+    if (purchase.store !== 'apple') return 'ignored';
     const transactionId = purchase.transactionId;
     if (!transactionId || processingTransactions.current.has(transactionId))
-      return;
+      return 'ignored';
 
     if (!userId) {
-      setMessage(
-        'Purchase verification pending: sign in to your Trailbook account.',
-      );
-      return;
+      if (notify) {
+        setMessage(
+          'Purchase verification pending: sign in to your Trailbook account.',
+        );
+      }
+      return 'pending';
     }
 
     const existingPending = (await listPendingAppleTransactions()).find(
       (transaction) => transaction.transactionId === transactionId,
     );
     if (existingPending && existingPending.userId !== userId) {
-      setMessage(
-        'Purchase verification pending: sign in with the Trailbook account that started this purchase.',
-      );
-      return;
+      if (notify) setMessage(appleOwnershipConflictMessage());
+      return 'ownership-conflict';
     }
     if (existingPending?.attemptCount) {
       await refreshPendingProducts();
-      if (!existingPending.retryable) return;
+      if (!existingPending.retryable) return 'pending';
       const nextAttemptAt = existingPending.nextAttemptAt
         ? new Date(existingPending.nextAttemptAt).getTime()
         : 0;
@@ -186,7 +209,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
           transactionId,
           nextAttemptAt - Date.now(),
         );
-        return;
+        return 'pending';
       }
     }
 
@@ -209,20 +232,20 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
         transactionId,
         accountTokenResult.error,
         true,
+        notify,
       );
-      return;
+      return 'pending';
     }
     if (
       appAccountToken &&
       appAccountToken.toLowerCase() !== accountTokenResult.value.toLowerCase()
     ) {
-      await keepPurchasePending(
-        purchase,
-        transactionId,
-        'sign in with the Trailbook account that started this purchase.',
-        false,
-      );
-      return;
+      await removePendingAppleTransaction(transactionId);
+      await refreshPendingProducts();
+      processingTransactions.current.delete(transactionId);
+      setBusyAction(null);
+      if (notify) setMessage(appleOwnershipConflictMessage());
+      return 'ownership-conflict';
     }
 
     const verificationResult = await purchaseRepository.verifyApplePurchase({
@@ -231,13 +254,22 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       transactionId,
     });
     if (!verificationResult.ok) {
+      if (isAppleOwnershipConflict(verificationResult.error)) {
+        await removePendingAppleTransaction(transactionId);
+        await refreshPendingProducts();
+        processingTransactions.current.delete(transactionId);
+        setBusyAction(null);
+        if (notify) setMessage(appleOwnershipConflictMessage());
+        return 'ownership-conflict';
+      }
       await keepPurchasePending(
         purchase,
         transactionId,
         verificationResult.error,
         isRetryableVerificationError(verificationResult.error),
+        notify,
       );
-      return;
+      return 'pending';
     }
 
     try {
@@ -254,22 +286,49 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       notifiedPendingTransactions.current.delete(transactionId);
       setAccess(verificationResult.value);
       setBusyAction(null);
-      setMessage('Trailbook Premium is active.');
+      if (notify) setMessage('Trailbook Premium is active.');
+      return 'verified';
     } catch (error) {
       await keepPurchasePending(
         purchase,
         transactionId,
         `StoreKit finalization failed: ${errorMessage(error)}`,
         true,
+        notify,
       );
+      return 'pending';
     }
+  }
+
+  async function verifyRestoredSubscription(
+    subscription: ActiveSubscription,
+  ): Promise<ApplePurchaseProcessingResult> {
+    if (!APPLE_PRODUCT_IDS.includes(subscription.productId)) return 'ignored';
+    if (!subscription.transactionId || !userId) return 'retry-required';
+
+    const accountTokenResult = await purchaseRepository.getAppleAccountToken();
+    if (!accountTokenResult.ok) return 'retry-required';
+
+    const verificationResult = await purchaseRepository.verifyApplePurchase({
+      appAccountToken: accountTokenResult.value,
+      productId: subscription.productId,
+      transactionId: subscription.transactionId,
+    });
+    if (!verificationResult.ok) {
+      return isAppleOwnershipConflict(verificationResult.error)
+        ? 'ownership-conflict'
+        : 'retry-required';
+    }
+
+    setAccess(verificationResult.value);
+    return 'verified';
   }
 
   processPurchaseRef.current = processPurchase;
 
   const iap = useIAP({
     onError(error) {
-      setMessage(errorMessage(error));
+      console.warn('[Trailbook][apple-iap]', errorMessage(error));
     },
     onPurchaseError(error) {
       setBusyAction(null);
@@ -355,7 +414,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
     for (const purchase of iap.availablePurchases) {
-      void processPurchaseRef.current(purchase);
+      void processPurchaseRef.current(purchase, false);
     }
   }, [authStatus, iap.availablePurchases]);
 
@@ -399,11 +458,63 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       setBusyAction('restore');
       setMessage(null);
       try {
-        await iap.restorePurchases();
-        await iap.getAvailablePurchases();
-        await refreshAccess();
+        await restoreApplePurchases();
+        const purchases = await getAvailablePurchases({
+          alsoPublishToEventListenerIOS: false,
+          onlyIncludeActiveItemsIOS: false,
+        });
+        const activeSubscriptions =
+          await getActiveSubscriptions(APPLE_PRODUCT_IDS);
+        const knownPurchases = purchases.filter(
+          (purchase) =>
+            purchase.store === 'apple' &&
+            APPLE_PRODUCT_IDS.includes(purchase.productId),
+        );
+        const outcomes: ApplePurchaseProcessingResult[] = [];
+        for (const purchase of knownPurchases) {
+          outcomes.push(await processPurchaseRef.current(purchase, false));
+        }
+        const processedTransactionIds = new Set(
+          knownPurchases.map((purchase) => purchase.transactionId),
+        );
+        for (const subscription of activeSubscriptions) {
+          if (processedTransactionIds.has(subscription.transactionId)) continue;
+          outcomes.push(await verifyRestoredSubscription(subscription));
+        }
+
+        if (outcomes.includes('ownership-conflict')) {
+          setBusyAction(null);
+          setMessage(appleOwnershipConflictMessage());
+          return;
+        }
+        if (outcomes.includes('pending')) {
+          setBusyAction(null);
+          setMessage(
+            'Apple purchase found. Backend verification is pending and will retry automatically.',
+          );
+          return;
+        }
+        if (outcomes.includes('retry-required')) {
+          setBusyAction(null);
+          setMessage(
+            'Restore could not be verified. Check your connection and try Restore purchases again.',
+          );
+          return;
+        }
+
+        const accessResult = await purchaseRepository.getCurrentAccess();
+        if (!accessResult.ok) {
+          setBusyAction(null);
+          setMessage(`Restore failed: ${accessResult.error}`);
+          return;
+        }
+        setAccess(accessResult.value);
         setBusyAction(null);
-        setMessage('Purchase restoration finished.');
+        setMessage(
+          hasPremiumAccess(accessResult.value)
+            ? 'Trailbook Premium has been restored.'
+            : 'No active Trailbook subscription was found for this account.',
+        );
       } catch (error) {
         setBusyAction(null);
         setMessage(`Restore failed: ${errorMessage(error)}`);
@@ -492,4 +603,16 @@ function isRetryableVerificationError(error: string) {
   if (!statusMatch) return true;
   const status = Number(statusMatch[1]);
   return status === 408 || status === 429 || status >= 500;
+}
+
+function isAppleOwnershipConflict(error: string) {
+  return (
+    error.includes('APPLE_PURCHASE_ALREADY_LINKED_TO_ANOTHER_ACCOUNT') ||
+    error.includes('APPLE_PURCHASE_OWNERSHIP_CONFLICT') ||
+    error.includes('APPLE_ACCOUNT_TOKEN_MISMATCH')
+  );
+}
+
+function appleOwnershipConflictMessage() {
+  return 'This Apple subscription is linked to another Trailbook account. Sign in with the original Trailbook account or contact support.';
 }

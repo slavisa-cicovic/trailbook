@@ -57,3 +57,11 @@ export interface ApplePurchaseVerificationInput {
   productId: string;
   transactionId: string;
 }
+
+export function hasPremiumAccess(
+  access: PurchaseAccess | null | undefined,
+): access is PurchaseAccess {
+  return Boolean(
+    access && access.planCode !== 'demo' && access.entitlements.length > 0,
+  );
+}
