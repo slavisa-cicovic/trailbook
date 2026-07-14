@@ -1018,7 +1018,7 @@ Verification completed on an iPhone preview build:
 
 ## Phase 9: Backend Entitlement Enforcement
 
-Status: In progress
+Status: Done
 
 Backend must enforce entitlement for cloud operations:
 
@@ -1093,6 +1093,8 @@ Verification completed against the deployed AWS backend:
 
 ## Phase 10: UI/UX
 
+Status: In progress
+
 Add paywall entry points:
 
 - login success if entitlement/pre-purchase state requires it;
@@ -1143,6 +1145,25 @@ Acceptance:
 - user sees pending verification state;
 - subscription state is understandable;
 - terms/privacy links work.
+
+Implementation completed locally:
+
+- blocked recording, waypoint photo, sync, restore, group, shared-trip and share
+  actions offer a direct `View Premium` path;
+- OAuth login opens Premium only when the local test trip was already consumed
+  and there is no active Premium entitlement;
+- purchase and restore outcomes are shown inline instead of opening an
+  unsolicited dialog when the Premium screen appears;
+- active, canceled, grace-period, billing-retry, expired and revoked states have
+  user-facing descriptions, including the verified period end where available;
+- monthly/yearly prices, billing periods and introductory offer text come from
+  StoreKit product metadata;
+- manage subscription, restore, ownership-conflict support, Terms of Use and
+  Privacy Policy actions are present;
+- public `/terms` and `/privacy` web pages are implemented and pass the Next.js
+  production build.
+
+Device verification is still required before marking this phase done.
 
 ---
 
