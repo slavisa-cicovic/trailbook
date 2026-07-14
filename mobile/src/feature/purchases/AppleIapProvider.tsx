@@ -47,6 +47,7 @@ interface AppleIapContextValue {
   connected: boolean;
   pendingProductIds: string[];
   purchase(productId: string): Promise<void>;
+  requestRefund(productId: string): Promise<void>;
   restore(): Promise<void>;
 }
 
@@ -55,6 +56,7 @@ const unavailableAppleIap: AppleIapContextValue = {
   connected: false,
   pendingProductIds: [],
   async purchase() {},
+  async requestRefund() {},
   async restore() {},
 };
 
@@ -86,6 +88,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
   const {
     getActiveSubscriptions,
     getAvailablePurchases,
+    beginRefundRequestIOS,
     isEligibleForIntroOfferIOS,
     restorePurchases: restoreApplePurchases,
     useIAP,
@@ -484,6 +487,26 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
             ? 'Purchase canceled. No charge was made.'
             : `Unable to start Apple purchase: ${errorMessage(error)}`,
         );
+      }
+    },
+    async requestRefund(productId) {
+      if (!APPLE_PRODUCT_IDS.includes(productId)) {
+        setMessage('This Apple product is not supported by Trailbook.');
+        return;
+      }
+      setBusyAction('refund');
+      setMessage(null);
+      try {
+        const result = await beginRefundRequestIOS(productId);
+        setBusyAction(null);
+        setMessage(
+          result === 'success'
+            ? 'Refund request submitted to Apple.'
+            : 'Refund request was not submitted.',
+        );
+      } catch (error) {
+        setBusyAction(null);
+        setMessage(`Unable to request a refund: ${errorMessage(error)}`);
       }
     },
     async restore() {

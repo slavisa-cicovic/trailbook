@@ -11,7 +11,11 @@ import {
 } from '@/core/domain/model/purchase';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import { useAppleIap } from './AppleIapProvider';
+import {
+  APPLE_MONTHLY_PRODUCT_ID,
+  APPLE_YEARLY_PRODUCT_ID,
+  useAppleIap,
+} from './AppleIapProvider';
 import { usePurchaseStore } from './purchaseStore';
 import {
   APPLE_MANAGE_SUBSCRIPTIONS_URL,
@@ -80,12 +84,25 @@ export default function PremiumScreen() {
             ) : null}
           </View>
           {access.provider === 'apple' && access.planCode !== 'demo' ? (
-            <LoadingButton
-              onPress={() => void openUrl(APPLE_MANAGE_SUBSCRIPTIONS_URL)}
-              variant="secondary"
-            >
-              Manage subscription
-            </LoadingButton>
+            <View style={styles.subscriptionActions}>
+              <LoadingButton
+                onPress={() => void openUrl(APPLE_MANAGE_SUBSCRIPTIONS_URL)}
+                variant="secondary"
+              >
+                Manage subscription
+              </LoadingButton>
+              {appleProductId(access.planCode) ? (
+                <LoadingButton
+                  disabled={!iap.available || !iap.connected || busyAction !== null}
+                  loading={busyAction === 'refund'}
+                  loadingLabel="Opening Apple…"
+                  onPress={() => void iap.requestRefund(appleProductId(access.planCode)!)}
+                  variant="ghost"
+                >
+                  Request refund
+                </LoadingButton>
+              ) : null}
+            </View>
           ) : null}
         </Card>
       ) : null}
@@ -290,6 +307,12 @@ function planLabel(planCode: string) {
   return 'No active plan';
 }
 
+function appleProductId(planCode: string) {
+  if (planCode === 'premium_monthly') return APPLE_MONTHLY_PRODUCT_ID;
+  if (planCode === 'premium_yearly') return APPLE_YEARLY_PRODUCT_ID;
+  return null;
+}
+
 function statusLabel(access: PurchaseAccess) {
   if (access.planCode === 'demo') return 'Not subscribed';
   const labels: Record<PurchaseAccess['subscriptionStatus'], string> = {
@@ -340,6 +363,7 @@ const styles = StyleSheet.create({
   heroTitle: { fontSize: 31, fontWeight: '900', lineHeight: 36 },
   heroBody: { fontSize: 15, fontWeight: '600', lineHeight: 22, opacity: 0.85 },
   card: { borderWidth: 1, marginBottom: 14 },
+  subscriptionActions: { gap: 10 },
   statusDetails: { gap: 8 },
   statusRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
   statusLabel: { fontSize: 13, fontWeight: '700' },
