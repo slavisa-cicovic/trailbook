@@ -30,6 +30,10 @@ export default function PremiumScreen() {
   const message = usePurchaseStore((state) => state.message);
   const products = usePurchaseStore((state) => state.products);
   const iap = useAppleIap();
+  const visibleMessage =
+    message === 'Trailbook Premium is active.' && !hasPremiumAccess(access)
+      ? null
+      : message;
 
   if (status === 'demo') return <Redirect href="/settings" />;
 
@@ -86,7 +90,7 @@ export default function PremiumScreen() {
         </Card>
       ) : null}
 
-      {message ? (
+      {visibleMessage ? (
         <Card
           style={[
             styles.card,
@@ -94,7 +98,7 @@ export default function PremiumScreen() {
           ]}
           title="Purchase update"
           titleStyle={{ color: theme.primaryText }}
-          subtitle={message}
+          subtitle={visibleMessage}
           subtitleStyle={{ color: theme.mutedText }}
         >
           <Pressable onPress={clearMessage} style={styles.dismissMessage}>
