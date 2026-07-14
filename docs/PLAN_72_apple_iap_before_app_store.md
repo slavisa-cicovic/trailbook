@@ -1093,7 +1093,7 @@ Verification completed against the deployed AWS backend:
 
 ## Phase 10: UI/UX
 
-Status: In progress
+Status: Done
 
 Add paywall entry points:
 
@@ -1163,11 +1163,15 @@ Implementation completed locally:
 - public `/terms` and `/privacy` web pages are implemented and pass the Next.js
   production build.
 
-Device verification is still required before marking this phase done.
+Device verification completed on an iPhone preview build, including blocked
+action and login paywall routing, StoreKit product/trial metadata, pending and
+restore states, and deployed Terms of Use and Privacy Policy links.
 
 ---
 
 ## Phase 11: StoreKit Local Testing
+
+Status: Done
 
 Before App Store sandbox testing, use local StoreKit configuration where useful.
 
@@ -1200,9 +1204,27 @@ Acceptance:
 - unfinished transactions survive relaunch;
 - no fake provider code leaks into Apple production flow.
 
+Execution note:
+
+- a local `.storekit` configuration is intentionally not added because the
+  project is built from Linux with EAS and has no local Xcode scheme that can
+  consume it;
+- adding an unused StoreKit configuration would not test the production mobile
+  integration;
+- the purchase state machine, unfinished transaction recovery, restore,
+  relaunch and expiration paths have already been exercised against the real
+  Apple Sandbox on an iPhone preview build;
+- failure, refund/revocation, billing retry and grace-period scenarios remain in
+  Phase 12, where Apple Sandbox/TestFlight and backend notifications exercise
+  the real integration;
+- fake purchase mode remains disabled and separate from the Apple production
+  provider path.
+
 ---
 
 ## Phase 12: Sandbox and TestFlight QA
+
+Status: In progress
 
 Test with Apple sandbox/TestFlight accounts:
 
