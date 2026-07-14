@@ -90,6 +90,19 @@ export function removePendingAppleTransaction(transactionId: string) {
   );
 }
 
+export function removeStalePendingAppleTransactions(
+  userId: string,
+  appleTransactionIds: Set<string>,
+) {
+  return mutatePendingTransactions((transactions) =>
+    transactions.filter(
+      (transaction) =>
+        transaction.userId !== userId ||
+        appleTransactionIds.has(transaction.transactionId),
+    ),
+  );
+}
+
 export function retryDelayMs(attemptCount: number) {
   const index = Math.max(
     0,

@@ -3,7 +3,7 @@ import { Platform, View, Text, Pressable, StyleSheet } from 'react-native';
 import MapView, { Polyline, Marker, type MapType, type Region, type UserLocationChangeEvent } from 'react-native-maps';
 import { TrailMap } from '@/components/ui/TrailMap';
 import * as Location from 'expo-location';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
 import { useAuthStore } from '@/feature/auth/authStore';
@@ -22,6 +22,7 @@ import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import {
   accessErrorMessage,
   authorizeTripPhotos,
+  isPremiumAccessError,
 } from '@/core/domain/access/mobileAccessPolicy';
 
 
@@ -49,6 +50,21 @@ export default function RecordingScreen() {
   const displayName = useAuthStore((s) => s.displayName);
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
+  const router = useRouter();
+
+  function showAccessAlert(error: string) {
+    const message = accessErrorMessage(error);
+    showAlert({
+      title: 'Trailbook Premium',
+      message,
+      buttons: isPremiumAccessError(error)
+        ? [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'View Premium', onPress: () => router.push('/premium') },
+          ]
+        : undefined,
+    });
+  }
 
   const focusMapOnRegion = useCallback((region: Region, animated = true) => {
     setInitialRegion(region);
@@ -143,7 +159,7 @@ export default function RecordingScreen() {
     if (!activeTrip) return;
     const access = await authorizeTripPhotos(activeTrip.clientTripId, 1);
     if (!access.ok) {
-      showAlert({ title: 'Trailbook Premium', message: accessErrorMessage(access.error) });
+      showAccessAlert(access.error);
       return;
     }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -157,7 +173,7 @@ export default function RecordingScreen() {
         null,
       );
       if (!saved.ok) {
-        showAlert({ title: 'Trailbook Premium', message: accessErrorMessage(saved.error) });
+        showAccessAlert(saved.error);
       }
     }
   }

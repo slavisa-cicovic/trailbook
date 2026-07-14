@@ -25,6 +25,7 @@ import {
   listPendingAppleTransactions,
   recordPendingAppleTransactionFailure,
   removePendingAppleTransaction,
+  removeStalePendingAppleTransactions,
   retryDelayMs,
   savePendingAppleTransaction,
 } from './pendingAppleTransactions';
@@ -281,6 +282,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       await finishTransaction({ purchase, isConsumable: false });
       await removePendingAppleTransaction(transactionId);
       await refreshPendingProducts();
+      processingTransactions.current.delete(transactionId);
       const timer = retryTimers.current.get(transactionId);
       if (timer) clearTimeout(timer);
       retryTimers.current.delete(transactionId);
@@ -290,6 +292,19 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       if (notify) setMessage('Trailbook Premium is active.');
       return 'verified';
     } catch (error) {
+      if (isAlreadyFinishedTransactionError(error)) {
+        await removePendingAppleTransaction(transactionId);
+        await refreshPendingProducts();
+        const timer = retryTimers.current.get(transactionId);
+        if (timer) clearTimeout(timer);
+        retryTimers.current.delete(transactionId);
+        notifiedPendingTransactions.current.delete(transactionId);
+        processingTransactions.current.delete(transactionId);
+        setAccess(verificationResult.value, userId);
+        setBusyAction(null);
+        if (notify) setMessage('Trailbook purchase status refreshed.');
+        return 'verified';
+      }
       await keepPurchasePending(
         purchase,
         transactionId,
@@ -485,6 +500,18 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
             purchase.store === 'apple' &&
             APPLE_PRODUCT_IDS.includes(purchase.productId),
         );
+        await removeStalePendingAppleTransactions(
+          requestedUserId,
+          new Set([
+            ...knownPurchases
+              .map((purchase) => purchase.transactionId)
+              .filter(isTransactionId),
+            ...activeSubscriptions.map(
+              (subscription) => subscription.transactionId,
+            ).filter(isTransactionId),
+          ]),
+        );
+        await refreshPendingProducts();
         const outcomes: ApplePurchaseProcessingResult[] = [];
         for (const purchase of knownPurchases) {
           outcomes.push(await processPurchaseRef.current(purchase, false));
@@ -553,7 +580,7 @@ function toPurchaseProduct(
     billingPeriodLabel: recurringPeriodLabel(product),
     billingType: billingType(product.id),
     description:
-      (introOfferEligible ? introductoryOfferLabel(product) : null) ??
+      introductoryOfferLabel(product, introOfferEligible) ??
       product.description,
     entitlements: ['premium'],
     planCode:
@@ -571,20 +598,45 @@ function billingType(productId: string): PurchaseBillingType {
   return productId === APPLE_YEARLY_PRODUCT_ID ? 'yearly' : 'monthly';
 }
 
-function introductoryOfferLabel(product: ProductSubscription) {
-  if (product.platform !== 'ios' || !product.introductoryPriceIOS) return null;
-  const periods = product.introductoryPriceNumberOfPeriodsIOS;
-  const unit = product.introductoryPriceSubscriptionPeriodIOS;
+function introductoryOfferLabel(
+  product: ProductSubscription,
+  introOfferEligible: boolean,
+) {
+  if (product.platform !== 'ios') return null;
+  const standardizedOffer = product.subscriptionOffers?.find(
+    (offer) => offer.type === 'introductory',
+  );
+  const iosPeriods = product.introductoryPriceNumberOfPeriodsIOS;
+  const standardizedPeriodCount =
+    standardizedOffer?.periodCount ??
+    standardizedOffer?.numberOfPeriodsIOS ??
+    1;
+  const periods = iosPeriods ?? (
+    standardizedOffer?.period?.value
+      ? standardizedOffer.period.value * standardizedPeriodCount
+      : null
+  );
+  const unit =
+    product.introductoryPriceSubscriptionPeriodIOS ??
+    standardizedOffer?.period?.unit;
+  const paymentMode =
+    product.introductoryPricePaymentModeIOS ?? standardizedOffer?.paymentMode;
+  const price =
+    product.introductoryPriceIOS ?? standardizedOffer?.displayPrice;
+  if (!price && paymentMode !== 'free-trial') return null;
   if (
-    product.introductoryPricePaymentModeIOS === 'free-trial' &&
+    paymentMode === 'free-trial' &&
     periods &&
     unit
   ) {
-    return `Free for ${periodLabel(Number(periods), unit)} for eligible new subscribers.`;
+    const duration = periodLabel(Number(periods), unit);
+    return introOfferEligible
+      ? `Free for ${duration}. Then the standard subscription price applies.`
+      : `${duration} free trial for eligible new subscribers.`;
   }
   return periods && unit
-    ? `${product.introductoryPriceIOS} introductory offer for ${periodLabel(Number(periods), unit)}.`
-    : `${product.introductoryPriceIOS} introductory offer`;
+    ? `${price} introductory offer for ${periodLabel(Number(periods), unit)}.`
+    : `${price} introductory offer`;
 }
 
 function recurringPeriodLabel(product: ProductSubscription) {
@@ -602,6 +654,10 @@ function isKnownProduct(product: PurchaseProduct) {
   return APPLE_PRODUCT_IDS.includes(product.productId);
 }
 
+function isTransactionId(value: string | null | undefined): value is string {
+  return Boolean(value);
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -612,6 +668,13 @@ function isUserCancelledPurchase(error: unknown) {
   }
 
   return /user cancel(?:led|ed)/i.test(errorMessage(error));
+}
+
+function isAlreadyFinishedTransactionError(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    if ((error as { code?: unknown }).code === 'receipt-finished') return true;
+  }
+  return /receipt already finished/i.test(errorMessage(error));
 }
 
 function isRetryableVerificationError(error: string) {

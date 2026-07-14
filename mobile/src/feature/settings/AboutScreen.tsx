@@ -14,9 +14,12 @@ import ScreenLayout from '@/components/layout/screen-layout';
 import { API_BASE_URL } from '@/core/data/remote/apiConfig';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import {
+  TRAILBOOK_PRIVACY_POLICY_URL,
+  TRAILBOOK_SUPPORT_EMAIL,
+  TRAILBOOK_TERMS_OF_USE_URL,
+} from '@/constants/legal';
 
-const AUTHOR_EMAIL = 'sc.trailbook@gmail.com';
-const PRIVACY_STATUS = 'To be published before public release';
 const LICENSES_STATUS = 'To be added before public release';
 
 function getAppName() {
@@ -64,7 +67,7 @@ function buildSupportEmailUrl(account: string) {
     ].join('\n'),
   );
 
-  return `mailto:${AUTHOR_EMAIL}?subject=${subject}&body=${body}`;
+  return `mailto:${TRAILBOOK_SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
 }
 
 export default function AboutScreen() {
@@ -109,7 +112,7 @@ export default function AboutScreen() {
         </InfoCard>
 
         <InfoCard label="Support">
-          <InfoRow label="Author" value={AUTHOR_EMAIL} />
+          <InfoRow label="Author" value={TRAILBOOK_SUPPORT_EMAIL} />
           <Pressable
             onPress={handleContactSupport}
             style={({ pressed }) => [styles.emailButton, pressed && styles.emailButtonPressed]}
@@ -126,11 +129,22 @@ export default function AboutScreen() {
         </InfoCard>
 
         <InfoCard label="Legal">
-          <InfoRow label="Privacy policy" value={PRIVACY_STATUS} />
+          <LegalRow label="Privacy policy" url={TRAILBOOK_PRIVACY_POLICY_URL} />
+          <LegalRow label="Terms of Use" url={TRAILBOOK_TERMS_OF_USE_URL} />
           <InfoRow label="Open-source licenses" value={LICENSES_STATUS} />
         </InfoCard>
       </View>
     </ScreenLayout>
+  );
+}
+
+function LegalRow({ label, url }: { label: string; url: string }) {
+  const { theme } = useAppTheme();
+  return (
+    <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(url)} style={styles.legalRow}>
+      <Text style={[styles.infoRowLabel, { color: theme.mutedText }]}>{label}</Text>
+      <Text style={[styles.emailText, { color: theme.accent }]}>Open</Text>
+    </Pressable>
   );
 }
 
@@ -200,6 +214,12 @@ const styles = StyleSheet.create({
   },
   infoRow: {
     gap: 4,
+  },
+  legalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+    paddingVertical: 5,
   },
   infoRowLabel: {
     fontSize: 12,

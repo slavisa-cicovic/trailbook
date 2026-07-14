@@ -16,6 +16,8 @@ import BottomSheetModal from '@/components/ui/bottom-sheet-modal';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import ModalActions from '@/components/ui/modal-actions';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { isPremiumAccessError } from '@/core/domain/access/mobileAccessPolicy';
+import type { PurchaseAccess } from '@/core/domain/model/purchase';
 
 const THEME_OPTIONS: { label: string; value: ThemePreference }[] = [
   { label: 'Auto', value: 'auto' },
@@ -59,9 +61,20 @@ export default function SettingsScreen() {
     showAlert({
       title: 'Trailbook',
       message: statusMessage,
-      buttons: [{ text: 'OK', onPress: onStatusMessageShown }],
+      buttons: isPremiumAccessError(statusMessage)
+        ? [
+            { text: 'Not now', style: 'cancel', onPress: onStatusMessageShown },
+            {
+              text: 'View Premium',
+              onPress: () => {
+                onStatusMessageShown();
+                router.push('/premium');
+              },
+            },
+          ]
+        : [{ text: 'OK', onPress: onStatusMessageShown }],
     });
-  }, [onStatusMessageShown, showAlert, statusMessage]);
+  }, [onStatusMessageShown, router, showAlert, statusMessage]);
 
   useEffect(() => {
     if (status === 'authenticated') void refreshPurchaseAccess();
@@ -115,7 +128,7 @@ export default function SettingsScreen() {
               isDemo
                 ? 'Local access only'
                 : purchaseAccess
-                  ? `${purchaseAccess.planCode} · ${purchaseAccess.subscriptionStatus}`
+                  ? purchaseDescription(purchaseAccess)
                   : 'Loading purchase access'
             }
             iconName="workspace-premium"
@@ -229,6 +242,18 @@ export default function SettingsScreen() {
 
     </ScreenLayout>
   );
+}
+
+function purchaseDescription(access: PurchaseAccess) {
+  const plan = access.planCode === 'premium_yearly'
+    ? 'Premium Yearly'
+    : access.planCode === 'premium_monthly'
+      ? 'Premium Monthly'
+      : 'No active plan';
+  const period = access.currentPeriodEndsAt
+    ? ` · until ${new Date(access.currentPeriodEndsAt).toLocaleDateString()}`
+    : '';
+  return `${plan} · ${access.subscriptionStatus.replaceAll('_', ' ')}${period}`;
 }
 
 const styles = StyleSheet.create({

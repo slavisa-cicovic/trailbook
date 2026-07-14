@@ -1,24 +1,28 @@
-import { useEffect } from 'react';
 import { Redirect, useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import ScreenLayout from '@/components/layout/screen-layout';
 import Card from '@/components/ui/card';
 import LoadingButton from '@/components/ui/loading-button';
-import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import {
   hasPremiumAccess,
+  type PurchaseAccess,
   type PurchaseProduct,
 } from '@/core/domain/model/purchase';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAppleIap } from './AppleIapProvider';
 import { usePurchaseStore } from './purchaseStore';
+import {
+  APPLE_MANAGE_SUBSCRIPTIONS_URL,
+  purchaseSupportUrl,
+  TRAILBOOK_PRIVACY_POLICY_URL,
+  TRAILBOOK_TERMS_OF_USE_URL,
+} from '@/constants/legal';
 
 export default function PremiumScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
-  const { showAlert } = useCustomAlert();
   const status = useAuthStore((state) => state.status);
   const access = usePurchaseStore((state) => state.access);
   const busyAction = usePurchaseStore((state) => state.busyAction);
@@ -26,15 +30,6 @@ export default function PremiumScreen() {
   const message = usePurchaseStore((state) => state.message);
   const products = usePurchaseStore((state) => state.products);
   const iap = useAppleIap();
-
-  useEffect(() => {
-    if (!message) return;
-    showAlert({
-      title: 'Trailbook Premium',
-      message,
-      buttons: [{ text: 'OK', onPress: clearMessage }],
-    });
-  }, [clearMessage, message, showAlert]);
 
   if (status === 'demo') return <Redirect href="/settings" />;
 
@@ -59,20 +54,52 @@ export default function PremiumScreen() {
         </Text>
       </View>
 
-      {hasPremiumAccess(access) ? (
+      {access ? (
         <Card
           style={[
             styles.card,
             { backgroundColor: theme.card, borderColor: theme.border },
           ]}
-          title="Premium active"
+          title="Your subscription"
           titleStyle={{ color: theme.primaryText }}
-          subtitle={`${access.planCode} · ${access.subscriptionStatus}`}
+          subtitle={subscriptionSummary(access)}
           subtitleStyle={{ color: theme.mutedText }}
         >
-          <Text style={[styles.period, { color: theme.mutedText }]}>
-            Current period ends: {formatDate(access.currentPeriodEndsAt)}
-          </Text>
+          <View style={styles.statusDetails}>
+            <StatusRow label="Plan" value={planLabel(access.planCode)} />
+            <StatusRow label="Status" value={statusLabel(access)} />
+            {access.currentPeriodEndsAt ? (
+              <StatusRow
+                label={access.subscriptionStatus === 'canceled' ? 'Access ends' : 'Current period ends'}
+                value={formatDate(access.currentPeriodEndsAt)}
+              />
+            ) : null}
+          </View>
+          {hasPremiumAccess(access) ? (
+            <LoadingButton
+              onPress={() => void openUrl(APPLE_MANAGE_SUBSCRIPTIONS_URL)}
+              variant="secondary"
+            >
+              Manage subscription
+            </LoadingButton>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {message ? (
+        <Card
+          style={[
+            styles.card,
+            { backgroundColor: theme.card, borderColor: theme.border },
+          ]}
+          title="Purchase update"
+          titleStyle={{ color: theme.primaryText }}
+          subtitle={message}
+          subtitleStyle={{ color: theme.mutedText }}
+        >
+          <Pressable onPress={clearMessage} style={styles.dismissMessage}>
+            <Text style={[styles.linkText, { color: theme.accent }]}>Dismiss</Text>
+          </Pressable>
         </Card>
       ) : null}
 
@@ -82,9 +109,9 @@ export default function PremiumScreen() {
             styles.card,
             { backgroundColor: theme.card, borderColor: theme.border },
           ]}
-          title="Purchase verification pending"
+          title="Completing Apple purchase"
           titleStyle={{ color: theme.primaryText }}
-          subtitle="Apple completed the purchase. Trailbook will keep retrying backend verification and finish the transaction automatically."
+          subtitle="Trailbook is verifying or finishing an Apple transaction and will retry automatically."
           subtitleStyle={{ color: theme.mutedText }}
         />
       ) : null}
@@ -152,6 +179,12 @@ export default function PremiumScreen() {
         ID. Manage or cancel the subscription in your App Store account
         settings.
       </Text>
+
+      <View style={styles.linkGroup}>
+        <LegalLink label="Terms of Use" onPress={() => void openUrl(TRAILBOOK_TERMS_OF_USE_URL)} />
+        <LegalLink label="Privacy Policy" onPress={() => void openUrl(TRAILBOOK_PRIVACY_POLICY_URL)} />
+        <LegalLink label="Purchase support" onPress={() => void openUrl(purchaseSupportUrl())} />
+      </View>
     </ScreenLayout>
   );
 }
@@ -192,6 +225,9 @@ function ProductCard({
           </Text>
         ) : null}
       </View>
+      <Text style={[styles.renewal, { color: theme.mutedText }]}>
+        {introductoryRenewalText(product)}
+      </Text>
       <LoadingButton
         disabled={!connected || busyAction !== null || pending}
         loading={
@@ -200,10 +236,72 @@ function ProductCard({
         loadingLabel="Processing…"
         onPress={onPurchase}
       >
-        {pending ? 'Verification pending…' : `Choose ${product.billingType}`}
+        {pending ? 'Completion pending…' : `Choose ${product.billingType}`}
       </LoadingButton>
     </Card>
   );
+}
+
+function StatusRow({ label, value }: { label: string; value: string }) {
+  const { theme } = useAppTheme();
+  return (
+    <View style={styles.statusRow}>
+      <Text style={[styles.statusLabel, { color: theme.mutedText }]}>{label}</Text>
+      <Text style={[styles.statusValue, { color: theme.primaryText }]}>{value}</Text>
+    </View>
+  );
+}
+
+function LegalLink({ label, onPress }: { label: string; onPress: () => void }) {
+  const { theme } = useAppTheme();
+  return (
+    <Pressable accessibilityRole="link" onPress={onPress} style={styles.legalLink}>
+      <Text style={[styles.linkText, { color: theme.accent }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function subscriptionSummary(access: PurchaseAccess) {
+  if (!hasPremiumAccess(access)) return 'No active Premium subscription.';
+  if (access.subscriptionStatus === 'canceled') {
+    return access.currentPeriodEndsAt
+      ? `Canceled. Premium remains active until ${formatDate(access.currentPeriodEndsAt)}.`
+      : 'Canceled. Premium remains active until the end of the current period.';
+  }
+  if (access.subscriptionStatus === 'active') return 'Trailbook Premium is active.';
+  if (access.subscriptionStatus === 'in_grace_period') {
+    return 'Premium remains active during the billing grace period.';
+  }
+  if (access.subscriptionStatus === 'billing_retry') {
+    return 'Apple is retrying the subscription payment. Update your payment method to retain access.';
+  }
+  if (access.subscriptionStatus === 'revoked') return 'This subscription was revoked.';
+  return 'No active Premium subscription.';
+}
+
+function planLabel(planCode: string) {
+  if (planCode === 'premium_monthly') return 'Premium Monthly';
+  if (planCode === 'premium_yearly') return 'Premium Yearly';
+  return 'No active plan';
+}
+
+function statusLabel(access: PurchaseAccess) {
+  if (!hasPremiumAccess(access)) return 'Not subscribed';
+  return access.subscriptionStatus
+    .replaceAll('_', ' ')
+    .replace(/^./, (value) => value.toUpperCase());
+}
+
+function introductoryRenewalText(product: PurchaseProduct) {
+  const period = product.billingPeriodLabel ?? product.billingType;
+  if (/free (?:for|trial)/i.test(product.description)) {
+    return `After the free trial, the subscription renews automatically at ${product.priceLabel} per ${period} until canceled.`;
+  }
+  return `Renews automatically at ${product.priceLabel} per ${period} until canceled.`;
+}
+
+async function openUrl(url: string) {
+  await Linking.openURL(url);
 }
 
 function formatDate(value: string | null) {
@@ -222,9 +320,14 @@ const styles = StyleSheet.create({
   heroTitle: { fontSize: 31, fontWeight: '900', lineHeight: 36 },
   heroBody: { fontSize: 15, fontWeight: '600', lineHeight: 22, opacity: 0.85 },
   card: { borderWidth: 1, marginBottom: 14 },
+  statusDetails: { gap: 8 },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
+  statusLabel: { fontSize: 13, fontWeight: '700' },
+  statusValue: { flex: 1, fontSize: 13, fontWeight: '800', textAlign: 'right' },
   priceRow: { alignItems: 'baseline', flexDirection: 'row', gap: 4 },
   price: { fontSize: 29, fontWeight: '900' },
   period: { fontSize: 14, fontWeight: '700' },
+  renewal: { fontSize: 12, lineHeight: 18 },
   storeStatus: {
     fontSize: 14,
     fontWeight: '700',
@@ -237,4 +340,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingBottom: 16,
   },
+  dismissMessage: { alignSelf: 'flex-start', paddingVertical: 4 },
+  linkGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 20 },
+  legalLink: { paddingHorizontal: 6, paddingVertical: 6 },
+  linkText: { fontSize: 13, fontWeight: '800' },
 });

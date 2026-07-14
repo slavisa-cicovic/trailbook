@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import {
   Modal, View, Text, TextInput, Pressable, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -7,6 +8,7 @@ import { useRecordingStore } from '../recordingStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import {
   accessErrorMessage,
+  isPremiumAccessError,
 } from '@/core/domain/access/mobileAccessPolicy';
 
 interface Props {
@@ -21,6 +23,7 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
   const [error, setError] = useState<string | null>(null);
   const startRecording = useRecordingStore((s) => s.startRecording);
   const { theme } = useAppTheme();
+  const router = useRouter();
 
   async function onStart() {
     if (!title.trim()) { setError('Title is required'); return; }
@@ -42,6 +45,11 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
     setDescription('');
     setError(null);
     onDismiss();
+  }
+
+  function onViewPremium() {
+    onCancel();
+    setTimeout(() => router.push('/premium'), 250);
   }
 
   return (
@@ -74,7 +82,16 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
             numberOfLines={3}
           />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? (
+            <View style={styles.errorBlock}>
+              <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>
+              {isPremiumAccessError(error) ? (
+                <Pressable onPress={onViewPremium}>
+                  <Text style={[styles.premiumLink, { color: theme.accent }]}>View Premium options</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
 
           <View style={styles.buttons}>
             <Pressable style={[styles.button, { backgroundColor: theme.accentMuted }]} onPress={onCancel} disabled={loading}>
@@ -122,7 +139,9 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   inputMulti: { height: 90, textAlignVertical: 'top', paddingTop: 14 },
-  error: { color: '#c0392b', fontSize: 13, marginTop: 4 },
+  errorBlock: { gap: 8, marginTop: 4 },
+  error: { fontSize: 13 },
+  premiumLink: { fontSize: 14, fontWeight: '800' },
   buttons: { flexDirection: 'row', gap: 12, marginTop: 8 },
   button: {
     flex: 1, paddingVertical: 16, borderRadius: 16,

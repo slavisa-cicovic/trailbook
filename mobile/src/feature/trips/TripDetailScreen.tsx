@@ -32,7 +32,10 @@ import {
 } from '@/core/domain/usecase/ReprocessTripUseCase';
 import { createTripShareLink } from '@/core/domain/usecase/ShareTripUseCase';
 import { shareTripWithUser } from '@/core/domain/usecase/ShareTripWithUserUseCase';
-import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
+import {
+  accessErrorMessage,
+  isPremiumAccessError,
+} from '@/core/domain/access/mobileAccessPolicy';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
@@ -430,8 +433,21 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     if (readOnly) return;
     if (!clientTripId) return;
     const error = await syncTrip(clientTripId);
-    if (error) showAlert({ title: 'Sync failed', message: error });
+    if (error) showGatedActionError('Sync failed', error);
     else load(clientTripId);
+  }
+
+  function showGatedActionError(title: string, error: string) {
+    showAlert({
+      title,
+      message: accessErrorMessage(error),
+      buttons: isPremiumAccessError(error)
+        ? [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'View Premium', onPress: () => router.push('/premium') },
+          ]
+        : undefined,
+    });
   }
 
   async function onShare() {
@@ -443,7 +459,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     setSharing(false);
 
     if (!result.ok) {
-      showAlert({ title: 'Share failed', message: accessErrorMessage(result.error) });
+      showGatedActionError('Share failed', result.error);
       return;
     }
 
@@ -476,7 +492,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     setSharingWithUser(false);
 
     if (!result.ok) {
-      showAlert({ title: 'Share failed', message: accessErrorMessage(result.error) });
+      showGatedActionError('Share failed', result.error);
       return;
     }
 

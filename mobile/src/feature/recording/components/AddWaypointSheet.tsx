@@ -4,12 +4,16 @@ import {
   ScrollView, ActivityIndicator, Image, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import type { WaypointCategory, ImageSource } from '@/core/domain/model/waypoint';
 import { addWaypoint } from '@/core/domain/usecase/AddWaypointUseCase';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
-import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
+import {
+  accessErrorMessage,
+  isPremiumAccessError,
+} from '@/core/domain/access/mobileAccessPolicy';
 
 type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
 
@@ -53,6 +57,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
   const [error, setError] = useState<string | null>(null);
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
+  const router = useRouter();
 
   function onSelectCategory(cat: WaypointCategory) {
     setCategory(cat);
@@ -110,6 +115,11 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
   }
 
   function onCancel() { reset(); onDismiss(); }
+
+  function onViewPremium() {
+    onCancel();
+    setTimeout(() => router.push('/premium'), 250);
+  }
 
   const canSave = title.trim().length > 0 && !loading;
 
@@ -210,7 +220,16 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
               </View>
             )}
 
-            {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
+            {error ? (
+              <View style={styles.errorBlock}>
+                <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>
+                {isPremiumAccessError(error) ? (
+                  <Pressable onPress={onViewPremium}>
+                    <Text style={[styles.premiumLink, { color: theme.accent }]}>View Premium options</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
           </ScrollView>
 
           {/* Bottom actions */}
@@ -300,7 +319,9 @@ const styles = StyleSheet.create({
   },
   removeBadgeText: { fontSize: 12, fontWeight: '700' },
 
-  error: { fontSize: 13, marginTop: 12 },
+  errorBlock: { gap: 8, marginTop: 12 },
+  error: { fontSize: 13 },
+  premiumLink: { fontSize: 14, fontWeight: '800' },
 
   actions: {
     flexDirection: 'row',

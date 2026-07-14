@@ -27,6 +27,10 @@ import {
 } from './groupNavigation';
 import { DEFAULT_FILTERS } from './tripFilters';
 import { useTripFiltersStore } from './tripFiltersStore';
+import {
+  accessErrorMessage,
+  isPremiumAccessError,
+} from '@/core/domain/access/mobileAccessPolicy';
 
 type Tab = 'my_trips' | 'groups' | 'shared';
 
@@ -96,10 +100,23 @@ export default function TripsScreen() {
   );
   const selectionMode = selectedTripIds.length > 0;
 
+  function showActionError(title: string, error: string) {
+    showAlert({
+      title,
+      message: accessErrorMessage(error),
+      buttons: isPremiumAccessError(error)
+        ? [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'View Premium', onPress: () => router.push('/premium') },
+          ]
+        : undefined,
+    });
+  }
+
   async function handleSyncTrip(clientTripId: string) {
     const error = await syncTrip(clientTripId);
     if (error) {
-      showAlert({ title: 'Sync failed', message: error });
+      showActionError('Sync failed', error);
     }
   }
 
@@ -126,7 +143,7 @@ export default function TripsScreen() {
   async function handleCreateGroup(title: string, description: string | null) {
     const error = await createGroup(title, description, selectedTripIds);
     if (error) {
-      showAlert({ title: 'Could not create group', message: error });
+      showActionError('Could not create group', error);
       return;
     }
     setAddToGroupVisible(false);
@@ -136,7 +153,7 @@ export default function TripsScreen() {
   async function handleAddToExisting(groupId: string) {
     const error = await addTripsToGroup(groupId, selectedTripIds);
     if (error) {
-      showAlert({ title: 'Could not update group', message: error });
+      showActionError('Could not update group', error);
       return;
     }
     setAddToGroupVisible(false);
@@ -145,7 +162,7 @@ export default function TripsScreen() {
 
   async function handleSyncGroup(groupId: string) {
     const error = await syncGroup(groupId);
-    if (error) showAlert({ title: 'Group sync failed', message: error });
+    if (error) showActionError('Group sync failed', error);
   }
 
   function openGroup(groupId: string) {
@@ -250,8 +267,16 @@ export default function TripsScreen() {
             {sharedTripsError ? (
               <View style={[styles.placeholder, { backgroundColor: theme.card }]}>
                 <Text style={[styles.placeholderText, { color: theme.mutedText }]}>
-                  {sharedTripsError}
+                  {accessErrorMessage(sharedTripsError)}
                 </Text>
+                {isPremiumAccessError(sharedTripsError) ? (
+                  <Pressable
+                    onPress={() => router.push('/premium')}
+                    style={[styles.placeholderAction, { backgroundColor: theme.accent }]}
+                  >
+                    <Text style={[styles.placeholderActionText, { color: theme.background }]}>View Premium</Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
           </>
@@ -426,6 +451,8 @@ const styles = StyleSheet.create({
 
   placeholder: { borderRadius: 20, padding: 40, margin: 20, alignItems: 'center' },
   placeholderText: { fontSize: 15, fontWeight: '600' },
+  placeholderAction: { borderRadius: 14, marginTop: 16, paddingHorizontal: 18, paddingVertical: 12 },
+  placeholderActionText: { fontSize: 14, fontWeight: '800' },
 
   groupSortRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 14 },
   groupSortChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18 },

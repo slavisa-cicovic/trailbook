@@ -5,6 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
+import { purchaseRepository } from '@/core/data/repository/PurchaseRepositoryImpl';
+import { hasPremiumAccess } from '@/core/domain/model/purchase';
+import { usePurchaseStore } from '@/feature/purchases/purchaseStore';
 
 function getParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -14,6 +17,7 @@ export default function AuthCallbackScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
   const loginWithOAuthSession = useAuthStore((s) => s.loginWithOAuthSession);
+  const setPurchaseAccess = usePurchaseStore((s) => s.setAccess);
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
 
@@ -35,15 +39,25 @@ export default function AuthCallbackScreen() {
       accessToken,
       refreshToken,
       user: { id: userId, email, displayName, role },
-    }).then((result) => {
+    }).then(async (result) => {
       if (!result.ok) {
         showAlert({ title: 'Sign in failed', message: result.error });
         router.replace('/login');
         return;
       }
-      router.replace('/recording');
+
+      const [access, testTrip] = await Promise.all([
+        purchaseRepository.getCurrentAccess(),
+        purchaseRepository.getLocalTestTripAllowance(),
+      ]);
+      if (access.ok) setPurchaseAccess(access.value, userId);
+      router.replace(
+        access.ok && !hasPremiumAccess(access.value) && testTrip.ok && !testTrip.value.available
+          ? '/premium'
+          : '/recording',
+      );
     });
-  }, [loginWithOAuthSession, params, router, showAlert]);
+  }, [loginWithOAuthSession, params, router, setPurchaseAccess, showAlert]);
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>

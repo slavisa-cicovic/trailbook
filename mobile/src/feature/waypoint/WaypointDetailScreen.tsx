@@ -32,6 +32,7 @@ import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import {
   accessErrorMessage,
   authorizeTripPhotos,
+  isPremiumAccessError,
 } from '@/core/domain/access/mobileAccessPolicy';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -50,6 +51,19 @@ export default function WaypointDetailScreen() {
   const { showAlert } = useCustomAlert();
   const mapRef = useRef<MapView>(null);
   const fittedRouteTripIdRef = useRef<string | null>(null);
+
+  function showAccessAlert(error: string) {
+    showAlert({
+      title: 'Trailbook Premium',
+      message: accessErrorMessage(error),
+      buttons: isPremiumAccessError(error)
+        ? [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'View Premium', onPress: () => router.push('/premium') },
+          ]
+        : undefined,
+    });
+  }
 
   const load = useWaypointDetailStore((s) => s.load);
   const reload = useWaypointDetailStore((s) => s.reload);
@@ -234,7 +248,7 @@ export default function WaypointDetailScreen() {
     if (result.canceled) return;
     const access = await authorizeTripPhotos(waypoint.tripId, result.assets.length);
     if (!access.ok) {
-      showAlert({ title: 'Trailbook Premium', message: accessErrorMessage(access.error) });
+      showAccessAlert(access.error);
       return;
     }
     for (const asset of result.assets) {
@@ -245,7 +259,7 @@ export default function WaypointDetailScreen() {
         null,
       );
       if (!saved.ok) {
-        showAlert({ title: 'Trailbook Premium', message: accessErrorMessage(saved.error) });
+        showAccessAlert(saved.error);
         return;
       }
     }

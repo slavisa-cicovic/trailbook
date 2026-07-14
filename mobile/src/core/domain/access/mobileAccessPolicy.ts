@@ -27,6 +27,16 @@ export function accessErrorMessage(error: string): string {
   return error;
 }
 
+export function isPremiumAccessError(error: string): boolean {
+  return (
+    error.includes(PREMIUM_REQUIRED) ||
+    error.includes(LOCAL_TEST_TRIP_ALREADY_USED) ||
+    error.includes(LOCAL_TEST_TRIP_PHOTO_LIMIT) ||
+    /(?:active )?Trailbook Premium subscription is required/i.test(error) ||
+    /Premium is required/i.test(error)
+  );
+}
+
 function bypassAllowed() {
   const role = useAuthStore.getState().role;
   return (
