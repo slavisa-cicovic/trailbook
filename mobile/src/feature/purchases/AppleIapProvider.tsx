@@ -383,13 +383,23 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     void iap.fetchProducts({ skus: APPLE_PRODUCT_IDS, type: 'subs' });
     void getAvailablePurchases({
       alsoPublishToEventListenerIOS: false,
-      onlyIncludeActiveItemsIOS: false,
-    }).then((purchases) => {
+      onlyIncludeActiveItemsIOS: true,
+    }).then(async (purchases) => {
+      if (!userId) return;
+      await removeStalePendingAppleTransactions(
+        userId,
+        new Set(
+          purchases
+            .map((purchase) => purchase.transactionId)
+            .filter(isTransactionId),
+        ),
+      );
+      await refreshPendingProducts();
       for (const purchase of purchases) {
         void processPurchaseRef.current(purchase, false);
       }
     });
-  }, [authStatus, iap.connected]);
+  }, [authStatus, iap.connected, userId]);
 
   useEffect(() => {
     void refreshPendingProducts();

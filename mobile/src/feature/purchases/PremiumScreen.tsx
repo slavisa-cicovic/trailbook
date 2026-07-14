@@ -91,7 +91,7 @@ export default function PremiumScreen() {
               >
                 Manage subscription
               </LoadingButton>
-              {appleProductId(access.planCode) ? (
+              {hasPremiumAccess(access) && appleProductId(access.planCode) ? (
                 <LoadingButton
                   disabled={!iap.available || !iap.connected || busyAction !== null}
                   loading={busyAction === 'refund'}
