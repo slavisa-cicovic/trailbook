@@ -37,7 +37,7 @@ describe("PurchaseApplicationService Apple idempotency", () => {
     });
   });
 
-  test("accepts the same Apple transaction received through another channel", async () => {
+  test("deduplicates the same Apple purchase received through another channel", async () => {
     let transactionCalled = false;
     const service = createService({
       existingTransactionUserId: "user-1",
@@ -50,6 +50,26 @@ describe("PurchaseApplicationService Apple idempotency", () => {
 
     assert.equal(transactionCalled, false);
     assert.equal(access.planCode, "demo");
+  });
+
+  test("applies a lifecycle event that reuses an existing Apple transaction ID", async () => {
+    let transactionCalled = false;
+    const service = createService({
+      existingTransactionUserId: "user-1",
+      onTransaction: () => {
+        transactionCalled = true;
+      },
+    });
+
+    await service.applyEvent(
+      appleEvent("user-1", {
+        eventType: "EXPIRED",
+        idempotencyKey: "apple:notification:did-fail-to-renew-1",
+        subscriptionStatus: "billing_retry",
+      }),
+    );
+
+    assert.equal(transactionCalled, true);
   });
 
   test("rejects the same Apple transaction for another account", async () => {
@@ -286,7 +306,10 @@ function premiumRequiredError(error: unknown) {
   );
 }
 
-function appleEvent(userId: string): NormalizedPurchaseEvent {
+function appleEvent(
+  userId: string,
+  overrides: Partial<NormalizedPurchaseEvent> = {},
+): NormalizedPurchaseEvent {
   return {
     environment: "sandbox",
     eventType: "PURCHASED",
@@ -298,5 +321,6 @@ function appleEvent(userId: string): NormalizedPurchaseEvent {
     result: "success",
     transactionId: "transaction-1",
     userId,
+    ...overrides,
   };
 }

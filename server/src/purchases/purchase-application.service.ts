@@ -241,7 +241,11 @@ export class PurchaseApplicationService {
       });
       if (existingTransaction) {
         if (existingTransaction.userId !== event.userId) this.throwAppleOwnershipConflict();
-        return this.getCurrentAccess(existingTransaction.userId);
+        // Lifecycle notifications can reuse the original purchase transaction
+        // ID. Their notification UUID remains the idempotency boundary.
+        if (event.eventType === "PURCHASED") {
+          return this.getCurrentAccess(existingTransaction.userId);
+        }
       }
     }
 
@@ -296,16 +300,12 @@ export class PurchaseApplicationService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
-        const existingTransaction = await this.database.purchaseEvent.findFirst({
-          select: { userId: true },
-          where: {
-            provider: "apple",
-            transactionId: event.transactionId,
-          },
+        const existingEvent = await this.database.purchaseEvent.findUnique({
+          where: { idempotencyKey: event.idempotencyKey },
         });
-        if (existingTransaction) {
-          if (existingTransaction.userId !== event.userId) this.throwAppleOwnershipConflict();
-          return this.getCurrentAccess(existingTransaction.userId);
+        if (existingEvent) {
+          if (existingEvent.userId !== event.userId) this.throwAppleOwnershipConflict();
+          return this.getCurrentAccess(existingEvent.userId);
         }
       }
       throw error;

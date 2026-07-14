@@ -45,6 +45,9 @@ describe("AppleNotificationService", () => {
 
   test("normalizes renewal, cancellation and grace period notifications", async () => {
     const harness = createHarness({
+      billingRetry: notification(NotificationTypeV2.DID_FAIL_TO_RENEW, {
+        status: Status.BILLING_RETRY,
+      }),
       canceled: notification(NotificationTypeV2.DID_CHANGE_RENEWAL_STATUS, {
         autoRenewEnabled: false,
         subtype: Subtype.AUTO_RENEW_DISABLED,
@@ -60,6 +63,7 @@ describe("AppleNotificationService", () => {
     await harness.service.handleSignedPayload("renewed");
     await harness.service.handleSignedPayload("canceled");
     await harness.service.handleSignedPayload("grace");
+    await harness.service.handleSignedPayload("billingRetry");
 
     assert.equal(harness.events[0].eventType, "RENEWED");
     assert.equal(harness.events[0].subscriptionStatus, "active");
@@ -67,6 +71,8 @@ describe("AppleNotificationService", () => {
     assert.equal(harness.events[1].subscriptionStatus, "canceled");
     assert.equal(harness.events[2].eventType, "RESTORED");
     assert.equal(harness.events[2].subscriptionStatus, "in_grace_period");
+    assert.equal(harness.events[3].eventType, "EXPIRED");
+    assert.equal(harness.events[3].subscriptionStatus, "billing_retry");
   });
 
   test("removes access for expiration and refund notifications", async () => {
