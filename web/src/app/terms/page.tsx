@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 
 import { LegalPage, LegalSection } from "../../components/legal/legal-page";
 
-export const metadata: Metadata = { title: "Terms of Use | Trailbook" };
+export const metadata: Metadata = {
+  description: "Terms governing the use of Trailbook and Trailbook Premium subscriptions.",
+  title: "Terms of Use | Trailbook",
+};
 
 export default function TermsOfUsePage() {
   return (

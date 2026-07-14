@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 
 import { LegalPage, LegalSection } from "../../components/legal/legal-page";
 
-export const metadata: Metadata = { title: "Privacy Policy | Trailbook" };
+export const metadata: Metadata = {
+  description: "How Trailbook processes account, trip, location, photo, and purchase information.",
+  title: "Privacy Policy | Trailbook",
+};
 
 export default function PrivacyPolicyPage() {
   return (
