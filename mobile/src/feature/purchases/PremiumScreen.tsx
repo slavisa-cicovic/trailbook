@@ -266,6 +266,7 @@ function LegalLink({ label, onPress }: { label: string; onPress: () => void }) {
 }
 
 function subscriptionSummary(access: PurchaseAccess) {
+  if (access.planCode === 'demo') return 'No active Premium subscription.';
   if (access.subscriptionStatus === 'canceled') {
     return access.currentPeriodEndsAt
       ? `Canceled. Premium remains active until ${formatDate(access.currentPeriodEndsAt)}.`
