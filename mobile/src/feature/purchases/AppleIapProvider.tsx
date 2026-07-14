@@ -16,6 +16,7 @@ import type {
 
 import { purchaseRepository } from '@/core/data/repository/PurchaseRepositoryImpl';
 import type {
+  PurchaseAccess,
   PurchaseBillingType,
   PurchaseProduct,
 } from '@/core/domain/model/purchase';
@@ -289,7 +290,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       notifiedPendingTransactions.current.delete(transactionId);
       setAccess(verificationResult.value, userId);
       setBusyAction(null);
-      if (notify) setMessage('Trailbook Premium is active.');
+      if (notify) setMessage(verifiedPurchaseMessage(verificationResult.value));
       return 'verified';
     } catch (error) {
       if (isAlreadyFinishedTransactionError(error)) {
@@ -374,7 +375,14 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!iap.connected || authStatus !== 'authenticated') return;
     void iap.fetchProducts({ skus: APPLE_PRODUCT_IDS, type: 'subs' });
-    void iap.getAvailablePurchases();
+    void getAvailablePurchases({
+      alsoPublishToEventListenerIOS: false,
+      onlyIncludeActiveItemsIOS: false,
+    }).then((purchases) => {
+      for (const purchase of purchases) {
+        void processPurchaseRef.current(purchase, false);
+      }
+    });
   }, [authStatus, iap.connected]);
 
   useEffect(() => {
@@ -435,13 +443,6 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       canceled = true;
     };
   }, [authStatus, iap.subscriptions, isEligibleForIntroOfferIOS]);
-
-  useEffect(() => {
-    if (authStatus !== 'authenticated') return;
-    for (const purchase of iap.availablePurchases) {
-      void processPurchaseRef.current(purchase, false);
-    }
-  }, [authStatus, iap.availablePurchases]);
 
   const value: AppleIapContextValue = {
     available: true,
@@ -596,6 +597,17 @@ function toPurchaseProduct(
 
 function billingType(productId: string): PurchaseBillingType {
   return productId === APPLE_YEARLY_PRODUCT_ID ? 'yearly' : 'monthly';
+}
+
+function verifiedPurchaseMessage(access: PurchaseAccess) {
+  if (access.subscriptionStatus === 'billing_retry') {
+    return 'The Apple purchase was verified, but the subscription has a billing issue.';
+  }
+  if (access.subscriptionStatus === 'revoked') {
+    return 'The Apple purchase was verified, but the subscription was revoked.';
+  }
+  if (hasPremiumAccess(access)) return 'Trailbook Premium is active.';
+  return 'The Apple purchase was verified, but there is no active Trailbook subscription.';
 }
 
 function introductoryOfferLabel(
