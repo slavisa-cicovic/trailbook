@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Req } fro
 import type { Request } from "express";
 
 import { AuthService } from "../auth/auth.service";
+import { PurchaseApplicationService } from "../purchases/purchase-application.service";
 import { WaypointImagesService } from "./waypoint-images.service";
 
 export interface ImageUploadRequestDto {
@@ -20,6 +21,8 @@ export interface CompleteImageUploadRequestDto {
 export class WaypointImagesController {
   constructor(
     @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(PurchaseApplicationService)
+    private readonly purchaseApplication: PurchaseApplicationService,
     @Inject(WaypointImagesService) private readonly waypointImagesService: WaypointImagesService,
   ) {}
 
@@ -30,6 +33,7 @@ export class WaypointImagesController {
     @Req() request: Request,
   ) {
     const user = await this.authService.requireAuthenticatedUser(request);
+    await this.purchaseApplication.requirePremium(user);
     return this.waypointImagesService.requestUpload(user.id, {
       contentType: input.contentType ?? "image/jpeg",
       imageId: input.imageId,
@@ -46,6 +50,7 @@ export class WaypointImagesController {
     @Req() request: Request,
   ) {
     const user = await this.authService.requireAuthenticatedUser(request);
+    await this.purchaseApplication.requirePremium(user);
     return this.waypointImagesService.completeUpload(user.id, {
       contentType: input.contentType ?? null,
       imageId,
@@ -58,6 +63,7 @@ export class WaypointImagesController {
   @Get(":waypointId/images")
   async getImages(@Param("waypointId") waypointId: string, @Req() request: Request) {
     const user = await this.authService.requireAuthenticatedUser(request);
+    await this.purchaseApplication.requirePremium(user);
     await this.waypointImagesService.assertWaypointOwnedByUser(user.id, waypointId);
     return this.waypointImagesService.getImages(waypointId);
   }

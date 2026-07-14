@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
@@ -28,6 +29,8 @@ const DEMO_ACCESS: PurchaseAccessResponse = {
 
 @Injectable()
 export class PurchaseApplicationService {
+  private readonly logger = new Logger(PurchaseApplicationService.name);
+
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(FakePurchaseProvider) private readonly fakeProvider: FakePurchaseProvider,
@@ -69,6 +72,42 @@ export class PurchaseApplicationService {
       provider: this.parseProvider(access.provider),
       subscriptionStatus: this.parseStatus(access.subscriptionStatus),
     };
+  }
+
+  async requirePremium(user: AuthenticatedUser): Promise<void> {
+    if (
+      process.env.ENABLE_PURCHASE_TEST_ROLE_BYPASS === "true" &&
+      (user.role === "admin" || user.role === "test_user")
+    ) {
+      this.logger.warn(`Premium entitlement bypass used by ${user.role} user ${user.id}.`);
+      return;
+    }
+
+    const access = await this.getCurrentAccess(user.id);
+    const validStatus =
+      access.subscriptionStatus === "active" ||
+      access.subscriptionStatus === "canceled" ||
+      access.subscriptionStatus === "in_grace_period" ||
+      access.subscriptionStatus === "lifetime";
+    const periodIsValid =
+      access.subscriptionStatus === "lifetime" ||
+      Boolean(
+        access.currentPeriodEndsAt &&
+          new Date(access.currentPeriodEndsAt).getTime() > Date.now(),
+      );
+    if (
+      access.planCode !== "demo" &&
+      access.entitlements.length > 0 &&
+      validStatus &&
+      periodIsValid
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException({
+      code: "PREMIUM_ENTITLEMENT_REQUIRED",
+      message: "An active Premium entitlement is required.",
+    });
   }
 
   async getLocalTestTripAllowance(userId: string) {

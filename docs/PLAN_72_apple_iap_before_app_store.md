@@ -909,7 +909,7 @@ Acceptance:
 
 ## Phase 8: Entitlement Enforcement in Mobile
 
-Status: In progress
+Status: Done
 
 App must enforce entitlement before premium local actions.
 
@@ -1018,6 +1018,8 @@ Verification completed on an iPhone preview build:
 
 ## Phase 9: Backend Entitlement Enforcement
 
+Status: In progress
+
 Backend must enforce entitlement for cloud operations:
 
 - trip sync/upload;
@@ -1073,6 +1075,19 @@ Acceptance:
 - expired/revoked user is denied;
 - canceled-but-not-expired user succeeds until expiration;
 - test/admin users bypass only where intended.
+
+Verification completed against the deployed AWS backend:
+
+- an authenticated unpaid user received HTTP `403` with
+  `PREMIUM_ENTITLEMENT_REQUIRED` from the trips API;
+- an active Premium entitlement received HTTP `200` from the same endpoint;
+- a canceled entitlement remained accepted before `currentPeriodEndsAt`;
+- the same entitlement was denied immediately after its period ended and was
+  normalized to `expired` by the backend;
+- an admin user without `ENABLE_PURCHASE_TEST_ROLE_BYPASS=true` was denied,
+  confirming that role alone cannot bypass production enforcement;
+- unit and controller tests cover unpaid, active, canceled, expired, revoked and
+  explicitly enabled role-bypass paths.
 
 ---
 
