@@ -9,6 +9,7 @@ import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import { saveRestoredPhoto } from '@/core/data/local/photoStorage';
 import { dbEvents } from '@/core/db/events';
 import { tripGroupRepository } from '@/core/data/repository/TripGroupRepositoryImpl';
+import { requireCloudPremium } from '@/core/domain/access/mobileAccessPolicy';
 
 interface RemoteImageInfo {
   imageId: string;
@@ -41,6 +42,8 @@ async function restoreImage(
 }
 
 export async function restoreTrips(): Promise<Result<void>> {
+  const access = await requireCloudPremium();
+  if (!access.ok) return access;
   if (await authRepository.isDemo()) return err('Demo users cannot restore trips');
 
   const deletionResult = await flushPendingTripDeletions();

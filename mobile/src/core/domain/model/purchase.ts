@@ -58,6 +58,12 @@ export interface ApplePurchaseVerificationInput {
   transactionId: string;
 }
 
+export interface LocalTestTripAllowance {
+  available: boolean;
+  tripClientId: string | null;
+  usedAt: string | null;
+}
+
 export function hasPremiumAccess(
   access: PurchaseAccess | null | undefined,
 ): access is PurchaseAccess {

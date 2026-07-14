@@ -5,6 +5,9 @@ import {
 } from 'react-native';
 import { useRecordingStore } from '../recordingStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import {
+  accessErrorMessage,
+} from '@/core/domain/access/mobileAccessPolicy';
 
 interface Props {
   visible: boolean;
@@ -26,9 +29,7 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
     const result = await startRecording(title.trim(), description.trim() || null);
     setLoading(false);
     if (!result.ok) {
-      setError(result.error === 'DEMO_LIMIT_REACHED'
-        ? 'Demo limit reached (3 trips max)'
-        : result.error);
+      setError(accessErrorMessage(result.error));
     } else {
       setTitle('');
       setDescription('');

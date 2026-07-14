@@ -18,6 +18,11 @@ import { TopAppBar } from '@/components/ui/TopAppBar';
 import { SessionCard } from './components/SessionCard';
 import { WaypointCard } from './components/WaypointCard';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
+import {
+  accessErrorMessage,
+  authorizeTripPhotos,
+} from '@/core/domain/access/mobileAccessPolicy';
 
 
 export default function RecordingScreen() {
@@ -43,6 +48,7 @@ export default function RecordingScreen() {
 
   const displayName = useAuthStore((s) => s.displayName);
   const { theme } = useAppTheme();
+  const { showAlert } = useCustomAlert();
 
   const focusMapOnRegion = useCallback((region: Region, animated = true) => {
     setInitialRegion(region);
@@ -134,11 +140,25 @@ export default function RecordingScreen() {
   }
 
   async function onAddPhotoToWaypoint(waypointId: string) {
+    if (!activeTrip) return;
+    const access = await authorizeTripPhotos(activeTrip.clientTripId, 1);
+    if (!access.ok) {
+      showAlert({ title: 'Trailbook Premium', message: accessErrorMessage(access.error) });
+      return;
+    }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
     if (!result.canceled && result.assets[0]) {
-      await addPhotoToWaypoint(waypointId, result.assets[0].uri, 'GALLERY', null);
+      const saved = await addPhotoToWaypoint(
+        waypointId,
+        result.assets[0].uri,
+        'GALLERY',
+        null,
+      );
+      if (!saved.ok) {
+        showAlert({ title: 'Trailbook Premium', message: accessErrorMessage(saved.error) });
+      }
     }
   }
 

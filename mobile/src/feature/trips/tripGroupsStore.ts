@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { dbEvents } from '@/core/db/events';
 import { tripGroupRepository } from '@/core/data/repository/TripGroupRepositoryImpl';
 import type { TripGroupWithMembers } from '@/core/domain/model/tripGroup';
+import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
 
 interface TripGroupsState {
   groups: TripGroupWithMembers[];
@@ -39,17 +40,17 @@ export const useTripGroupsStore = create<TripGroupsState & TripGroupsActions>((s
 
     async createGroup(title, description, tripClientIds) {
       const result = await tripGroupRepository.createGroup(title, description, tripClientIds);
-      return result.ok ? null : result.error;
+      return result.ok ? null : accessErrorMessage(result.error);
     },
 
     async addTripsToGroup(groupId, tripClientIds) {
       const result = await tripGroupRepository.addTripsToGroup(groupId, tripClientIds);
-      return result.ok ? null : result.error;
+      return result.ok ? null : accessErrorMessage(result.error);
     },
 
     async deleteGroup(groupId) {
       const result = await tripGroupRepository.deleteGroup(groupId);
-      return result.ok ? null : result.error;
+      return result.ok ? null : accessErrorMessage(result.error);
     },
 
     async syncGroup(groupId) {
@@ -58,7 +59,7 @@ export const useTripGroupsStore = create<TripGroupsState & TripGroupsActions>((s
       set({ syncingGroupIds: [...syncingGroupIds, groupId] });
       try {
         const result = await tripGroupRepository.syncGroup(groupId);
-        return result.ok ? null : result.error;
+        return result.ok ? null : accessErrorMessage(result.error);
       } finally {
         set({
           syncingGroupIds: useTripGroupsStore

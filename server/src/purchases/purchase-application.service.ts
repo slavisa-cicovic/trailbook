@@ -71,6 +71,87 @@ export class PurchaseApplicationService {
     };
   }
 
+  async getLocalTestTripAllowance(userId: string) {
+    const user = await this.database.user.findUniqueOrThrow({
+      select: {
+        localTestTripClientId: true,
+        localTestTripUsedAt: true,
+      },
+      where: { id: userId },
+    });
+    return {
+      available: user.localTestTripUsedAt === null,
+      tripClientId: user.localTestTripClientId,
+      usedAt: user.localTestTripUsedAt?.toISOString() ?? null,
+    };
+  }
+
+  async consumeLocalTestTripAllowance(userId: string, clientTripId: string) {
+    const normalizedTripId = clientTripId.trim();
+    if (!normalizedTripId) {
+      throw new BadRequestException("clientTripId is required.");
+    }
+
+    const existing = await this.database.user.findUniqueOrThrow({
+      select: {
+        localTestTripClientId: true,
+        localTestTripUsedAt: true,
+      },
+      where: { id: userId },
+    });
+    if (existing.localTestTripUsedAt) {
+      if (existing.localTestTripClientId === normalizedTripId) {
+        return {
+          available: false,
+          tripClientId: existing.localTestTripClientId,
+          usedAt: existing.localTestTripUsedAt.toISOString(),
+        };
+      }
+      throw new ForbiddenException({
+        code: "LOCAL_TEST_TRIP_ALREADY_USED",
+        message: "Premium is required to record another trip.",
+      });
+    }
+
+    const usedAt = new Date();
+    const claimed = await this.database.user.updateMany({
+      data: {
+        localTestTripClientId: normalizedTripId,
+        localTestTripUsedAt: usedAt,
+      },
+      where: { id: userId, localTestTripUsedAt: null },
+    });
+    if (claimed.count === 0) {
+      const winner = await this.database.user.findUniqueOrThrow({
+        select: {
+          localTestTripClientId: true,
+          localTestTripUsedAt: true,
+        },
+        where: { id: userId },
+      });
+      if (
+        winner.localTestTripClientId === normalizedTripId &&
+        winner.localTestTripUsedAt
+      ) {
+        return {
+          available: false,
+          tripClientId: winner.localTestTripClientId,
+          usedAt: winner.localTestTripUsedAt.toISOString(),
+        };
+      }
+      throw new ForbiddenException({
+        code: "LOCAL_TEST_TRIP_ALREADY_USED",
+        message: "Premium is required to record another trip.",
+      });
+    }
+
+    return {
+      available: false,
+      tripClientId: normalizedTripId,
+      usedAt: usedAt.toISOString(),
+    };
+  }
+
   async simulateFakePurchase(
     user: AuthenticatedUser,
     input: {

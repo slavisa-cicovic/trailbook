@@ -1,10 +1,13 @@
 import { err, type Result } from '@/core/common/result';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
+import { requireCloudPremium } from '@/core/domain/access/mobileAccessPolicy';
 
 export async function shareTripWithUser(
   clientTripId: string,
   email: string,
 ): Promise<Result<{ recipientEmail: string }>> {
+  const access = await requireCloudPremium();
+  if (!access.ok) return access;
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) return err('Email is required.');
 

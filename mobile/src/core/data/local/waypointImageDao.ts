@@ -1,6 +1,6 @@
 import { eq, ne, inArray } from 'drizzle-orm';
 import { db } from '@/core/db';
-import { waypointImages } from '@/core/db/schema';
+import { waypointImages, waypoints } from '@/core/db/schema';
 import { dbEvents } from '@/core/db/events';
 import type { WaypointImage, ImageSource, ImageUploadState } from '@/core/domain/model/waypoint';
 import { runInChunks } from './chunkedInsert';
@@ -91,6 +91,14 @@ export async function countForWaypoints(waypointIds: string[]): Promise<number> 
     count += rows.length;
   });
   return count;
+}
+
+export async function countForTrip(clientTripId: string): Promise<number> {
+  const tripWaypoints = await db
+    .select({ id: waypoints.id })
+    .from(waypoints)
+    .where(eq(waypoints.tripId, clientTripId));
+  return countForWaypoints(tripWaypoints.map((waypoint) => waypoint.id));
 }
 
 export async function countNotUploadedForWaypoints(waypointIds: string[]): Promise<number> {

@@ -6,8 +6,14 @@ CREATE TABLE IF NOT EXISTS users (
     display_name VARCHAR(100) NOT NULL,
     role         VARCHAR(50)  NOT NULL DEFAULT 'user',
     apple_app_account_token UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+    local_test_trip_client_id VARCHAR(255),
+    local_test_trip_used_at TIMESTAMPTZ,
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS local_test_trip_client_id VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS local_test_trip_used_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

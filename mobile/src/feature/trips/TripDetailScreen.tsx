@@ -32,6 +32,7 @@ import {
 } from '@/core/domain/usecase/ReprocessTripUseCase';
 import { createTripShareLink } from '@/core/domain/usecase/ShareTripUseCase';
 import { shareTripWithUser } from '@/core/domain/usecase/ShareTripWithUserUseCase';
+import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { TrailMap } from '@/components/ui/TrailMap';
 import { TopAppBar } from '@/components/ui/TopAppBar';
@@ -442,7 +443,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     setSharing(false);
 
     if (!result.ok) {
-      showAlert({ title: 'Share failed', message: result.error });
+      showAlert({ title: 'Share failed', message: accessErrorMessage(result.error) });
       return;
     }
 
@@ -475,7 +476,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     setSharingWithUser(false);
 
     if (!result.ok) {
-      showAlert({ title: 'Share failed', message: result.error });
+      showAlert({ title: 'Share failed', message: accessErrorMessage(result.error) });
       return;
     }
 

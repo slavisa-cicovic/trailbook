@@ -91,6 +91,8 @@ model User {
   displayName                String                      @map("display_name") @db.VarChar(100)
   role                       String                      @default("user") @db.VarChar(50)
   appleAppAccountToken       String                      @unique @default(dbgenerated("gen_random_uuid()")) @map("apple_app_account_token") @db.Uuid
+  localTestTripClientId      String?                     @map("local_test_trip_client_id") @db.VarChar(255)
+  localTestTripUsedAt        DateTime?                   @map("local_test_trip_used_at") @db.Timestamptz(6)
   createdAt                  DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
   trips                      Trip[]
   tripGroups                 TripGroup[]

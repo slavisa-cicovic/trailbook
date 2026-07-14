@@ -91,6 +91,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
   const authStatus = useAuthStore((state) => state.status);
   const userId = useAuthStore((state) => state.userId);
   const refreshAccess = usePurchaseStore((state) => state.refreshAccess);
+  const hydrateAccess = usePurchaseStore((state) => state.hydrateAccess);
   const setAccess = usePurchaseStore((state) => state.setAccess);
   const setBusyAction = usePurchaseStore((state) => state.setBusyAction);
   const setMessage = usePurchaseStore((state) => state.setMessage);
@@ -284,7 +285,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       if (timer) clearTimeout(timer);
       retryTimers.current.delete(transactionId);
       notifiedPendingTransactions.current.delete(transactionId);
-      setAccess(verificationResult.value);
+      setAccess(verificationResult.value, userId);
       setBusyAction(null);
       if (notify) setMessage('Trailbook Premium is active.');
       return 'verified';
@@ -320,7 +321,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
         : 'retry-required';
     }
 
-    setAccess(verificationResult.value);
+    setAccess(verificationResult.value, userId);
     return 'verified';
   }
 
@@ -346,10 +347,19 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
   finishTransactionRef.current = iap.finishTransaction;
 
   useEffect(() => {
+    let canceled = false;
+    void hydrateAccess(userId).then(() => {
+      if (!canceled && authStatus === 'authenticated') void refreshAccess();
+    });
+    return () => {
+      canceled = true;
+    };
+  }, [authStatus, hydrateAccess, refreshAccess, userId]);
+
+  useEffect(() => {
     if (!iap.connected || authStatus !== 'authenticated') return;
     void iap.fetchProducts({ skus: APPLE_PRODUCT_IDS, type: 'subs' });
     void iap.getAvailablePurchases();
-    void refreshAccess();
   }, [authStatus, iap.connected]);
 
   useEffect(() => {
@@ -455,6 +465,11 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       }
     },
     async restore() {
+      const requestedUserId = userId;
+      if (!requestedUserId) {
+        setMessage('Sign in to restore Trailbook Premium.');
+        return;
+      }
       setBusyAction('restore');
       setMessage(null);
       try {
@@ -503,12 +518,13 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
         }
 
         const accessResult = await purchaseRepository.getCurrentAccess();
+        if (useAuthStore.getState().userId !== requestedUserId) return;
         if (!accessResult.ok) {
           setBusyAction(null);
           setMessage(`Restore failed: ${accessResult.error}`);
           return;
         }
-        setAccess(accessResult.value);
+        setAccess(accessResult.value, requestedUserId);
         setBusyAction(null);
         setMessage(
           hasPremiumAccess(accessResult.value)

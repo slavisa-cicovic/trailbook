@@ -830,7 +830,7 @@ Acceptance:
 
 ## Phase 7: Restore Purchases and Ownership
 
-Status: In progress
+Status: Done
 
 Implemented:
 
@@ -847,10 +847,6 @@ Implemented:
   account and show an explicit ownership recovery message;
 - an account with no active verified subscription remains non-Premium.
 
-Pending real-device verification:
-
-- expired/no-purchase restore;
-
 Verified on a real iPhone with Apple sandbox:
 
 - same-account restore succeeds;
@@ -861,6 +857,10 @@ Verified on a real iPhone with Apple sandbox:
 - restore during a backend outage keeps the StoreKit transaction in the
   persistent verification queue;
 - verification automatically recovers after the backend becomes available;
+- restoring an expired subscription leaves the Trailbook account without
+  Premium and removes stale local Premium display state;
+- restore with a fresh Apple sandbox tester that has no purchase history leaves
+  the Trailbook account without Premium;
 - restoring from another Trailbook account using the same Apple sandbox
   account does not unlock Premium;
 - ownership conflict displays a clear recovery/support message.
@@ -908,6 +908,8 @@ Acceptance:
 ---
 
 ## Phase 8: Entitlement Enforcement in Mobile
+
+Status: In progress
 
 App must enforce entitlement before premium local actions.
 
@@ -995,6 +997,22 @@ Acceptance:
 - expired entitlement blocks premium actions after verified expiry/refresh;
 - app outage/backend outage does not immediately lock a valid StoreKit subscriber;
 - test/admin bypass works only where explicitly allowed.
+
+Verification completed on an iPhone preview build:
+
+- a normal unpaid account claimed one backend-recorded local test trip;
+- the test trip saved at most three photos and rejected a waypoint containing
+  more than three photos;
+- deleting or finishing the test trip did not restore the allowance;
+- sync and restore were rejected with a user-facing Premium message;
+- an active sandbox monthly subscription allowed recording and more than three
+  photos even after the test allowance was marked as used;
+- cached verified Premium allowed a new local recording while the device was
+  offline;
+- after sandbox cancellation and verified expiration, the account returned to
+  demo access and a used test allowance blocked another trip;
+- `admin` and `test_user` bypass was confirmed in the preview build, and a role
+  change required a new login as expected.
 
 ---
 

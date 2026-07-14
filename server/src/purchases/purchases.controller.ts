@@ -55,6 +55,24 @@ export class PurchasesController {
     return this.purchaseApplication.getCurrentAccess(user.id);
   }
 
+  @Get("local-test-trip")
+  async getLocalTestTripAllowance(@Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.purchaseApplication.getLocalTestTripAllowance(user.id);
+  }
+
+  @Post("local-test-trip/consume")
+  async consumeLocalTestTripAllowance(
+    @Body() input: { clientTripId?: string },
+    @Req() request: Request,
+  ) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.purchaseApplication.consumeLocalTestTripAllowance(
+      user.id,
+      input.clientTripId ?? "",
+    );
+  }
+
   @Post("fake/simulate")
   async simulate(@Body() input: SimulatePurchaseRequest, @Req() request: Request) {
     const user = await this.authService.requireAuthenticatedUser(request);

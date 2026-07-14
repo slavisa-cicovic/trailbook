@@ -5,6 +5,7 @@ import { restoreTrips } from '@/core/domain/usecase/RestoreTripsUseCase';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
 import { useTripsStore } from '@/feature/trips/tripsStore';
+import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
 
 interface SettingsUiState {
   isWorking: boolean;
@@ -43,7 +44,7 @@ export const useSettingsStore = create<SettingsUiState & SettingsActions>((set) 
       useTripsStore.getState().load();
       set({ isWorking: false, statusMessage: 'Your local trips deleted' });
     } else {
-      set({ isWorking: false, statusMessage: result.error });
+      set({ isWorking: false, statusMessage: accessErrorMessage(result.error) });
     }
   },
 
@@ -63,7 +64,10 @@ export const useSettingsStore = create<SettingsUiState & SettingsActions>((set) 
       useTripsStore.getState().load();
       set({ isWorking: false, statusMessage: 'Restore complete' });
     } else {
-      set({ isWorking: false, statusMessage: result.error });
+      set({
+        isWorking: false,
+        statusMessage: accessErrorMessage(result.error),
+      });
     }
   },
 

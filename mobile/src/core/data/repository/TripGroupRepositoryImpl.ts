@@ -12,6 +12,7 @@ import {
   memberFromDto,
   memberToDto,
 } from '@/core/data/remote/dto/tripGroupDto';
+import { requireCloudPremium } from '@/core/domain/access/mobileAccessPolicy';
 
 export class TripGroupRepositoryImpl {
   listGroups(): Promise<TripGroupWithMembers[]> {
@@ -93,6 +94,8 @@ export class TripGroupRepositoryImpl {
   }
 
   async syncPending(): Promise<Result<void>> {
+    const access = await requireCloudPremium();
+    if (!access.ok) return access;
     if (await authRepository.isDemo()) return err('Demo users cannot sync groups');
     const [groups, members] = await Promise.all([
       tripGroupDao.getPendingGroups(),
@@ -111,6 +114,8 @@ export class TripGroupRepositoryImpl {
   }
 
   async syncGroup(groupId: string): Promise<Result<void>> {
+    const access = await requireCloudPremium();
+    if (!access.ok) return access;
     if (await authRepository.isDemo()) return err('Demo users cannot sync groups');
     const groups = await tripGroupDao.getGroupsWithMembers();
     const target = groups.find((item) => item.group.id === groupId);
@@ -131,6 +136,8 @@ export class TripGroupRepositoryImpl {
   }
 
   private async syncDeletedGroup(groupId: string): Promise<Result<void>> {
+    const access = await requireCloudPremium();
+    if (!access.ok) return access;
     if (await authRepository.isDemo()) return err('Demo users cannot sync groups');
     const group = await tripGroupDao.getGroupById(groupId);
     if (!group) return err('Group not found');
@@ -146,6 +153,8 @@ export class TripGroupRepositoryImpl {
   }
 
   async restore(): Promise<Result<void>> {
+    const access = await requireCloudPremium();
+    if (!access.ok) return access;
     if (await authRepository.isDemo()) return err('Demo users cannot restore groups');
     const result = await remoteTripGroupDataSource.fetchGroups();
     if (!result.ok) return err(result.error);
@@ -158,6 +167,8 @@ export class TripGroupRepositoryImpl {
 
   private async validateSyncedTrips(tripClientIds: string[]): Promise<Result<void>> {
     if (tripClientIds.length === 0) return err('Select at least one trip');
+    const access = await requireCloudPremium();
+    if (!access.ok) return access;
     if (await authRepository.isDemo()) return err('Demo users cannot create groups');
 
     for (const tripClientId of tripClientIds) {

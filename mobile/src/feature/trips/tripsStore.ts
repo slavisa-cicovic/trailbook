@@ -9,6 +9,7 @@ import * as waypointImageDao from '@/core/data/local/waypointImageDao';
 import { uploadTrip } from '@/core/domain/usecase/UploadTripUseCase';
 import { deleteTrip as deleteTripUseCase } from '@/core/domain/usecase/DeleteTripUseCase';
 import type { Filters } from './tripFilters';
+import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
 
 export interface TripWithMeta {
   trip: Trip;
@@ -99,7 +100,7 @@ export const useTripsStore = create<TripsState & TripsActions>((set) => {
       set({ syncingTripIds: [...syncingTripIds, clientTripId] });
       try {
         const result = await uploadTrip(clientTripId);
-        return result.ok ? null : result.error;
+        return result.ok ? null : accessErrorMessage(result.error);
       } finally {
         set({
           syncingTripIds: useTripsStore

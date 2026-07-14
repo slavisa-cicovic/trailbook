@@ -2,6 +2,7 @@ import type { Result } from '@/core/common/result';
 import type {
   FakePurchaseScenario,
   PurchaseAccess,
+  LocalTestTripAllowance,
   ApplePurchaseVerificationInput,
   PurchaseProduct,
   PurchaseSimulationResult,
@@ -16,4 +17,6 @@ export interface PurchaseRepository {
     scenario: FakePurchaseScenario;
   }): Promise<Result<PurchaseSimulationResult>>;
   verifyApplePurchase(input: ApplePurchaseVerificationInput): Promise<Result<PurchaseAccess>>;
+  getLocalTestTripAllowance(): Promise<Result<LocalTestTripAllowance>>;
+  consumeLocalTestTripAllowance(clientTripId: string): Promise<Result<LocalTestTripAllowance>>;
 }

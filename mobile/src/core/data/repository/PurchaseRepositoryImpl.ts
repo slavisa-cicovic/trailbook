@@ -3,6 +3,7 @@ import type {
   FakePurchaseScenario,
   ApplePurchaseVerificationInput,
   PurchaseAccess,
+  LocalTestTripAllowance,
   PurchaseProduct,
   PurchaseSimulationResult,
 } from '@/core/domain/model/purchase';
@@ -38,6 +39,16 @@ export class PurchaseRepositoryImpl implements PurchaseRepository {
 
   verifyApplePurchase(input: ApplePurchaseVerificationInput): Promise<Result<PurchaseAccess>> {
     return this.remoteDataSource.verifyApplePurchase(input);
+  }
+
+  getLocalTestTripAllowance(): Promise<Result<LocalTestTripAllowance>> {
+    return this.remoteDataSource.fetchLocalTestTripAllowance();
+  }
+
+  consumeLocalTestTripAllowance(
+    clientTripId: string,
+  ): Promise<Result<LocalTestTripAllowance>> {
+    return this.remoteDataSource.consumeLocalTestTripAllowance(clientTripId);
   }
 }
 

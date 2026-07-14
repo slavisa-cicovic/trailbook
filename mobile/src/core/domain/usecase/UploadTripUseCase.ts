@@ -4,8 +4,14 @@ import { err, ok } from '@/core/common/result';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { remoteTripDataSource } from '@/core/data/remote/FetchRemoteTripDataSource';
 import { uploadWaypointImages } from './UploadWaypointImagesUseCase';
+import { requireCloudPremium } from '@/core/domain/access/mobileAccessPolicy';
 
 export async function uploadTrip(clientTripId: string): Promise<Result<void>> {
+  const access = await requireCloudPremium();
+  if (!access.ok) {
+    await tripRepository.updateSyncState(clientTripId, 'FAILED');
+    return access;
+  }
   if (await authRepository.isDemo()) {
     await tripRepository.updateSyncState(clientTripId, 'FAILED');
     return err('Demo user cannot sync trips. Log in with a real account.');

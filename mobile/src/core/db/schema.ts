@@ -153,6 +153,12 @@ export const pendingTripDeletions = sqliteTable('pending_trip_deletions', {
   createdAt: text('created_at').notNull(),
 });
 
+export const localTestTripUsage = sqliteTable('local_test_trip_usage', {
+  userId: text('user_id').primaryKey(),
+  tripClientId: text('trip_client_id').notNull(),
+  usedAt: text('used_at').notNull(),
+});
+
 // ─── GROUPS ─────────────────────────────────────────────────────────────────
 
 export const tripGroups = sqliteTable(

@@ -3,6 +3,7 @@ import type {
   FakePurchaseScenario,
   ApplePurchaseVerificationInput,
   PurchaseAccess,
+  LocalTestTripAllowance,
   PurchaseProduct,
   PurchaseSimulationResult,
 } from '@/core/domain/model/purchase';
@@ -17,6 +18,8 @@ export interface RemotePurchaseDataSource {
     scenario: FakePurchaseScenario;
   }): Promise<Result<PurchaseSimulationResult>>;
   verifyApplePurchase(input: ApplePurchaseVerificationInput): Promise<Result<PurchaseAccess>>;
+  fetchLocalTestTripAllowance(): Promise<Result<LocalTestTripAllowance>>;
+  consumeLocalTestTripAllowance(clientTripId: string): Promise<Result<LocalTestTripAllowance>>;
 }
 
 class FetchRemotePurchaseDataSource implements RemotePurchaseDataSource {
@@ -45,6 +48,18 @@ class FetchRemotePurchaseDataSource implements RemotePurchaseDataSource {
 
   verifyApplePurchase(input: ApplePurchaseVerificationInput): Promise<Result<PurchaseAccess>> {
     return apiPost<PurchaseAccess>('/purchases/apple/verify', input);
+  }
+
+  fetchLocalTestTripAllowance(): Promise<Result<LocalTestTripAllowance>> {
+    return apiGet<LocalTestTripAllowance>('/purchases/local-test-trip');
+  }
+
+  consumeLocalTestTripAllowance(
+    clientTripId: string,
+  ): Promise<Result<LocalTestTripAllowance>> {
+    return apiPost<LocalTestTripAllowance>('/purchases/local-test-trip/consume', {
+      clientTripId,
+    });
   }
 }
 

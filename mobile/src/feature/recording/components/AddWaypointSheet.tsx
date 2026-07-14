@@ -9,6 +9,7 @@ import type { WaypointCategory, ImageSource } from '@/core/domain/model/waypoint
 import { addWaypoint } from '@/core/domain/usecase/AddWaypointUseCase';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
+import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
 
 type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
 
@@ -93,7 +94,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
     const result = await addWaypoint({ tripId, title: title.trim(), description: description.trim() || null, category, photos });
     setLoading(false);
     if (!result.ok) {
-      setError(result.error);
+      setError(accessErrorMessage(result.error));
     } else {
       reset();
       onDismiss();

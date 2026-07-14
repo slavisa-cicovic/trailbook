@@ -30,13 +30,12 @@ import {
   startNativeIosLocationCapture,
   stopNativeIosLocationCapture,
 } from '@/core/data/location/nativeIosLocationCapture';
-import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
 import { dbEvents } from '@/core/db/events';
 import { process, CURRENT_PROCESSING_VERSION } from '@/core/domain/processing';
 import { rawCaptureRepository } from '@/core/data/repository/RawCaptureRepositoryImpl';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
+import { authorizeTripStart } from '@/core/domain/access/mobileAccessPolicy';
 
-const DEMO_TRIP_LIMIT = 3;
 const DEVICE_SAMPLE_INTERVAL_MS = 60_000;
 
 async function sampleDevice(tripId: string): Promise<void> {
@@ -242,16 +241,12 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
 
   async startRecording(title, description) {
     try {
-      const isDemo = await authRepository.isDemo();
-      if (isDemo) {
-        const ids = await tripDao.getAllCompletedClientIds();
-        if (ids.length >= DEMO_TRIP_LIMIT) return err('DEMO_LIMIT_REACHED');
-      }
-
       const permissionResult = await requireRecordingLocationPermissions();
       if (!permissionResult.ok) return permissionResult;
 
       const clientTripId = randomUuid();
+      const accessResult = await authorizeTripStart(clientTripId);
+      if (!accessResult.ok) return accessResult;
       const now = new Date();
 
       await tripDao.insertTrip({

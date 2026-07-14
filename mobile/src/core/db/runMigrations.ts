@@ -221,6 +221,14 @@ async function migration_0009(sqlite: SQLiteDatabase): Promise<void> {
   await sqlite.execAsync(`DELETE FROM display_route_points;`);
 }
 
+const MIGRATION_0010 = `
+  CREATE TABLE IF NOT EXISTS local_test_trip_usage (
+    user_id text PRIMARY KEY NOT NULL,
+    trip_client_id text NOT NULL,
+    used_at text NOT NULL
+  );
+`;
+
 type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
 
 const MIGRATIONS: Migration[] = [
@@ -234,6 +242,7 @@ const MIGRATIONS: Migration[] = [
   [7, migration_0007],
   [8, migration_0008],
   [9, migration_0009],
+  [10, MIGRATION_0010],
 ];
 
 export async function runMigrations(): Promise<void> {

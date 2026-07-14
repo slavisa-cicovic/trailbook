@@ -6,6 +6,10 @@ import { ok, err } from '@/core/common/result';
 import { randomUuid } from '@/core/common/uuid';
 import * as waypointDao from '@/core/data/local/waypointDao';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
+import {
+  authorizeTripContent,
+  authorizeTripPhotos,
+} from '@/core/domain/access/mobileAccessPolicy';
 
 export interface AddWaypointParams {
   tripId: string;
@@ -33,6 +37,14 @@ async function copyPhotoToStorage(
 
 export async function addWaypoint(params: AddWaypointParams): Promise<Result<string>> {
   try {
+    const contentAccess = await authorizeTripContent(params.tripId);
+    if (!contentAccess.ok) return contentAccess;
+    const photoAccess = await authorizeTripPhotos(
+      params.tripId,
+      params.photos.length,
+    );
+    if (!photoAccess.ok) return photoAccess;
+
     const position = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.High,
     });

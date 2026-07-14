@@ -28,6 +28,11 @@ import { getTripNavigationContext } from '@/feature/trips/tripNavigationContext'
 import * as displayRoutePointDao from '@/core/data/local/displayRoutePointDao';
 import * as tripDao from '@/core/data/local/tripDao';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
+import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
+import {
+  accessErrorMessage,
+  authorizeTripPhotos,
+} from '@/core/domain/access/mobileAccessPolicy';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PHOTO_HEIGHT = Math.round(SCREEN_WIDTH * 0.65);
@@ -42,6 +47,7 @@ export default function WaypointDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
+  const { showAlert } = useCustomAlert();
   const mapRef = useRef<MapView>(null);
   const fittedRouteTripIdRef = useRef<string | null>(null);
 
@@ -226,8 +232,22 @@ export default function WaypointDetailScreen() {
       quality: 0.85,
     });
     if (result.canceled) return;
+    const access = await authorizeTripPhotos(waypoint.tripId, result.assets.length);
+    if (!access.ok) {
+      showAlert({ title: 'Trailbook Premium', message: accessErrorMessage(access.error) });
+      return;
+    }
     for (const asset of result.assets) {
-      await addPhotoToWaypoint(waypoint.id, asset.uri, 'GALLERY', null);
+      const saved = await addPhotoToWaypoint(
+        waypoint.id,
+        asset.uri,
+        'GALLERY',
+        null,
+      );
+      if (!saved.ok) {
+        showAlert({ title: 'Trailbook Premium', message: accessErrorMessage(saved.error) });
+        return;
+      }
     }
     reload();
   }
