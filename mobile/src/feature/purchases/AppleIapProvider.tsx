@@ -102,6 +102,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     null,
   );
   const [pendingProductIds, setPendingProductIds] = useState<string[]>([]);
+  const initiatedProductIds = useRef(new Set<string>());
   const processingTransactions = useRef(new Set<string>());
   const notifiedPendingTransactions = useRef(new Set<string>());
   const retryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -348,6 +349,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       console.warn('[Trailbook][apple-iap]', errorMessage(error));
     },
     onPurchaseError(error) {
+      initiatedProductIds.current.clear();
       setBusyAction(null);
       setMessage(
         error.code === 'user-cancelled'
@@ -356,7 +358,8 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       );
     },
     onPurchaseSuccess(purchase) {
-      void processPurchaseRef.current(purchase);
+      const notify = initiatedProductIds.current.delete(purchase.productId);
+      void processPurchaseRef.current(purchase, notify);
     },
   });
 
@@ -453,9 +456,11 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
         setMessage('This Apple product is not supported by Trailbook.');
         return;
       }
+      initiatedProductIds.current.add(productId);
       setBusyAction(`purchase:${productId}`);
       const tokenResult = await purchaseRepository.getAppleAccountToken();
       if (!tokenResult.ok) {
+        initiatedProductIds.current.delete(productId);
         setBusyAction(null);
         setMessage(tokenResult.error);
         return;
@@ -472,6 +477,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
           type: 'subs',
         });
       } catch (error) {
+        initiatedProductIds.current.delete(productId);
         setBusyAction(null);
         setMessage(
           isUserCancelledPurchase(error)
