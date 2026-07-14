@@ -70,12 +70,12 @@ export default function PremiumScreen() {
             <StatusRow label="Status" value={statusLabel(access)} />
             {access.currentPeriodEndsAt ? (
               <StatusRow
-                label={access.subscriptionStatus === 'canceled' ? 'Access ends' : 'Current period ends'}
+                label={periodEndLabel(access.subscriptionStatus)}
                 value={formatDate(access.currentPeriodEndsAt)}
               />
             ) : null}
           </View>
-          {hasPremiumAccess(access) ? (
+          {access.provider === 'apple' && access.planCode !== 'demo' ? (
             <LoadingButton
               onPress={() => void openUrl(APPLE_MANAGE_SUBSCRIPTIONS_URL)}
               variant="secondary"
@@ -262,7 +262,6 @@ function LegalLink({ label, onPress }: { label: string; onPress: () => void }) {
 }
 
 function subscriptionSummary(access: PurchaseAccess) {
-  if (!hasPremiumAccess(access)) return 'No active Premium subscription.';
   if (access.subscriptionStatus === 'canceled') {
     return access.currentPeriodEndsAt
       ? `Canceled. Premium remains active until ${formatDate(access.currentPeriodEndsAt)}.`
@@ -273,9 +272,11 @@ function subscriptionSummary(access: PurchaseAccess) {
     return 'Premium remains active during the billing grace period.';
   }
   if (access.subscriptionStatus === 'billing_retry') {
-    return 'Apple is retrying the subscription payment. Update your payment method to retain access.';
+    return 'Premium access is paused while Apple retries the subscription payment. Update your payment method to restore access.';
   }
   if (access.subscriptionStatus === 'revoked') return 'This subscription was revoked.';
+  if (access.subscriptionStatus === 'expired') return 'This subscription has expired.';
+  if (!hasPremiumAccess(access)) return 'No active Premium subscription.';
   return 'No active Premium subscription.';
 }
 
@@ -286,10 +287,25 @@ function planLabel(planCode: string) {
 }
 
 function statusLabel(access: PurchaseAccess) {
-  if (!hasPremiumAccess(access)) return 'Not subscribed';
-  return access.subscriptionStatus
-    .replaceAll('_', ' ')
-    .replace(/^./, (value) => value.toUpperCase());
+  if (access.planCode === 'demo') return 'Not subscribed';
+  const labels: Record<PurchaseAccess['subscriptionStatus'], string> = {
+    active: 'Active',
+    billing_retry: 'Billing retry',
+    canceled: 'Canceled',
+    expired: 'Expired',
+    in_grace_period: 'Billing grace period',
+    lifetime: 'Lifetime',
+    revoked: 'Revoked',
+  };
+  return labels[access.subscriptionStatus];
+}
+
+function periodEndLabel(status: PurchaseAccess['subscriptionStatus']) {
+  if (status === 'canceled') return 'Access ends';
+  if (status === 'billing_retry' || status === 'expired' || status === 'revoked') {
+    return 'Current period ended';
+  }
+  return 'Current period ends';
 }
 
 function introductoryRenewalText(product: PurchaseProduct) {
