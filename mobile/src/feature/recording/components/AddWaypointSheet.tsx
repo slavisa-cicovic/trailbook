@@ -120,7 +120,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
         <View style={[styles.sheet, { backgroundColor: theme.background }]}>
           <View style={[styles.handle, { backgroundColor: theme.border }]} />
 
-          <Text style={[styles.sheetTitle, { color: theme.primaryText }]}>Add note</Text>
+          <Text style={[styles.sheetTitle, { color: theme.primaryText }]}>Add waypoint</Text>
           <Text style={[styles.sheetSubtitle, { color: theme.mutedText }]}>
             Save a quick waypoint for this route using your current location.
           </Text>
@@ -225,7 +225,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
             >
               {loading
                 ? <ActivityIndicator color={theme.background} size="small" />
-                : <Text style={[styles.saveBtnText, { color: theme.background }]}>Save note</Text>
+                : <Text style={[styles.saveBtnText, { color: theme.background }]}>Save waypoint</Text>
               }
             </Pressable>
           </View>

@@ -59,7 +59,7 @@ export function EditWaypointSheet({ waypoint, visible, onDismiss, onSaved }: Pro
         <Pressable style={styles.backdrop} onPress={onDismiss} />
         <View style={[styles.sheet, { backgroundColor: theme.card }]}>
           <View style={[styles.handle, { backgroundColor: theme.border }]} />
-          <Text style={[styles.sheetTitle, { color: theme.primaryText }]}>Edit note</Text>
+          <Text style={[styles.sheetTitle, { color: theme.primaryText }]}>Edit waypoint</Text>
 
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Title */}
