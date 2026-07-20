@@ -154,7 +154,12 @@ export class TripRepositoryImpl implements TripRepository {
   }
 
   async updateWaypoint(waypoint: Waypoint): Promise<Result<void>> {
-    return resultOfAsync(() => waypointDao.updateWaypoint(waypoint));
+    return resultOfAsync(async () => {
+      await sqlite.withTransactionAsync(async () => {
+        await waypointDao.updateWaypoint(waypoint);
+        await tripDao.updateSyncState(waypoint.tripId, 'PENDING');
+      });
+    });
   }
 
   async deleteWaypoint(waypointId: string): Promise<Result<void>> {

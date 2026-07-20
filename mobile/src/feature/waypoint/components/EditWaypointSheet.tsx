@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { Waypoint, WaypointCategory } from '@/core/domain/model/waypoint';
-import * as waypointDao from '@/core/data/local/waypointDao';
+import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { CATEGORY_ICON, CATEGORY_LABEL, CATEGORY_ORDER } from '@/constants/waypointCategories';
 
@@ -37,13 +37,17 @@ export function EditWaypointSheet({ waypoint, visible, onDismiss, onSaved }: Pro
     if (!title.trim()) { setError('Title is required'); return; }
     setLoading(true);
     try {
-      await waypointDao.updateWaypoint({
+      const result = await tripRepository.updateWaypoint({
         ...waypoint,
         category,
         title: title.trim(),
         description: note.trim() || null,
         updatedAt: new Date(),
       });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       onSaved();
       onDismiss();
     } catch (e) {
