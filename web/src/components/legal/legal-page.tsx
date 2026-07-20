@@ -3,15 +3,16 @@ import type { PropsWithChildren, ReactNode } from "react";
 
 export function LegalPage({
   children,
+  subtitle = "Effective July 14, 2026",
   title,
-}: PropsWithChildren<{ title: string }>) {
+}: PropsWithChildren<{ subtitle?: string; title: string }>) {
   return (
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 8 } }}>
       <Paper elevation={0} sx={{ border: 1, borderColor: "divider", borderRadius: 4, p: { xs: 3, md: 6 } }}>
         <Stack spacing={3}>
           <Stack spacing={1}>
             <Typography component="h1" variant="h3">{title}</Typography>
-            <Typography color="text.secondary">Effective July 14, 2026</Typography>
+            <Typography color="text.secondary">{subtitle}</Typography>
           </Stack>
           {children}
           <Typography color="text.secondary" variant="body2">

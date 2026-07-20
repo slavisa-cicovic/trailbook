@@ -1224,7 +1224,7 @@ Execution note:
 
 ## Phase 12: Sandbox and TestFlight QA
 
-Status: In progress
+Status: Done
 
 Test with Apple sandbox/TestFlight accounts:
 
@@ -1269,9 +1269,39 @@ Acceptance:
 - restore after reinstall works;
 - ownership conflicts are safely handled.
 
+Sandbox verification completed on the deployed AWS backend and an iPhone
+preview build:
+
+- monthly and yearly purchases, localized StoreKit prices and introductory
+  offers;
+- cancellation, failed purchase, renewal, disabled auto-renewal, expiration,
+  billing retry and recovery after purchases were re-enabled;
+- Billing Grace Period preserved all Premium entitlements and recording access,
+  then removed entitlements and blocked a regular user after grace expired;
+- restore, reinstall then restore, backend outage recovery and unfinished
+  transaction completion;
+- refund request through the Apple system sheet, followed by a processed
+  `REFUND` notification, immediate `revoked` backend state and empty
+  entitlements;
+- Trailbook account switching and Apple purchase ownership conflict;
+- duplicate transaction verification produced one idempotent event;
+- replaying an already processed signed notification returned
+  `duplicate: true` without changing entitlement state;
+- notification history recovery processed 36 Apple payloads with zero failures
+  and preserved the latest revoked state;
+- offline/local entitlement enforcement, cloud guards, login, sync, restore,
+  images, sharing and deployed AWS integrations were regression-tested;
+- fake purchase controls remained disabled, including after upgrading an older
+  development installation.
+- TestFlight production build `1.0.0 (2)` completed a monthly sandbox purchase,
+  persisted the verified backend entitlement across reinstall and completed an
+  explicit StoreKit restore successfully.
+
 ---
 
 ## Phase 13: Production Readiness
+
+Status: In progress
 
 Before production:
 
