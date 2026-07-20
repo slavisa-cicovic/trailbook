@@ -9,10 +9,19 @@ module.exports = {
     version: "1.0.0",
     orientation: "portrait",
     userInterfaceStyle: "light",
-    icon: "./assets/app-icon.png",
+    icon: "./assets/app-icon-release.png",
     plugins: [
       "./plugins/withLocationTaskPatch",
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          image: "./assets/app-icon-release.png",
+          imageWidth: 220,
+          resizeMode: "contain",
+          backgroundColor: "#f3efe6",
+        },
+      ],
       "expo-background-task",
       "expo-secure-store",
       "expo-iap",
@@ -44,7 +53,7 @@ module.exports = {
     runtimeVersion: "1.0.0",
     assetBundlePatterns: ["**/*"],
     ios: {
-      icon: "./assets/app-icon.png",
+      icon: "./assets/app-icon-release.png",
       supportsTablet: false,
       bundleIdentifier: "com.slavisacicovic.trailbook",
       entitlements: {
@@ -97,6 +106,9 @@ module.exports = {
             },
           }
         : undefined,
+    },
+    web: {
+      favicon: "./assets/app-icon-release.png",
     },
     experiments: {
       typedRoutes: false,
