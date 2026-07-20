@@ -55,6 +55,9 @@ export default function SettingsScreen() {
   const purchaseSimulationEnabled =
     (role === 'admin' || role === 'test_user') &&
     (__DEV__ || process.env.EXPO_PUBLIC_ENABLE_FAKE_PURCHASES === 'true');
+  const developerDataToolsEnabled =
+    (role === 'admin' || role === 'test_user') &&
+    (__DEV__ || process.env.EXPO_PUBLIC_ENABLE_DATA_TOOLS === 'true');
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -174,25 +177,19 @@ export default function SettingsScreen() {
           </View>
         </SettingsSection>
 
-        <SettingsSection title="Data">
-          <SettingsRow
-            disabled={isDemo || isWorking}
-            iconName="cloud-download"
-            loading={isWorking}
-            onPress={isDemo ? undefined : () => void onRestoreFromBackend()}
-            title="Restore from backend"
-            value={isDemo ? 'Unavailable' : 'Restore'}
-          />
-          <SettingsDivider />
-          <SettingsRow
-            disabled={isDemo || isWorking}
-            iconName="delete-sweep"
-            onPress={isDemo ? undefined : onDeleteLocalClick}
-            title="Delete local trips"
-            tone="danger"
-            value={isDemo ? 'Unavailable' : 'Delete'}
-          />
-        </SettingsSection>
+        {!isDemo ? (
+          <SettingsSection title="Cloud data">
+            <SettingsRow
+              description="Download trips and photos that are missing on this device"
+              disabled={isWorking}
+              iconName="cloud-download"
+              loading={isWorking}
+              onPress={() => void onRestoreFromBackend()}
+              title="Restore missing data"
+              value="Restore"
+            />
+          </SettingsSection>
+        ) : null}
 
         <SettingsSection title="App">
           <SettingsRow
@@ -203,23 +200,38 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
 
-        {purchaseSimulationEnabled ? (
+        {purchaseSimulationEnabled || developerDataToolsEnabled ? (
           <SettingsSection title="Developer">
-            <SettingsRow
-              iconName="payments"
-              onPress={() => router.push('/purchases')}
-              title="Purchases simulation"
-              value="Open"
-            />
-            <SettingsDivider />
-            <SettingsRow
-              disabled={isWorking}
-              iconName="storage"
-              loading={isWorking}
-              onPress={() => void onExportDatabase()}
-              title="Export database"
-              value="Share"
-            />
+            {purchaseSimulationEnabled ? (
+              <SettingsRow
+                iconName="payments"
+                onPress={() => router.push('/purchases')}
+                title="Purchases simulation"
+                value="Open"
+              />
+            ) : null}
+            {purchaseSimulationEnabled && developerDataToolsEnabled ? <SettingsDivider /> : null}
+            {developerDataToolsEnabled ? (
+              <>
+                <SettingsRow
+                  disabled={isWorking}
+                  iconName="delete-sweep"
+                  onPress={onDeleteLocalClick}
+                  title="Delete local trips"
+                  tone="danger"
+                  value="Delete"
+                />
+                <SettingsDivider />
+                <SettingsRow
+                  disabled={isWorking}
+                  iconName="storage"
+                  loading={isWorking}
+                  onPress={() => void onExportDatabase()}
+                  title="Export database"
+                  value="Share"
+                />
+              </>
+            ) : null}
           </SettingsSection>
         ) : null}
 
