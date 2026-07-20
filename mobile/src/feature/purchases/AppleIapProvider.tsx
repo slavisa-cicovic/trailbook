@@ -46,6 +46,7 @@ interface AppleIapContextValue {
   available: boolean;
   connected: boolean;
   pendingProductIds: string[];
+  manageSubscriptions(): Promise<void>;
   purchase(productId: string): Promise<void>;
   requestRefund(productId: string): Promise<void>;
   restore(): Promise<void>;
@@ -55,6 +56,7 @@ const unavailableAppleIap: AppleIapContextValue = {
   available: false,
   connected: false,
   pendingProductIds: [],
+  async manageSubscriptions() {},
   async purchase() {},
   async requestRefund() {},
   async restore() {},
@@ -91,6 +93,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     beginRefundRequestIOS,
     isEligibleForIntroOfferIOS,
     restorePurchases: restoreApplePurchases,
+    showManageSubscriptionsIOS,
     useIAP,
   } = require('expo-iap') as typeof import('expo-iap');
   const authStatus = useAuthStore((state) => state.status);
@@ -464,6 +467,17 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     available: true,
     connected: iap.connected,
     pendingProductIds,
+    async manageSubscriptions() {
+      setBusyAction('manage-subscription');
+      setMessage(null);
+      try {
+        await showManageSubscriptionsIOS();
+        await refreshAccess();
+      } catch (error) {
+        setBusyAction(null);
+        setMessage(`Unable to manage subscriptions: ${errorMessage(error)}`);
+      }
+    },
     async purchase(productId) {
       if (!APPLE_PRODUCT_IDS.includes(productId)) {
         setMessage('This Apple product is not supported by Trailbook.');

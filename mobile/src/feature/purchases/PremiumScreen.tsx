@@ -18,7 +18,6 @@ import {
 } from './AppleIapProvider';
 import { usePurchaseStore } from './purchaseStore';
 import {
-  APPLE_MANAGE_SUBSCRIPTIONS_URL,
   purchaseSupportUrl,
   TRAILBOOK_PRIVACY_POLICY_URL,
   TRAILBOOK_TERMS_OF_USE_URL,
@@ -86,7 +85,10 @@ export default function PremiumScreen() {
           {access.provider === 'apple' && access.planCode !== 'demo' ? (
             <View style={styles.subscriptionActions}>
               <LoadingButton
-                onPress={() => void openUrl(APPLE_MANAGE_SUBSCRIPTIONS_URL)}
+                disabled={!iap.available || !iap.connected}
+                loading={busyAction === 'manage-subscription'}
+                loadingLabel="Opening Apple…"
+                onPress={() => void iap.manageSubscriptions()}
                 variant="secondary"
               >
                 Manage subscription

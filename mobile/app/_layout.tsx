@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Platform, useColorScheme } from 'react-native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  View,
+} from 'react-native';
+import {
+  Stack,
+  type ErrorBoundaryProps,
+  useRouter,
+  useSegments,
+} from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -17,6 +29,39 @@ import { unregisterSyncTask } from '@/core/data/sync/syncTask';
 import { AppleIapProvider } from '@/feature/purchases/AppleIapProvider';
 
 SplashScreen.preventAutoHideAsync();
+
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  console.error('Unhandled route error', error);
+
+  return (
+    <FailureScreen
+      message="Trailbook encountered an unexpected error."
+      onRetry={retry}
+    />
+  );
+}
+
+function FailureScreen({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void | Promise<void>;
+}) {
+  return (
+    <View style={styles.failureScreen}>
+      <Text style={styles.failureTitle}>Something went wrong</Text>
+      <Text style={styles.failureMessage}>{message}</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => void onRetry()}
+        style={styles.retryButton}
+      >
+        <Text style={styles.retryButtonText}>Try again</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 function AuthGate({ ready }: { ready: boolean }) {
   const status = useAuthStore((s) => s.status);
@@ -47,6 +92,8 @@ function AuthGate({ ready }: { ready: boolean }) {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  const [startupAttempt, setStartupAttempt] = useState(0);
+  const [startupError, setStartupError] = useState<Error | null>(null);
   const initAuth = useAuthStore((s) => s.init);
   const initRecording = useRecordingStore((s) => s.init);
   const initTheme = useThemeStore((s) => s.init);
@@ -61,13 +108,39 @@ export default function RootLayout() {
   }, [resolvedMode]);
 
   useEffect(() => {
+    let canceled = false;
+    setReady(false);
+    setStartupError(null);
+
     runMigrations()
       .then(() => Promise.all([initAuth(), initTheme()]))
       .then(() => unregisterSyncTask())
       .then(() => initRecording())
-      .then(() => setReady(true))
-      .catch((e) => console.error('Startup failed', e));
-  }, []);
+      .then(() => {
+        if (!canceled) setReady(true);
+      })
+      .catch((error) => {
+        if (canceled) return;
+        const startupFailure =
+          error instanceof Error ? error : new Error(String(error));
+        console.error('Startup failed', startupFailure);
+        setStartupError(startupFailure);
+        void SplashScreen.hideAsync();
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [initAuth, initRecording, initTheme, startupAttempt]);
+
+  if (startupError) {
+    return (
+      <FailureScreen
+        message="Trailbook could not finish starting. Check your connection and try again."
+        onRetry={() => setStartupAttempt((attempt) => attempt + 1)}
+      />
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -80,3 +153,39 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  failureScreen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 32,
+    backgroundColor: '#f3efe6',
+  },
+  failureTitle: {
+    color: '#243224',
+    fontSize: 30,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  failureMessage: {
+    color: '#5f6f5c',
+    fontSize: 17,
+    lineHeight: 25,
+    textAlign: 'center',
+  },
+  retryButton: {
+    minWidth: 180,
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    backgroundColor: '#243224',
+  },
+  retryButtonText: {
+    color: '#f7f4ed',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});
