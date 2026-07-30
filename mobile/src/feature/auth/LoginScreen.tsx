@@ -8,10 +8,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
@@ -31,6 +32,7 @@ const isDebugLoginEnabled =
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [email] = useState(DEFAULT_LOGIN_EMAIL);
+  const router = useRouter();
   const loginWithSocial = useAuthStore((s) => s.loginWithSocial);
   const loginAsDemo = useAuthStore((s) => s.loginAsDemo);
   const { theme } = useAppTheme();
@@ -40,7 +42,18 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const url = `${API_BASE_URL}/auth/${provider}?returnTo=${encodeURIComponent(OAUTH_RETURN_TO)}`;
-      await Linking.openURL(url);
+      const result = await WebBrowser.openAuthSessionAsync(url, OAUTH_RETURN_TO);
+      if (result.type !== 'success') return;
+
+      const callbackUrl = new URL(result.url);
+      if (callbackUrl.protocol !== 'trailbook:' || callbackUrl.pathname !== '/auth/callback') {
+        throw new Error('OAuth returned an unexpected callback URL.');
+      }
+
+      router.replace({
+        pathname: '/auth/callback',
+        params: Object.fromEntries(callbackUrl.searchParams.entries()),
+      });
     } catch (e) {
       showAlert({
         title: 'Sign in failed',
@@ -140,7 +153,7 @@ export default function LoginScreen() {
           <Text style={[styles.hint, { color: theme.mutedText }]}>
             {isExpoGo
               ? 'Expo Go uses debug sign in because OAuth deep links return to the native app.'
-              : 'Social sign in opens your browser and returns to Trailbook after authorization.'}
+              : 'Sign in securely without leaving Trailbook.'}
           </Text>
         </View>
       </KeyboardAvoidingView>

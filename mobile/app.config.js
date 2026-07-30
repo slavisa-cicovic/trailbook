@@ -24,6 +24,7 @@ module.exports = {
       ],
       "expo-background-task",
       "expo-secure-store",
+      "expo-web-browser",
       "expo-iap",
       [
         "expo-image-picker",
