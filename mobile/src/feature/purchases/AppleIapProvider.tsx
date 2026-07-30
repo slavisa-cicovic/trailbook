@@ -41,13 +41,17 @@ type ApplePurchaseProcessingResult =
   | 'pending'
   | 'retry-required'
   | 'verified';
+type AppleProductLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
 interface AppleIapContextValue {
   available: boolean;
   connected: boolean;
   pendingProductIds: string[];
+  productLoadError: string | null;
+  productLoadState: AppleProductLoadState;
   manageSubscriptions(): Promise<void>;
   purchase(productId: string): Promise<void>;
+  reloadProducts(): Promise<void>;
   requestRefund(productId: string): Promise<void>;
   restore(): Promise<void>;
 }
@@ -56,8 +60,11 @@ const unavailableAppleIap: AppleIapContextValue = {
   available: false,
   connected: false,
   pendingProductIds: [],
+  productLoadError: null,
+  productLoadState: 'idle',
   async manageSubscriptions() {},
   async purchase() {},
+  async reloadProducts() {},
   async requestRefund() {},
   async restore() {},
 };
@@ -108,6 +115,9 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     null,
   );
   const [pendingProductIds, setPendingProductIds] = useState<string[]>([]);
+  const [productLoadError, setProductLoadError] = useState<string | null>(null);
+  const [productLoadState, setProductLoadState] =
+    useState<AppleProductLoadState>('idle');
   const initiatedProductIds = useRef(new Set<string>());
   const processingTransactions = useRef(new Set<string>());
   const notifiedPendingTransactions = useRef(new Set<string>());
@@ -371,6 +381,19 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
 
   finishTransactionRef.current = iap.finishTransaction;
 
+  async function loadAppleProducts() {
+    if (!iap.connected || authStatus !== 'authenticated') return;
+    setProductLoadError(null);
+    setProductLoadState('loading');
+    try {
+      await iap.fetchProducts({ skus: APPLE_PRODUCT_IDS, type: 'subs' });
+      setProductLoadState('loaded');
+    } catch (error) {
+      setProductLoadError(errorMessage(error));
+      setProductLoadState('error');
+    }
+  }
+
   useEffect(() => {
     let canceled = false;
     void hydrateAccess(userId).then(() => {
@@ -383,7 +406,7 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!iap.connected || authStatus !== 'authenticated') return;
-    void iap.fetchProducts({ skus: APPLE_PRODUCT_IDS, type: 'subs' });
+    void loadAppleProducts();
     void getAvailablePurchases({
       alsoPublishToEventListenerIOS: false,
       onlyIncludeActiveItemsIOS: true,
@@ -467,6 +490,8 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
     available: true,
     connected: iap.connected,
     pendingProductIds,
+    productLoadError,
+    productLoadState,
     async manageSubscriptions() {
       setBusyAction('manage-subscription');
       setMessage(null);
@@ -512,6 +537,9 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
             : `Unable to start Apple purchase: ${errorMessage(error)}`,
         );
       }
+    },
+    async reloadProducts() {
+      await loadAppleProducts();
     },
     async requestRefund(productId) {
       if (!APPLE_PRODUCT_IDS.includes(productId)) {

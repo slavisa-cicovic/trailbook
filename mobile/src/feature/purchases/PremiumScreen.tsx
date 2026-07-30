@@ -37,6 +37,7 @@ export default function PremiumScreen() {
     message === 'Trailbook Premium is active.' && !hasPremiumAccess(access)
       ? null
       : message;
+  const goBack = () => router.dismissTo('/settings');
 
   if (status === 'demo') return <Redirect href="/settings" />;
 
@@ -44,7 +45,7 @@ export default function PremiumScreen() {
     <ScreenLayout
       contentStyle={styles.content}
       contentVariant="plain"
-      onBack={() => router.back()}
+      onBack={goBack}
       scrollEnabled
       title="Trailbook Premium"
     >
@@ -158,10 +159,40 @@ export default function PremiumScreen() {
         </Text>
       ) : null}
 
-      {iap.connected && products.length === 0 ? (
+      {iap.connected &&
+      products.length === 0 &&
+      (iap.productLoadState === 'idle' ||
+        iap.productLoadState === 'loading') ? (
         <Text style={[styles.storeStatus, { color: theme.mutedText }]}>
           Loading Apple subscription options…
         </Text>
+      ) : null}
+
+      {iap.connected &&
+      products.length === 0 &&
+      (iap.productLoadState === 'loaded' ||
+        iap.productLoadState === 'error') ? (
+        <Card
+          style={[
+            styles.card,
+            { backgroundColor: theme.card, borderColor: theme.border },
+          ]}
+          title="Apple subscriptions unavailable"
+          titleStyle={{ color: theme.primaryText }}
+          subtitle={
+            iap.productLoadError
+              ? `Apple could not load the subscription catalog: ${iap.productLoadError}`
+              : 'Apple did not return the Trailbook monthly or yearly subscription. Check the App Store connection and try again.'
+          }
+          subtitleStyle={{ color: theme.mutedText }}
+        >
+          <LoadingButton
+            onPress={() => void iap.reloadProducts()}
+            variant="secondary"
+          >
+            Retry
+          </LoadingButton>
+        </Card>
       ) : null}
 
       {products.map((product) => (
