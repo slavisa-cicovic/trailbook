@@ -47,9 +47,15 @@ export function mergeAndFinalize(
 ): Segment[] {
   if (!rawSegments.length) return [];
 
+  // A speed-derived DRIVE interval inside a continuous bike ride can be caused
+  // by briefly crossing the fallback vehicle threshold. Collapse consecutive
+  // classifier fragments first so the bridge check evaluates the complete run.
+  const classifierRuns = mergeAdjacentSameType(rawSegments);
+  const bikeStable = normalizeBikeDriveBridges(classifierRuns, geoPoints);
+
   // A short low-speed interruption between confirmed drive segments is usually
   // traffic, parking manoeuvring, or sparse callbacks rather than a true mode change.
-  const driveStable = absorbDriveInterruptions(rawSegments);
+  const driveStable = absorbDriveInterruptions(bikeStable);
 
   // Sparse slow movement should not be labelled as cycling solely because one
   // reported speed crossed the walk threshold.
@@ -90,6 +96,27 @@ export function mergeAndFinalize(
     endedAt: seg.endTime,
     distanceM: distanceInRange(geoPoints, seg.startTime, seg.endTime),
   }));
+}
+
+function mergeAdjacentSameType(segments: RawSegment[]): RawSegment[] {
+  if (segments.length <= 1) {
+    return segments.map((segment) => ({ ...segment }));
+  }
+
+  const result: RawSegment[] = [{ ...segments[0] }];
+  for (const segment of segments.slice(1)) {
+    const previous = result[result.length - 1];
+    const gapMs = segment.startTime.getTime() - previous.endTime.getTime();
+    if (
+      previous.type === segment.type &&
+      gapMs <= V1.mergeGapThresholdMs
+    ) {
+      previous.endTime = segment.endTime;
+    } else {
+      result.push({ ...segment });
+    }
+  }
+  return result;
 }
 
 function mergeConsecutiveSameType(segments: RawSegment[], geoPoints: GeoPoint[]): RawSegment[] {
@@ -136,6 +163,108 @@ function classifyByAverageSpeed(speedMps: number): Segment['segmentType'] {
   if (speedMps < V1.walkMaxMps) return 'WALK';
   if (speedMps < V1.bikeMaxMps) return 'BIKE';
   return 'DRIVE';
+}
+
+function normalizeBikeDriveBridges(
+  segments: RawSegment[],
+  geoPoints: GeoPoint[],
+): RawSegment[] {
+  if (segments.length < 3) return segments.map((segment) => ({ ...segment }));
+
+  return segments.map((segment, index) => {
+    const previous = segments[index - 1];
+    const next = segments[index + 1];
+    if (
+      segment.type !== 'DRIVE' ||
+      previous?.type !== 'BIKE' ||
+      next?.type !== 'BIKE'
+    ) {
+      return segment;
+    }
+
+    const durationMs = segment.endTime.getTime() - segment.startTime.getTime();
+    const previousGapMs = segment.startTime.getTime() - previous.endTime.getTime();
+    const nextGapMs = next.startTime.getTime() - segment.endTime.getTime();
+    if (
+      durationMs <= 0 ||
+      durationMs > V1.bikeDriveBridgeMaxMs ||
+      previousGapMs > V1.mergeGapThresholdMs ||
+      nextGapMs > V1.mergeGapThresholdMs
+    ) {
+      return segment;
+    }
+
+    const durationSeconds = durationMs / 1000;
+    const averageSpeedMps =
+      distanceInRange(geoPoints, segment.startTime, segment.endTime) / durationSeconds;
+    const medianSpeedMps = medianReportedSpeedInRange(
+      geoPoints,
+      segment.startTime,
+      segment.endTime,
+    );
+
+    if (
+      averageSpeedMps > V1.bikeMaxMps ||
+      medianSpeedMps === null ||
+      medianSpeedMps > V1.bikeMaxMps ||
+      !hasContinuousBikeBoundary(geoPoints, segment.startTime) ||
+      !hasContinuousBikeBoundary(geoPoints, segment.endTime)
+    ) {
+      return segment;
+    }
+
+    return { ...segment, type: 'BIKE' };
+  });
+}
+
+function hasContinuousBikeBoundary(points: GeoPoint[], boundary: Date): boolean {
+  const boundaryMs = boundary.getTime();
+  const samples = points.filter(
+    (point) =>
+      Math.abs(point.timestamp.getTime() - boundaryMs) <=
+        V1.bikeDriveBoundaryWindowMs &&
+      point.speedMps !== undefined &&
+      point.speedMps >= 0,
+  );
+  const hasBefore = samples.some(
+    (point) =>
+      point.timestamp.getTime() <= boundaryMs &&
+      (point.speedMps as number) >= V1.walkMaxMps,
+  );
+  const hasAfter = samples.some(
+    (point) =>
+      point.timestamp.getTime() >= boundaryMs &&
+      (point.speedMps as number) >= V1.walkMaxMps,
+  );
+
+  return (
+    hasBefore &&
+    hasAfter &&
+    samples.every((point) => (point.speedMps as number) > V1.stationaryMaxMps)
+  );
+}
+
+function medianReportedSpeedInRange(
+  points: GeoPoint[],
+  from: Date,
+  to: Date,
+): number | null {
+  const speeds = points
+    .filter(
+      (point) =>
+        point.timestamp.getTime() >= from.getTime() &&
+        point.timestamp.getTime() <= to.getTime() &&
+        point.speedMps !== undefined &&
+        point.speedMps >= 0,
+    )
+    .map((point) => point.speedMps as number)
+    .sort((left, right) => left - right);
+
+  if (!speeds.length) return null;
+  const middle = Math.floor(speeds.length / 2);
+  return speeds.length % 2 === 0
+    ? (speeds[middle - 1] + speeds[middle]) / 2
+    : speeds[middle];
 }
 
 function reclassifyMovingStationarySegments(

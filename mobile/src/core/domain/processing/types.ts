@@ -39,6 +39,8 @@ export const V1 = {
   mergeGapThresholdMs: 30_000,
   driveInterruptionMaxMs: 5 * 60_000,
   driveAdjacentBikeMaxMs: 2 * 60_000,
+  bikeDriveBridgeMaxMs: 15 * 60_000,
+  bikeDriveBoundaryWindowMs: 30_000,
   walkStationaryInterruptionMaxMs: 4 * 60_000,
   walkStationaryInterruptionMinDistanceM: 15,
   walkSparseMergeMaxMs: 10 * 60_000,

@@ -5,7 +5,7 @@ import { classifyIntervals } from './activityClassifier';
 import { detectSegments } from './segmentDetector';
 import { mergeAndFinalize } from './segmentMerger';
 
-export const CURRENT_PROCESSING_VERSION = 9;
+export const CURRENT_PROCESSING_VERSION = 11;
 
 function processV1(bundle: TripBundle): Segment[] {
   const tripId = bundle.trip.clientTripId;
