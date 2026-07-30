@@ -3,7 +3,7 @@ import type { AuthRepository, AuthUser, SocialProvider } from './AuthRepository'
 import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
 import * as authApiClient from '@/core/data/remote/authApiClient';
-import { setApiAuthTokenProvider } from '@/core/data/remote/apiClient';
+import { apiDelete, setApiAuthTokenProvider } from '@/core/data/remote/apiClient';
 
 const KEYS = {
   accessToken: 'trailbook.access_token',
@@ -16,6 +16,10 @@ const KEYS = {
 } as const;
 
 export class SecureStoreAuthRepository implements AuthRepository {
+  async deleteAccount(): Promise<Result<void>> {
+    return apiDelete<void>('/auth/account', { confirmation: 'DELETE' });
+  }
+
   async loginWithSocial(provider: SocialProvider, idToken: string): Promise<Result<AuthUser>> {
     const result = await authApiClient.loginWithSocial(provider, idToken);
     if (!result.ok) return err(result.error);

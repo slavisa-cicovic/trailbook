@@ -127,6 +127,15 @@ export function apiGet<T>(path: string): Promise<Result<T>> {
   return withToken((token) => doRequest<T>(path, { method: 'GET' }, token));
 }
 
-export function apiDelete<T>(path: string): Promise<Result<T>> {
-  return withToken((token) => doRequest<T>(path, { method: 'DELETE' }, token));
+export function apiDelete<T>(path: string, body?: unknown): Promise<Result<T>> {
+  return withToken((token) =>
+    doRequest<T>(
+      path,
+      {
+        method: 'DELETE',
+        body: body === undefined ? undefined : JSON.stringify(body),
+      },
+      token,
+    ),
+  );
 }

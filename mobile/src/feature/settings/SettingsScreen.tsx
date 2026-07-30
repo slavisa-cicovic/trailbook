@@ -41,9 +41,15 @@ export default function SettingsScreen() {
 
   const isWorking = useSettingsStore((s) => s.isWorking);
   const statusMessage = useSettingsStore((s) => s.statusMessage);
+  const showDeleteAccountConfirm = useSettingsStore((s) => s.showDeleteAccountConfirm);
   const showDeleteConfirm = useSettingsStore((s) => s.showDeleteConfirm);
+  const onDeleteAccountClick = useSettingsStore((s) => s.onDeleteAccountClick);
   const onDeleteLocalClick = useSettingsStore((s) => s.onDeleteLocalClick);
+  const onDismissDeleteAccountConfirm = useSettingsStore(
+    (s) => s.onDismissDeleteAccountConfirm,
+  );
   const onDismissDeleteConfirm = useSettingsStore((s) => s.onDismissDeleteConfirm);
+  const onConfirmDeleteAccount = useSettingsStore((s) => s.onConfirmDeleteAccount);
   const onConfirmDeleteLocal = useSettingsStore((s) => s.onConfirmDeleteLocal);
   const onExportDatabase = useSettingsStore((s) => s.onExportDatabase);
   const onRestoreFromBackend = useSettingsStore((s) => s.onRestoreFromBackend);
@@ -140,6 +146,20 @@ export default function SettingsScreen() {
             title="Purchase"
             value={isDemo ? 'Demo' : purchaseAccess?.subscriptionStatus}
           />
+          {!isDemo && status === 'authenticated' ? (
+            <>
+              <SettingsDivider />
+              <SettingsRow
+                description="Permanently remove your account and cloud data"
+                disabled={isWorking}
+                iconName="delete-forever"
+                onPress={onDeleteAccountClick}
+                title="Delete account"
+                tone="danger"
+                value="Delete"
+              />
+            </>
+          ) : null}
         </SettingsSection>
 
         <SettingsSection title="Theme">
@@ -249,6 +269,24 @@ export default function SettingsScreen() {
           secondaryLabel="Cancel"
           onPrimaryPress={() => void onConfirmDeleteLocal()}
           onSecondaryPress={onDismissDeleteConfirm}
+        />
+      </BottomSheetModal>
+
+      <BottomSheetModal
+        visible={showDeleteAccountConfirm}
+        onClose={onDismissDeleteAccountConfirm}
+        title="Permanently delete your account?"
+        subtitle="This removes your Trailbook account, cloud trips, waypoint photos, shares and purchase link. It cannot be undone. Deleting Trailbook does not cancel an Apple subscription; cancel it separately in App Store subscription settings."
+      >
+        <ModalActions
+          primaryDisabled={isWorking}
+          primaryLabel="Delete account"
+          primaryLoading={isWorking}
+          primaryLoadingLabel="Deleting…"
+          secondaryDisabled={isWorking}
+          secondaryLabel="Cancel"
+          onPrimaryPress={() => void onConfirmDeleteAccount()}
+          onSecondaryPress={onDismissDeleteAccountConfirm}
         />
       </BottomSheetModal>
 

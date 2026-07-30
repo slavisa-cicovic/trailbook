@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { deleteAccount } from '@/core/domain/usecase/DeleteAccountUseCase';
 import { deleteLocalTrips } from '@/core/domain/usecase/DeleteLocalTripsUseCase';
 import { exportDatabase } from '@/core/domain/usecase/ExportDatabaseUseCase';
 import { restoreTrips } from '@/core/domain/usecase/RestoreTripsUseCase';
@@ -10,12 +11,16 @@ import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
 interface SettingsUiState {
   isWorking: boolean;
   statusMessage: string | null;
+  showDeleteAccountConfirm: boolean;
   showDeleteConfirm: boolean;
 }
 
 interface SettingsActions {
+  onDeleteAccountClick(): void;
   onDeleteLocalClick(): void;
+  onDismissDeleteAccountConfirm(): void;
   onDismissDeleteConfirm(): void;
+  onConfirmDeleteAccount(): Promise<void>;
   onConfirmDeleteLocal(): Promise<void>;
   onExportDatabase(): Promise<void>;
   onRestoreFromBackend(): Promise<void>;
@@ -26,14 +31,47 @@ interface SettingsActions {
 export const useSettingsStore = create<SettingsUiState & SettingsActions>((set) => ({
   isWorking: false,
   statusMessage: null,
+  showDeleteAccountConfirm: false,
   showDeleteConfirm: false,
+
+  onDeleteAccountClick() {
+    set({ showDeleteAccountConfirm: true });
+  },
 
   onDeleteLocalClick() {
     set({ showDeleteConfirm: true });
   },
 
+  onDismissDeleteAccountConfirm() {
+    set({ showDeleteAccountConfirm: false });
+  },
+
   onDismissDeleteConfirm() {
     set({ showDeleteConfirm: false });
+  },
+
+  async onConfirmDeleteAccount() {
+    const auth = useAuthStore.getState();
+    if (!auth.userId || auth.status !== 'authenticated') {
+      set({
+        showDeleteAccountConfirm: false,
+        statusMessage: 'Sign in again before deleting your account.',
+      });
+      return;
+    }
+
+    set({ showDeleteAccountConfirm: false, isWorking: true, statusMessage: null });
+    const result = await deleteAccount(
+      auth.userId,
+      useRecordingStore.getState().isRecording,
+    );
+    if (!result.ok) {
+      set({ isWorking: false, statusMessage: result.error });
+      return;
+    }
+
+    await useAuthStore.getState().logout();
+    set({ isWorking: false });
   },
 
   async onConfirmDeleteLocal() {

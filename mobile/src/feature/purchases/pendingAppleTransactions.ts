@@ -103,6 +103,12 @@ export function removeStalePendingAppleTransactions(
   );
 }
 
+export function removePendingAppleTransactionsForUser(userId: string) {
+  return mutatePendingTransactions((transactions) =>
+    transactions.filter((transaction) => transaction.userId !== userId),
+  );
+}
+
 export function retryDelayMs(attemptCount: number) {
   const index = Math.max(
     0,

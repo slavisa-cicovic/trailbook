@@ -10,6 +10,7 @@ export interface AuthUser {
 }
 
 export interface AuthRepository {
+  deleteAccount(): Promise<Result<void>>;
   loginWithSocial(provider: SocialProvider, idToken: string): Promise<Result<AuthUser>>;
   loginWithOAuthSession(input: {
     accessToken: string;

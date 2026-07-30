@@ -1,6 +1,8 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -13,6 +15,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 
+import { AccountDeletionService } from "./account-deletion.service";
 import { AuthService } from "./auth.service";
 
 export interface SocialLoginRequest {
@@ -24,9 +27,16 @@ export interface RefreshRequest {
   refreshToken?: string;
 }
 
+export interface DeleteAccountRequest {
+  confirmation?: string;
+}
+
 @Controller("auth")
 export class AuthController {
-  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
+  constructor(
+    @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(AccountDeletionService) private readonly accountDeletionService: AccountDeletionService,
+  ) {}
 
   @Get("providers")
   providers() {
@@ -124,6 +134,21 @@ export class AuthController {
   async logout(@Body() input: RefreshRequest, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
     const refreshToken = input.refreshToken || this.authService.getSessionRefreshToken(request) || undefined;
     await this.authService.logout(refreshToken);
+    response.clearCookie(this.authService.getSessionCookieName(), { path: "/" });
+  }
+
+  @Delete("account")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteAccount(
+    @Body() input: DeleteAccountRequest,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    if (input.confirmation !== "DELETE") {
+      throw new BadRequestException("Account deletion confirmation is required.");
+    }
+    const user = await this.authService.requireAuthenticatedUser(request);
+    await this.accountDeletionService.deleteAccount(user.id);
     response.clearCookie(this.authService.getSessionCookieName(), { path: "/" });
   }
 }
