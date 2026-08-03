@@ -1301,7 +1301,11 @@ preview build:
 
 ## Phase 13: Production Readiness
 
-Status: In progress
+Status: Done
+
+Completed with App Store approval and public release of Trailbook 1.0 on
+July 31, 2026. Monthly and yearly subscriptions and the Trailbook Premium
+subscription group were approved in the same submission.
 
 Before production:
 

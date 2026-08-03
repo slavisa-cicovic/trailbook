@@ -1,4 +1,9 @@
-# PLAN 72: App Store Release Preparation
+# PLAN 73: App Store Release Preparation
+
+Status: Done
+
+Trailbook 1.0, build 4, was approved with both subscriptions and released
+publicly on the App Store on July 31, 2026.
 
 ## Goal
 
@@ -255,4 +260,3 @@ After approval/release:
 - Do we need a reviewer test account, or is Apple/Google login enough?
 - Should `test_user` diagnostics be hidden unless server role is `test_user`?
 - Are all screenshots and metadata available in Serbian/English or only English?
-
