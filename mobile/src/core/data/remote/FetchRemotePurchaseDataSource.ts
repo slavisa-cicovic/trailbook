@@ -2,6 +2,7 @@ import type { Result } from '@/core/common/result';
 import type {
   FakePurchaseScenario,
   ApplePurchaseVerificationInput,
+  GooglePurchaseVerificationInput,
   PurchaseAccess,
   LocalTestTripAllowance,
   PurchaseProduct,
@@ -11,6 +12,7 @@ import { apiGet, apiPost } from './apiClient';
 
 export interface RemotePurchaseDataSource {
   fetchAppleAccountToken(): Promise<Result<string>>;
+  fetchGoogleAccountId(): Promise<Result<string>>;
   fetchCurrentAccess(): Promise<Result<PurchaseAccess>>;
   fetchFakeProducts(): Promise<Result<PurchaseProduct[]>>;
   simulateFakePurchase(input: {
@@ -18,6 +20,7 @@ export interface RemotePurchaseDataSource {
     scenario: FakePurchaseScenario;
   }): Promise<Result<PurchaseSimulationResult>>;
   verifyApplePurchase(input: ApplePurchaseVerificationInput): Promise<Result<PurchaseAccess>>;
+  verifyGooglePurchase(input: GooglePurchaseVerificationInput): Promise<Result<PurchaseAccess>>;
   fetchLocalTestTripAllowance(): Promise<Result<LocalTestTripAllowance>>;
   consumeLocalTestTripAllowance(clientTripId: string): Promise<Result<LocalTestTripAllowance>>;
 }
@@ -26,6 +29,13 @@ class FetchRemotePurchaseDataSource implements RemotePurchaseDataSource {
   async fetchAppleAccountToken(): Promise<Result<string>> {
     const result = await apiGet<{ appAccountToken: string }>('/purchases/apple/account-token');
     return result.ok ? { ok: true, value: result.value.appAccountToken } : result;
+  }
+
+  async fetchGoogleAccountId(): Promise<Result<string>> {
+    const result = await apiGet<{ obfuscatedAccountId: string }>(
+      '/purchases/google/account-id',
+    );
+    return result.ok ? { ok: true, value: result.value.obfuscatedAccountId } : result;
   }
 
   fetchCurrentAccess(): Promise<Result<PurchaseAccess>> {
@@ -48,6 +58,10 @@ class FetchRemotePurchaseDataSource implements RemotePurchaseDataSource {
 
   verifyApplePurchase(input: ApplePurchaseVerificationInput): Promise<Result<PurchaseAccess>> {
     return apiPost<PurchaseAccess>('/purchases/apple/verify', input);
+  }
+
+  verifyGooglePurchase(input: GooglePurchaseVerificationInput): Promise<Result<PurchaseAccess>> {
+    return apiPost<PurchaseAccess>('/purchases/google/verify', input);
   }
 
   fetchLocalTestTripAllowance(): Promise<Result<LocalTestTripAllowance>> {

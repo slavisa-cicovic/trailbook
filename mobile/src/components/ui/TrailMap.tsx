@@ -1,5 +1,6 @@
 import { forwardRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import type { MapViewProps, MapType } from 'react-native-maps';
 import { useAppTheme } from '@/hooks/useAppTheme';
@@ -42,6 +43,10 @@ export const TrailMap = forwardRef<MapView, Props>(function TrailMap(
   const { theme, resolvedMode } = useAppTheme();
   const [internalType, setInternalType] = useState<MapType>('standard');
   const activeType = controlledType ?? internalType;
+  const canRenderMap =
+    Platform.OS !== 'android' ||
+    Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+    Constants.expoConfig?.extra?.hasGoogleMapsApiKey === true;
 
   function handleTypeChange(t: MapType) {
     if (onMapTypeChange) onMapTypeChange(t);
@@ -50,19 +55,26 @@ export const TrailMap = forwardRef<MapView, Props>(function TrailMap(
 
   return (
     <View style={[styles.container, style]}>
-      <MapView
-        ref={ref}
-        style={StyleSheet.absoluteFill}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        mapType={activeType}
-        customMapStyle={resolvedMode === 'night' ? NIGHT_MAP_STYLE : []}
-        userInterfaceStyle={resolvedMode === 'night' ? 'dark' : 'light'}
-        {...rest}
-      >
-        {children}
-      </MapView>
+      {canRenderMap ? (
+        <MapView
+          ref={ref}
+          style={StyleSheet.absoluteFill}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+          mapType={activeType}
+          customMapStyle={resolvedMode === 'night' ? NIGHT_MAP_STYLE : []}
+          userInterfaceStyle={resolvedMode === 'night' ? 'dark' : 'light'}
+          {...rest}
+        >
+          {children}
+        </MapView>
+      ) : (
+        <View style={[styles.unavailable, { backgroundColor: theme.accentMuted }]}>
+          <Text style={[styles.unavailableTitle, { color: theme.primaryText }]}>Map unavailable</Text>
+          <Text style={[styles.unavailableText, { color: theme.mutedText }]}>Android map configuration is missing.</Text>
+        </View>
+      )}
 
-      {switcherPosition !== 'none' && (
+      {canRenderMap && switcherPosition !== 'none' && (
         <View
           style={[
             styles.switcher,
@@ -97,6 +109,9 @@ export const TrailMap = forwardRef<MapView, Props>(function TrailMap(
 
 const styles = StyleSheet.create({
   container: { flex: 1, overflow: 'hidden' },
+  unavailable: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  unavailableTitle: { fontSize: 18, fontWeight: '700' },
+  unavailableText: { marginTop: 6, fontSize: 14, textAlign: 'center' },
   switcher: { position: 'absolute', top: 14, flexDirection: 'row', gap: 8 },
   switcherLeft: { left: 14 },
   switcherRight: { right: 14 },

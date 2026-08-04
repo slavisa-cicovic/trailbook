@@ -27,6 +27,7 @@ import { CustomAlertProvider } from '@/components/ui/custom-alert-dialog';
 import '@/core/data/location/locationTask';
 import { unregisterSyncTask } from '@/core/data/sync/syncTask';
 import { AppleIapProvider } from '@/feature/purchases/AppleIapProvider';
+import { GoogleIapProvider } from '@/feature/purchases/GoogleIapProvider';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -146,8 +147,10 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <CustomAlertProvider>
         <AppleIapProvider>
-          <StatusBar style="auto" />
-          <AuthGate ready={ready} />
+          <GoogleIapProvider>
+            <StatusBar style="auto" />
+            <AuthGate ready={ready} />
+          </GoogleIapProvider>
         </AppleIapProvider>
       </CustomAlertProvider>
     </GestureHandlerRootView>

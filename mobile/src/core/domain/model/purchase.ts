@@ -28,6 +28,7 @@ export type FakePurchaseScenario =
   | 'restore';
 
 export interface PurchaseProduct {
+  basePlanId?: string;
   billingPeriodLabel?: string;
   billingType: PurchaseBillingType;
   description: string;
@@ -56,6 +57,12 @@ export interface ApplePurchaseVerificationInput {
   appAccountToken: string;
   productId: string;
   transactionId: string;
+}
+
+export interface GooglePurchaseVerificationInput {
+  basePlanId: string;
+  productId: string;
+  purchaseToken: string;
 }
 
 export interface LocalTestTripAllowance {

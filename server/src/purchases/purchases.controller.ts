@@ -5,6 +5,8 @@ import { AuthService } from "../auth/auth.service";
 import { AppleNotificationService } from "./apple-notification.service";
 import { ApplePurchaseProvider } from "./apple-purchase.provider";
 import { PurchaseApplicationService } from "./purchase-application.service";
+import { GooglePurchaseProvider } from "./google-purchase.provider";
+import { GoogleNotificationService, type GooglePubsubPushBody } from "./google-notification.service";
 import type { FakePurchaseScenario } from "./purchase.types";
 
 interface SimulatePurchaseRequest {
@@ -21,6 +23,12 @@ interface VerifyApplePurchaseRequest {
 
 interface AppleNotificationRequest {
   signedPayload?: string;
+}
+
+interface VerifyGooglePurchaseRequest {
+  basePlanId?: string;
+  productId?: string;
+  purchaseToken?: string;
 }
 
 interface RecoverAppleNotificationsRequest {
@@ -40,6 +48,10 @@ export class PurchasesController {
     private readonly applePurchaseProvider: ApplePurchaseProvider,
     @Inject(AppleNotificationService)
     private readonly appleNotificationService: AppleNotificationService,
+    @Inject(GooglePurchaseProvider)
+    private readonly googlePurchaseProvider: GooglePurchaseProvider,
+    @Inject(GoogleNotificationService)
+    private readonly googleNotificationService: GoogleNotificationService,
   ) {}
 
   @Get("products")
@@ -94,6 +106,28 @@ export class PurchasesController {
       transactionId: input.transactionId ?? "",
       userId: user.id,
     });
+  }
+
+  @Get("google/account-id")
+  async getGoogleAccountId(@Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.googlePurchaseProvider.getAccountId(user.id);
+  }
+
+  @Post("google/verify")
+  async verifyGooglePurchase(@Body() input: VerifyGooglePurchaseRequest, @Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    return this.googlePurchaseProvider.verifyPurchase({
+      basePlanId: input.basePlanId ?? "",
+      productId: input.productId ?? "",
+      purchaseToken: input.purchaseToken ?? "",
+      userId: user.id,
+    });
+  }
+
+  @Post("google/notifications")
+  async receiveGoogleNotification(@Body() input: GooglePubsubPushBody, @Req() request: Request) {
+    return this.googleNotificationService.handlePush(request.header("authorization"), input);
   }
 
   @Post("apple/notifications")

@@ -38,6 +38,7 @@ export type FakePurchaseScenario =
   | "restore";
 
 export interface PurchaseProduct {
+  basePlanId?: string;
   billingType: PurchaseBillingType;
   description: string;
   entitlements: string[];
@@ -69,6 +70,7 @@ export interface NormalizedPurchaseEvent {
   idempotencyKey: string;
   originalTransactionId?: string;
   provider: PurchaseProviderName;
+  providerBasePlanId?: string;
   providerProductId: string;
   purchasedAt?: string;
   rawPayload: unknown;
@@ -84,5 +86,12 @@ export interface ApplePurchaseVerificationInput {
   appAccountToken: string;
   productId: string;
   transactionId: string;
+  userId: string;
+}
+
+export interface GooglePurchaseVerificationInput {
+  basePlanId: string;
+  productId: string;
+  purchaseToken: string;
   userId: string;
 }

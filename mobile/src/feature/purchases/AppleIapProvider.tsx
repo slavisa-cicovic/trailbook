@@ -50,7 +50,7 @@ interface AppleIapContextValue {
   productLoadError: string | null;
   productLoadState: AppleProductLoadState;
   manageSubscriptions(): Promise<void>;
-  purchase(productId: string): Promise<void>;
+  purchase(productId: string, basePlanId?: string): Promise<void>;
   reloadProducts(): Promise<void>;
   requestRefund(productId: string): Promise<void>;
   restore(): Promise<void>;

@@ -227,20 +227,22 @@ export class PurchaseApplicationService {
       where: { idempotencyKey: event.idempotencyKey },
     });
     if (existing) {
-      if (existing.userId !== event.userId) this.throwAppleOwnershipConflict();
+      if (existing.userId !== event.userId) this.throwPurchaseOwnershipConflict(event.provider);
       return this.getCurrentAccess(existing.userId);
     }
 
-    if (event.provider === "apple") {
+    if (event.provider === "apple" || event.provider === "google") {
       const existingTransaction = await this.database.purchaseEvent.findFirst({
         select: { userId: true },
         where: {
-          provider: "apple",
+          provider: event.provider,
           transactionId: event.transactionId,
         },
       });
       if (existingTransaction) {
-        if (existingTransaction.userId !== event.userId) this.throwAppleOwnershipConflict();
+        if (existingTransaction.userId !== event.userId) {
+          this.throwPurchaseOwnershipConflict(event.provider);
+        }
         // Lifecycle notifications can reuse the original purchase transaction
         // ID. Their notification UUID remains the idempotency boundary.
         if (event.eventType === "PURCHASED") {
@@ -249,18 +251,27 @@ export class PurchaseApplicationService {
       }
     }
 
-    if (event.provider === "apple" && event.originalTransactionId) {
+    if (
+      (event.provider === "apple" || event.provider === "google") &&
+      event.originalTransactionId
+    ) {
       const owner = await this.database.purchaseEvent.findFirst({
         select: { userId: true },
         where: {
           originalTransactionId: event.originalTransactionId,
-          provider: "apple",
+          provider: event.provider,
         },
       });
-      if (owner && owner.userId !== event.userId) this.throwAppleOwnershipConflict();
+      if (owner && owner.userId !== event.userId) {
+        this.throwPurchaseOwnershipConflict(event.provider);
+      }
     }
 
-    const product = findPurchaseProduct(event.providerProductId);
+    const product = findPurchaseProduct(
+      event.providerProductId,
+      event.provider,
+      event.providerBasePlanId,
+    );
     if (!product) throw new BadRequestException("Unknown purchase product.");
 
     try {
@@ -296,7 +307,7 @@ export class PurchaseApplicationService {
       });
     } catch (error) {
       if (
-        event.provider === "apple" &&
+        (event.provider === "apple" || event.provider === "google") &&
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
@@ -304,7 +315,9 @@ export class PurchaseApplicationService {
           where: { idempotencyKey: event.idempotencyKey },
         });
         if (existingEvent) {
-          if (existingEvent.userId !== event.userId) this.throwAppleOwnershipConflict();
+          if (existingEvent.userId !== event.userId) {
+            this.throwPurchaseOwnershipConflict(event.provider);
+          }
           return this.getCurrentAccess(existingEvent.userId);
         }
       }
@@ -443,10 +456,14 @@ export class PurchaseApplicationService {
     return "active";
   }
 
-  private throwAppleOwnershipConflict(): never {
+  private throwPurchaseOwnershipConflict(provider: "apple" | "google" | "fake"): never {
+    const store = provider === "google" ? "Google Play" : "Apple";
+    const code = provider === "google"
+      ? "GOOGLE_PURCHASE_ALREADY_LINKED_TO_ANOTHER_ACCOUNT"
+      : "APPLE_PURCHASE_ALREADY_LINKED_TO_ANOTHER_ACCOUNT";
     throw new ConflictException({
-      code: "APPLE_PURCHASE_ALREADY_LINKED_TO_ANOTHER_ACCOUNT",
-      message: "This Apple purchase is already linked to another Trailbook account.",
+      code,
+      message: `This ${store} purchase is already linked to another Trailbook account.`,
     });
   }
 }

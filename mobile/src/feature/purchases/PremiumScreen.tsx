@@ -1,5 +1,5 @@
 import { Redirect, useRouter } from 'expo-router';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import ScreenLayout from '@/components/layout/screen-layout';
 import Card from '@/components/ui/card';
@@ -17,6 +17,7 @@ import {
   useAppleIap,
 } from './AppleIapProvider';
 import { usePurchaseStore } from './purchaseStore';
+import { useGoogleIap } from './GoogleIapProvider';
 import {
   purchaseSupportUrl,
   TRAILBOOK_PRIVACY_POLICY_URL,
@@ -32,7 +33,10 @@ export default function PremiumScreen() {
   const clearMessage = usePurchaseStore((state) => state.clearMessage);
   const message = usePurchaseStore((state) => state.message);
   const products = usePurchaseStore((state) => state.products);
-  const iap = useAppleIap();
+  const appleIap = useAppleIap();
+  const googleIap = useGoogleIap();
+  const iap = Platform.OS === 'android' ? googleIap : appleIap;
+  const storeName = Platform.OS === 'android' ? 'Google Play' : 'Apple';
   const visibleMessage =
     message === 'Trailbook Premium is active.' && !hasPremiumAccess(access)
       ? null
@@ -83,18 +87,19 @@ export default function PremiumScreen() {
               />
             ) : null}
           </View>
-          {access.provider === 'apple' && access.planCode !== 'demo' ? (
+          {(access.provider === 'apple' || access.provider === 'google') &&
+          access.planCode !== 'demo' ? (
             <View style={styles.subscriptionActions}>
               <LoadingButton
                 disabled={!iap.available || !iap.connected}
                 loading={busyAction === 'manage-subscription'}
-                loadingLabel="Opening Apple…"
+                loadingLabel={`Opening ${storeName}…`}
                 onPress={() => void iap.manageSubscriptions()}
                 variant="secondary"
               >
                 Manage subscription
               </LoadingButton>
-              {hasPremiumAccess(access) && appleProductId(access.planCode) ? (
+              {access.provider === 'apple' && hasPremiumAccess(access) && appleProductId(access.planCode) ? (
                 <LoadingButton
                   disabled={!iap.available || !iap.connected || busyAction !== null}
                   loading={busyAction === 'refund'}
@@ -133,14 +138,14 @@ export default function PremiumScreen() {
             styles.card,
             { backgroundColor: theme.card, borderColor: theme.border },
           ]}
-          title="Completing Apple purchase"
+          title={`Completing ${storeName} purchase`}
           titleStyle={{ color: theme.primaryText }}
-          subtitle="Trailbook is verifying or finishing an Apple transaction and will retry automatically."
+          subtitle={`Trailbook is verifying or finishing a ${storeName} transaction and will retry automatically.`}
           subtitleStyle={{ color: theme.mutedText }}
         />
       ) : null}
 
-      {!iap.available ? (
+      {Platform.OS === 'ios' && !iap.available ? (
         <Card
           style={[
             styles.card,
@@ -153,9 +158,19 @@ export default function PremiumScreen() {
         />
       ) : null}
 
+      {Platform.OS === 'android' && !iap.available ? (
+        <Card
+          style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
+          title="Native Android build required"
+          titleStyle={{ color: theme.primaryText }}
+          subtitle="Google Play subscriptions are unavailable in Expo Go. Install a Play-distributed Trailbook Android build."
+          subtitleStyle={{ color: theme.mutedText }}
+        />
+      ) : null}
+
       {iap.available && !iap.connected ? (
         <Text style={[styles.storeStatus, { color: theme.mutedText }]}>
-          Connecting to App Store…
+          Connecting to {storeName}…
         </Text>
       ) : null}
 
@@ -164,7 +179,7 @@ export default function PremiumScreen() {
       (iap.productLoadState === 'idle' ||
         iap.productLoadState === 'loading') ? (
         <Text style={[styles.storeStatus, { color: theme.mutedText }]}>
-          Loading Apple subscription options…
+          Loading {storeName} subscription options…
         </Text>
       ) : null}
 
@@ -177,12 +192,12 @@ export default function PremiumScreen() {
             styles.card,
             { backgroundColor: theme.card, borderColor: theme.border },
           ]}
-          title="Apple subscriptions unavailable"
+          title={`${storeName} subscriptions unavailable`}
           titleStyle={{ color: theme.primaryText }}
           subtitle={
             iap.productLoadError
-              ? `Apple could not load the subscription catalog: ${iap.productLoadError}`
-              : 'Apple did not return the Trailbook monthly or yearly subscription. Check the App Store connection and try again.'
+              ? `${storeName} could not load the subscription catalog: ${iap.productLoadError}`
+              : `${storeName} did not return the Trailbook monthly or yearly subscription. Check the store connection and try again.`
           }
           subtitleStyle={{ color: theme.mutedText }}
         >
@@ -199,9 +214,9 @@ export default function PremiumScreen() {
         <ProductCard
           busyAction={busyAction}
           connected={iap.connected}
-          key={product.productId}
-          onPurchase={() => void iap.purchase(product.productId)}
-          pending={iap.pendingProductIds.includes(product.productId)}
+          key={`${product.productId}:${product.basePlanId ?? ''}`}
+          onPurchase={() => void iap.purchase(product.productId, product.basePlanId)}
+          pending={iap.pendingProductIds.includes(product.basePlanId ?? product.productId)}
           product={product}
         />
       ))}
@@ -213,7 +228,7 @@ export default function PremiumScreen() {
         ]}
         title="Already subscribed?"
         titleStyle={{ color: theme.primaryText }}
-        subtitle="Restore asks Apple for your current subscriptions and verifies them with Trailbook."
+        subtitle={`Restore asks ${storeName} for your current subscriptions and verifies them with Trailbook.`}
         subtitleStyle={{ color: theme.mutedText }}
       >
         <LoadingButton
@@ -228,10 +243,9 @@ export default function PremiumScreen() {
       </Card>
 
       <Text style={[styles.legal, { color: theme.mutedText }]}>
-        Subscriptions renew automatically unless canceled at least 24 hours
-        before the end of the current period. Payment is charged to your Apple
-        ID. Manage or cancel the subscription in your App Store account
-        settings.
+        Subscriptions renew automatically unless canceled before the end of the
+        current period. Payment is charged to your {Platform.OS === 'android' ? 'Google Play' : 'Apple ID'} account.
+        {' '}Manage or cancel the subscription in your {Platform.OS === 'android' ? 'Google Play' : 'App Store'} settings.
       </Text>
 
       <View style={styles.linkGroup}>
@@ -257,7 +271,7 @@ function ProductCard({
   product: PurchaseProduct;
 }) {
   const { theme } = useAppTheme();
-  const action = `purchase:${product.productId}`;
+  const action = `purchase:${product.productId}:${product.basePlanId ?? ''}`;
   return (
     <Card
       style={[

@@ -103,8 +103,30 @@ model User {
   purchaseAccess             PurchaseAccess?
   purchaseEvents             PurchaseEvent[]
   applePurchaseNotifications ApplePurchaseNotification[]
+  googlePurchaseNotifications GooglePurchaseNotification[]
 
   @@map("users")
+}
+
+model GooglePurchaseNotification {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String?   @map("user_id") @db.Uuid
+  messageId        String    @unique @map("message_id") @db.VarChar(255)
+  subscription     String?   @db.VarChar(500)
+  packageName      String?   @map("package_name") @db.VarChar(255)
+  notificationType Int?      @map("notification_type")
+  processingStatus String    @default("received") @map("processing_status") @db.VarChar(50)
+  attemptCount     Int       @default(0) @map("attempt_count")
+  lastError        String?   @map("last_error") @db.Text
+  decodedPayload   Json?     @map("decoded_payload") @db.JsonB
+  receivedAt       DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  lastAttemptAt    DateTime? @map("last_attempt_at") @db.Timestamptz(6)
+  processedAt      DateTime? @map("processed_at") @db.Timestamptz(6)
+  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([processingStatus, receivedAt], map: "google_purchase_notifications_status_received_idx")
+  @@index([userId, receivedAt(sort: Desc)], map: "google_purchase_notifications_user_received_idx")
+  @@map("google_purchase_notifications")
 }
 
 model ApplePurchaseNotification {

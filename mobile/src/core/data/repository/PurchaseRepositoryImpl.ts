@@ -2,6 +2,7 @@ import type { PurchaseRepository } from '@/core/domain/usecase/PurchaseRepositor
 import type {
   FakePurchaseScenario,
   ApplePurchaseVerificationInput,
+  GooglePurchaseVerificationInput,
   PurchaseAccess,
   LocalTestTripAllowance,
   PurchaseProduct,
@@ -30,6 +31,10 @@ export class PurchaseRepositoryImpl implements PurchaseRepository {
     return this.remoteDataSource.fetchAppleAccountToken();
   }
 
+  getGoogleAccountId(): Promise<Result<string>> {
+    return this.remoteDataSource.fetchGoogleAccountId();
+  }
+
   simulateFakePurchase(input: {
     productId: string;
     scenario: FakePurchaseScenario;
@@ -39,6 +44,10 @@ export class PurchaseRepositoryImpl implements PurchaseRepository {
 
   verifyApplePurchase(input: ApplePurchaseVerificationInput): Promise<Result<PurchaseAccess>> {
     return this.remoteDataSource.verifyApplePurchase(input);
+  }
+
+  verifyGooglePurchase(input: GooglePurchaseVerificationInput): Promise<Result<PurchaseAccess>> {
+    return this.remoteDataSource.verifyGooglePurchase(input);
   }
 
   getLocalTestTripAllowance(): Promise<Result<LocalTestTripAllowance>> {

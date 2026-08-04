@@ -40,8 +40,49 @@ export const FAKE_PURCHASE_PRODUCTS: PurchaseProduct[] = [
   },
 ];
 
+export function googlePurchaseProducts(): PurchaseProduct[] {
+  const productId = process.env.GOOGLE_PLAY_SUBSCRIPTION_PRODUCT_ID?.trim() || "trailbook_premium";
+  return [
+    {
+      basePlanId: process.env.GOOGLE_PLAY_MONTHLY_BASE_PLAN_ID?.trim() || "monthly",
+      billingType: "monthly",
+      description: "Monthly Trailbook Premium subscription from Google Play.",
+      entitlements: [...PAID_ENTITLEMENTS],
+      planCode: "premium_monthly",
+      priceLabel: "",
+      productId,
+      provider: "google",
+      title: "Trailbook Premium Monthly",
+    },
+    {
+      basePlanId: process.env.GOOGLE_PLAY_YEARLY_BASE_PLAN_ID?.trim() || "yearly",
+      billingType: "yearly",
+      description: "Yearly Trailbook Premium subscription from Google Play.",
+      entitlements: [...PAID_ENTITLEMENTS],
+      planCode: "premium_yearly",
+      priceLabel: "",
+      productId,
+      provider: "google",
+      title: "Trailbook Premium Yearly",
+    },
+  ];
+}
+
 export function findFakePurchaseProduct(productId: string) {
   return FAKE_PURCHASE_PRODUCTS.find((product) => product.productId === productId) ?? null;
 }
 
-export const findPurchaseProduct = findFakePurchaseProduct;
+export function findPurchaseProduct(
+  productId: string,
+  provider: PurchaseProduct["provider"] = "fake",
+  basePlanId?: string,
+) {
+  if (provider === "google") {
+    return googlePurchaseProducts().find(
+      (product) => product.productId === productId && product.basePlanId === basePlanId,
+    ) ?? null;
+  }
+  // Apple currently uses the same monthly/yearly product IDs as the internal
+  // catalog. Its provider is validated independently by ApplePurchaseProvider.
+  return findFakePurchaseProduct(productId);
+}
