@@ -351,6 +351,15 @@ Completed August 4, 2026:
   remained usable until its verified period end, then expired correctly: the
   Premium screen returned to no active plan and the server-protected restore
   operation again required Trailbook Premium.
+- Production RTDN lifecycle verification completed end to end: the initial
+  `SUBSCRIPTION_PURCHASED` raced mobile verification and succeeded after safe
+  Pub/Sub retries; three `SUBSCRIPTION_RENEWED` events extended entitlement;
+  `SUBSCRIPTION_CANCELED` disabled auto-renew while preserving access until the
+  period end; and `SUBSCRIPTION_EXPIRED` removed entitlement without a manual
+  purchase restore. Every post-purchase RTDN was processed once without error.
+- A stale Premium-screen snapshot found during expiry testing was fixed by
+  refreshing server-authoritative access on screen focus and every 30 seconds
+  while the Premium screen remains focused.
 
 - Add Android production build/submit scripts.
 - Build a production bundle:

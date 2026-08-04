@@ -1,4 +1,5 @@
-import { Redirect, useRouter } from 'expo-router';
+import { useCallback } from 'react';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import ScreenLayout from '@/components/layout/screen-layout';
@@ -33,6 +34,7 @@ export default function PremiumScreen() {
   const clearMessage = usePurchaseStore((state) => state.clearMessage);
   const message = usePurchaseStore((state) => state.message);
   const products = usePurchaseStore((state) => state.products);
+  const refreshAccess = usePurchaseStore((state) => state.refreshAccess);
   const appleIap = useAppleIap();
   const googleIap = useGoogleIap();
   const iap = Platform.OS === 'android' ? googleIap : appleIap;
@@ -42,6 +44,15 @@ export default function PremiumScreen() {
       ? null
       : message;
   const goBack = () => router.dismissTo('/settings');
+
+  useFocusEffect(
+    useCallback(() => {
+      if (status !== 'authenticated') return;
+      void refreshAccess();
+      const timer = setInterval(() => void refreshAccess(), 30_000);
+      return () => clearInterval(timer);
+    }, [refreshAccess, status]),
+  );
 
   if (status === 'demo') return <Redirect href="/settings" />;
 
