@@ -104,11 +104,7 @@ function NativeGoogleIapProvider({ children }: PropsWithChildren) {
     onPurchaseError(error) {
       initiatedBasePlanId.current = null;
       setBusyAction(null);
-      setMessage(
-        error.code === 'user-cancelled'
-          ? 'Purchase canceled. No charge was made.'
-          : `Google Play purchase failed: ${error.message}`,
-      );
+      setMessage(googlePurchaseErrorMessage(error));
     },
     onPurchaseSuccess(purchase) {
       void processPurchaseRef.current(purchase, true);
@@ -275,7 +271,7 @@ function NativeGoogleIapProvider({ children }: PropsWithChildren) {
         setMessage(
           isUserCancelledPurchase(error)
             ? 'Purchase canceled. No charge was made.'
-            : `Unable to start Google Play purchase: ${errorMessage(error)}`,
+            : googlePurchaseErrorMessage(error),
         );
       }
     },
@@ -361,6 +357,26 @@ function isUserCancelledPurchase(error: unknown) {
     error && typeof error === 'object' && 'code' in error &&
     String((error as { code?: unknown }).code).toLowerCase().includes('cancel'),
   );
+}
+
+function googlePurchaseErrorMessage(error: unknown) {
+  if (isUserCancelledPurchase(error)) return 'Purchase canceled. No charge was made.';
+  const code = error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: unknown }).code).toLowerCase()
+    : '';
+  if (code === 'billing-unavailable' || code === 'service-error') {
+    return 'Google Play could not complete the payment. Check your payment method and try again.';
+  }
+  if (code === 'network-error' || code === 'service-disconnected' || code === 'service-timeout') {
+    return 'Google Play is temporarily unavailable. Check your connection and try again.';
+  }
+  if (code === 'item-unavailable') {
+    return 'This Google Play subscription is currently unavailable.';
+  }
+  if (code === 'already-owned') {
+    return 'This Google Play subscription is already owned. Try Restore purchases.';
+  }
+  return `Google Play purchase failed: ${errorMessage(error)}`;
 }
 
 function isGoogleOwnershipConflict(error: string) {
