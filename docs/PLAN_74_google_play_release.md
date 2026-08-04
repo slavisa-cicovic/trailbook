@@ -360,6 +360,13 @@ Completed August 4, 2026:
 - A stale Premium-screen snapshot found during expiry testing was fixed by
   refreshing server-authoritative access on screen focus and every 30 seconds
   while the Premium screen remains focused.
+- Payment-recovery lifecycle was verified with a license tester and a declined
+  renewal payment: RTDN type 6 moved access to `in_grace_period` while retaining
+  Premium, type 5 moved it to `billing_retry` and blocked a server-protected
+  restore operation, and type 1 recovered the subscription after changing back
+  to the approving test instrument. The focused Premium screen reflected each
+  server transition without an app restart, and the protected restore operation
+  succeeded again after recovery.
 
 - Add Android production build/submit scripts.
 - Build a production bundle:
