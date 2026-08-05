@@ -204,9 +204,9 @@ function normalizeBikeDriveBridges(
     );
 
     if (
-      averageSpeedMps > V1.bikeMaxMps ||
+      averageSpeedMps > V1.motionBikeHardMaxMps ||
       medianSpeedMps === null ||
-      medianSpeedMps > V1.bikeMaxMps ||
+      medianSpeedMps > V1.motionBikeHardMaxMps ||
       !hasContinuousBikeBoundary(geoPoints, segment.startTime) ||
       !hasContinuousBikeBoundary(geoPoints, segment.endTime)
     ) {

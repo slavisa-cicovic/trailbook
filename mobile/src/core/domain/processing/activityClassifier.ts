@@ -73,9 +73,16 @@ function reconcileActivityWithSpeed(
 ) {
   const speedType = speedToSegmentType(speedMps);
 
-  // Motion/activity hints cannot override physically impossible walking/cycling speeds.
-  if (speedMps !== undefined && speedMps >= V1.hardDriveMinMps) {
-    return 'DRIVE' as const;
+  // A bicycle can realistically exceed the speed-only classification threshold,
+  // especially downhill. Preserve a motion-confirmed BIKE until the measured
+  // speed becomes implausible for cycling. WALK keeps the lower safety limit.
+  if (speedMps !== undefined) {
+    if (activityType === 'BIKE') {
+      return speedMps >= V1.motionBikeHardMaxMps ? 'DRIVE' as const : 'BIKE' as const;
+    }
+    if (activityType === 'WALK' && speedMps >= V1.hardDriveMinMps) {
+      return 'DRIVE' as const;
+    }
   }
 
   return activityType ?? speedType;

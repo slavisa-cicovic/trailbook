@@ -24,6 +24,10 @@ export const V1 = {
   stationaryMaxMps: 0.5,
   walkMaxMps: 2.5,
   bikeMaxMps: 7.0,
+  // A motion-confirmed bicycle can legitimately exceed the speed-only bike
+  // threshold (for example on a descent). Above this value, treat the motion
+  // hint as implausible and prefer DRIVE.
+  motionBikeHardMaxMps: 20.0,
   hardDriveMinMps: 8.5,
   driveMaxMps: 50.0,
   minWalkDurationMs: 60_000,

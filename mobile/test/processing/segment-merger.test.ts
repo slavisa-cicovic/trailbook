@@ -90,7 +90,7 @@ test('keeps DRIVE when a stop is observed at a mode boundary', () => {
   assert.deepEqual(result.map((item) => item.segmentType), ['BIKE', 'DRIVE', 'BIKE']);
 });
 
-test('keeps a continuous DRIVE bridge whose speed is too high for cycling', () => {
+test('reclassifies a short DRIVE bridge at a realistic downhill cycling speed', () => {
   const result = mergeAndFinalize(
     'fast-trip',
     [
@@ -99,6 +99,20 @@ test('keeps a continuous DRIVE bridge whose speed is too high for cycling', () =
       segment(10, 15, 'BIKE'),
     ],
     routePoints(15, 10),
+  );
+
+  assert.deepEqual(result.map((item) => item.segmentType), ['BIKE']);
+});
+
+test('keeps a continuous DRIVE bridge at implausible cycling speed', () => {
+  const result = mergeAndFinalize(
+    'vehicle-trip',
+    [
+      segment(0, 5, 'BIKE'),
+      segment(5, 10, 'DRIVE'),
+      segment(10, 15, 'BIKE'),
+    ],
+    routePoints(15, 22),
   );
 
   assert.deepEqual(result.map((item) => item.segmentType), ['BIKE', 'DRIVE', 'BIKE']);
