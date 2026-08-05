@@ -1,0 +1,7 @@
+{
+  "name": "trailbook-motion-activity",
+  "version": "0.1.0",
+  "description": "Trailbook native motion activity bridge",
+  "main": "index.js",
+  "private": true
+}

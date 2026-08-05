@@ -3,6 +3,7 @@ import * as rawActivityDao from '@/core/data/local/rawActivityDao';
 import * as rawLocationDao from '@/core/data/local/rawLocationDao';
 import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
 import { buildActivitySampleFromSpeed } from '@/core/data/activity/activitySampler';
+import { getMotionActivitySample } from '@/core/data/activity/motionActivity';
 import { dbEvents } from '@/core/db/events';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
 
@@ -92,11 +93,13 @@ async function persistNativeEvents(events: NativeLocationEvent[]): Promise<numbe
   }
 
   await rawLocationDao.insertAll(locations);
-  await rawActivityDao.insertAll(
-    locations.map((location) =>
+  const activitySamples = await Promise.all(
+    locations.map(async (location) =>
+      (await getMotionActivitySample(location.tripId, location.timestamp)) ??
       buildActivitySampleFromSpeed(location.tripId, location.speedMps, location.timestamp),
     ),
   );
+  await rawActivityDao.insertAll(activitySamples);
   dbEvents.emit('rawData:changed');
   return locations.length;
 }

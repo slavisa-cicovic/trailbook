@@ -7,6 +7,7 @@ import * as rawLocationDao from '@/core/data/local/rawLocationDao';
 import * as rawActivityDao from '@/core/data/local/rawActivityDao';
 import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
 import { buildActivitySampleFromSpeed } from '@/core/data/activity/activitySampler';
+import { getMotionActivitySample } from '@/core/data/activity/motionActivity';
 import { dbEvents } from '@/core/db/events';
 import type { RawSessionEvent, SessionEventType } from '@/core/domain/model/rawSamples';
 
@@ -170,7 +171,9 @@ if (!TaskManager.isTaskDefined(LOCATION_TASK)) {
           provider: 'fused',
         });
 
-        const activitySample = buildActivitySampleFromSpeed(tripId, loc.coords.speed, timestamp);
+        const activitySample =
+          (await getMotionActivitySample(tripId, timestamp)) ??
+          buildActivitySampleFromSpeed(tripId, loc.coords.speed, timestamp);
         await rawActivityDao.insert(activitySample);
       }
     } catch (writeError) {

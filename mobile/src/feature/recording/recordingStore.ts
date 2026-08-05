@@ -18,6 +18,10 @@ import * as displayRoutePointDao from '@/core/data/local/displayRoutePointDao';
 import * as waypointDao from '@/core/data/local/waypointDao';
 import { sampleDeviceState } from '@/core/data/devicestate/deviceStateSampler';
 import {
+  startMotionActivityUpdates,
+  stopMotionActivityUpdates,
+} from '@/core/data/activity/motionActivity';
+import {
   setActiveRecordingTripId,
   clearActiveRecordingTripId,
   getActiveRecordingTripId,
@@ -137,6 +141,10 @@ let rawDataHandler: (() => void) | null = null;
 let waypointsHandler: (() => void) | null = null;
 
 async function startLocationCapture(): Promise<void> {
+  // Motion recognition improves walk/bike/drive classification. Recording still
+  // works with the speed-based fallback when the sensor or permission is absent.
+  await startMotionActivityUpdates();
+
   if (Platform.OS === 'ios') {
     const startedNative = await startNativeIosLocationCapture(await getActiveRecordingTripId() ?? '');
     if (startedNative) {
@@ -151,17 +159,21 @@ async function startLocationCapture(): Promise<void> {
 }
 
 async function stopLocationCapture(): Promise<void> {
-  if (Platform.OS === 'ios') {
-    const stoppedNative = await stopNativeIosLocationCapture();
-    if (stoppedNative) {
+  try {
+    if (Platform.OS === 'ios') {
+      const stoppedNative = await stopNativeIosLocationCapture();
+      if (stoppedNative) {
+        return;
+      }
+
+      await stopLocationTask();
       return;
     }
 
     await stopLocationTask();
-    return;
+  } finally {
+    await stopMotionActivityUpdates();
   }
-
-  await stopLocationTask();
 }
 
 function subscribeToLiveUpdates(tripId: string) {
