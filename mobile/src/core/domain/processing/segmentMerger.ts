@@ -51,7 +51,8 @@ export function mergeAndFinalize(
   // by briefly crossing the fallback vehicle threshold. Collapse consecutive
   // classifier fragments first so the bridge check evaluates the complete run.
   const classifierRuns = mergeAdjacentSameType(rawSegments);
-  const bikeStable = normalizeBikeDriveBridges(classifierRuns, geoPoints);
+  const physicallyPlausibleRuns = requireStopForBikeDriveTransition(classifierRuns);
+  const bikeStable = normalizeBikeDriveBridges(physicallyPlausibleRuns, geoPoints);
 
   // A short low-speed interruption between confirmed drive segments is usually
   // traffic, parking manoeuvring, or sparse callbacks rather than a true mode change.
@@ -116,6 +117,43 @@ function mergeAdjacentSameType(segments: RawSegment[]): RawSegment[] {
       result.push({ ...segment });
     }
   }
+  return result;
+}
+
+function requireStopForBikeDriveTransition(segments: RawSegment[]): RawSegment[] {
+  if (segments.length < 2) {
+    return segments.map((segment) => ({ ...segment }));
+  }
+
+  const result: RawSegment[] = [{ ...segments[0] }];
+  for (const segment of segments.slice(1)) {
+    const previous = result[result.length - 1];
+    const durationMs = segment.endTime.getTime() - segment.startTime.getTime();
+
+    if (
+      segment.type === 'STATIONARY' &&
+      durationMs < V1.bikeDriveTransitionStopMinMs &&
+      (previous.type === 'BIKE' || previous.type === 'DRIVE')
+    ) {
+      previous.endTime = segment.endTime;
+      continue;
+    }
+
+    const isBikeDriveTransition =
+      (previous.type === 'BIKE' && segment.type === 'DRIVE') ||
+      (previous.type === 'DRIVE' && segment.type === 'BIKE');
+
+    if (isBikeDriveTransition) {
+      // A real bicycle/vehicle switch requires the user to stop to enter or
+      // leave the vehicle. Without a retained STATIONARY segment of at least
+      // bikeDriveTransitionStopMinMs between them, keep the established mode.
+      previous.endTime = segment.endTime;
+      continue;
+    }
+
+    result.push({ ...segment });
+  }
+
   return result;
 }
 

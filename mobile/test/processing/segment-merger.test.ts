@@ -11,7 +11,11 @@ function at(minutes: number) {
   return new Date(START.getTime() + minutes * 60_000);
 }
 
-function segment(startMinutes: number, endMinutes: number, type: 'BIKE' | 'DRIVE') {
+function segment(
+  startMinutes: number,
+  endMinutes: number,
+  type: 'BIKE' | 'DRIVE' | 'STATIONARY',
+) {
   return {
     startTime: at(startMinutes),
     endTime: at(endMinutes),
@@ -76,7 +80,7 @@ test('reclassifies a fragmented continuous DRIVE run inside a bike ride', () => 
   assert.deepEqual(result.map((item) => item.segmentType), ['BIKE']);
 });
 
-test('keeps DRIVE when a stop is observed at a mode boundary', () => {
+test('does not treat one zero-speed sample as a valid mode-change stop', () => {
   const result = mergeAndFinalize(
     'stopped-trip',
     [
@@ -87,7 +91,7 @@ test('keeps DRIVE when a stop is observed at a mode boundary', () => {
     routePoints(15, 6.2, (minute) => (minute === 5 ? 0 : 6.2)),
   );
 
-  assert.deepEqual(result.map((item) => item.segmentType), ['BIKE', 'DRIVE', 'BIKE']);
+  assert.deepEqual(result.map((item) => item.segmentType), ['BIKE']);
 });
 
 test('reclassifies a short DRIVE bridge at a realistic downhill cycling speed', () => {
@@ -115,5 +119,56 @@ test('keeps a continuous DRIVE bridge at implausible cycling speed', () => {
     routePoints(15, 22),
   );
 
-  assert.deepEqual(result.map((item) => item.segmentType), ['BIKE', 'DRIVE', 'BIKE']);
+  assert.deepEqual(result.map((item) => item.segmentType), ['BIKE']);
+});
+
+test('allows BIKE to DRIVE transition after a stationary period of at least 20 seconds', () => {
+  const result = mergeAndFinalize(
+    'bike-to-drive-after-stop',
+    [
+      segment(0, 5, 'BIKE'),
+      {
+        startTime: at(5),
+        endTime: new Date(at(5).getTime() + 20_000),
+        type: 'STATIONARY',
+      },
+      {
+        startTime: new Date(at(5).getTime() + 20_000),
+        endTime: at(10),
+        type: 'DRIVE',
+      },
+    ],
+    routePoints(10, 10, (minute) => (minute === 5 ? 0 : 10)),
+  );
+
+  assert.deepEqual(
+    result.map((item) => item.segmentType),
+    ['BIKE', 'STATIONARY', 'DRIVE'],
+  );
+});
+
+test('rejects BIKE to DRIVE transition after a stationary period shorter than 20 seconds', () => {
+  const stopStart = at(5);
+  const stopEnd = new Date(stopStart.getTime() + 19_000);
+  const result = mergeAndFinalize(
+    'bike-to-drive-after-short-stop',
+    [
+      segment(0, 5, 'BIKE'),
+      { startTime: stopStart, endTime: stopEnd, type: 'STATIONARY' },
+      { startTime: stopEnd, endTime: at(10), type: 'DRIVE' },
+    ],
+    routePoints(10, 10, (minute) => (minute === 5 ? 0 : 10)),
+  );
+
+  assert.deepEqual(result.map((item) => item.segmentType), ['BIKE']);
+});
+
+test('rejects DRIVE to BIKE transition without a stationary period', () => {
+  const result = mergeAndFinalize(
+    'drive-to-bike-without-stop',
+    [segment(0, 5, 'DRIVE'), segment(5, 10, 'BIKE')],
+    routePoints(10, 8),
+  );
+
+  assert.deepEqual(result.map((item) => item.segmentType), ['DRIVE']);
 });

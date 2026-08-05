@@ -33,7 +33,10 @@ export const V1 = {
   minWalkDurationMs: 60_000,
   minDriveDurationMs: 10_000,
   minBikeDurationMs: 30_000,
-  minStationaryDurationMs: 30_000,
+  // Changing between bicycle and vehicle implies stopping to enter/leave the
+  // vehicle. Keep a 20-second stop so it can serve as a mode-change boundary.
+  minStationaryDurationMs: 20_000,
+  bikeDriveTransitionStopMinMs: 20_000,
   stationarySegmentMaxDistanceM: 20,
   dwellStationaryMinDurationMs: 60_000,
   dwellStationaryRadiusM: 30,
