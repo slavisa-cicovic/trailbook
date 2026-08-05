@@ -276,7 +276,7 @@ export default function SettingsScreen() {
         visible={showDeleteAccountConfirm}
         onClose={onDismissDeleteAccountConfirm}
         title="Permanently delete your account?"
-        subtitle="This removes your Trailbook account, cloud trips, waypoint photos, shares and purchase link. It cannot be undone. Deleting Trailbook does not cancel an Apple subscription; cancel it separately in App Store subscription settings."
+        subtitle="This removes your Trailbook account, cloud trips, waypoint photos, shares and purchase link. It cannot be undone. Deleting Trailbook does not cancel a Google Play or App Store subscription; cancel it separately in the store's subscription settings."
       >
         <ModalActions
           primaryDisabled={isWorking}
