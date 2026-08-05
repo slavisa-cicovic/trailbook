@@ -3,6 +3,7 @@
 import {
   Alert,
   Box,
+  Button,
   Card,
   CardContent,
   CircularProgress,
@@ -17,7 +18,14 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { getAdminDashboardMetrics, getCurrentUser, type AdminDashboardMetrics, type AuthUser } from "../../../lib/auth-api";
+import {
+  getAdminDashboardMetrics,
+  getCurrentUser,
+  grantTesterPremium,
+  type AdminDashboardMetrics,
+  type AuthUser,
+  type TesterPremiumResult,
+} from "../../../lib/auth-api";
 
 type RangeTab = "today" | "week" | "month" | "year" | "custom";
 
@@ -136,6 +144,24 @@ export function AdminDashboardView() {
   const [loading, setLoading] = useState(true);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testerEmails, setTesterEmails] = useState("");
+  const [testerExpiry, setTesterExpiry] = useState(() => toDateInputValue(addDays(new Date(), 16)));
+  const [testerResult, setTesterResult] = useState<TesterPremiumResult | null>(null);
+  const [testerSaving, setTesterSaving] = useState(false);
+
+  const submitTesterPremium = async (apply: boolean) => {
+    const emails = testerEmails.split(/[\s,;]+/).map((email) => email.trim()).filter(Boolean);
+    const expiresAt = new Date(`${testerExpiry}T23:59:59`).toISOString();
+    setTesterSaving(true);
+    setError(null);
+    try {
+      setTesterResult(await grantTesterPremium({ apply, emails, expiresAt }));
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to update tester Premium access.");
+    } finally {
+      setTesterSaving(false);
+    }
+  };
 
   const selectedRange = useMemo<RangeSelection | null>(() => {
     if (tab === "custom") {
@@ -334,6 +360,56 @@ export function AdminDashboardView() {
           </Grid>
         </Box>
       ) : null}
+
+      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 3 }}>
+        <Stack spacing={2}>
+          <Typography variant="h6">Temporary tester Premium</Typography>
+          <Typography color="text.secondary">
+            Preview first. Applying never replaces an existing non-test purchase.
+          </Typography>
+          <TextField
+            label="Tester email addresses"
+            minRows={5}
+            multiline
+            onChange={(event) => {
+              setTesterEmails(event.target.value);
+              setTesterResult(null);
+            }}
+            placeholder="One email per line"
+            value={testerEmails}
+          />
+          <TextField
+            InputLabelProps={{ shrink: true }}
+            label="Access expires after this date"
+            onChange={(event) => {
+              setTesterExpiry(event.target.value);
+              setTesterResult(null);
+            }}
+            type="date"
+            value={testerExpiry}
+          />
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <Button disabled={testerSaving || !testerEmails.trim()} onClick={() => void submitTesterPremium(false)} variant="outlined">
+              Preview
+            </Button>
+            <Button
+              disabled={testerSaving || !testerResult || testerResult.applied || testerResult.eligible.length === 0}
+              onClick={() => void submitTesterPremium(true)}
+              variant="contained"
+            >
+              Apply to eligible testers
+            </Button>
+          </Stack>
+          {testerResult ? (
+            <Alert severity={testerResult.conflicts.length > 0 || testerResult.missing.length > 0 ? "warning" : "success"}>
+              {testerResult.applied ? "Applied" : "Preview"}: {testerResult.eligible.length} eligible, {testerResult.missing.length} missing,
+              {" "}{testerResult.conflicts.length} existing purchase conflicts. Expires {formatDateOnly(testerResult.expiresAt)}.
+              {testerResult.missing.length > 0 ? ` Missing: ${testerResult.missing.join(", ")}.` : ""}
+              {testerResult.conflicts.length > 0 ? ` Conflicts: ${testerResult.conflicts.map((item) => item.email).join(", ")}.` : ""}
+            </Alert>
+          ) : null}
+        </Stack>
+      </Paper>
     </Stack>
   );
 }
