@@ -39,6 +39,7 @@ expo-env.d.ts
 # Native / mobile
 ios/Pods/
 android/.gradle/
+**/android/.gradle/
 android/app/build/
 android/build/
 mobile/android/
