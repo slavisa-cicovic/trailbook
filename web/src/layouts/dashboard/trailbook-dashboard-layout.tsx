@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Box, CircularProgress, Stack, Typography } from "@mui/material";
+import { Alert, Box, CircularProgress, Drawer, Stack, Typography } from "@mui/material";
 import { usePathname, useRouter } from "next/navigation";
 import type { PropsWithChildren } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -26,6 +26,7 @@ export function TrailbookDashboardLayout({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const title = useMemo(() => getPageTitle(pathname), [pathname]);
 
   useEffect(() => {
@@ -89,10 +90,25 @@ export function TrailbookDashboardLayout({ children }: PropsWithChildren) {
 
   return (
     <Box sx={{ bgcolor: "#faf7f1", display: "flex", minHeight: "100vh" }}>
-      <TrailbookSidebar user={user} />
+      <Box sx={{ display: { xs: "none", md: "block" }, flexShrink: 0 }}>
+        <TrailbookSidebar user={user} />
+      </Box>
+      <Drawer
+        ModalProps={{ keepMounted: true }}
+        onClose={() => setMobileNavigationOpen(false)}
+        open={mobileNavigationOpen}
+        slotProps={{ paper: { sx: { width: 220 } } }}
+      >
+        <TrailbookSidebar onNavigate={() => setMobileNavigationOpen(false)} user={user} />
+      </Drawer>
       <Box sx={{ display: "flex", flex: 1, flexDirection: "column", minWidth: 0 }}>
-        <TrailbookHeader onLogout={handleLogout} title={title} userLabel={user.email} />
-        <Box sx={{ flex: 1, p: 4 }}>{children}</Box>
+        <TrailbookHeader
+          onLogout={handleLogout}
+          onMenuOpen={() => setMobileNavigationOpen(true)}
+          title={title}
+          userLabel={user.email}
+        />
+        <Box sx={{ flex: 1, p: { xs: 2, sm: 3, lg: 4 } }}>{children}</Box>
       </Box>
     </Box>
   );

@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { isTripUserRole, type AuthUser } from "../../lib/auth-api";
 
 interface TrailbookSidebarProps {
+  onNavigate?: () => void;
   user: AuthUser;
 }
 
@@ -22,7 +23,7 @@ const navItems: NavItem[] = [
   { href: "/trips", label: "Trips", userOnly: true },
 ];
 
-export function TrailbookSidebar({ user }: TrailbookSidebarProps) {
+export function TrailbookSidebar({ onNavigate, user }: TrailbookSidebarProps) {
   const pathname = usePathname();
 
   const visibleItems = navItems.filter((item) => {
@@ -44,7 +45,7 @@ export function TrailbookSidebar({ user }: TrailbookSidebarProps) {
         borderRight: "1px solid #e6ddcb",
         display: "flex",
         flexDirection: "column",
-        minHeight: "100vh",
+        minHeight: "100%",
         p: 2,
         position: "sticky",
         top: 0,
@@ -68,6 +69,7 @@ export function TrailbookSidebar({ user }: TrailbookSidebarProps) {
               component={Link}
               href={item.href}
               key={item.href}
+              onClick={onNavigate}
               sx={{ justifyContent: "flex-start" }}
               variant={active ? "contained" : "text"}
             >

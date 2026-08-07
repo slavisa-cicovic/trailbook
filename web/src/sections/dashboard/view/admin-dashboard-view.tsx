@@ -116,12 +116,12 @@ function MetricCard({ label, value, helper }: { label: string; value: string; he
   return (
     <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
       <Card elevation={0} sx={{ border: "1px solid #e6ddcb", height: "100%" }}>
-        <CardContent>
+        <CardContent sx={{ p: { xs: 2, sm: 3 }, "&:last-child": { pb: { xs: 2, sm: 3 } } }}>
           <Stack spacing={1}>
             <Typography color="text.secondary" variant="body2">
               {label}
             </Typography>
-            <Typography variant="h4">{value}</Typography>
+            <Typography sx={{ overflowWrap: "anywhere" }} variant="h4">{value}</Typography>
             {helper ? (
               <Typography color="text.secondary" variant="body2">
                 {helper}
@@ -284,14 +284,14 @@ export function AdminDashboardView() {
   return (
     <Stack spacing={3}>
       <Stack spacing={1}>
-        <Typography variant="h4">Admin dashboard</Typography>
-        <Typography color="text.secondary">
+        <Typography sx={{ fontSize: { xs: "1.75rem", sm: "2.125rem" } }} variant="h4">Admin dashboard</Typography>
+        <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
           Signed in as {user.email}. Metrics always use the selected tab range.
         </Typography>
       </Stack>
 
-      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", overflow: "hidden" }}>
-        <Tabs onChange={(_, value: RangeTab) => setTab(value)} value={tab} variant="scrollable">
+      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", maxWidth: "100%", overflow: "hidden" }}>
+        <Tabs allowScrollButtonsMobile onChange={(_, value: RangeTab) => setTab(value)} value={tab} variant="scrollable">
           <Tab label="Today" value="today" />
           <Tab label="This week" value="week" />
           <Tab label="This month" value="month" />
@@ -301,7 +301,7 @@ export function AdminDashboardView() {
       </Paper>
 
       {tab === "custom" ? (
-        <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 3 }}>
+        <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: { xs: 2, sm: 3 } }}>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField
               InputLabelProps={{ shrink: true }}
@@ -325,7 +325,7 @@ export function AdminDashboardView() {
 
       {!selectedRange ? <Alert severity="warning">Select a valid custom date range.</Alert> : null}
 
-      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 3 }}>
+      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: { xs: 2, sm: 3 } }}>
         <Stack spacing={1}>
           <Typography variant="h6">Selected range</Typography>
           <Typography color="text.secondary">
@@ -361,13 +361,14 @@ export function AdminDashboardView() {
         </Box>
       ) : null}
 
-      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 3 }}>
+      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: { xs: 2, sm: 3 } }}>
         <Stack spacing={2}>
           <Typography variant="h6">Temporary tester Premium</Typography>
           <Typography color="text.secondary">
             Preview first. Applying never replaces an existing non-test purchase.
           </Typography>
           <TextField
+            fullWidth
             label="Tester email addresses"
             minRows={5}
             multiline
@@ -379,6 +380,7 @@ export function AdminDashboardView() {
             value={testerEmails}
           />
           <TextField
+            fullWidth
             InputLabelProps={{ shrink: true }}
             label="Access expires after this date"
             onChange={(event) => {
@@ -389,11 +391,12 @@ export function AdminDashboardView() {
             value={testerExpiry}
           />
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-            <Button disabled={testerSaving || !testerEmails.trim()} onClick={() => void submitTesterPremium(false)} variant="outlined">
+            <Button disabled={testerSaving || !testerEmails.trim()} fullWidth onClick={() => void submitTesterPremium(false)} variant="outlined">
               Preview
             </Button>
             <Button
               disabled={testerSaving || !testerResult || testerResult.applied || testerResult.eligible.length === 0}
+              fullWidth
               onClick={() => void submitTesterPremium(true)}
               variant="contained"
             >
