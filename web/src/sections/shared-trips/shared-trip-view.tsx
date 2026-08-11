@@ -149,8 +149,12 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
           elevation={0}
           sx={{
             background:
-              "radial-gradient(circle at top left, rgba(70, 112, 68, 0.28), transparent 34rem), linear-gradient(135deg, #fff9ee, #e9dfce)",
-            border: "1px solid rgba(75, 63, 45, 0.12)",
+              (theme) =>
+                theme.palette.mode === "dark"
+                  ? "radial-gradient(circle at top left, rgba(128, 174, 119, 0.24), transparent 34rem), linear-gradient(135deg, #1b251b, #101610)"
+                  : "radial-gradient(circle at top left, rgba(70, 112, 68, 0.28), transparent 34rem), linear-gradient(135deg, #fff9ee, #e9dfce)",
+            border: "1px solid",
+            borderColor: "divider",
             borderRadius: 5,
             overflow: "hidden",
             p: { xs: 3, md: 5 },
@@ -160,7 +164,7 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
             <Stack spacing={1}>
               <Typography
                 sx={{
-                  color: "#52764a",
+                  color: "primary.main",
                   fontSize: 12,
                   fontWeight: 900,
                   letterSpacing: "0.16em",
@@ -172,7 +176,7 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
               <Typography
                 component="h1"
                 sx={{
-                  color: "#201b14",
+                  color: "text.primary",
                   fontSize: { xs: 40, md: 72 },
                   fontWeight: 900,
                   letterSpacing: "-0.06em",
@@ -219,7 +223,8 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
             <Paper
               elevation={0}
               sx={{
-                border: "1px solid #e4dac9",
+                border: "1px solid",
+                borderColor: "divider",
                 borderRadius: 4,
                 maxHeight: { lg: 760 },
                 overflow: "auto",
@@ -246,8 +251,9 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
                       onMouseLeave={() => setActiveSegmentIndex(null)}
                       spacing={2}
                       sx={{
-                        bgcolor: activeSegmentIndex === segment.index ? "#fff1d3" : "#fffaf1",
-                        border: `1px solid ${activeSegmentIndex === segment.index ? "#d9912f" : "#eadfcd"}`,
+                        bgcolor: activeSegmentIndex === segment.index ? "action.selected" : "background.paper",
+                        border: "1px solid",
+                        borderColor: activeSegmentIndex === segment.index ? "secondary.main" : "divider",
                         borderRadius: 3,
                         color: "inherit",
                         cursor: "default",
@@ -283,7 +289,7 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
 
 function SharedShell({ children }: { children: ReactNode }) {
   return (
-    <Box sx={{ bgcolor: "#f6efe3", minHeight: "100vh", py: { xs: 3, md: 6 } }}>
+    <Box sx={{ bgcolor: "background.default", minHeight: "100vh", py: { xs: 3, md: 6 } }}>
       <Container maxWidth="xl">{children}</Container>
     </Box>
   );
@@ -291,7 +297,7 @@ function SharedShell({ children }: { children: ReactNode }) {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <Card elevation={0} sx={{ bgcolor: "rgba(255, 250, 241, 0.86)", border: "1px solid #eadfcd", height: "100%" }}>
+    <Card elevation={0} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", height: "100%" }}>
       <CardContent>
         <Typography color="text.secondary" fontSize={12} fontWeight={900} letterSpacing="0.12em" textTransform="uppercase">
           {label}

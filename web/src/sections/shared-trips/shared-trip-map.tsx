@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Box, Stack, Typography } from "@mui/material";
+import { Box, Stack, Typography, useTheme } from "@mui/material";
 
 import { loadGoogleMaps } from "../trips/view/google-maps-loader";
 
@@ -57,6 +57,8 @@ export function SharedTripMap({
   segments,
   waypoints,
 }: SharedTripMapProps) {
+  const theme = useTheme();
+  const darkMode = theme.palette.mode === "dark";
   const mapRef = useRef<HTMLDivElement | null>(null);
   const polylinesRef = useRef<Array<{ index: number; polyline: StyledPolyline }>>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -149,7 +151,7 @@ export function SharedTripMap({
           });
 
           marker.addListener("click", () => {
-            infoWindow.setContent(renderWaypointInfo(waypoint));
+            infoWindow.setContent(renderWaypointInfo(waypoint, darkMode));
             infoWindow.open({ anchor: marker, map });
           });
         }
@@ -170,7 +172,7 @@ export function SharedTripMap({
       disposed = true;
       polylinesRef.current = [];
     };
-  }, [onActiveSegmentIndexChange, points, segmentKey, segments, waypointKey, waypoints]);
+  }, [darkMode, onActiveSegmentIndexChange, points, segmentKey, segments, waypointKey, waypoints]);
 
   useEffect(() => {
     for (const { index, polyline } of polylinesRef.current) {
@@ -184,14 +186,14 @@ export function SharedTripMap({
 
   if (points.length === 0 && waypoints.length === 0) {
     return (
-      <Box sx={{ alignItems: "center", bgcolor: "#f2eadb", borderRadius: 4, display: "flex", justifyContent: "center", minHeight: 420 }}>
+      <Box sx={{ alignItems: "center", bgcolor: "background.paper", borderRadius: 4, display: "flex", justifyContent: "center", minHeight: 420 }}>
         <Typography color="text.secondary">This shared trip has no route points yet.</Typography>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ bgcolor: "#f2eadb", borderRadius: 4, overflow: "hidden", p: 1 }}>
+    <Box sx={{ bgcolor: "background.paper", borderRadius: 4, overflow: "hidden", p: 1 }}>
       <Box ref={mapRef} sx={{ borderRadius: 3, height: { xs: 440, md: 680 }, width: "100%" }} />
       <Stack direction="row" justifyContent="space-between" sx={{ px: 1, py: 1 }}>
         <Typography color="text.secondary" variant="body2">
@@ -210,14 +212,15 @@ export function SharedTripMap({
   );
 }
 
-function renderWaypointInfo(waypoint: SharedWaypoint) {
+function renderWaypointInfo(waypoint: SharedWaypoint, darkMode: boolean) {
   const photos = waypoint.images.slice(0, 4);
+  const secondaryColor = darkMode ? "#cbd8c7" : "#5f574d";
   return `
     <div style="max-width: 260px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
       <strong style="display:block; font-size:15px; margin-bottom:4px;">${escapeHtml(waypoint.title)}</strong>
       ${
         waypoint.description
-          ? `<div style="color:#5f574d; font-size:13px; margin-bottom:8px;">${escapeHtml(waypoint.description)}</div>`
+          ? `<div style="color:${secondaryColor}; font-size:13px; margin-bottom:8px;">${escapeHtml(waypoint.description)}</div>`
           : ""
       }
       ${
@@ -225,7 +228,7 @@ function renderWaypointInfo(waypoint: SharedWaypoint) {
           ? `<div style="display:grid; grid-template-columns: repeat(${Math.min(photos.length, 2)}, 1fr); gap:6px;">
               ${photos.map((photo) => `<img src="${escapeHtml(photo.getUrl)}" alt="${escapeHtml(waypoint.title)}" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px;" />`).join("")}
             </div>`
-          : `<div style="color:#83796c; font-size:12px;">No photos</div>`
+          : `<div style="color:${secondaryColor}; font-size:12px;">No photos</div>`
       }
     </div>`;
 }
