@@ -461,7 +461,7 @@ This would replace manual PostgreSQL JSON cloning for routine triage.
 
 ## Finding 5: Temporary tester Premium lifecycle
 
-Status: **test-only behavior; removal proposed**  
+Status: **done; temporary grant workflow removed**
 Priority: **P2**
 
 ### Current behavior
@@ -470,13 +470,21 @@ Closed-test users were given time-limited `premium_test` access so they did not
 need to make real Google Play purchases. This is backend test access rather than
 a Google Play lifetime product.
 
-### Next-build decision
+### Implemented removal
 
-- Remove or disable the temporary `premium_test` workflow after the closed test.
-- Ensure removal does not affect real Apple or Google purchases.
-- Keep an explicit, audited admin-only mechanism only if future beta programs
-  require it.
-- Remove expired test entitlements after evidence needed for this test is saved.
+- The `POST /admin/tester-premium` endpoint, backend grant implementation and
+  admin-dashboard controls were removed, so no new temporary grants can be
+  created through the application.
+- Existing `premium_test` rows are treated as retired regardless of their former
+  expiry date. On the next entitlement read, the backend empties their
+  entitlements, marks them `expired`, records `revokedAt` and returns demo access.
+- The row is retained as audit evidence instead of being deleted. Its former
+  grant, expiry and update history therefore remain inspectable.
+- Revocation is selected only by the exact `premium_test` plan code. Apple and
+  Google provider-backed purchases continue through their existing verification
+  and entitlement paths unchanged.
+- No replacement beta-grant mechanism is retained. A future beta program must
+  introduce an explicit, audited workflow as a separate product decision.
 
 ## Finding 6: Current-trip route is corrupted while a large location batch is processed
 

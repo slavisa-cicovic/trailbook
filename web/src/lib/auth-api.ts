@@ -48,20 +48,6 @@ export interface AdminDashboardMetrics {
   };
 }
 
-export interface TesterPremiumResult {
-  applied: boolean;
-  eligible: string[];
-  expiresAt: string;
-  conflicts: Array<{
-    email: string;
-    planCode: string;
-    provider: string | null;
-    subscriptionStatus: string;
-  }>;
-  missing: string[];
-  requested: number;
-}
-
 export interface UserTripOverview {
   range: {
     from: string | null;
@@ -217,13 +203,6 @@ export async function getAdminDashboardMetrics(input: { from: string; to: string
 
   return request<AdminDashboardMetrics>(`/admin/dashboard?${query.toString()}`, {
     method: "GET",
-  });
-}
-
-export async function grantTesterPremium(input: { apply: boolean; emails: string[]; expiresAt: string }) {
-  return request<TesterPremiumResult>("/admin/tester-premium", {
-    method: "POST",
-    body: JSON.stringify(input),
   });
 }
 

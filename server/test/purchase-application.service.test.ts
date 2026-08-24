@@ -179,6 +179,28 @@ describe("PurchaseApplicationService premium enforcement", () => {
     assert.equal(updateCalled, true);
   });
 
+  test("revokes a legacy tester Premium grant without affecting store access", async () => {
+    let updateData: unknown;
+    const access = {
+      ...premiumAccess("active", futureDate()),
+      environment: "production",
+      planCode: "premium_test",
+      provider: null,
+    };
+    const service = createPremiumService(access, (data) => {
+      updateData = data;
+    });
+
+    await assert.rejects(service.requirePremium(user), premiumRequiredError);
+    assert.ok(updateData && typeof updateData === "object");
+    assert.deepEqual((updateData as { entitlements: unknown }).entitlements, []);
+    assert.equal(
+      (updateData as { subscriptionStatus: string }).subscriptionStatus,
+      "expired",
+    );
+    assert.ok((updateData as { revokedAt: unknown }).revokedAt instanceof Date);
+  });
+
   test("denies a revoked subscription", async () => {
     const service = createPremiumService(premiumAccess("revoked", futureDate(), []));
 
@@ -257,13 +279,15 @@ function createAllowanceService() {
 
 function createPremiumService(
   access: ReturnType<typeof premiumAccess> | null,
-  onUpdate?: () => void,
+  onUpdate?: (data: { entitlements: unknown; revokedAt?: Date; subscriptionStatus: string }) => void,
 ) {
   const database = {
     purchaseAccess: {
       findUnique: async () => access,
-      update: async () => {
-        onUpdate?.();
+      update: async (input: {
+        data: { entitlements: unknown; revokedAt?: Date; subscriptionStatus: string };
+      }) => {
+        onUpdate?.(input.data);
         return access;
       },
     },
@@ -282,6 +306,7 @@ function premiumAccess(
     environment: "sandbox",
     planCode: "premium_monthly",
     provider: "apple",
+    revokedAt: null,
     subscriptionStatus,
   };
 }

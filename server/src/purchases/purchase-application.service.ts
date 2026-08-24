@@ -44,6 +44,25 @@ export class PurchaseApplicationService {
     const access = await this.database.purchaseAccess.findUnique({ where: { userId } });
     if (!access) return DEMO_ACCESS;
 
+    if (access.planCode === "premium_test") {
+      if (
+        access.subscriptionStatus !== "expired" ||
+        !Array.isArray(access.entitlements) ||
+        access.entitlements.length > 0 ||
+        !access.revokedAt
+      ) {
+        await this.database.purchaseAccess.update({
+          data: {
+            entitlements: [],
+            revokedAt: access.revokedAt ?? new Date(),
+            subscriptionStatus: "expired",
+          },
+          where: { userId },
+        });
+      }
+      return DEMO_ACCESS;
+    }
+
     if (
       access.subscriptionStatus !== "lifetime" &&
       (access.subscriptionStatus === "active" ||

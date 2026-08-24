@@ -2,7 +2,6 @@ import { BadRequestException, ForbiddenException, Inject, Injectable } from "@ne
 
 import type { AuthenticatedUser } from "../auth/auth.service";
 import { DatabaseService } from "../database/database.service";
-import { PAID_ENTITLEMENTS } from "../purchases/purchase-catalog";
 
 interface RawTripPointCount {
   totalTripPoints: bigint | number | null;
@@ -74,71 +73,6 @@ export class AdminService {
     };
   }
 
-  async grantTesterPremium(
-    user: AuthenticatedUser,
-    input: { apply?: boolean; emails?: unknown; expiresAt?: unknown },
-  ) {
-    this.requireAdmin(user);
-
-    const emails = this.parseEmails(input.emails);
-    const expiresAt = this.parseTesterPremiumExpiry(input.expiresAt);
-    const users = await this.database.user.findMany({
-      include: { purchaseAccess: true },
-      where: { email: { in: emails, mode: "insensitive" } },
-    });
-    const usersByEmail = new Map(users.map((candidate) => [candidate.email.toLowerCase(), candidate]));
-    const missing = emails.filter((email) => !usersByEmail.has(email));
-    const conflicts = users
-      .filter((candidate) => candidate.purchaseAccess && candidate.purchaseAccess.planCode !== "premium_test")
-      .map((candidate) => ({
-        email: candidate.email,
-        planCode: candidate.purchaseAccess!.planCode,
-        provider: candidate.purchaseAccess!.provider,
-        subscriptionStatus: candidate.purchaseAccess!.subscriptionStatus,
-      }));
-    const conflictEmails = new Set(conflicts.map((conflict) => conflict.email.toLowerCase()));
-    const eligible = users.filter((candidate) => !conflictEmails.has(candidate.email.toLowerCase()));
-
-    if (input.apply === true && eligible.length > 0) {
-      await this.database.$transaction(
-        eligible.map((candidate) =>
-          this.database.purchaseAccess.upsert({
-            create: {
-              autoRenewEnabled: false,
-              currentPeriodEndsAt: expiresAt,
-              entitlements: [...PAID_ENTITLEMENTS],
-              environment: "production",
-              planCode: "premium_test",
-              provider: null,
-              subscriptionStatus: "active",
-              userId: candidate.id,
-              verifiedAt: new Date(),
-            },
-            update: {
-              autoRenewEnabled: false,
-              currentPeriodEndsAt: expiresAt,
-              entitlements: [...PAID_ENTITLEMENTS],
-              environment: "production",
-              revokedAt: null,
-              subscriptionStatus: "active",
-              verifiedAt: new Date(),
-            },
-            where: { userId: candidate.id },
-          }),
-        ),
-      );
-    }
-
-    return {
-      applied: input.apply === true,
-      eligible: eligible.map((candidate) => candidate.email),
-      expiresAt: expiresAt.toISOString(),
-      conflicts,
-      missing,
-      requested: emails.length,
-    };
-  }
-
   private parseRange(input: { from?: string; to?: string }) {
     const from = input.from ? new Date(input.from) : null;
     const to = input.to ? new Date(input.to) : null;
@@ -148,32 +82,6 @@ export class AdminService {
     }
 
     return { from, to };
-  }
-
-  private parseEmails(value: unknown) {
-    if (!Array.isArray(value) || value.length === 0 || value.length > 100) {
-      throw new BadRequestException("Provide between 1 and 100 tester email addresses.");
-    }
-
-    const emails = [...new Set(value.map((item) => typeof item === "string" ? item.trim().toLowerCase() : ""))];
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (emails.some((email) => !emailPattern.test(email))) {
-      throw new BadRequestException("Every tester email address must be valid.");
-    }
-    return emails;
-  }
-
-  private parseTesterPremiumExpiry(value: unknown) {
-    const expiresAt = typeof value === "string" ? new Date(value) : new Date(Number.NaN);
-    const now = Date.now();
-    if (
-      Number.isNaN(expiresAt.getTime()) ||
-      expiresAt.getTime() <= now ||
-      expiresAt.getTime() > now + 60 * 24 * 60 * 60 * 1000
-    ) {
-      throw new BadRequestException("Tester Premium expiry must be within the next 60 days.");
-    }
-    return expiresAt;
   }
 
   private requireAdmin(user: AuthenticatedUser) {
