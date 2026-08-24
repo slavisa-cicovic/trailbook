@@ -34,6 +34,7 @@ import {
   authorizeTripPhotos,
   isPremiumAccessError,
 } from '@/core/domain/access/mobileAccessPolicy';
+import { buildDisplayRouteCoordinateGroups } from '@/core/domain/processing/displayRouteBuilder';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PHOTO_HEIGHT = Math.round(SCREEN_WIDTH * 0.65);
@@ -120,10 +121,11 @@ export default function WaypointDetailScreen() {
     return () => reset();
   }, [reset]);
 
-  const routeCoordinates = useMemo(
-    () => routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude })),
+  const routeCoordinateGroups = useMemo(
+    () => buildDisplayRouteCoordinateGroups(routePoints),
     [routePoints],
   );
+  const routeCoordinates = useMemo(() => routeCoordinateGroups.flat(), [routeCoordinateGroups]);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,10 +204,7 @@ export default function WaypointDetailScreen() {
       ]);
       if (!trip) continue;
 
-      const routeCoordinates = routePoints.map((point) => ({
-        latitude: point.latitude,
-        longitude: point.longitude,
-      }));
+      const routeCoordinateGroups = buildDisplayRouteCoordinateGroups(routePoints);
       const sortedWaypoints = tripWaypoints.sort(
         (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
       );
@@ -215,7 +214,7 @@ export default function WaypointDetailScreen() {
         for (const image of waypointImages) {
           items.push({
             ...image,
-            routeCoordinates,
+            routeCoordinateGroups,
             tripTitle: trip.title,
             waypointCoordinate: {
               latitude: tripWaypoint.latitude,
@@ -369,13 +368,14 @@ export default function WaypointDetailScreen() {
               longitudeDelta: 0.012,
             }}
           >
-            {routeCoordinates.length > 1 && (
+            {routeCoordinateGroups.map((coordinates, index) => (
               <Polyline
-                coordinates={routeCoordinates}
+                key={index}
+                coordinates={coordinates}
                 strokeColor={theme.accent}
                 strokeWidth={4}
               />
-            )}
+            ))}
             <Marker
               coordinate={{ latitude: waypoint.latitude, longitude: waypoint.longitude }}
               pinColor={theme.accent}

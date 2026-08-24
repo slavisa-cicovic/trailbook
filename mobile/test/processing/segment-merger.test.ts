@@ -14,7 +14,7 @@ function at(minutes: number) {
 function segment(
   startMinutes: number,
   endMinutes: number,
-  type: 'BIKE' | 'DRIVE' | 'STATIONARY',
+  type: 'WALK' | 'BIKE' | 'DRIVE' | 'STATIONARY',
 ) {
   return {
     startTime: at(startMinutes),
@@ -163,6 +163,41 @@ test('keeps a long delivery dwell stationary despite walking-sized accumulated m
     'STATIONARY',
     'DRIVE',
   ]);
+});
+
+test('does not include distance across a long uncertain walking gap', () => {
+  const points: GeoPoint[] = [
+    {
+      timestamp: START,
+      latitude: 45,
+      longitude: 19.8,
+      speedMps: 2,
+      altitudeM: undefined,
+    },
+    {
+      timestamp: new Date(START.getTime() + 60_000),
+      latitude: 45.001,
+      longitude: 19.8,
+      speedMps: 2,
+      altitudeM: undefined,
+    },
+    {
+      timestamp: new Date(START.getTime() + 283_000),
+      latitude: 45.0041,
+      longitude: 19.8,
+      speedMps: 2,
+      altitudeM: undefined,
+    },
+  ];
+  const result = mergeAndFinalize(
+    'sparse-walk',
+    [{ startTime: START, endTime: points.at(-1)!.timestamp, type: 'WALK' }],
+    points,
+  );
+
+  assert.equal(result.length, 1);
+  assert.ok((result[0].distanceM ?? 0) > 100);
+  assert.ok((result[0].distanceM ?? Number.POSITIVE_INFINITY) < 150);
 });
 
 test('rejects BIKE to DRIVE transition after a stationary period shorter than 20 seconds', () => {

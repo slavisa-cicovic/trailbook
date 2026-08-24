@@ -2,7 +2,7 @@ import type { DisplayRoutePoint } from '../model/displayRoutePoint';
 import type { RawLocationSample } from '../model/rawSamples';
 import type { Segment } from '../model/segment';
 import type { GeoPoint } from './types';
-import { cleanLocations, distanceM } from './locationCleaner';
+import { cleanLocations, distanceM, splitLocationsOnRouteGaps } from './locationCleaner';
 
 export const MAX_DISPLAY_ROUTE_POINTS = 2_500;
 const METERS_PER_DEGREE_LATITUDE = 111_320;
@@ -208,6 +208,20 @@ export interface DisplayRouteSnapshot {
     accepted: number;
     displayed: number;
   };
+}
+
+export function buildDisplayRouteCoordinateGroups(points: DisplayRoutePoint[]) {
+  const geoPoints: GeoPoint[] = points.map((point) => ({
+    timestamp: point.timestamp,
+    latitude: point.latitude,
+    longitude: point.longitude,
+    speedMps: point.speedMps,
+    altitudeM: undefined,
+  }));
+
+  return splitLocationsOnRouteGaps(geoPoints)
+    .filter((group) => group.length > 1)
+    .map((group) => group.map(({ latitude, longitude }) => ({ latitude, longitude })));
 }
 
 export function buildDisplayRouteSnapshot(

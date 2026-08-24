@@ -716,7 +716,7 @@ condition.
 
 ## Finding 8: Completed walking route contains long straight jumps and zigzags
 
-Status: **raw bundle analyzed; contributing causes confirmed**  
+Status: **done; uncertain route gaps are no longer connected**
 Priority: **P1**
 
 ### Symptom
@@ -795,6 +795,30 @@ bad point alone.
   endpoints individually pass the `25 m` threshold.
 - The UI can distinguish a continuous recorded route from missing/uncertain
   route sections without inventing geometry.
+
+### Implemented fix
+
+- Processing version `16` treats every gap longer than 60 seconds as uncertain
+  and never connects its endpoints, even when they happen to be less than the
+  former 100 m fallback distance apart.
+- Within a continuous time window, connection plausibility is mode-aware:
+  `WALK`, `BIKE`, `STATIONARY`, vehicle, boat and plane segments use separate
+  maximum implied speeds. A walking GPS zigzag can therefore be rejected without
+  applying walking limits to a valid vehicle route.
+- Segment distance uses the same connection decision as rendered geometry.
+  Distances across hidden gaps are not silently included in trip totals.
+- Trip detail, waypoint mini-maps and photo route previews render separate
+  polyline groups. Auxiliary views cannot reconnect an uncertain temporal gap;
+  the segment-aware trip view additionally applies mode plausibility.
+- The stable raw-sample identity migration from Finding 3 makes overlapping
+  callback replays idempotent before processing and display.
+- Regressions cover a gap just over 60 seconds with nearby endpoints, an
+  implausible 30-second walking jump to another block, the corresponding valid
+  vehicle connection and ordinary continuous walking.
+
+The private affected raw bundle is not stored as a repository fixture. The
+regression encodes the measured temporal/distance failure mode without retaining
+tester coordinates.
 
 ## Finding 9: Stop can process an incomplete in-flight Android location batch
 

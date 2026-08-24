@@ -21,13 +21,18 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function distanceInRange(points: GeoPoint[], from: Date, to: Date): number {
+function distanceInRange(
+  points: GeoPoint[],
+  from: Date,
+  to: Date,
+  segmentType?: Segment['segmentType'],
+): number {
   const inRange = points.filter(
     (p) => p.timestamp.getTime() >= from.getTime() && p.timestamp.getTime() <= to.getTime(),
   );
   let total = 0;
   for (let i = 1; i < inRange.length; i++) {
-    if (!shouldConnectGeoPoints(inRange[i - 1], inRange[i])) {
+    if (!shouldConnectGeoPoints(inRange[i - 1], inRange[i], segmentType)) {
       continue;
     }
     total += haversineM(
@@ -95,7 +100,7 @@ export function mergeAndFinalize(
     segmentType: seg.type,
     startedAt: seg.startTime,
     endedAt: seg.endTime,
-    distanceM: distanceInRange(geoPoints, seg.startTime, seg.endTime),
+    distanceM: distanceInRange(geoPoints, seg.startTime, seg.endTime, seg.type),
   }));
 }
 
@@ -234,7 +239,7 @@ function normalizeBikeDriveBridges(
 
     const durationSeconds = durationMs / 1000;
     const averageSpeedMps =
-      distanceInRange(geoPoints, segment.startTime, segment.endTime) / durationSeconds;
+      distanceInRange(geoPoints, segment.startTime, segment.endTime, segment.type) / durationSeconds;
     const medianSpeedMps = medianReportedSpeedInRange(
       geoPoints,
       segment.startTime,
@@ -316,7 +321,7 @@ function reclassifyMovingStationarySegments(
       (segment.endTime.getTime() - segment.startTime.getTime()) / 1000;
     if (durationSeconds <= 0) return segment;
 
-    const distanceM = distanceInRange(geoPoints, segment.startTime, segment.endTime);
+    const distanceM = distanceInRange(geoPoints, segment.startTime, segment.endTime, segment.type);
     if (distanceM <= V1.stationarySegmentMaxDistanceM) return segment;
 
     const averageSpeedMps = distanceM / durationSeconds;
@@ -404,7 +409,7 @@ function normalizeSlowBikeSegments(
     if (durationSeconds <= 0) return segment;
 
     const averageSpeedMps =
-      distanceInRange(geoPoints, segment.startTime, segment.endTime) / durationSeconds;
+      distanceInRange(geoPoints, segment.startTime, segment.endTime, segment.type) / durationSeconds;
 
     if (averageSpeedMps < V1.stationaryMaxMps) {
       return { ...segment, type: 'STATIONARY' };
@@ -566,7 +571,7 @@ function absorbWalkStationaryInterruptions(
       return segment;
     }
 
-    const distanceM = distanceInRange(geoPoints, segment.startTime, segment.endTime);
+    const distanceM = distanceInRange(geoPoints, segment.startTime, segment.endTime, segment.type);
     if (distanceM < V1.walkStationaryInterruptionMinDistanceM) {
       return segment;
     }

@@ -1,4 +1,5 @@
 import type { RawLocationSample } from '../model/rawSamples';
+import type { SegmentType } from '../model/segment';
 import type { GeoPoint } from './types';
 import { V1 } from './types';
 
@@ -14,11 +15,16 @@ export function distanceM(lat1: number, lon1: number, lat2: number, lon2: number
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export function shouldConnectGeoPoints(previous: GeoPoint, current: GeoPoint): boolean {
+export function shouldConnectGeoPoints(
+  previous: GeoPoint,
+  current: GeoPoint,
+  segmentType?: SegmentType,
+): boolean {
   const dtMs = current.timestamp.getTime() - previous.timestamp.getTime();
   if (dtMs <= 0) return false;
+  if (dtMs > V1.routeGapSplitThresholdMs) return false;
 
-  if (dtMs <= V1.routeGapSplitThresholdMs) return true;
+  if (!segmentType) return true;
 
   const distance = distanceM(
     previous.latitude,
@@ -26,17 +32,21 @@ export function shouldConnectGeoPoints(previous: GeoPoint, current: GeoPoint): b
     current.latitude,
     current.longitude,
   );
-  return distance < V1.routeGapSplitMinDistanceM;
+  const impliedSpeedMps = distance / (dtMs / 1000);
+  return impliedSpeedMps <= V1.routeConnectionMaxMps[segmentType];
 }
 
-export function splitLocationsOnRouteGaps(locations: GeoPoint[]): GeoPoint[][] {
+export function splitLocationsOnRouteGaps(
+  locations: GeoPoint[],
+  segmentType?: SegmentType,
+): GeoPoint[][] {
   if (locations.length === 0) return [];
 
   const chunks: GeoPoint[][] = [[locations[0]]];
   for (let index = 1; index < locations.length; index += 1) {
     const previous = locations[index - 1];
     const current = locations[index];
-    if (shouldConnectGeoPoints(previous, current)) {
+    if (shouldConnectGeoPoints(previous, current, segmentType)) {
       chunks[chunks.length - 1].push(current);
     } else {
       chunks.push([current]);

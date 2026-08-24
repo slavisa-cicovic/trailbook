@@ -217,9 +217,13 @@ export function WaypointPhotoViewer({
   const [zoomedImageId, setZoomedImageId] = useState<string | null>(null);
   const [routeExpanded, setRouteExpanded] = useState(false);
   const currentImage = images[currentIndex] ?? null;
+  const previewRouteCoordinateGroups = useMemo(
+    () => (currentImage?.routeCoordinateGroups ?? []).map(downsampleRouteCoordinates),
+    [currentImage?.routeCoordinateGroups],
+  );
   const previewRouteCoordinates = useMemo(
-    () => downsampleRouteCoordinates(currentImage?.routeCoordinates ?? []),
-    [currentImage?.routeCoordinates],
+    () => previewRouteCoordinateGroups.flat(),
+    [previewRouteCoordinateGroups],
   );
   const routePreviewRegion = useMemo(
     () =>
@@ -287,13 +291,14 @@ export function WaypointPhotoViewer({
             style={styles.expandedRouteMap}
             toolbarEnabled={false}
           >
-            {previewRouteCoordinates.length > 1 && (
+            {previewRouteCoordinateGroups.map((coordinates, index) => (
               <Polyline
-                coordinates={previewRouteCoordinates}
+                key={index}
+                coordinates={coordinates}
                 strokeColor={ROUTE_PREVIEW_LINE_COLOR}
                 strokeWidth={4}
               />
-            )}
+            ))}
             {currentImage && (
               <Marker coordinate={currentImage.waypointCoordinate} pinColor="#e53935" tracksViewChanges={false} />
             )}
@@ -341,13 +346,14 @@ export function WaypointPhotoViewer({
             toolbarEnabled={false}
             zoomEnabled={false}
           >
-            {previewRouteCoordinates.length > 1 && (
+            {previewRouteCoordinateGroups.map((coordinates, index) => (
               <Polyline
-                coordinates={previewRouteCoordinates}
+                key={index}
+                coordinates={coordinates}
                 strokeColor={ROUTE_PREVIEW_LINE_COLOR}
                 strokeWidth={3}
               />
-            )}
+            ))}
             {currentImage && (
               <Marker coordinate={currentImage.waypointCoordinate} pinColor="#e53935" tracksViewChanges={false} />
             )}

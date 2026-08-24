@@ -20,7 +20,15 @@ export const V1 = {
   speedSpikeThresholdMps: 120,  // 432 km/h - above any realistic ground transport
   maxContinuousIntervalMs: 60_000,
   routeGapSplitThresholdMs: 60_000,
-  routeGapSplitMinDistanceM: 100,
+  routeConnectionMaxMps: {
+    WALK: 4.5,
+    BIKE: 25,
+    DRIVE: 70,
+    BOAT: 40,
+    PLANE: 350,
+    STATIONARY: 1.5,
+    UNKNOWN: 50,
+  },
   stationaryMaxMps: 0.5,
   walkMaxMps: 2.5,
   bikeMaxMps: 7.0,

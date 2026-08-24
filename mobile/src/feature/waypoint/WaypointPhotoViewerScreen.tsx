@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as displayRoutePointDao from '@/core/data/local/displayRoutePointDao';
+import { buildDisplayRouteCoordinateGroups } from '@/core/domain/processing/displayRouteBuilder';
 import * as tripDao from '@/core/data/local/tripDao';
 import * as waypointDao from '@/core/data/local/waypointDao';
 import * as waypointImageDao from '@/core/data/local/waypointImageDao';
@@ -57,14 +58,11 @@ export default function WaypointPhotoViewerScreen() {
       return;
     }
 
-    const routeCoordinates = routePoints.map((point) => ({
-      latitude: point.latitude,
-      longitude: point.longitude,
-    }));
+    const routeCoordinateGroups = buildDisplayRouteCoordinateGroups(routePoints);
     setImages(
       waypointImages.map((image) => ({
         ...image,
-        routeCoordinates,
+        routeCoordinateGroups,
         tripTitle: trip.title,
         waypointCoordinate: {
           latitude: waypoint.latitude,

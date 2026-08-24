@@ -84,7 +84,7 @@ function waitForNextFrame() {
 function pointGroupsForSegment(locations: GeoPoint[], seg: Segment) {
   const segmentLocations = locations
     .filter((l) => l.timestamp >= seg.startedAt && l.timestamp <= seg.endedAt);
-  return splitLocationsOnRouteGaps(segmentLocations)
+  return splitLocationsOnRouteGaps(segmentLocations, seg.segmentType)
     .map((group) => group.map((l) => ({ latitude: l.latitude, longitude: l.longitude })))
     .filter((group) => group.length > 1);
 }

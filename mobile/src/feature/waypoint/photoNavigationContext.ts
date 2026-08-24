@@ -1,7 +1,7 @@
 import type { WaypointImage } from '@/core/domain/model/waypoint';
 
 export interface PhotoViewerItem extends WaypointImage {
-  routeCoordinates: Array<{ latitude: number; longitude: number }>;
+  routeCoordinateGroups: Array<Array<{ latitude: number; longitude: number }>>;
   tripTitle: string;
   waypointCoordinate: { latitude: number; longitude: number };
   waypointTitle: string;
