@@ -508,18 +508,51 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       stopCaptureHealthInterval();
 
       const endedAt = new Date();
-      await rawSessionEventDao.insert({ tripId: activeTrip.clientTripId, timestamp: endedAt, type: 'RECORDING_STOPPED' });
+      const finalRawSnapshot = await rawLocationDao.getSummaryForTrip(activeTrip.clientTripId);
+      await rawSessionEventDao.insert({
+        tripId: activeTrip.clientTripId,
+        timestamp: endedAt,
+        type: 'RECORDING_STOPPED',
+        payload: {
+          finalRawLocationCount: finalRawSnapshot.count,
+          finalRawLocationTimestamp: finalRawSnapshot.lastTimestamp?.toISOString() ?? null,
+        },
+      });
       await tripDao.updateEndedAt(activeTrip.clientTripId, endedAt);
       await clearActiveRecordingTripId();
 
       set({ isRecording: false, isPaused: false, activeTrip: null, locationCount: 0, liveCoordinates: [], activeWaypoints: [], captureHealth: 'inactive', firstLocationAt: null, lastLocationAt: null, lastAcceptedLocationAt: null });
       dbEvents.emit('trips:changed');
 
-      const bundleResult = await rawCaptureRepository.getTripBundle(activeTrip.clientTripId);
-      if (bundleResult.ok && bundleResult.value) {
+      let expectedRawSnapshot = finalRawSnapshot;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const bundleResult = await rawCaptureRepository.getTripBundle(activeTrip.clientTripId);
+        if (!bundleResult.ok || !bundleResult.value) break;
+
         const segments = process(bundleResult.value, CURRENT_PROCESSING_VERSION);
+        const observedRawSnapshot = await rawLocationDao.getSummaryForTrip(
+          activeTrip.clientTripId,
+        );
+        const rawSnapshotIsStable =
+          observedRawSnapshot.count === expectedRawSnapshot.count &&
+          observedRawSnapshot.lastTimestamp?.getTime() ===
+            expectedRawSnapshot.lastTimestamp?.getTime();
+
+        if (!rawSnapshotIsStable) {
+          console.warn('[RecordingStore] raw capture advanced during final processing', {
+            attempt,
+            expectedCount: expectedRawSnapshot.count,
+            observedCount: observedRawSnapshot.count,
+            tripId: activeTrip.clientTripId,
+          });
+          expectedRawSnapshot = observedRawSnapshot;
+          if (attempt < 3) continue;
+          throw new Error('Raw location capture did not stabilize during final processing.');
+        }
+
         await tripRepository.replaceSegments(activeTrip.clientTripId, segments);
         await tripRepository.updateProcessingVersion(activeTrip.clientTripId, CURRENT_PROCESSING_VERSION);
+        break;
       }
 
       return ok(undefined);

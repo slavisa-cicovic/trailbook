@@ -10,10 +10,12 @@ import { buildActivitySampleFromSpeed } from '@/core/data/activity/activitySampl
 import { getMotionActivitySample } from '@/core/data/activity/motionActivity';
 import { dbEvents } from '@/core/db/events';
 import type { RawSessionEvent, SessionEventType } from '@/core/domain/model/rawSamples';
+import { LocationWriteBarrier } from './locationDrainCoordinator';
 
 export const LOCATION_TASK = 'trailbook-location-task';
 
 const START_RETRY_DELAYS_MS = [0, 750, 1500, 3000];
+const callbackWriteBarrier = new LocationWriteBarrier();
 
 type LocationTaskPayload = Record<string, unknown>;
 
@@ -118,74 +120,80 @@ async function recordTaskOptionsSnapshot(tripId: string, expectedOptions: Locati
   }
 }
 
-// Defined at module level - must be imported before any component mounts.
-// Guard against duplicate definition during fast refresh / JS reloads.
-if (!TaskManager.isTaskDefined(LOCATION_TASK)) {
-  TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: TaskManager.TaskManagerTaskBody<{ locations: LocationObject[] }>) => {
-    const tripId = await getActiveRecordingTripId();
+async function handleLocationTaskCallback(
+  { data, error }: TaskManager.TaskManagerTaskBody<{ locations: LocationObject[] }>,
+) {
+  const tripId = await getActiveRecordingTripId();
 
-    if (error) {
-      console.error('[LocationTask] error:', error.message);
-      await recordLocationTaskEvent(tripId, 'LOCATION_TASK_CALLBACK_WRITE_FAILED', {
-        error: error.message,
-        taskName: LOCATION_TASK,
-      });
-      return;
-    }
+  if (error) {
+    console.error('[LocationTask] error:', error.message);
+    await recordLocationTaskEvent(tripId, 'LOCATION_TASK_CALLBACK_WRITE_FAILED', {
+      error: error.message,
+      taskName: LOCATION_TASK,
+    });
+    return;
+  }
 
-    const locations = data?.locations ?? [];
-    if (!tripId) {
-      console.error('[LocationTask] callback ignored because active trip is missing');
-      return;
-    }
+  const locations = data?.locations ?? [];
+  if (!tripId) {
+    console.error('[LocationTask] callback ignored because active trip is missing');
+    return;
+  }
 
-    if (!locations.length) {
-      await recordLocationTaskEvent(tripId, 'LOCATION_TASK_CALLBACK_RECEIVED', {
-        locationsCount: 0,
-        taskName: LOCATION_TASK,
-      });
-      return;
-    }
-
+  if (!locations.length) {
     await recordLocationTaskEvent(tripId, 'LOCATION_TASK_CALLBACK_RECEIVED', {
-      firstTimestamp: new Date(locations[0].timestamp).toISOString(),
-      lastTimestamp: new Date(locations[locations.length - 1].timestamp).toISOString(),
+      locationsCount: 0,
+      taskName: LOCATION_TASK,
+    });
+    return;
+  }
+
+  await recordLocationTaskEvent(tripId, 'LOCATION_TASK_CALLBACK_RECEIVED', {
+    firstTimestamp: new Date(locations[0].timestamp).toISOString(),
+    lastTimestamp: new Date(locations[locations.length - 1].timestamp).toISOString(),
+    locationsCount: locations.length,
+    taskName: LOCATION_TASK,
+  });
+
+  try {
+    const rawLocations = locations.map((loc) => ({
+      tripId,
+      timestamp: new Date(loc.timestamp),
+      latitude: loc.coords.latitude,
+      longitude: loc.coords.longitude,
+      // iOS returns -1 for unavailable values; treat negative as undefined
+      accuracyM: loc.coords.accuracy != null && loc.coords.accuracy >= 0 ? loc.coords.accuracy : undefined,
+      altitudeM: loc.coords.altitude != null && loc.coords.altitude > -999 ? loc.coords.altitude : undefined,
+      speedMps: loc.coords.speed != null && loc.coords.speed >= 0 ? loc.coords.speed : undefined,
+      bearingDeg: loc.coords.heading != null && loc.coords.heading >= 0 ? loc.coords.heading : undefined,
+      provider: 'fused',
+    }));
+    await rawLocationDao.insertAll(rawLocations);
+    const activitySamples = await Promise.all(
+      locations.map(async (loc) => {
+        const timestamp = new Date(loc.timestamp);
+        return (await getMotionActivitySample(tripId, timestamp)) ??
+          buildActivitySampleFromSpeed(tripId, loc.coords.speed, timestamp);
+      }),
+    );
+    await rawActivityDao.insertAll(activitySamples);
+  } catch (writeError) {
+    await recordLocationTaskEvent(tripId, 'LOCATION_TASK_CALLBACK_WRITE_FAILED', {
+      error: writeError instanceof Error ? writeError.message : String(writeError),
       locationsCount: locations.length,
       taskName: LOCATION_TASK,
     });
+    throw writeError;
+  }
 
-    try {
-      for (const loc of locations) {
-        const timestamp = new Date(loc.timestamp);
+  dbEvents.emit('rawData:changed');
+}
 
-        await rawLocationDao.insert({
-          tripId,
-          timestamp,
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-          // iOS returns -1 for unavailable values; treat negative as undefined
-          accuracyM: loc.coords.accuracy != null && loc.coords.accuracy >= 0 ? loc.coords.accuracy : undefined,
-          altitudeM: loc.coords.altitude != null && loc.coords.altitude > -999 ? loc.coords.altitude : undefined,
-          speedMps: loc.coords.speed != null && loc.coords.speed >= 0 ? loc.coords.speed : undefined,
-          bearingDeg: loc.coords.heading != null && loc.coords.heading >= 0 ? loc.coords.heading : undefined,
-          provider: 'fused',
-        });
-
-        const activitySample =
-          (await getMotionActivitySample(tripId, timestamp)) ??
-          buildActivitySampleFromSpeed(tripId, loc.coords.speed, timestamp);
-        await rawActivityDao.insert(activitySample);
-      }
-    } catch (writeError) {
-      await recordLocationTaskEvent(tripId, 'LOCATION_TASK_CALLBACK_WRITE_FAILED', {
-        error: writeError instanceof Error ? writeError.message : String(writeError),
-        locationsCount: locations.length,
-        taskName: LOCATION_TASK,
-      });
-      throw writeError;
-    }
-
-    dbEvents.emit('rawData:changed');
+// Defined at module level - must be imported before any component mounts.
+// Guard against duplicate definition during fast refresh / JS reloads.
+if (!TaskManager.isTaskDefined(LOCATION_TASK)) {
+  TaskManager.defineTask(LOCATION_TASK, async (taskBody: TaskManager.TaskManagerTaskBody<{ locations: LocationObject[] }>) => {
+    await callbackWriteBarrier.run(() => handleLocationTaskCallback(taskBody));
   });
 }
 
@@ -248,6 +256,7 @@ export async function stopLocationTask(): Promise<void> {
     if (isRunning) {
       await Location.stopLocationUpdatesAsync(LOCATION_TASK);
     }
+    await callbackWriteBarrier.waitForIdle();
     await recordLocationTaskEvent(tripId, 'LOCATION_TASK_STOP_SUCCEEDED', {
       previouslyRunning: isRunning,
       taskName: LOCATION_TASK,

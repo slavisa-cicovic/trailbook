@@ -65,6 +65,10 @@ class TrailbookNativeLocationModule : Module() {
     } finally {
       TrailbookLocationStorage.setActiveTripId(context, null)
       context.stopService(Intent(context, TrailbookLocationService::class.java))
+      // append() and pendingCount() share the storage lock. Crossing this
+      // barrier guarantees that a BroadcastReceiver already appending its
+      // accepted batch has finished before JavaScript performs the final drain.
+      TrailbookLocationStorage.pendingCount(context)
     }
   }
 

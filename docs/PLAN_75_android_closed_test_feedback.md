@@ -822,7 +822,7 @@ tester coordinates.
 
 ## Finding 9: Stop can process an incomplete in-flight Android location batch
 
-Status: **root cause confirmed; reprocessing verified the recovery**  
+Status: **done; stop now drains and verifies final raw snapshot**
 Priority: **P1**
 
 ### Symptom
@@ -912,6 +912,40 @@ and permanently save segments derived from a partial snapshot.
   geometry.
 - A regression test reproduces the observed ordering: a `150`-location callback
   begins, Stop occurs during insertion, and the resulting route remains complete.
+
+### Implemented fix
+
+- Native queue draining now uses a shared single-flight promise instead of a
+  boolean early return. Stop joins an already active drain rather than treating
+  `drain in progress` as `nothing to wait for`.
+- Android native stop clears future delivery and then crosses the same storage
+  lock used by the BroadcastReceiver append path. When native stop returns, any
+  receiver that had already accepted a batch has completed its queue write.
+- JavaScript performs two post-stop drain calls: the first joins an in-flight
+  persistence operation, and the second drains the queue after native production
+  is stable. Location and activity samples continue to use bounded bulk inserts
+  and idempotent raw-sample identities.
+- The Expo TaskManager fallback has its own active-write barrier. Its former
+  per-location sequential loop is replaced by bulk location/activity inserts,
+  and `stopLocationTask()` waits for every callback write already in progress.
+- `RECORDING_STOPPED` diagnostics include the final raw location count and final
+  raw timestamp immediately before bundle processing.
+- Finalization compares that snapshot with the raw database after processing.
+  If raw data advanced, it reloads the bundle and reruns processing, up to three
+  stable-snapshot attempts; it refuses to publish known-stale segments if the
+  capture cannot stabilize.
+- The race regression blocks an in-flight 150-location drain after 25 samples,
+  invokes the Stop-side drain, verifies that both calls share one operation, and
+  confirms all 150 samples are present before Stop continues. It also verifies
+  that a fresh post-stop drain pass can run afterward.
+- A separate fallback regression verifies that TaskManager stop waits across a
+  blocked callback write instead of returning with a partial batch.
+
+The native location module Kotlin source compiles successfully. The wider app
+Gradle task proceeded through `trailbook-native-location:compileDebugKotlin` and
+then stopped at the repository's absent generated
+`android/app/src/main/AndroidManifest.xml`; this is an Expo prebuild workspace
+condition, not a Kotlin error in the change.
 
 ## Finding 10: Shared-trip photos load slowly or never in Trip Details and the fullscreen viewer
 

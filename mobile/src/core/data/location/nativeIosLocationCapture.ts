@@ -6,6 +6,7 @@ import { buildActivitySampleFromSpeed } from '@/core/data/activity/activitySampl
 import { getMotionActivitySample } from '@/core/data/activity/motionActivity';
 import { dbEvents } from '@/core/db/events';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
+import { LocationDrainCoordinator } from './locationDrainCoordinator';
 
 declare const require: (name: string) => any;
 
@@ -43,7 +44,7 @@ type NativeModuleRuntime = {
 let runtime: NativeModuleRuntime | null | undefined;
 let activeTripId: string | null = null;
 let eventSubscription: { remove(): void } | null = null;
-let drainInProgress = false;
+const drainCoordinator = new LocationDrainCoordinator();
 let drainInterval: ReturnType<typeof setInterval> | null = null;
 
 function loadRuntime(): NativeModuleRuntime | null {
@@ -127,10 +128,9 @@ export function isNativeLocationCaptureAvailable(): boolean {
 
 export async function flushNativeLocationEvents(): Promise<number> {
   const native = loadRuntime();
-  if (!native || drainInProgress) return 0;
+  if (!native) return 0;
 
-  drainInProgress = true;
-  try {
+  return drainCoordinator.run(async () => {
     let persistedCount = 0;
     while (true) {
       const events = await native.module.peekEvents(250);
@@ -140,9 +140,7 @@ export async function flushNativeLocationEvents(): Promise<number> {
       persistedCount += events.length;
       if (events.length < 250) return persistedCount;
     }
-  } finally {
-    drainInProgress = false;
-  }
+  });
 }
 
 export async function startNativeLocationCapture(tripId: string): Promise<boolean> {
@@ -220,6 +218,9 @@ export async function stopNativeLocationCapture(): Promise<boolean> {
   }
 
   await native.module.stop();
+  // The first call joins a drain that may already be persisting a large batch.
+  // The second starts a fresh pass after native stop has made the queue stable.
+  await flushNativeLocationEvents();
   await flushNativeLocationEvents();
   eventSubscription?.remove();
   eventSubscription = null;
