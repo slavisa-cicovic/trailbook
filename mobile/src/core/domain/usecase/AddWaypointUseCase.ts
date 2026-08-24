@@ -10,6 +10,7 @@ import {
   authorizeTripContent,
   authorizeTripPhotos,
 } from '@/core/domain/access/mobileAccessPolicy';
+import { saveNormalizedJpeg } from '@/core/data/local/normalizedPhotoStorage';
 
 export interface AddWaypointParams {
   tripId: string;
@@ -31,7 +32,7 @@ async function copyPhotoToStorage(
   const dir = `${FileSystem.documentDirectory}waypoint_photos/${waypointId}/`;
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   const dest = `${dir}${imageId}.jpg`;
-  await FileSystem.copyAsync({ from: sourceUri, to: dest });
+  await saveNormalizedJpeg(sourceUri, dest);
   return dest;
 }
 

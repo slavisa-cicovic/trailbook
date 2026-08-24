@@ -70,7 +70,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
       showAlert({ title: 'Camera permission required' });
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.8, allowsEditing: false });
+    const result = await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: false });
     if (!result.canceled && result.assets[0]) {
       setPhotos((p) => [...p, { uri: result.assets[0]!.uri, source: 'CAMERA', capturedAt: new Date() }]);
     }
@@ -82,7 +82,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
       showAlert({ title: 'Photo library permission required' });
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (!result.canceled && result.assets[0]) {
       setPhotos((p) => [...p, { uri: result.assets[0]!.uri, source: 'GALLERY', capturedAt: null }]);
     }

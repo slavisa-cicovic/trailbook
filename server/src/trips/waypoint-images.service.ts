@@ -43,8 +43,6 @@ export class WaypointImagesService {
   private readonly allowedContentTypes = this.getListEnv("MEDIA_UPLOAD_ALLOWED_CONTENT_TYPES", [
     "image/jpeg",
     "image/png",
-    "image/heic",
-    "image/heif",
     "image/webp",
   ]);
   private readonly region = process.env.S3_REGION?.trim() || "us-east-1";
@@ -270,7 +268,11 @@ export class WaypointImagesService {
   }
 
   private assertAllowedUpload(contentType: string, sizeBytes: number | null) {
-    if (!this.allowedContentTypes.includes(contentType)) {
+    if (
+      contentType === "image/heic" ||
+      contentType === "image/heif" ||
+      !this.allowedContentTypes.includes(contentType)
+    ) {
       throw new BadRequestException(`Unsupported image content type: ${contentType}`);
     }
 

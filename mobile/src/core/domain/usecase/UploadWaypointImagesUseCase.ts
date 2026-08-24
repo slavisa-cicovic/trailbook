@@ -4,6 +4,7 @@ import { remoteWaypointImageDataSource } from '@/core/data/remote/FetchRemoteWay
 import * as FileSystem from 'expo-file-system/legacy';
 import type { Result } from '@/core/common/result';
 import { err, ok } from '@/core/common/result';
+import { localImageContentType } from '@/core/domain/media/localImageContentType';
 
 export async function uploadWaypointImages(clientTripId: string): Promise<Result<void>> {
   const waypoints = await waypointDao.getForTrip(clientTripId);
@@ -60,24 +61,6 @@ export async function uploadWaypointImages(clientTripId: string): Promise<Result
   return ok(undefined);
 }
 
-function getContentType(localUri: string): string {
-  const extension = localUri.split('?')[0]?.split('.').pop()?.toLowerCase();
-  switch (extension) {
-    case 'heic':
-      return 'image/heic';
-    case 'heif':
-      return 'image/heif';
-    case 'png':
-      return 'image/png';
-    case 'webp':
-      return 'image/webp';
-    case 'jpg':
-    case 'jpeg':
-    default:
-      return 'image/jpeg';
-  }
-}
-
 async function getLocalImageUploadMetadata(
   localUri: string,
 ): Promise<Result<{ contentType: string; sizeBytes: number }>> {
@@ -91,8 +74,11 @@ async function getLocalImageUploadMetadata(
     return err('Local image size is not available.');
   }
 
+  const contentType = localImageContentType(localUri);
+  if (!contentType.ok) return contentType;
+
   return ok({
-    contentType: getContentType(localUri),
+    contentType: contentType.value,
     sizeBytes: size,
   });
 }

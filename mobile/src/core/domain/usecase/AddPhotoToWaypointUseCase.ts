@@ -8,6 +8,7 @@ import * as tripDao from '@/core/data/local/tripDao';
 import { dbEvents } from '@/core/db/events';
 import { randomUuid } from '@/core/common/uuid';
 import { authorizeTripPhotos } from '@/core/domain/access/mobileAccessPolicy';
+import { saveNormalizedJpeg } from '@/core/data/local/normalizedPhotoStorage';
 
 export async function addPhotoToWaypoint(
   waypointId: string,
@@ -25,9 +26,8 @@ export async function addPhotoToWaypoint(
 
     const dir = `${FileSystem.documentDirectory}waypoint_photos/${waypointId}/`;
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-    const ext = uri.split('.').pop() ?? 'jpg';
-    const localUri = `${dir}${randomUuid()}.${ext}`;
-    await FileSystem.copyAsync({ from: uri, to: localUri });
+    const localUri = `${dir}${randomUuid()}.jpg`;
+    await saveNormalizedJpeg(uri, localUri);
     await waypointImageDao.insert({
       id: randomUuid(),
       waypointId,

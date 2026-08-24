@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import type { DatabaseService } from "../src/database/database.service";
 import { WaypointImagesService } from "../src/trips/waypoint-images.service";
+import { BadRequestException } from "@nestjs/common";
 
 test("lists verified image metadata without a per-image S3 HEAD request", async () => {
   const previousEnv = {
@@ -42,6 +43,41 @@ test("lists verified image metadata without a per-image S3 HEAD request", async 
     restoreEnv("S3_ACCESS_KEY_ID", previousEnv.accessKey);
     restoreEnv("S3_SECRET_ACCESS_KEY", previousEnv.secretKey);
     restoreEnv("S3_BUCKET", previousEnv.bucket);
+  }
+});
+
+test("rejects HEIC and HEIF uploads even if configuration lists them", async () => {
+  const previousEnv = {
+    accessKey: process.env.S3_ACCESS_KEY_ID,
+    allowedTypes: process.env.MEDIA_UPLOAD_ALLOWED_CONTENT_TYPES,
+    bucket: process.env.S3_BUCKET,
+    secretKey: process.env.S3_SECRET_ACCESS_KEY,
+  };
+  process.env.S3_ACCESS_KEY_ID = "test-access-key";
+  process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
+  process.env.S3_BUCKET = "trailbook-test";
+  process.env.MEDIA_UPLOAD_ALLOWED_CONTENT_TYPES = "image/jpeg,image/heic,image/heif";
+
+  try {
+    const service = new WaypointImagesService({} as DatabaseService);
+    for (const contentType of ["image/heic", "image/heif"]) {
+      await assert.rejects(
+        service.requestUpload("user-1", {
+          contentType,
+          imageId: "550e8400-e29b-41d4-a716-446655440000",
+          sizeBytes: 1024,
+          waypointId: "waypoint-1",
+        }),
+        (error) =>
+          error instanceof BadRequestException &&
+          error.message === `Unsupported image content type: ${contentType}`,
+      );
+    }
+  } finally {
+    restoreEnv("S3_ACCESS_KEY_ID", previousEnv.accessKey);
+    restoreEnv("S3_SECRET_ACCESS_KEY", previousEnv.secretKey);
+    restoreEnv("S3_BUCKET", previousEnv.bucket);
+    restoreEnv("MEDIA_UPLOAD_ALLOWED_CONTENT_TYPES", previousEnv.allowedTypes);
   }
 });
 

@@ -987,7 +987,7 @@ Server-side causes of latency and failure:
   grew linearly with photo count, and the returned URL expires after one hour.
   The serial object-store validation has now been removed as documented below.
 - There is no thumbnail/resize mechanism anywhere in the stack. Originals
-  (JPEG/PNG/HEIC/HEIF/WebP, up to the 10 MB upload limit) are served as-is to
+  (previously JPEG/PNG/HEIC/HEIF/WebP, up to the 10 MB upload limit) were served as-is to
   both the thumbnail preview and the fullscreen viewer.
 
 Failure presentation:
@@ -1099,7 +1099,7 @@ opening all originals; they are not part of the current Finding 10 implementatio
 
 ## Finding 11: HEIC/HEIF uploads can render as broken images on the web
 
-Status: **identified in source; latent with current picker settings; direction decided**  
+Status: **completed**
 Priority: **P2**
 
 ### Symptom
@@ -1118,7 +1118,7 @@ image for such a photo, while Safari renders it.
   (`UploadWaypointImagesUseCase.getContentType`: `.heic` -> `image/heic`,
   `.heif` -> `image/heif`), and `addPhotoToWaypoint` preserves the picked
   asset's original extension.
-- Current picker calls pass `quality: 0.8/0.85`
+- Previous picker calls passed `quality: 0.8/0.85`
   (`RecordingScreen`, `AddWaypointSheet`, `WaypointDetailScreen`), which on iOS
   re-encodes to JPEG. The defect is therefore latent today, but both the mobile
   path and the server accept HEIC/HEIF, so any future "original quality" pick
@@ -1126,24 +1126,34 @@ image for such a photo, while Safari renders it.
 - Finding 10 no longer plans thumbnails, so HEIC/HEIF compatibility must be
   solved for the one original used by both preview and fullscreen.
 
-### Direction (clean approach: the server never touches image bytes)
+### Implemented solution (the server never touches image bytes)
 
-- Normalize at pick time on the mobile device: the picker must always produce a
-  JPEG (keep an explicit `quality` setting and/or re-encode with
-  `expo-image-manipulator`), so HEIC/HEIF never enters the local store, the
-  upload pipeline or S3. The stored local file and the upload content type are
-  then always JPEG.
+- Both mobile persistence entry points (`addWaypoint` and
+  `addPhotoToWaypoint`) now use the same `saveNormalizedJpeg()` boundary. It
+  explicitly re-encodes every picked/captured image with
+  `expo-image-manipulator`, writes a `.jpg` local file and removes the temporary
+  conversion output.
+- Picker quality is `1` so it does not apply a first lossy compression;
+  `saveNormalizedJpeg()` is the single controlled JPEG encoding at quality
+  `0.85`.
+- The uploader maps only JPEG, PNG and WebP extensions. HEIC/HEIF and unknown
+  extensions now fail locally with a clear error instead of defaulting to JPEG
+  metadata for incompatible bytes.
 - The server does not convert or re-encode anything. It stays a pure object
   store: it accepts, stores and serves the bytes it is given.
-- Narrow `MEDIA_UPLOAD_ALLOWED_CONTENT_TYPES` on the server to drop
-  `image/heic` and `image/heif`, so a non-web-renderable upload is rejected
-  outright instead of being persisted.
-- Thumbnail generation (Finding 10) runs on the normalized JPEG, so a single
-  source format covers preview and fullscreen everywhere.
+- The server default and `.env.example` allowed-content-type lists now exclude
+  `image/heic` and `image/heif`; `assertAllowedUpload()` also rejects both
+  unconditionally so configuration cannot accidentally re-enable them. The
+  request fails before a pre-signed PUT URL or database row is created.
+- Finding 10 intentionally has no thumbnail pipeline. Its preview and
+  fullscreen paths both use this normalized, web-renderable original.
 - Existing images: HEIC/HEIF objects are not expected (current picker settings
   already re-encode to JPEG and the app is not in production). If any are
   found, handle them ad hoc (re-upload a JPEG rendition) rather than building a
   server-side conversion path.
+- Mobile regression coverage verifies allowed mappings and explicit HEIC/HEIF
+  rejection. Server regression coverage verifies that both MIME types receive
+  `BadRequestException` under the default configuration.
 
 ### Acceptance criteria
 
@@ -1211,11 +1221,9 @@ complete.
 6. Validate segmentation changes against cloned real raw bundles.
 7. Add route-gap plausibility rules and replay the Novi Sad zigzag fixture.
 8. Decide and remove the temporary tester entitlement path.
-9. Add an original-only persistent mobile cache for shared-trip images plus
-   loading/error/retry handling; add web fullscreen later with the web-link-share
-   flow. Normalize captures to JPEG at pick time and drop HEIC/HEIF from the
-   allowed upload types so the server never stores or converts
-   non-web-renderable images.
+9. ~~Complete shared-photo local caching and normalize mobile photos to JPEG;
+   reject HEIC/HEIF in both the uploader and server.~~ Completed in Findings 10
+   and 11. Web fullscreen remains a later web-link-share enhancement.
 10. Build one consolidated next AAB and run focused regression tests before
     submitting it.
 

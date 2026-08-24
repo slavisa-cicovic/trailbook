@@ -242,7 +242,7 @@ export default function WaypointDetailScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
-      quality: 0.85,
+      quality: 1,
     });
     if (result.canceled) return;
     const access = await authorizeTripPhotos(waypoint.tripId, result.assets.length);
