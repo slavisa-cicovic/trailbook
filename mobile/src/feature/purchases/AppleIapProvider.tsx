@@ -106,7 +106,6 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
   const authStatus = useAuthStore((state) => state.status);
   const userId = useAuthStore((state) => state.userId);
   const refreshAccess = usePurchaseStore((state) => state.refreshAccess);
-  const hydrateAccess = usePurchaseStore((state) => state.hydrateAccess);
   const setAccess = usePurchaseStore((state) => state.setAccess);
   const setBusyAction = usePurchaseStore((state) => state.setBusyAction);
   const setMessage = usePurchaseStore((state) => state.setMessage);
@@ -393,16 +392,6 @@ function NativeAppleIapProvider({ children }: PropsWithChildren) {
       setProductLoadState('error');
     }
   }
-
-  useEffect(() => {
-    let canceled = false;
-    void hydrateAccess(userId).then(() => {
-      if (!canceled && authStatus === 'authenticated') void refreshAccess();
-    });
-    return () => {
-      canceled = true;
-    };
-  }, [authStatus, hydrateAccess, refreshAccess, userId]);
 
   useEffect(() => {
     if (!iap.connected || authStatus !== 'authenticated') return;

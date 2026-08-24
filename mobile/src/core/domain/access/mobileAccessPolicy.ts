@@ -83,6 +83,18 @@ export async function authorizeTripStart(
     return err(PREMIUM_REQUIRED);
   }
 
+  // The backend is authoritative. A cached non-Premium value must never send an
+  // authenticated user down the one-test-trip path without first checking the
+  // current entitlement.
+  const refreshedAccess = await purchaseRepository.getCurrentAccess();
+  if (useAuthStore.getState().userId !== auth.userId) {
+    return err(PREMIUM_REQUIRED);
+  }
+  if (refreshedAccess.ok) {
+    usePurchaseStore.getState().setAccess(refreshedAccess.value, auth.userId);
+    if (hasPremiumAccess(refreshedAccess.value)) return ok('premium');
+  }
+
   const allowance = await purchaseRepository.consumeLocalTestTripAllowance(
     clientTripId,
   );

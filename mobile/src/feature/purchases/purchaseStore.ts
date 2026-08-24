@@ -20,7 +20,7 @@ interface PurchaseState {
   verifiedAt: string | null;
   hydrateAccess(userId: string | null): Promise<void>;
   load(): Promise<void>;
-  refreshAccess(): Promise<void>;
+  refreshAccess(options?: { silent?: boolean }): Promise<void>;
   runScenario(actionKey: string, productId: string, scenario: FakePurchaseScenario): Promise<void>;
   clearMessage(): void;
   setAccess(access: PurchaseAccess, expectedUserId: string): void;
@@ -50,18 +50,20 @@ export const usePurchaseStore = create<PurchaseState>((set) => ({
     });
   },
 
-  async refreshAccess() {
+  async refreshAccess(options) {
     const requestedUserId = useAuthStore.getState().userId;
     if (!requestedUserId) return;
-    set({ busyAction: 'access' });
+    if (!options?.silent) set({ busyAction: 'access' });
     const result = await purchaseRepository.getCurrentAccess();
     if (useAuthStore.getState().userId !== requestedUserId) return;
     if (!result.ok) {
-      set({ busyAction: null });
+      if (!options?.silent) set({ busyAction: null });
       return;
     }
     const verifiedAt = new Date().toISOString();
-    set({ access: result.value, busyAction: null, verifiedAt });
+    set(options?.silent
+      ? { access: result.value, verifiedAt }
+      : { access: result.value, busyAction: null, verifiedAt });
     await savePurchaseAccessCache({
       access: result.value,
       userId: requestedUserId,
