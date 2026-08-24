@@ -596,7 +596,7 @@ from display derivation without exposing location data.
 
 ## Finding 7: Recording completes with duration but zero distance
 
-Status: **raw bundle analyzed; root cause of zero processed distance confirmed**  
+Status: **done; rejected-fix health warning implemented**
 Priority: **P1**
 
 ### Symptom
@@ -686,6 +686,33 @@ substitute for an accurate route geometry.
   filtering.
 - Normal optimized-battery operation is covered by a locked-screen test on
   representative devices.
+
+### Implemented fix
+
+- Capture health now tracks the first and latest raw callback separately from
+  the latest point accepted by the same route builder used for display and final
+  processing.
+- If raw locations span at least two minutes but none is acceptable, health
+  becomes `inaccurate` instead of incorrectly becoming `healthy`. If acceptable
+  fixes existed and raw callbacks later continue for five minutes without a new
+  acceptable fix, health also becomes `inaccurate`.
+- Missing or stale callbacks remain distinct `starting`, `delayed` and `stopped`
+  states. The warning therefore distinguishes capture-service failure from the
+  observed case where callbacks arrived but all geometry was filtered.
+- The recording screen shows a visible explanation that fixes are arriving but
+  GPS accuracy cannot build a route, with guidance to move to open sky and check
+  precise-location settings. Invalid `81-200 m` fixes are not converted into a
+  fabricated distance.
+- Live snapshot diagnostics from Finding 6 expose received, rejected, accepted
+  and displayed counts without coordinates, while callback events retain batch
+  counts. Together they distinguish no callbacks from filtered callbacks.
+- Regression tests cover no callbacks, sustained rejected fixes, stale callback
+  delivery and continuing acceptable fixes.
+
+Foreground/native capture startup is awaited before recording start completes,
+as hardened in Findings 2 and 3. Locked-screen validation on representative
+physical devices remains a release verification activity rather than a unit-test
+condition.
 
 ## Finding 8: Completed walking route contains long straight jumps and zigzags
 

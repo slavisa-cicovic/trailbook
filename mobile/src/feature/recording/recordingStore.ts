@@ -40,16 +40,15 @@ import { rawCaptureRepository } from '@/core/data/repository/RawCaptureRepositor
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { authorizeTripStart } from '@/core/domain/access/mobileAccessPolicy';
 import {
-  buildDisplayRoutePoints,
   buildDisplayRouteSnapshot,
 } from '@/core/domain/processing/displayRouteBuilder';
+import {
+  captureHealthFromLocations,
+  type CaptureHealth,
+} from './captureHealth';
 
 const DEVICE_SAMPLE_INTERVAL_MS = 60_000;
 const MAX_RECOVERED_LIVE_COORDINATES = 1_000;
-const CAPTURE_DELAYED_AFTER_MS = 5 * 60 * 1000;
-const CAPTURE_STOPPED_AFTER_MS = 20 * 60 * 1000;
-
-export type CaptureHealth = 'inactive' | 'starting' | 'healthy' | 'delayed' | 'stopped' | 'paused';
 
 async function sampleDevice(tripId: string): Promise<void> {
   const deviceSample = await sampleDeviceState(tripId);
@@ -75,7 +74,9 @@ function stopDeviceSampleInterval() {
 
 async function getLiveLocationState(tripId: string): Promise<{
   captureHealth: CaptureHealth;
+  firstLocationAt: Date | null;
   lastLocationAt: Date | null;
+  lastAcceptedLocationAt: Date | null;
   liveCoordinates: LatLng[];
   locationCount: number;
 }> {
@@ -84,28 +85,27 @@ async function getLiveLocationState(tripId: string): Promise<{
     rawLocationDao.getRecentForTrip(tripId, MAX_RECOVERED_LIVE_COORDINATES),
   ]);
   const routeSnapshot = buildDisplayRouteSnapshot(tripId, locations);
+  const lastAcceptedLocationAt = routeSnapshot.points.at(-1)?.timestamp ?? null;
   console.info('[RecordingStore] live route snapshot built', {
     ...routeSnapshot.diagnostics,
     persistedPoints: summary.count,
     tripId,
   });
   return {
-    captureHealth: healthFromLastLocation(summary.lastTimestamp),
+    captureHealth: captureHealthFromLocations({
+      firstLocationAt: summary.firstTimestamp,
+      lastAcceptedLocationAt,
+      lastLocationAt: summary.lastTimestamp,
+    }),
+    firstLocationAt: summary.firstTimestamp,
     lastLocationAt: summary.lastTimestamp,
+    lastAcceptedLocationAt,
     liveCoordinates: routeSnapshot.points.map((location) => ({
       latitude: location.latitude,
       longitude: location.longitude,
     })),
     locationCount: summary.count,
   };
-}
-
-function healthFromLastLocation(lastLocationAt: Date | null): CaptureHealth {
-  if (!lastLocationAt) return 'starting';
-  const age = Date.now() - lastLocationAt.getTime();
-  if (age >= CAPTURE_STOPPED_AFTER_MS) return 'stopped';
-  if (age >= CAPTURE_DELAYED_AFTER_MS) return 'delayed';
-  return 'healthy';
 }
 
 async function requireRecordingLocationPermissions(): Promise<Result<void>> {
@@ -169,7 +169,9 @@ interface RecordingState {
   activeWaypoints: ActiveWaypoint[];
   error: string | null;
   captureHealth: CaptureHealth;
+  firstLocationAt: Date | null;
   lastLocationAt: Date | null;
+  lastAcceptedLocationAt: Date | null;
 }
 
 interface RecordingActions {
@@ -200,7 +202,13 @@ function startCaptureHealthInterval() {
   captureHealthInterval = setInterval(() => {
     const state = useRecordingStore.getState();
     if (!state.isRecording || state.isPaused) return;
-    useRecordingStore.setState({ captureHealth: healthFromLastLocation(state.lastLocationAt) });
+    useRecordingStore.setState({
+      captureHealth: captureHealthFromLocations({
+        firstLocationAt: state.firstLocationAt,
+        lastAcceptedLocationAt: state.lastAcceptedLocationAt,
+        lastLocationAt: state.lastLocationAt,
+      }),
+    });
   }, 60_000);
 }
 
@@ -299,7 +307,9 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
   activeWaypoints: [],
   error: null,
   captureHealth: 'inactive',
+  firstLocationAt: null,
   lastLocationAt: null,
+  lastAcceptedLocationAt: null,
 
   async init() {
     unsubscribeFromLiveUpdates();
@@ -307,7 +317,14 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
     stopCaptureHealthInterval();
     const tripId = await getActiveRecordingTripId();
     if (!tripId) {
-      set({ isRecording: false, activeTrip: null, captureHealth: 'inactive', lastLocationAt: null });
+      set({
+        isRecording: false,
+        activeTrip: null,
+        captureHealth: 'inactive',
+        firstLocationAt: null,
+        lastLocationAt: null,
+        lastAcceptedLocationAt: null,
+      });
       return;
     }
 
@@ -317,7 +334,14 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       await rawSessionEventDao.insert({ tripId, timestamp: new Date(), type: 'PROCESS_DEATH_RECOVERED' });
       await tripDao.updateEndedAt(tripId, new Date());
       await clearActiveRecordingTripId();
-      set({ isRecording: false, activeTrip: null });
+      set({
+        isRecording: false,
+        activeTrip: null,
+        captureHealth: 'inactive',
+        firstLocationAt: null,
+        lastLocationAt: null,
+        lastAcceptedLocationAt: null,
+      });
       dbEvents.emit('trips:changed');
       return;
     }
@@ -333,13 +357,21 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
         return { ...w, firstImageUri: imgs[0]?.localUri ?? null };
       }),
     );
+    const liveRouteSnapshot = buildDisplayRouteSnapshot(tripId, liveLocations);
+    const lastAcceptedLocationAt = liveRouteSnapshot.points.at(-1)?.timestamp ?? null;
     set({
       isRecording: true,
       activeTrip: trip,
       locationCount: locationSummary.count,
+      firstLocationAt: locationSummary.firstTimestamp,
       lastLocationAt: locationSummary.lastTimestamp,
-      captureHealth: 'starting',
-      liveCoordinates: buildDisplayRoutePoints(tripId, liveLocations).map((location) => ({
+      lastAcceptedLocationAt,
+      captureHealth: captureHealthFromLocations({
+        firstLocationAt: locationSummary.firstTimestamp,
+        lastAcceptedLocationAt,
+        lastLocationAt: locationSummary.lastTimestamp,
+      }),
+      liveCoordinates: liveRouteSnapshot.points.map((location) => ({
         latitude: location.latitude,
         longitude: location.longitude,
       })),
@@ -412,7 +444,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       startDeviceSampleInterval(clientTripId);
 
       const fullTrip = await tripDao.getTripByClientId(clientTripId);
-      set({ isRecording: true, activeTrip: fullTrip, locationCount: 0, liveCoordinates: [], activeWaypoints: [], error: null, captureHealth: 'starting', lastLocationAt: null });
+      set({ isRecording: true, activeTrip: fullTrip, locationCount: 0, liveCoordinates: [], activeWaypoints: [], error: null, captureHealth: 'starting', firstLocationAt: null, lastLocationAt: null, lastAcceptedLocationAt: null });
       startCaptureHealthInterval();
       dbEvents.emit('trips:changed');
 
@@ -480,7 +512,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       await tripDao.updateEndedAt(activeTrip.clientTripId, endedAt);
       await clearActiveRecordingTripId();
 
-      set({ isRecording: false, isPaused: false, activeTrip: null, locationCount: 0, liveCoordinates: [], activeWaypoints: [], captureHealth: 'inactive', lastLocationAt: null });
+      set({ isRecording: false, isPaused: false, activeTrip: null, locationCount: 0, liveCoordinates: [], activeWaypoints: [], captureHealth: 'inactive', firstLocationAt: null, lastLocationAt: null, lastAcceptedLocationAt: null });
       dbEvents.emit('trips:changed');
 
       const bundleResult = await rawCaptureRepository.getTripBundle(activeTrip.clientTripId);

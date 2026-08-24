@@ -350,6 +350,7 @@ const styles = StyleSheet.create({
 
 function captureHealthMessage(health: string): string {
   if (health === 'starting') return 'Location capture is starting. Waiting for the first GPS point.';
+  if (health === 'inaccurate') return 'Location updates are arriving, but GPS quality is too low or inconsistent to build a route. Move to open sky and check precise location settings.';
   if (health === 'delayed') return 'No recent GPS point. The phone may be stationary or Android may be delaying capture.';
   if (health === 'stopped') return 'Location capture appears to have stopped. Restart it before continuing.';
   return 'Location capture status is unavailable.';

@@ -66,11 +66,13 @@ export async function getRecentForTrip(
 
 export async function getSummaryForTrip(tripId: string): Promise<{
   count: number;
+  firstTimestamp: Date | null;
   lastTimestamp: Date | null;
 }> {
   const rows = await db
     .select({
       count: sql<number>`count(*)`,
+      firstTimestamp: sql<string | null>`min(${rawLocationSamples.timestamp})`,
       lastTimestamp: sql<string | null>`max(${rawLocationSamples.timestamp})`,
     })
     .from(rawLocationSamples)
@@ -79,6 +81,7 @@ export async function getSummaryForTrip(tripId: string): Promise<{
 
   return {
     count: Number(row?.count ?? 0),
+    firstTimestamp: row?.firstTimestamp ? new Date(row.firstTimestamp) : null,
     lastTimestamp: row?.lastTimestamp ? new Date(row.lastTimestamp) : null,
   };
 }
