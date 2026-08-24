@@ -309,7 +309,7 @@ that narrower attribution.
 
 ## Finding 4: Activity-based trip segmentation needs real-bundle verification
 
-Status: **under investigation**  
+Status: **implemented; original real-bundle replay pending**  
 Priority: **P2**
 
 ### Symptom
@@ -381,6 +381,30 @@ phone placement, and stop-and-go urban driving can resemble bicycle motion.
   distinct transport modes.
 - Do not allow a short, isolated Activity Recognition false positive to split or
   relabel an otherwise consistently classified journey.
+
+### Implemented fix
+
+- Processing version `15` treats `BIKE` and `DRIVE` labels as provisional across
+  one uninterrupted movement run.
+- Activity confidence is accumulated across the run. A stronger later signal can
+  retroactively correct an initial false positive instead of being interpreted as
+  a real transport-mode transition.
+- A retained stationary interval ends the movement run. Therefore a real
+  `BIKE -> stationary >= 20 s -> DRIVE` transition is still preserved as three
+  distinct intervals.
+- Implausible bicycle speed remains strong `DRIVE` evidence. Ordinary high bicycle
+  speed is not used as decisive vehicle evidence when continuous `ON_BICYCLE`
+  samples support cycling.
+- Regression coverage reproduces the documented `Razvoz robe` evidence balance:
+  `32 x ON_BICYCLE@60` followed by `39 x IN_VEHICLE@70` at approximately
+  `29.4 km/h`. It resolves to one `DRIVE` run.
+- Separate regressions preserve a consistently motion-confirmed bicycle at
+  `45 km/h` and a genuine bicycle-to-vehicle change after a 20-second stop.
+
+The original `Razvoz robe` raw bundle is not stored in this repository. The
+aggregate regression is complete, but the finding must retain the real-bundle
+replay qualifier until that bundle is supplied or exported into a sanitized test
+fixture.
 
 ### Diagnostic workflow established
 

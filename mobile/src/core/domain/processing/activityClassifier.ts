@@ -37,11 +37,14 @@ function speedToSegmentType(speedMps: number | undefined): SegmentType {
   return 'DRIVE'; // > 50 m/s: PLANE heuristic future
 }
 
-function bestActivityType(sample: RawActivitySample): SegmentType | null {
+function bestActivityEvidence(
+  sample: RawActivitySample,
+): { confidence: number; type: SegmentType } | null {
   if (!sample.results.length) return null;
   const best = sample.results.reduce((a, b) => (a.confidence >= b.confidence ? a : b));
   if (best.confidence < 50) return null;
-  return activityTypeToSegmentType(best.activityType);
+  const type = activityTypeToSegmentType(best.activityType);
+  return type ? { confidence: best.confidence, type } : null;
 }
 
 function distanceM(start: GeoPoint, end: GeoPoint) {
@@ -146,7 +149,10 @@ export function classifyIntervals(
   }
 
   const dwellIntervalIndexes = detectDwellIntervals(geoPoints);
-  const intervals: ClassifiedInterval[] = [];
+  const evidenceIntervals: Array<ClassifiedInterval & {
+    bikeEvidence: number;
+    driveEvidence: number;
+  }> = [];
 
   for (let i = 0; i < geoPoints.length - 1; i++) {
     const p = geoPoints[i];
@@ -157,7 +163,8 @@ export function classifyIntervals(
     }
 
     const actSample = nearestActivity(p.timestamp);
-    const fromActivity = actSample ? bestActivityType(actSample) : null;
+    const activityEvidence = actSample ? bestActivityEvidence(actSample) : null;
+    const fromActivity = activityEvidence?.type ?? null;
     const speedMps = intervalSpeedMps(p, next);
     const hasMovingSignal =
       isMovingActivity(fromActivity) &&
@@ -168,14 +175,76 @@ export function classifyIntervals(
         ? 'STATIONARY'
         : reconcileActivityWithSpeed(fromActivity, speedMps);
 
-    // Merge with previous interval if same type
-    const last = intervals[intervals.length - 1];
-    if (last && last.type === type && last.endTime.getTime() >= p.timestamp.getTime()) {
-      last.endTime = next.timestamp;
-    } else {
-      intervals.push({ startTime: p.timestamp, endTime: next.timestamp, type });
-    }
+    evidenceIntervals.push({
+      startTime: p.timestamp,
+      endTime: next.timestamp,
+      type,
+      bikeEvidence: activityEvidence?.type === 'BIKE' ? activityEvidence.confidence : 0,
+      driveEvidence:
+        (activityEvidence?.type === 'DRIVE' ? activityEvidence.confidence : 0) +
+        (speedMps !== undefined && speedMps >= V1.motionBikeHardMaxMps ? 100 : 0),
+    });
   }
 
-  return intervals;
+  return mergeClassifiedIntervals(resolveProvisionalBikeDrive(evidenceIntervals));
+}
+
+function resolveProvisionalBikeDrive<T extends ClassifiedInterval & {
+  bikeEvidence: number;
+  driveEvidence: number;
+}>(intervals: T[]): ClassifiedInterval[] {
+  const resolved = intervals.map((interval) => ({ ...interval }));
+  let start = 0;
+
+  while (start < resolved.length) {
+    if (resolved[start].type !== 'BIKE' && resolved[start].type !== 'DRIVE') {
+      start += 1;
+      continue;
+    }
+
+    let end = start + 1;
+    while (
+      end < resolved.length &&
+      (resolved[end].type === 'BIKE' || resolved[end].type === 'DRIVE') &&
+      resolved[end].startTime.getTime() - resolved[end - 1].endTime.getTime() <=
+        V1.mergeGapThresholdMs
+    ) {
+      end += 1;
+    }
+
+    const run = resolved.slice(start, end);
+    const bikeEvidence = run.reduce((sum, interval) => sum + interval.bikeEvidence, 0);
+    const driveEvidence = run.reduce((sum, interval) => sum + interval.driveEvidence, 0);
+
+    // BIKE/DRIVE is provisional until the complete uninterrupted movement run
+    // has been observed. This allows a stronger later signal to correct an
+    // initial false positive without inventing a mode switch that never occurred.
+    if (bikeEvidence > 0 || driveEvidence > 0) {
+      const resolvedType = driveEvidence > bikeEvidence ? 'DRIVE' : 'BIKE';
+      for (let index = start; index < end; index += 1) {
+        resolved[index].type = resolvedType;
+      }
+    }
+
+    start = end;
+  }
+
+  return resolved.map(({ startTime, endTime, type }) => ({ startTime, endTime, type }));
+}
+
+function mergeClassifiedIntervals(intervals: ClassifiedInterval[]): ClassifiedInterval[] {
+  const merged: ClassifiedInterval[] = [];
+  for (const interval of intervals) {
+    const last = merged[merged.length - 1];
+    if (
+      last &&
+      last.type === interval.type &&
+      last.endTime.getTime() >= interval.startTime.getTime()
+    ) {
+      last.endTime = interval.endTime;
+    } else {
+      merged.push({ ...interval });
+    }
+  }
+  return merged;
 }
