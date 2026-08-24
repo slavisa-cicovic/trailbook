@@ -147,6 +147,24 @@ test('allows BIKE to DRIVE transition after a stationary period of at least 20 s
   );
 });
 
+test('keeps a long delivery dwell stationary despite walking-sized accumulated movement', () => {
+  const result = mergeAndFinalize(
+    'delivery-stop',
+    [
+      segment(0, 5, 'DRIVE'),
+      segment(5, 15, 'STATIONARY'),
+      segment(15, 20, 'DRIVE'),
+    ],
+    routePoints(20, 1),
+  );
+
+  assert.deepEqual(result.map((item) => item.segmentType), [
+    'DRIVE',
+    'STATIONARY',
+    'DRIVE',
+  ]);
+});
+
 test('rejects BIKE to DRIVE transition after a stationary period shorter than 20 seconds', () => {
   const stopStart = at(5);
   const stopEnd = new Date(stopStart.getTime() + 19_000);

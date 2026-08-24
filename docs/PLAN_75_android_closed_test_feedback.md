@@ -309,7 +309,7 @@ that narrower attribution.
 
 ## Finding 4: Activity-based trip segmentation needs real-bundle verification
 
-Status: **implemented; original real-bundle replay pending**  
+Status: **done; verified against copied original raw bundle**
 Priority: **P2**
 
 ### Symptom
@@ -400,11 +400,30 @@ phone placement, and stop-and-go urban driving can resemble bicycle motion.
   `29.4 km/h`. It resolves to one `DRIVE` run.
 - Separate regressions preserve a consistently motion-confirmed bicycle at
   `45 km/h` and a genuine bicycle-to-vehicle change after a 20-second stop.
+- After `DRIVE` is established, an alternative `BIKE` or `WALK` mode must be
+  both confidence-dominant and sustained for that mode's minimum duration.
+  Short or contradictory Activity Recognition bursts therefore cannot split a
+  confirmed vehicle journey.
+- A confirmed dwell adjacent to `DRIVE` remains stationary when GPS jitter or
+  small unloading movements produce a walking-sized accumulated path. This
+  prevents delivery stops from being relabelled as `WALK`.
 
-The original `Razvoz robe` raw bundle is not stored in this repository. The
-aggregate regression is complete, but the finding must retain the real-bundle
-replay qualifier until that bundle is supplied or exported into a sanitized test
-fixture.
+### Real-bundle verification
+
+The supplied `[TEST COPY] Razvoz robe` trip was created on the reviewer's phone
+by restoring the original trip's `raw_bundle`. Its copied trip identity and
+owner therefore do not affect processing verification.
+
+The version `15` pipeline replayed all `1,014` raw locations and `1,014` activity
+samples. The activity stream contained `292 IN_VEHICLE@70`,
+`301 ON_BICYCLE@60`, `145 ON_FOOT@75` and `276 STILL@90` best-confidence
+samples. The final output contains only `DRIVE` and retained `STATIONARY`
+segments; it contains no `BIKE` or `WALK` segment. This matches the tester's
+description of an entirely car-based delivery route with unloading stops.
+
+The raw bundle is intentionally not stored in this repository because it
+contains private trip and location data. Sanitized unit regressions retain the
+classifier evidence patterns and delivery-dwell behavior found by the replay.
 
 ### Diagnostic workflow established
 

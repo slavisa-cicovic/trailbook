@@ -152,6 +152,7 @@ export function classifyIntervals(
   const evidenceIntervals: Array<ClassifiedInterval & {
     bikeEvidence: number;
     driveEvidence: number;
+    walkEvidence: number;
   }> = [];
 
   for (let i = 0; i < geoPoints.length - 1; i++) {
@@ -183,16 +184,21 @@ export function classifyIntervals(
       driveEvidence:
         (activityEvidence?.type === 'DRIVE' ? activityEvidence.confidence : 0) +
         (speedMps !== undefined && speedMps >= V1.motionBikeHardMaxMps ? 100 : 0),
+      walkEvidence: activityEvidence?.type === 'WALK' ? activityEvidence.confidence : 0,
     });
   }
 
-  return mergeClassifiedIntervals(resolveProvisionalBikeDrive(evidenceIntervals));
+  const bikeDriveResolved = resolveProvisionalBikeDrive(evidenceIntervals);
+  return mergeClassifiedIntervals(
+    carryDriveAcrossAmbiguousActivity(bikeDriveResolved),
+  );
 }
 
 function resolveProvisionalBikeDrive<T extends ClassifiedInterval & {
   bikeEvidence: number;
   driveEvidence: number;
-}>(intervals: T[]): ClassifiedInterval[] {
+  walkEvidence: number;
+}>(intervals: T[]): T[] {
   const resolved = intervals.map((interval) => ({ ...interval }));
   let start = 0;
 
@@ -227,6 +233,77 @@ function resolveProvisionalBikeDrive<T extends ClassifiedInterval & {
     }
 
     start = end;
+  }
+
+  return resolved;
+}
+
+function carryDriveAcrossAmbiguousActivity<T extends ClassifiedInterval & {
+  bikeEvidence: number;
+  driveEvidence: number;
+  walkEvidence: number;
+}>(intervals: T[]): ClassifiedInterval[] {
+  const resolved = intervals.map((interval) => ({ ...interval }));
+  let driveEstablished = false;
+  let index = 0;
+
+  while (index < resolved.length) {
+    const interval = resolved[index];
+    if (interval.driveEvidence > 0) {
+      driveEstablished = true;
+      index += 1;
+      continue;
+    }
+    if (!driveEstablished) {
+      index += 1;
+      continue;
+    }
+
+    const clusterStart = index;
+    while (
+      index < resolved.length &&
+      resolved[index].driveEvidence === 0
+    ) index += 1;
+    const cluster = resolved.slice(clusterStart, index);
+    const bikeEvidence = cluster.reduce((sum, item) => sum + item.bikeEvidence, 0);
+    const walkEvidence = cluster.reduce((sum, item) => sum + item.walkEvidence, 0);
+    const bikeEvidenceDurationMs = cluster.reduce(
+      (sum, item) => sum + (item.bikeEvidence > 0
+        ? item.endTime.getTime() - item.startTime.getTime()
+        : 0),
+      0,
+    );
+    const walkEvidenceDurationMs = cluster.reduce(
+      (sum, item) => sum + (item.walkEvidence > 0
+        ? item.endTime.getTime() - item.startTime.getTime()
+        : 0),
+      0,
+    );
+    const weakerEvidence = Math.min(bikeEvidence, walkEvidence);
+    const strongerEvidence = Math.max(bikeEvidence, walkEvidence);
+    const hasDominantEvidence =
+      strongerEvidence > 0 &&
+      (weakerEvidence === 0 ||
+        strongerEvidence / weakerEvidence >= V1.alternativeModeEvidenceDominanceRatio);
+    const dominantType = bikeEvidence > walkEvidence ? 'BIKE' : 'WALK';
+    const dominantEvidenceDurationMs = dominantType === 'BIKE'
+      ? bikeEvidenceDurationMs
+      : walkEvidenceDurationMs;
+    const confirmationDurationMs = dominantType === 'BIKE'
+      ? V1.minBikeDurationMs
+      : V1.minWalkDurationMs;
+    const hasConfirmedAlternative =
+      hasDominantEvidence && dominantEvidenceDurationMs >= confirmationDurationMs;
+
+    if (!hasConfirmedAlternative) {
+      for (let clusterIndex = clusterStart; clusterIndex < index; clusterIndex += 1) {
+        if (resolved[clusterIndex].type === 'BIKE' || resolved[clusterIndex].type === 'WALK') {
+          resolved[clusterIndex].type = 'DRIVE';
+        }
+      }
+    } else {
+      driveEstablished = false;
+    }
   }
 
   return resolved.map(({ startTime, endTime, type }) => ({ startTime, endTime, type }));

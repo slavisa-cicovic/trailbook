@@ -326,6 +326,15 @@ function reclassifyMovingStationarySegments(
     const previous = segments[index - 1];
     const next = segments[index + 1];
     if (
+      speedType === 'WALK' &&
+      (previous?.type === 'DRIVE' || next?.type === 'DRIVE')
+    ) {
+      // A dwell interval can accumulate a walking-sized path from GPS drift or
+      // small unloading movements. Do not let that path sum turn a confirmed
+      // delivery stop into a transport-mode change.
+      return segment;
+    }
+    if (
       speedType === 'BIKE' &&
       averageSpeedMps >= V1.walkMaxMps &&
       (previous?.type === 'DRIVE' || next?.type === 'DRIVE')

@@ -33,6 +33,14 @@ function vehicleActivity(seconds: number, confidence = 70): RawActivitySample {
   };
 }
 
+function walkingActivity(seconds: number, confidence = 75): RawActivitySample {
+  return {
+    tripId: 'activity-continuity',
+    timestamp: new Date(START.getTime() + seconds * 1000),
+    results: [{ activityType: 7, confidence }],
+  };
+}
+
 function activitySequence(
   startSeconds: number,
   count: number,
@@ -117,4 +125,40 @@ test('preserves a genuine bicycle to vehicle transition separated by a 20 second
     'STATIONARY',
     'DRIVE',
   ]);
+});
+
+test('keeps established DRIVE across ambiguous alternating bicycle and walking evidence', () => {
+  const intervals = classifyIntervals(
+    movingPoints(60, 4),
+    [
+      ...activitySequence(0, 8, (seconds) => vehicleActivity(seconds, 80)),
+      ...activitySequence(24, 8, (seconds) => bicycleActivity(seconds, 60)),
+      ...activitySequence(48, 5, (seconds) => walkingActivity(seconds, 75)),
+    ],
+  );
+
+  assert.deepEqual(intervals.map((interval) => interval.type), ['DRIVE']);
+});
+
+test('keeps established DRIVE across a short isolated walking false positive', () => {
+  const intervals = classifyIntervals(
+    movingPoints(50, 4),
+    [
+      ...activitySequence(0, 8, (seconds) => vehicleActivity(seconds, 80)),
+      ...activitySequence(24, 9, (seconds) => walkingActivity(seconds, 90)),
+    ],
+  );
+
+  assert.deepEqual(intervals.map((interval) => interval.type), ['DRIVE']);
+});
+
+test('allows dominant walking evidence to replace an established DRIVE mode after a stop', () => {
+  const points = movingPoints(120, 1.5);
+  const intervals = classifyIntervals(points, [
+    ...activitySequence(0, 10, (seconds) => vehicleActivity(seconds, 80)),
+    ...activitySequence(30, 30, (seconds) => walkingActivity(seconds, 90)),
+    bicycleActivity(117, 60),
+  ]);
+
+  assert.deepEqual(intervals.map((interval) => interval.type), ['DRIVE', 'WALK']);
 });

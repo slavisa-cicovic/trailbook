@@ -48,6 +48,10 @@ export const V1 = {
   driveAdjacentBikeMaxMs: 2 * 60_000,
   bikeDriveBridgeMaxMs: 15 * 60_000,
   bikeDriveBoundaryWindowMs: 30_000,
+  // After DRIVE is established, noisy BIKE/WALK evidence is not a reliable mode
+  // switch. One alternative must both outweigh the other by this ratio and last
+  // for that mode's ordinary minimum duration.
+  alternativeModeEvidenceDominanceRatio: 2,
   walkStationaryInterruptionMaxMs: 4 * 60_000,
   walkStationaryInterruptionMinDistanceM: 15,
   walkSparseMergeMaxMs: 10 * 60_000,
