@@ -39,6 +39,10 @@ import { process, CURRENT_PROCESSING_VERSION } from '@/core/domain/processing';
 import { rawCaptureRepository } from '@/core/data/repository/RawCaptureRepositoryImpl';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { authorizeTripStart } from '@/core/domain/access/mobileAccessPolicy';
+import {
+  buildDisplayRoutePoints,
+  buildDisplayRouteSnapshot,
+} from '@/core/domain/processing/displayRouteBuilder';
 
 const DEVICE_SAMPLE_INTERVAL_MS = 60_000;
 const MAX_RECOVERED_LIVE_COORDINATES = 1_000;
@@ -79,10 +83,16 @@ async function getLiveLocationState(tripId: string): Promise<{
     rawLocationDao.getSummaryForTrip(tripId),
     rawLocationDao.getRecentForTrip(tripId, MAX_RECOVERED_LIVE_COORDINATES),
   ]);
+  const routeSnapshot = buildDisplayRouteSnapshot(tripId, locations);
+  console.info('[RecordingStore] live route snapshot built', {
+    ...routeSnapshot.diagnostics,
+    persistedPoints: summary.count,
+    tripId,
+  });
   return {
     captureHealth: healthFromLastLocation(summary.lastTimestamp),
     lastLocationAt: summary.lastTimestamp,
-    liveCoordinates: locations.map((location) => ({
+    liveCoordinates: routeSnapshot.points.map((location) => ({
       latitude: location.latitude,
       longitude: location.longitude,
     })),
@@ -177,6 +187,7 @@ let deviceSampleInterval: ReturnType<typeof setInterval> | null = null;
 let rawDataHandler: (() => void) | null = null;
 let waypointsHandler: (() => void) | null = null;
 let captureHealthInterval: ReturnType<typeof setInterval> | null = null;
+let liveRefreshGeneration = 0;
 
 function stopCaptureHealthInterval() {
   if (!captureHealthInterval) return;
@@ -246,8 +257,16 @@ async function stopLocationCapture(): Promise<void> {
 
 function subscribeToLiveUpdates(tripId: string) {
   rawDataHandler = () => {
+    const generation = ++liveRefreshGeneration;
     getLiveLocationState(tripId)
-      .then((state) => useRecordingStore.setState(state))
+      .then((state) => {
+        const current = useRecordingStore.getState();
+        if (
+          generation !== liveRefreshGeneration ||
+          current.activeTrip?.clientTripId !== tripId
+        ) return;
+        useRecordingStore.setState(state);
+      })
       .catch((error) => console.error('[RecordingStore] live route refresh failed', error));
   };
   waypointsHandler = () => {
@@ -266,6 +285,7 @@ function subscribeToLiveUpdates(tripId: string) {
 }
 
 function unsubscribeFromLiveUpdates() {
+  liveRefreshGeneration += 1;
   if (rawDataHandler) { dbEvents.off('rawData:changed', rawDataHandler); rawDataHandler = null; }
   if (waypointsHandler) { dbEvents.off('waypoints:changed', waypointsHandler); waypointsHandler = null; }
 }
@@ -319,7 +339,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       locationCount: locationSummary.count,
       lastLocationAt: locationSummary.lastTimestamp,
       captureHealth: 'starting',
-      liveCoordinates: liveLocations.map((location) => ({
+      liveCoordinates: buildDisplayRoutePoints(tripId, liveLocations).map((location) => ({
         latitude: location.latitude,
         longitude: location.longitude,
       })),
@@ -479,6 +499,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
   },
 
   async refreshLiveData(tripId: string) {
+    const generation = ++liveRefreshGeneration;
     const [locationState, wps] = await Promise.all([
       getLiveLocationState(tripId),
       waypointDao.getForTrip(tripId),
@@ -489,6 +510,10 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
         return { ...w, firstImageUri: imgs[0]?.localUri ?? null };
       }),
     );
+    if (
+      generation !== liveRefreshGeneration ||
+      get().activeTrip?.clientTripId !== tripId
+    ) return;
     set({
       ...locationState,
       activeWaypoints,

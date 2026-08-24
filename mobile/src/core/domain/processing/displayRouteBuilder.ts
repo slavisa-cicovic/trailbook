@@ -196,8 +196,27 @@ export function buildDisplayRoutePoints(
   samples: RawLocationSample[],
   segments: Segment[] = [],
 ): DisplayRoutePoint[] {
+  return buildDisplayRouteSnapshot(tripId, samples, segments).points;
+}
+
+export interface DisplayRouteSnapshot {
+  points: DisplayRoutePoint[];
+  diagnostics: {
+    received: number;
+    duplicates: number;
+    rejected: number;
+    accepted: number;
+    displayed: number;
+  };
+}
+
+export function buildDisplayRouteSnapshot(
+  tripId: string,
+  samples: RawLocationSample[],
+  segments: Segment[] = [],
+): DisplayRouteSnapshot {
   const cleanedLocations = removeSegmentSpikeLocations(cleanLocations(samples), segments);
-  return thinLocationsForDisplay(cleanedLocations).map((location, index) => ({
+  const points = thinLocationsForDisplay(cleanedLocations).map((location, index) => ({
     tripId,
     index,
     timestamp: location.timestamp,
@@ -205,4 +224,22 @@ export function buildDisplayRoutePoints(
     longitude: location.longitude,
     speedMps: location.speedMps,
   }));
+  const identities = new Set(
+    samples.map((sample) => [
+      sample.timestamp.toISOString(),
+      sample.latitude,
+      sample.longitude,
+    ].join('|')),
+  );
+
+  return {
+    points,
+    diagnostics: {
+      received: samples.length,
+      duplicates: samples.length - identities.size,
+      rejected: samples.length - cleanedLocations.length,
+      accepted: cleanedLocations.length,
+      displayed: points.length,
+    },
+  };
 }

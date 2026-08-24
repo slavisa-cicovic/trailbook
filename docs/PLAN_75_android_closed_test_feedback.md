@@ -488,7 +488,7 @@ a Google Play lifetime product.
 
 ## Finding 6: Current-trip route is corrupted while a large location batch is processed
 
-Status: **reported; screenshot available**  
+Status: **done; live route pipeline hardened**
 Priority: **P1**
 
 ### Symptom
@@ -557,6 +557,42 @@ corrupt. Possible layers include:
   as chronologically delivered callbacks.
 - The live route and final stopped route use compatible filtering and ordering
   rules, so stopping is not required merely to obtain valid geometry.
+
+### Confirmed implementation cause
+
+The recording screen previously mapped recent raw database rows directly to the
+polyline. The stopped-trip route instead used `buildDisplayRoutePoints`, which
+sorts samples, rejects inaccurate points and impossible speed spikes, removes
+duplicate timestamps and thins the display geometry. This pipeline mismatch
+explains why stopping could make the same persisted capture appear correct.
+
+Concurrent `rawData:changed` refreshes could also complete out of order. An older
+query result was able to overwrite a newer route snapshot even though each
+individual database query was valid.
+
+### Implemented fix
+
+- The live route now uses the same immutable display-route builder as the final
+  trip instead of exposing raw coordinates directly.
+- Equal-timestamp samples use a deterministic accuracy/coordinate/provider
+  ordering, so delayed and out-of-order callback delivery produces the same
+  route as chronological delivery.
+- Exact persisted duplicates remain prevented by the unique raw-sample identity
+  migration added with Finding 3. Display building also safely collapses
+  duplicate timestamps already present in an input snapshot.
+- Every asynchronous live refresh receives a generation number. Only the newest
+  generation for the still-active trip may publish state; late stale results are
+  discarded.
+- Snapshot diagnostics report received, duplicate, rejected, accepted, displayed
+  and total persisted point counts without logging coordinates.
+- Regression coverage injects delayed order, an exact duplicate and an
+  inaccurate unrelated point, and verifies byte-for-byte equivalent ordered
+  display points to the chronological route.
+
+The original screenshot bundle was not required to identify this deterministic
+pipeline mismatch. If a future occurrence survives this fix, the existing
+callback and snapshot counters should distinguish persisted input corruption
+from display derivation without exposing location data.
 
 ## Finding 7: Recording completes with duration but zero distance
 

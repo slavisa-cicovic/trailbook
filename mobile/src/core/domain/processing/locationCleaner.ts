@@ -47,7 +47,20 @@ export function splitLocationsOnRouteGaps(locations: GeoPoint[]): GeoPoint[][] {
 }
 
 export function cleanLocations(samples: RawLocationSample[]): GeoPoint[] {
-  const sorted = [...samples].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  const sorted = [...samples].sort((a, b) => {
+    const timestampDifference = a.timestamp.getTime() - b.timestamp.getTime();
+    if (timestampDifference !== 0) return timestampDifference;
+
+    // Callback order is not stable when Android drains delayed batches. Pick a
+    // deterministic winner for equal timestamps so replay order cannot change
+    // the displayed or processed route.
+    const accuracyDifference = (a.accuracyM ?? Number.POSITIVE_INFINITY) -
+      (b.accuracyM ?? Number.POSITIVE_INFINITY);
+    if (accuracyDifference !== 0) return accuracyDifference;
+    if (a.latitude !== b.latitude) return a.latitude - b.latitude;
+    if (a.longitude !== b.longitude) return a.longitude - b.longitude;
+    return a.provider.localeCompare(b.provider);
+  });
 
   // Stage 1: accuracy filter
   const accurate = sorted.filter((s) => (s.accuracyM ?? 0) <= V1.maxAccuracyM);
