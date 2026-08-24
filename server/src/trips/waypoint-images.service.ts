@@ -179,22 +179,11 @@ export class WaypointImagesService {
       where: { uploadStatus: "uploaded", waypointId },
     });
 
-    const availableImages = [];
-
-    for (const image of images) {
-      try {
-        await this.s3Client.send(
-          new HeadObjectCommand({
-            Bucket: this.bucket,
-            Key: image.objectKey,
-          }),
-        );
-      } catch {
-        await this.database.waypointImage.delete({ where: { id: image.id } });
-        continue;
-      }
-
-      availableImages.push({
+    // completeUpload() already verifies the remote object before marking the
+    // row uploaded. Listing must not repeat a serial S3 HEAD request per image
+    // or delete valid metadata because of a transient object-store failure.
+    return Promise.all(
+      images.map(async (image) => ({
         getUrl: await getSignedUrl(
           this.publicS3Client,
           new GetObjectCommand({
@@ -205,10 +194,8 @@ export class WaypointImagesService {
         ),
         imageId: image.id,
         objectKey: image.objectKey,
-      });
-    }
-
-    return availableImages;
+      })),
+    );
   }
 
   async deleteImage(userId: string, waypointId: string, imageId: string) {

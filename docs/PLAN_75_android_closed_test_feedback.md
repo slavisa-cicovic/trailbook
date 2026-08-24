@@ -949,7 +949,7 @@ condition, not a Kotlin error in the change.
 
 ## Finding 10: Shared-trip photos load slowly or never in Trip Details and the fullscreen viewer
 
-Status: **reported; code path identified, device timing evidence still needed**  
+Status: **server listing fixed; original-only mobile cache selected**
 Priority: **P2**
 
 ### Symptom
@@ -979,12 +979,13 @@ Affected flow on mobile (in-app shared trip):
 
 Server-side causes of latency and failure:
 
-- `waypoint-images.service.ts` `getImages()` issues a serial `HeadObject` call
+- `waypoint-images.service.ts` `getImages()` issued a serial `HeadObject` call
   to S3 for every image (a `for` loop, not parallel) and signs a GET URL with
   `expiresIn: 60 * 60` on every request. The shared-trip access endpoints
   (`/shared/trips/:token/access`, `/trips/shared-with-me/:clientTripId`, and
   the shared-with-me list) all call this per waypoint. Response time therefore
-  grows linearly with photo count, and the returned URL expires after one hour.
+  grew linearly with photo count, and the returned URL expires after one hour.
+  The serial object-store validation has now been removed as documented below.
 - There is no thumbnail/resize mechanism anywhere in the stack. Originals
   (JPEG/PNG/HEIC/HEIF/WebP, up to the 10 MB upload limit) are served as-is to
   both the thumbnail preview and the fullscreen viewer.
@@ -1015,47 +1016,68 @@ Web link share:
 
 ### Direction
 
-- Generate the thumbnail on the mobile device at upload time
-  (`expo-image-manipulator`, bounded ~400 px JPEG/WebP) and upload it as a
-  sibling object (`media/images/{uuid}/thumb`) together with the original.
-- No backfill for already-uploaded images: the app is not in production yet
-  and the photo volume is small. Clients fall back to the full file whenever a
-  thumbnail object is missing; the fallback can be revisited later.
-- The NestJS server stores and serves objects only; it does not resize images
-  or cache them on disk (S3/MinIO remains the only image store).
+Thumbnail generation is intentionally dropped from the current design.
+
+For the in-app shared-trip flow, a user who opens a waypoint photo is expected
+to continue to the full image in nearly every case. Downloading a thumbnail and
+then the original would add a second object, upload/retry path, API field, cache
+lifecycle and extra transfer without removing the need for the original.
+
+The selected mobile model is therefore:
+
+1. keep one original object in S3/MinIO;
+2. download that original once to a persistent shared-image cache on the device;
+3. deduplicate concurrent requests for the same image;
+4. use the same local file URI for waypoint preview and fullscreen;
+5. reuse the local file on later opens and expose retry/error state when the
+   initial download fails.
+
+If device measurements later show unacceptable local decode/memory cost for
+large originals, thumbnails can be reconsidered from evidence. They are not a
+prerequisite for fixing the current repeated-network and expired-URL failures.
+
+Web link sharing currently has no fullscreen photo view. A web lightbox/fullscreen
+viewer will be implemented when that flow is developed. Web-specific thumbnails
+may be reconsidered then because a web visitor can inspect the map without ever
+opening all originals; they are not part of the current Finding 10 implementation.
+
+### Implemented server improvement
+
+- `completeUpload()` remains the single remote-object verification boundary: it
+  performs `HeadObject`, validates content type and size, and only then records
+  `uploadStatus = uploaded` and `remoteVerifiedAt`.
+- `getImages()` now trusts that verified database state and signs all GET URLs
+  without repeating `HeadObject` for every image. Shared-trip response latency
+  therefore no longer contains one serial S3 round-trip per photo.
+- A transient S3 read/list failure can no longer cause `getImages()` to delete
+  otherwise valid image metadata.
+- Regression coverage lists three uploaded images and verifies that listing
+  performs zero object-store requests while returning a signed URL for each.
 
 ### Next-build investigation
 
 - Instrument shared-trip image timing on the device: request start, bytes
   received, decode, first frame, for both the waypoint preview and fullscreen
   viewer; record HTTP status on failure.
-- Mobile: generate the thumbnail at upload time with `expo-image-manipulator`
-  and upload both objects (original + thumb). Extend
-  `UploadWaypointImagesUseCase`/the image row so the thumb object key is
-  recorded and the second PUT is part of the same retry-safe flow.
-- Server: `getImages()` returns both `getUrl` and `thumbUrl`; parallelize the
-  per-image serial `HeadObject` (or trust `uploadStatus = uploaded` +
-  `remoteVerifiedAt` for listing).
-- Cache shared-trip images on the device using the existing
+- Cache original shared-trip images on the device using the existing
   `photoStorage`/`saveRestoredPhoto` pattern and use the local file as
   `localUri`, so a second open does not re-download.
 - Add loading and error states to `ZoomablePhoto` and the InfoWindow images; on
   403, refresh the pre-signed URL instead of leaving a black screen.
-- Web: add a fullscreen/lightbox photo view with loading and error states and
-  use `thumbUrl` (fallback `getUrl`) in the InfoWindow.
+- Web: add a fullscreen/lightbox photo view with loading and error states as a
+  later web-link-share enhancement.
 
 ### Acceptance criteria
 
-- Tapping a waypoint marker shows the preview thumbnail promptly even for
-  waypoints with several photos.
-- Waypoints without a thumbnail object still render via the full-file fallback.
+- Tapping a waypoint marker shows the locally cached original promptly after its
+  first download.
 - The fullscreen viewer shows the photo or a clear error within a defined time;
   an expired pre-signed URL is refreshed automatically.
 - Opening a shared trip twice does not re-download images that are already
   cached locally.
-- Shared-trip access response time does not grow linearly with photo count.
-- The web shared-trip page loads thumbnails without fetching full originals and
-  offers a working fullscreen view.
+- Shared-trip access does not perform serial object-store validation per photo.
+- Web fullscreen behavior is tracked as a later enhancement and does not block
+  the mobile shared-image cache fix.
 
 ## Finding 11: HEIC/HEIF uploads can render as broken images on the web
 
@@ -1083,9 +1105,8 @@ image for such a photo, while Safari renders it.
   re-encodes to JPEG. The defect is therefore latent today, but both the mobile
   path and the server accept HEIC/HEIF, so any future "original quality" pick
   or direct upload can persist an image the web cannot display.
-- The thumbnails planned in Finding 10 are always JPEG/WebP, which fixes
-  previews; the fullscreen original remains affected when its content type is
-  HEIC/HEIF.
+- Finding 10 no longer plans thumbnails, so HEIC/HEIF compatibility must be
+  solved for the one original used by both preview and fullscreen.
 
 ### Direction (clean approach: the server never touches image bytes)
 
@@ -1154,7 +1175,7 @@ Add new reports here before creating implementation tasks.
 | CT-08 | 2026-08-11 | Android tester / SM-A566B, API 36 | Trip lasted about 26 minutes but remained at 0 km; all 36 raw points had 81-200 m accuracy and failed the 25 m processor threshold | Raw bundle and source threshold | Zero-distance cause confirmed; poor accuracy/batching cause still under investigation | P1 |
 | CT-09 | 2026-08-11 | Android tester / Novi Sad | Completed 342 m walking route contains implausible straight jumps; 518 raw entries collapse to 239 timestamps, only 68 pass 25 m accuracy, and overlapping 139/140/141-point batches repeat data | Raw bundle and shared-trip screenshot | Contributing causes confirmed; processor/rendering policy investigation pending | P1 |
 | CT-10 | 2026-08-11 | Reviewer / Android and iOS comparison | `Andr setnja` initially ended at 21:06 although valid raw locations continued to 21:17; Stop raced a 150-location callback, while manual Reprocess restored the complete route | Both production bundles, segment boundaries, callback events, source flow and successful Reprocess | Root cause confirmed | P1 |
-| CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Source flow: `loadShared` uses the pre-signed S3 URL as `localUri`; 1 h URL expiry; serial per-image `HeadObject`; no thumbnail pipeline; no image error state | Code path identified; device timing evidence needed | P2 |
+| CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Source flow: `loadShared` uses the pre-signed S3 URL as `localUri`; 1 h URL expiry; formerly serial per-image `HeadObject`; no local original cache; no image error state | Server listing fixed; original-only mobile cache selected | P2 |
 
 ## Proposed order after feedback collection
 
@@ -1172,11 +1193,11 @@ complete.
 6. Validate segmentation changes against cloned real raw bundles.
 7. Add route-gap plausibility rules and replay the Novi Sad zigzag fixture.
 8. Decide and remove the temporary tester entitlement path.
-9. Add mobile-generated thumbnails (`expo-image-manipulator`) with full-file
-   fallback, local caching for shared-trip images, and loading/error handling
-   in the photo viewer (web and mobile); normalize captures to JPEG at pick
-   time and drop HEIC/HEIF from the allowed upload types so the server never
-   stores or converts non-web-renderable images.
+9. Add an original-only persistent mobile cache for shared-trip images plus
+   loading/error/retry handling; add web fullscreen later with the web-link-share
+   flow. Normalize captures to JPEG at pick time and drop HEIC/HEIF from the
+   allowed upload types so the server never stores or converts
+   non-web-renderable images.
 10. Build one consolidated next AAB and run focused regression tests before
     submitting it.
 
