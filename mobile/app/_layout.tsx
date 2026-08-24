@@ -28,6 +28,15 @@ import '@/core/data/location/locationTask';
 import { unregisterSyncTask } from '@/core/data/sync/syncTask';
 import { AppleIapProvider } from '@/feature/purchases/AppleIapProvider';
 import { GoogleIapProvider } from '@/feature/purchases/GoogleIapProvider';
+import { PurchaseAccessLifecycle } from '@/feature/purchases/PurchaseAccessLifecycle';
+import {
+  clearStartupFailure,
+  describeStartupFailure,
+  runStartupPhase,
+  saveStartupFailure,
+  startupFailureMessage,
+  type StartupFailure,
+} from '@/core/startup/startupDiagnostics';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,9 +52,11 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 }
 
 function FailureScreen({
+  diagnostic,
   message,
   onRetry,
 }: {
+  diagnostic?: StartupFailure;
   message: string;
   onRetry: () => void | Promise<void>;
 }) {
@@ -53,6 +64,13 @@ function FailureScreen({
     <View style={styles.failureScreen}>
       <Text style={styles.failureTitle}>Something went wrong</Text>
       <Text style={styles.failureMessage}>{message}</Text>
+      {diagnostic ? (
+        <Text selectable style={styles.failureDiagnostic}>
+          Diagnostic code: {diagnostic.code}{'\n'}
+          Attempt: {diagnostic.attempt}{'\n'}
+          Time: {diagnostic.occurredAt}
+        </Text>
+      ) : null}
       <Pressable
         accessibilityRole="button"
         onPress={() => void onRetry()}
@@ -94,7 +112,7 @@ function AuthGate({ ready }: { ready: boolean }) {
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
   const [startupAttempt, setStartupAttempt] = useState(0);
-  const [startupError, setStartupError] = useState<Error | null>(null);
+  const [startupFailure, setStartupFailure] = useState<StartupFailure | null>(null);
   const initAuth = useAuthStore((s) => s.init);
   const initRecording = useRecordingStore((s) => s.init);
   const initTheme = useThemeStore((s) => s.init);
@@ -111,33 +129,41 @@ export default function RootLayout() {
   useEffect(() => {
     let canceled = false;
     setReady(false);
-    setStartupError(null);
+    setStartupFailure(null);
 
-    runMigrations()
-      .then(() => Promise.all([initAuth(), initTheme()]))
-      .then(() => unregisterSyncTask())
-      .then(() => initRecording())
-      .then(() => {
+    async function initialize() {
+      const attempt = startupAttempt + 1;
+      try {
+        await runStartupPhase('database', runMigrations);
+        await runStartupPhase('authentication', initAuth);
+        await runStartupPhase('preferences', initTheme);
+        await runStartupPhase('background_tasks', unregisterSyncTask);
+        await runStartupPhase('recording_recovery', initRecording);
+        await clearStartupFailure();
         if (!canceled) setReady(true);
-      })
-      .catch((error) => {
+      } catch (error) {
         if (canceled) return;
-        const startupFailure =
-          error instanceof Error ? error : new Error(String(error));
-        console.error('Startup failed', startupFailure);
-        setStartupError(startupFailure);
+        const failure = describeStartupFailure(error, attempt);
+        console.error(`[Trailbook][startup][${failure.code}]`, error);
+        await saveStartupFailure(failure);
+        if (canceled) return;
+        setStartupFailure(failure);
         void SplashScreen.hideAsync();
-      });
+      }
+    }
+
+    void initialize();
 
     return () => {
       canceled = true;
     };
   }, [initAuth, initRecording, initTheme, startupAttempt]);
 
-  if (startupError) {
+  if (startupFailure) {
     return (
       <FailureScreen
-        message="Trailbook could not finish starting. Check your connection and try again."
+        diagnostic={startupFailure}
+        message={startupFailureMessage(startupFailure)}
         onRetry={() => setStartupAttempt((attempt) => attempt + 1)}
       />
     );
@@ -148,6 +174,7 @@ export default function RootLayout() {
       <CustomAlertProvider>
         <AppleIapProvider>
           <GoogleIapProvider>
+            <PurchaseAccessLifecycle />
             <StatusBar style="auto" />
             <AuthGate ready={ready} />
           </GoogleIapProvider>
@@ -176,6 +203,12 @@ const styles = StyleSheet.create({
     color: '#5f6f5c',
     fontSize: 17,
     lineHeight: 25,
+    textAlign: 'center',
+  },
+  failureDiagnostic: {
+    color: '#5f6f5c',
+    fontSize: 13,
+    lineHeight: 19,
     textAlign: 'center',
   },
   retryButton: {
