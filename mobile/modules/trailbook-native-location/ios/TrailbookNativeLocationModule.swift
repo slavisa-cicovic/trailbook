@@ -49,8 +49,16 @@ public class TrailbookNativeLocationModule: Module {
       }
     }
 
-    AsyncFunction("drainEvents") { () -> [[String: Any]] in
-      return self.drainEvents()
+    AsyncFunction("peekEvents") { (maxCount: Int) -> [[String: Any]] in
+      return self.peekEvents(maxCount: min(max(maxCount, 1), 250))
+    }
+
+    AsyncFunction("acknowledgeEvents") { (count: Int) in
+      self.acknowledgeEvents(count: min(max(count, 0), 250))
+    }
+
+    AsyncFunction("pendingEventCount") { () -> Int in
+      return self.pendingEventCount()
     }
 
     AsyncFunction("isRunning") { () -> Bool in
@@ -190,7 +198,7 @@ public class TrailbookNativeLocationModule: Module {
     }
   }
 
-  private func drainEvents() -> [[String: Any]] {
+  private func peekEvents(maxCount: Int) -> [[String: Any]] {
     return fileQueue.sync {
       let url = eventsFileUrl()
       guard let text = try? String(contentsOf: url, encoding: .utf8), !text.isEmpty else {
@@ -199,6 +207,7 @@ public class TrailbookNativeLocationModule: Module {
 
       let events = text
         .split(separator: "\n")
+        .prefix(maxCount)
         .compactMap { line -> [String: Any]? in
           guard let data = String(line).data(using: .utf8),
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -207,8 +216,33 @@ public class TrailbookNativeLocationModule: Module {
           return json
         }
 
-      try? FileManager.default.removeItem(at: url)
       return events
+    }
+  }
+
+  private func acknowledgeEvents(count: Int) {
+    guard count > 0 else { return }
+    fileQueue.sync {
+      let url = eventsFileUrl()
+      guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+      let remaining = text.split(separator: "\n").dropFirst(count)
+      if remaining.isEmpty {
+        try? FileManager.default.removeItem(at: url)
+      } else {
+        try? (remaining.joined(separator: "\n") + "\n").write(
+          to: url,
+          atomically: true,
+          encoding: .utf8
+        )
+      }
+    }
+  }
+
+  private func pendingEventCount() -> Int {
+    return fileQueue.sync {
+      let url = eventsFileUrl()
+      guard let text = try? String(contentsOf: url, encoding: .utf8) else { return 0 }
+      return text.split(separator: "\n").count
     }
   }
 

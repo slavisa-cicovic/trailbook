@@ -1,16 +1,8 @@
 {
   "name": "trailbook-native-location",
   "version": "0.1.0",
-  "description": "Trailbook native iOS location capture module",
+  "description": "Trailbook native bounded location capture module",
   "main": "index.js",
   "private": true,
-  "expo": {
-    "autolinking": {
-      "ios": {
-        "modules": [
-          "TrailbookNativeLocationModule"
-        ]
-      }
-    }
-  }
+  "expo": {}
 }

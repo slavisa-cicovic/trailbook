@@ -1,6 +1,9 @@
 {
-  "platforms": ["ios"],
+  "platforms": ["ios", "android"],
   "ios": {
     "modules": ["TrailbookNativeLocationModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.trailbooknativelocation.TrailbookNativeLocationModule"]
   }
 }

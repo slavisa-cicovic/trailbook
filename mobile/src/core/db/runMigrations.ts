@@ -229,6 +229,24 @@ const MIGRATION_0010 = `
   );
 `;
 
+const MIGRATION_0011 = `
+  DELETE FROM raw_location_samples
+  WHERE id NOT IN (
+    SELECT min(id) FROM raw_location_samples
+    GROUP BY trip_id, timestamp, latitude, longitude
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS raw_location_sample_identity_idx
+    ON raw_location_samples (trip_id, timestamp, latitude, longitude);
+
+  DELETE FROM raw_activity_samples
+  WHERE id NOT IN (
+    SELECT min(id) FROM raw_activity_samples
+    GROUP BY trip_id, timestamp
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS raw_activity_sample_identity_idx
+    ON raw_activity_samples (trip_id, timestamp);
+`;
+
 type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
 
 const MIGRATIONS: Migration[] = [
@@ -243,6 +261,7 @@ const MIGRATIONS: Migration[] = [
   [8, migration_0008],
   [9, migration_0009],
   [10, MIGRATION_0010],
+  [11, MIGRATION_0011],
 ];
 
 export async function runMigrations(): Promise<void> {

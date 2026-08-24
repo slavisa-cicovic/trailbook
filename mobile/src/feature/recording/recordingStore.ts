@@ -31,8 +31,8 @@ import {
   stopLocationTask,
 } from '@/core/data/location/locationTask';
 import {
-  startNativeIosLocationCapture,
-  stopNativeIosLocationCapture,
+  startNativeLocationCapture,
+  stopNativeLocationCapture,
 } from '@/core/data/location/nativeIosLocationCapture';
 import { dbEvents } from '@/core/db/events';
 import { process, CURRENT_PROCESSING_VERSION } from '@/core/domain/processing';
@@ -41,6 +41,11 @@ import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { authorizeTripStart } from '@/core/domain/access/mobileAccessPolicy';
 
 const DEVICE_SAMPLE_INTERVAL_MS = 60_000;
+const MAX_RECOVERED_LIVE_COORDINATES = 1_000;
+const CAPTURE_DELAYED_AFTER_MS = 5 * 60 * 1000;
+const CAPTURE_STOPPED_AFTER_MS = 20 * 60 * 1000;
+
+export type CaptureHealth = 'inactive' | 'starting' | 'healthy' | 'delayed' | 'stopped' | 'paused';
 
 async function sampleDevice(tripId: string): Promise<void> {
   const deviceSample = await sampleDeviceState(tripId);
@@ -62,6 +67,35 @@ function stopDeviceSampleInterval() {
   if (!deviceSampleInterval) return;
   clearInterval(deviceSampleInterval);
   deviceSampleInterval = null;
+}
+
+async function getLiveLocationState(tripId: string): Promise<{
+  captureHealth: CaptureHealth;
+  lastLocationAt: Date | null;
+  liveCoordinates: LatLng[];
+  locationCount: number;
+}> {
+  const [summary, locations] = await Promise.all([
+    rawLocationDao.getSummaryForTrip(tripId),
+    rawLocationDao.getRecentForTrip(tripId, MAX_RECOVERED_LIVE_COORDINATES),
+  ]);
+  return {
+    captureHealth: healthFromLastLocation(summary.lastTimestamp),
+    lastLocationAt: summary.lastTimestamp,
+    liveCoordinates: locations.map((location) => ({
+      latitude: location.latitude,
+      longitude: location.longitude,
+    })),
+    locationCount: summary.count,
+  };
+}
+
+function healthFromLastLocation(lastLocationAt: Date | null): CaptureHealth {
+  if (!lastLocationAt) return 'starting';
+  const age = Date.now() - lastLocationAt.getTime();
+  if (age >= CAPTURE_STOPPED_AFTER_MS) return 'stopped';
+  if (age >= CAPTURE_DELAYED_AFTER_MS) return 'delayed';
+  return 'healthy';
 }
 
 async function requireRecordingLocationPermissions(): Promise<Result<void>> {
@@ -124,6 +158,8 @@ interface RecordingState {
   liveCoordinates: LatLng[];
   activeWaypoints: ActiveWaypoint[];
   error: string | null;
+  captureHealth: CaptureHealth;
+  lastLocationAt: Date | null;
 }
 
 interface RecordingActions {
@@ -133,21 +169,45 @@ interface RecordingActions {
   resumeRecording(): Promise<Result<void>>;
   stopRecording(): Promise<Result<void>>;
   refreshLiveData(tripId: string): Promise<void>;
+  recoverLocationCapture(): Promise<Result<void>>;
   clearError(): void;
 }
 
 let deviceSampleInterval: ReturnType<typeof setInterval> | null = null;
 let rawDataHandler: (() => void) | null = null;
 let waypointsHandler: (() => void) | null = null;
+let captureHealthInterval: ReturnType<typeof setInterval> | null = null;
+
+function stopCaptureHealthInterval() {
+  if (!captureHealthInterval) return;
+  clearInterval(captureHealthInterval);
+  captureHealthInterval = null;
+}
+
+function startCaptureHealthInterval() {
+  stopCaptureHealthInterval();
+  captureHealthInterval = setInterval(() => {
+    const state = useRecordingStore.getState();
+    if (!state.isRecording || state.isPaused) return;
+    useRecordingStore.setState({ captureHealth: healthFromLastLocation(state.lastLocationAt) });
+  }, 60_000);
+}
 
 async function startLocationCapture(): Promise<void> {
   // Motion recognition improves walk/bike/drive classification. Recording still
   // works with the speed-based fallback when the sensor or permission is absent.
   await startMotionActivityUpdates();
 
-  if (Platform.OS === 'ios') {
-    const startedNative = await startNativeIosLocationCapture(await getActiveRecordingTripId() ?? '');
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    const startedNative = await startNativeLocationCapture(await getActiveRecordingTripId() ?? '');
     if (startedNative) {
+      if (Platform.OS === 'android') {
+        // Remove an Expo location task left registered by an older Trailbook
+        // build so it cannot keep accumulating persisted TaskManager jobs.
+        await stopLocationTask().catch((error) => {
+          console.warn('[RecordingStore] legacy Expo location cleanup failed', error);
+        });
+      }
       return;
     }
 
@@ -161,12 +221,20 @@ async function startLocationCapture(): Promise<void> {
 async function stopLocationCapture(): Promise<void> {
   try {
     if (Platform.OS === 'ios') {
-      const stoppedNative = await stopNativeIosLocationCapture();
+      const stoppedNative = await stopNativeLocationCapture();
       if (stoppedNative) {
         return;
       }
 
       await stopLocationTask();
+      return;
+    }
+
+    if (Platform.OS === 'android') {
+      const stoppedNative = await stopNativeLocationCapture();
+      await stopLocationTask().catch((error) => {
+        if (!stoppedNative) throw error;
+      });
       return;
     }
 
@@ -178,12 +246,9 @@ async function stopLocationCapture(): Promise<void> {
 
 function subscribeToLiveUpdates(tripId: string) {
   rawDataHandler = () => {
-    rawLocationDao.getAllForTrip(tripId).then((locs) => {
-      useRecordingStore.setState({
-        liveCoordinates: locs.map((l) => ({ latitude: l.latitude, longitude: l.longitude })),
-        locationCount: locs.length,
-      });
-    });
+    getLiveLocationState(tripId)
+      .then((state) => useRecordingStore.setState(state))
+      .catch((error) => console.error('[RecordingStore] live route refresh failed', error));
   };
   waypointsHandler = () => {
     waypointDao.getForTrip(tripId).then(async (wps) => {
@@ -213,10 +278,18 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
   liveCoordinates: [],
   activeWaypoints: [],
   error: null,
+  captureHealth: 'inactive',
+  lastLocationAt: null,
 
   async init() {
+    unsubscribeFromLiveUpdates();
+    stopDeviceSampleInterval();
+    stopCaptureHealthInterval();
     const tripId = await getActiveRecordingTripId();
-    if (!tripId) return;
+    if (!tripId) {
+      set({ isRecording: false, activeTrip: null, captureHealth: 'inactive', lastLocationAt: null });
+      return;
+    }
 
     const trip = await tripDao.getTripByClientId(tripId);
     if (!trip) {
@@ -229,8 +302,9 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       return;
     }
 
-    const [locs, wps] = await Promise.all([
-      rawLocationDao.getAllForTrip(tripId),
+    const [locationSummary, liveLocations, wps] = await Promise.all([
+      rawLocationDao.getSummaryForTrip(tripId),
+      rawLocationDao.getRecentForTrip(tripId, MAX_RECOVERED_LIVE_COORDINATES),
       waypointDao.getForTrip(tripId),
     ]);
     const activeWaypoints: ActiveWaypoint[] = await Promise.all(
@@ -242,13 +316,33 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
     set({
       isRecording: true,
       activeTrip: trip,
-      locationCount: locs.length,
-      liveCoordinates: locs.map((l) => ({ latitude: l.latitude, longitude: l.longitude })),
+      locationCount: locationSummary.count,
+      lastLocationAt: locationSummary.lastTimestamp,
+      captureHealth: 'starting',
+      liveCoordinates: liveLocations.map((location) => ({
+        latitude: location.latitude,
+        longitude: location.longitude,
+      })),
       activeWaypoints,
     });
     subscribeToLiveUpdates(tripId);
-    await startLocationCapture();
-    startDeviceSampleInterval(tripId);
+    try {
+      await startLocationCapture();
+      startDeviceSampleInterval(tripId);
+      startCaptureHealthInterval();
+      await rawSessionEventDao.insert({
+        tripId,
+        timestamp: new Date(),
+        type: 'SERVICE_RESTARTED',
+        payload: { provider: `native-${Platform.OS}`, reason: 'active-trip-startup-recovery' },
+      });
+    } catch (error) {
+      unsubscribeFromLiveUpdates();
+      stopDeviceSampleInterval();
+      stopCaptureHealthInterval();
+      await stopLocationCapture().catch(() => {});
+      throw error;
+    }
   },
 
   async startRecording(title, description) {
@@ -298,7 +392,8 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       startDeviceSampleInterval(clientTripId);
 
       const fullTrip = await tripDao.getTripByClientId(clientTripId);
-      set({ isRecording: true, activeTrip: fullTrip, locationCount: 0, liveCoordinates: [], activeWaypoints: [], error: null });
+      set({ isRecording: true, activeTrip: fullTrip, locationCount: 0, liveCoordinates: [], activeWaypoints: [], error: null, captureHealth: 'starting', lastLocationAt: null });
+      startCaptureHealthInterval();
       dbEvents.emit('trips:changed');
 
       return ok(undefined);
@@ -316,9 +411,10 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
     try {
       await stopLocationCapture();
       stopDeviceSampleInterval();
+      stopCaptureHealthInterval();
       await rawSessionEventDao.insert({ tripId: activeTrip.clientTripId, timestamp: new Date(), type: 'RECORDING_PAUSED' });
       await tripDao.updateStatus(activeTrip.clientTripId, 'PAUSED');
-      set({ isPaused: true });
+      set({ isPaused: true, captureHealth: 'paused' });
       return ok(undefined);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -338,7 +434,8 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       await rawSessionEventDao.insert({ tripId: activeTrip.clientTripId, timestamp: new Date(), type: 'RECORDING_RESUMED' });
       await tripDao.updateStatus(activeTrip.clientTripId, 'RECORDING');
       startDeviceSampleInterval(activeTrip.clientTripId);
-      set({ isPaused: false });
+      startCaptureHealthInterval();
+      set({ isPaused: false, captureHealth: 'starting' });
       return ok(undefined);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -356,13 +453,14 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       unsubscribeFromLiveUpdates();
 
       stopDeviceSampleInterval();
+      stopCaptureHealthInterval();
 
       const endedAt = new Date();
       await rawSessionEventDao.insert({ tripId: activeTrip.clientTripId, timestamp: endedAt, type: 'RECORDING_STOPPED' });
       await tripDao.updateEndedAt(activeTrip.clientTripId, endedAt);
       await clearActiveRecordingTripId();
 
-      set({ isRecording: false, isPaused: false, activeTrip: null, locationCount: 0, liveCoordinates: [], activeWaypoints: [] });
+      set({ isRecording: false, isPaused: false, activeTrip: null, locationCount: 0, liveCoordinates: [], activeWaypoints: [], captureHealth: 'inactive', lastLocationAt: null });
       dbEvents.emit('trips:changed');
 
       const bundleResult = await rawCaptureRepository.getTripBundle(activeTrip.clientTripId);
@@ -381,8 +479,8 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
   },
 
   async refreshLiveData(tripId: string) {
-    const [locs, wps] = await Promise.all([
-      rawLocationDao.getAllForTrip(tripId),
+    const [locationState, wps] = await Promise.all([
+      getLiveLocationState(tripId),
       waypointDao.getForTrip(tripId),
     ]);
     const activeWaypoints: ActiveWaypoint[] = await Promise.all(
@@ -392,10 +490,31 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       }),
     );
     set({
-      liveCoordinates: locs.map((l) => ({ latitude: l.latitude, longitude: l.longitude })),
-      locationCount: locs.length,
+      ...locationState,
       activeWaypoints,
     });
+  },
+
+  async recoverLocationCapture() {
+    const { activeTrip, isPaused } = get();
+    if (!activeTrip || isPaused) return err('No active location capture to recover.');
+    try {
+      set({ captureHealth: 'starting', error: null });
+      await startLocationCapture();
+      startDeviceSampleInterval(activeTrip.clientTripId);
+      startCaptureHealthInterval();
+      await rawSessionEventDao.insert({
+        tripId: activeTrip.clientTripId,
+        timestamp: new Date(),
+        type: 'SERVICE_RESTARTED',
+        payload: { provider: `native-${Platform.OS}`, reason: 'manual-health-recovery' },
+      });
+      return ok(undefined);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set({ captureHealth: 'stopped', error: message });
+      return err(message);
+    }
   },
 
   clearError() { set({ error: null }); },

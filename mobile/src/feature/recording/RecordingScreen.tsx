@@ -46,6 +46,9 @@ export default function RecordingScreen() {
   const stopRecording = useRecordingStore((s) => s.stopRecording);
   const pauseRecording = useRecordingStore((s) => s.pauseRecording);
   const resumeRecording = useRecordingStore((s) => s.resumeRecording);
+  const captureHealth = useRecordingStore((s) => s.captureHealth);
+  const lastLocationAt = useRecordingStore((s) => s.lastLocationAt);
+  const recoverLocationCapture = useRecordingStore((s) => s.recoverLocationCapture);
 
   const displayName = useAuthStore((s) => s.displayName);
   const { theme } = useAppTheme();
@@ -145,8 +148,8 @@ export default function RecordingScreen() {
   }
 
   useEffect(() => {
-    if (locationCount > 0) setLastPointTime(new Date());
-  }, [locationCount]);
+    setLastPointTime(lastLocationAt);
+  }, [lastLocationAt]);
 
   async function onStopPress() {
     setShowSessionSheet(false);
@@ -229,6 +232,22 @@ export default function RecordingScreen() {
           onResumePress={() => void onPauseResumePress()}
           onDetailsPress={() => setShowSessionSheet(true)}
         />
+        {isRecording && !isPaused && captureHealth !== 'healthy' ? (
+          <View style={[styles.healthBanner, { backgroundColor: theme.card }]}>
+            <Text style={[styles.healthText, { color: theme.primaryText }]}>
+              {captureHealthMessage(captureHealth)}
+            </Text>
+            {(captureHealth === 'delayed' || captureHealth === 'stopped') ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void recoverLocationCapture()}
+                style={[styles.healthAction, { backgroundColor: theme.accent }]}
+              >
+                <Text style={{ color: theme.background, fontWeight: '700' }}>Restart capture</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       <BottomNav />
@@ -252,6 +271,10 @@ export default function RecordingScreen() {
           <Text style={[styles.infoRow, { color: theme.primaryText }]}>
             <Text style={{ color: theme.mutedText }}>Active user: </Text>
             <Text style={{ fontWeight: '500' }}>{displayName ?? '—'}</Text>
+          </Text>
+          <Text style={[styles.infoRow, { color: theme.primaryText }]}>
+            <Text style={{ color: theme.mutedText }}>Capture health: </Text>
+            <Text style={{ fontWeight: '500' }}>{captureHealth}</Text>
           </Text>
           <Text style={[styles.infoRow, { color: theme.primaryText }]}>
             <Text style={{ color: theme.mutedText }}>Route: </Text>
@@ -308,6 +331,9 @@ export default function RecordingScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   mapCard: { flex: 1, marginHorizontal: 12, borderRadius: 28, overflow: 'hidden' },
+  healthBanner: { position: 'absolute', left: 12, right: 12, top: 58, borderRadius: 14, padding: 12, gap: 8 },
+  healthText: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  healthAction: { alignSelf: 'flex-start', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8 },
 
   infoCard: { borderRadius: 18, padding: 16, gap: 8 },
   infoRow: { fontSize: 14, lineHeight: 20 },
@@ -321,3 +347,10 @@ const styles = StyleSheet.create({
   recentTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   emptyText: { fontSize: 14 },
 });
+
+function captureHealthMessage(health: string): string {
+  if (health === 'starting') return 'Location capture is starting. Waiting for the first GPS point.';
+  if (health === 'delayed') return 'No recent GPS point. The phone may be stationary or Android may be delaying capture.';
+  if (health === 'stopped') return 'Location capture appears to have stopped. Restart it before continuing.';
+  return 'Location capture status is unavailable.';
+}

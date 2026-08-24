@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/core/db';
 import { rawLocationSamples } from '@/core/db/schema';
 import type { RawLocationSample } from '@/core/domain/model/rawSamples';
@@ -33,13 +33,13 @@ function toDomain(row: typeof rawLocationSamples.$inferSelect): RawLocationSampl
 }
 
 export async function insert(sample: RawLocationSample): Promise<void> {
-  await db.insert(rawLocationSamples).values(toRow(sample));
+  await db.insert(rawLocationSamples).values(toRow(sample)).onConflictDoNothing();
 }
 
 export async function insertAll(samples: RawLocationSample[]): Promise<void> {
   if (samples.length === 0) return;
   await runInChunks(samples.map(toRow), (chunk) =>
-    db.insert(rawLocationSamples).values(chunk),
+    db.insert(rawLocationSamples).values(chunk).onConflictDoNothing(),
   );
 }
 
@@ -49,6 +49,19 @@ export async function getAllForTrip(tripId: string): Promise<RawLocationSample[]
     .from(rawLocationSamples)
     .where(eq(rawLocationSamples.tripId, tripId));
   return rows.map(toDomain);
+}
+
+export async function getRecentForTrip(
+  tripId: string,
+  limit: number,
+): Promise<RawLocationSample[]> {
+  const rows = await db
+    .select()
+    .from(rawLocationSamples)
+    .where(eq(rawLocationSamples.tripId, tripId))
+    .orderBy(desc(rawLocationSamples.timestamp))
+    .limit(limit);
+  return rows.reverse().map(toDomain);
 }
 
 export async function getSummaryForTrip(tripId: string): Promise<{

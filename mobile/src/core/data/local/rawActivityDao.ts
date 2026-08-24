@@ -21,13 +21,13 @@ function toDomain(row: typeof rawActivitySamples.$inferSelect): RawActivitySampl
 }
 
 export async function insert(sample: RawActivitySample): Promise<void> {
-  await db.insert(rawActivitySamples).values(toRow(sample));
+  await db.insert(rawActivitySamples).values(toRow(sample)).onConflictDoNothing();
 }
 
 export async function insertAll(samples: RawActivitySample[]): Promise<void> {
   if (samples.length === 0) return;
   await runInChunks(samples.map(toRow), (chunk) =>
-    db.insert(rawActivitySamples).values(chunk),
+    db.insert(rawActivitySamples).values(chunk).onConflictDoNothing(),
   );
 }
 

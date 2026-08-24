@@ -24,7 +24,9 @@ type NativeLocationEvent = {
 type NativeLocationModule = {
   start(tripId: string): Promise<void>;
   stop(): Promise<void>;
-  drainEvents(): Promise<NativeLocationEvent[]>;
+  peekEvents(maxCount: number): Promise<NativeLocationEvent[]>;
+  acknowledgeEvents(count: number): Promise<void>;
+  pendingEventCount(): Promise<number>;
   isRunning(): Promise<boolean>;
 };
 
@@ -35,7 +37,7 @@ type NativeModuleRuntime = {
       eventName: string,
       listener: (event: Record<string, unknown>) => void,
     ): { remove(): void };
-  };
+  } | null;
 };
 
 let runtime: NativeModuleRuntime | null | undefined;
@@ -47,7 +49,7 @@ let drainInterval: ReturnType<typeof setInterval> | null = null;
 function loadRuntime(): NativeModuleRuntime | null {
   if (runtime !== undefined) return runtime;
 
-  if (Platform.OS !== 'ios') {
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
     runtime = null;
     return runtime;
   }
@@ -57,7 +59,7 @@ function loadRuntime(): NativeModuleRuntime | null {
     const module = requireNativeModule('TrailbookNativeLocation') as NativeLocationModule;
     runtime = {
       module,
-      emitter: new EventEmitter(module),
+      emitter: Platform.OS === 'ios' ? new EventEmitter(module) : null,
     };
   } catch {
     runtime = null;
@@ -79,7 +81,7 @@ function toRawLocation(event: NativeLocationEvent): RawLocationSample | null {
     altitudeM: event.altitudeM,
     speedMps: event.speedMps,
     bearingDeg: event.bearingDeg,
-    provider: event.provider ?? 'native-ios',
+    provider: event.provider ?? `native-${Platform.OS}`,
   };
 }
 
@@ -91,6 +93,21 @@ async function persistNativeEvents(events: NativeLocationEvent[]): Promise<numbe
   if (!locations.length) {
     return 0;
   }
+
+  const first = locations[0];
+  const last = locations[locations.length - 1];
+  await rawSessionEventDao.insert({
+    tripId: first.tripId,
+    timestamp: new Date(),
+    type: 'LOCATION_TASK_CALLBACK_RECEIVED',
+    payload: {
+      firstTimestamp: first.timestamp.toISOString(),
+      lastTimestamp: last.timestamp.toISOString(),
+      locationsCount: locations.length,
+      provider: `native-${Platform.OS}`,
+      processingLimit: 250,
+    },
+  });
 
   await rawLocationDao.insertAll(locations);
   const activitySamples = await Promise.all(
@@ -104,24 +121,31 @@ async function persistNativeEvents(events: NativeLocationEvent[]): Promise<numbe
   return locations.length;
 }
 
-export function isNativeIosLocationCaptureAvailable(): boolean {
+export function isNativeLocationCaptureAvailable(): boolean {
   return Boolean(loadRuntime());
 }
 
-export async function flushNativeIosLocationEvents(): Promise<number> {
+export async function flushNativeLocationEvents(): Promise<number> {
   const native = loadRuntime();
   if (!native || drainInProgress) return 0;
 
   drainInProgress = true;
   try {
-    const events = await native.module.drainEvents();
-    return persistNativeEvents(events);
+    let persistedCount = 0;
+    while (true) {
+      const events = await native.module.peekEvents(250);
+      if (!events.length) return persistedCount;
+      await persistNativeEvents(events);
+      await native.module.acknowledgeEvents(events.length);
+      persistedCount += events.length;
+      if (events.length < 250) return persistedCount;
+    }
   } finally {
     drainInProgress = false;
   }
 }
 
-export async function startNativeIosLocationCapture(tripId: string): Promise<boolean> {
+export async function startNativeLocationCapture(tripId: string): Promise<boolean> {
   const native = loadRuntime();
   if (!native) return false;
   if (!tripId) return false;
@@ -131,23 +155,23 @@ export async function startNativeIosLocationCapture(tripId: string): Promise<boo
     tripId,
     timestamp: new Date(),
     type: 'LOCATION_TASK_START_REQUESTED',
-    payload: { taskName: 'trailbook-native-ios-location', provider: 'native-ios' },
+    payload: { taskName: `trailbook-native-${Platform.OS}-location`, provider: `native-${Platform.OS}` },
   });
 
   eventSubscription?.remove();
-  eventSubscription = native.emitter.addListener('onLocations', (event) => {
+  eventSubscription = native.emitter?.addListener('onLocations', (event) => {
     const error = typeof event.error === 'string' ? event.error : null;
     if (error && activeTripId) {
       rawSessionEventDao.insert({
         tripId: activeTripId,
         timestamp: new Date(),
         type: 'LOCATION_TASK_CALLBACK_WRITE_FAILED',
-        payload: { error, taskName: 'trailbook-native-ios-location' },
+        payload: { error, taskName: `trailbook-native-${Platform.OS}-location` },
       }).catch(() => {});
       return;
     }
 
-    flushNativeIosLocationEvents().catch((flushError) => {
+    flushNativeLocationEvents().catch((flushError) => {
       if (!activeTripId) return;
       rawSessionEventDao.insert({
         tripId: activeTripId,
@@ -155,28 +179,28 @@ export async function startNativeIosLocationCapture(tripId: string): Promise<boo
         type: 'LOCATION_TASK_CALLBACK_WRITE_FAILED',
         payload: {
           error: flushError instanceof Error ? flushError.message : String(flushError),
-          taskName: 'trailbook-native-ios-location',
+          taskName: `trailbook-native-${Platform.OS}-location`,
         },
       }).catch(() => {});
     });
-  });
+  }) ?? null;
 
   await native.module.start(tripId);
   await rawSessionEventDao.insert({
     tripId,
     timestamp: new Date(),
     type: 'LOCATION_TASK_START_SUCCEEDED',
-    payload: { taskName: 'trailbook-native-ios-location', provider: 'native-ios' },
+    payload: { taskName: `trailbook-native-${Platform.OS}-location`, provider: `native-${Platform.OS}` },
   });
 
   drainInterval = setInterval(() => {
-    flushNativeIosLocationEvents().catch(() => {});
+    flushNativeLocationEvents().catch(() => {});
   }, 5000);
 
   return true;
 }
 
-export async function stopNativeIosLocationCapture(): Promise<boolean> {
+export async function stopNativeLocationCapture(): Promise<boolean> {
   const native = loadRuntime();
   if (!native) return false;
 
@@ -186,7 +210,7 @@ export async function stopNativeIosLocationCapture(): Promise<boolean> {
       tripId,
       timestamp: new Date(),
       type: 'LOCATION_TASK_STOP_REQUESTED',
-      payload: { taskName: 'trailbook-native-ios-location' },
+      payload: { taskName: `trailbook-native-${Platform.OS}-location` },
     });
   }
 
@@ -196,7 +220,7 @@ export async function stopNativeIosLocationCapture(): Promise<boolean> {
   }
 
   await native.module.stop();
-  await flushNativeIosLocationEvents();
+  await flushNativeLocationEvents();
   eventSubscription?.remove();
   eventSubscription = null;
 
@@ -205,7 +229,7 @@ export async function stopNativeIosLocationCapture(): Promise<boolean> {
       tripId,
       timestamp: new Date(),
       type: 'LOCATION_TASK_STOP_SUCCEEDED',
-      payload: { taskName: 'trailbook-native-ios-location' },
+      payload: { taskName: `trailbook-native-${Platform.OS}-location` },
     });
   }
 
