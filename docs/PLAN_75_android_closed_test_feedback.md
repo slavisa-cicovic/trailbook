@@ -949,7 +949,7 @@ condition, not a Kotlin error in the change.
 
 ## Finding 10: Shared-trip photos load slowly or never in Trip Details and the fullscreen viewer
 
-Status: **server listing fixed; original-only mobile cache selected**
+Status: **completed**
 Priority: **P2**
 
 ### Symptom
@@ -1054,16 +1054,34 @@ opening all originals; they are not part of the current Finding 10 implementatio
 - Regression coverage lists three uploaded images and verifies that listing
   performs zero object-store requests while returning a signed URL for each.
 
-### Next-build investigation
+### Implemented mobile improvement
+
+- Shared-trip originals are downloaded into the app document directory and the
+  resulting local URI is used by both the waypoint preview and fullscreen
+  viewer. A non-empty cached file is reused on every later open.
+- Downloads for different images run concurrently, while a `SingleFlight`
+  coordinator deduplicates concurrent requests for the same image.
+- Each download has a 20-second deadline, uses a temporary file and moves it
+  into place only after a successful non-empty response. Failed/partial files
+  are removed and do not poison the persistent cache.
+- If any download fails, `loadShared()` refreshes the shared-trip detail once to
+  obtain new signed URLs and retries only the failed images. This covers URLs
+  that expired while the app was backgrounded without redownloading successful
+  images.
+- Waypoint preview and fullscreen photo components now expose explicit loading,
+  failure and retry states instead of an indefinite blank/black image.
+- Regression tests cover concurrent download deduplication and verify that a
+  failed operation is removed so a later retry can run.
+
+### Device verification
 
 - Instrument shared-trip image timing on the device: request start, bytes
   received, decode, first frame, for both the waypoint preview and fullscreen
   viewer; record HTTP status on failure.
-- Cache original shared-trip images on the device using the existing
-  `photoStorage`/`saveRestoredPhoto` pattern and use the local file as
-  `localUri`, so a second open does not re-download.
-- Add loading and error states to `ZoomablePhoto` and the InfoWindow images; on
-  403, refresh the pre-signed URL instead of leaving a black screen.
+- Confirm first-open timing and local decode/memory behavior with the largest
+  allowed originals on the Android and iOS closed-test devices.
+- Confirm airplane-mode reopening after one successful load and recovery after
+  deliberately expiring a signed URL.
 - Web: add a fullscreen/lightbox photo view with loading and error states as a
   later web-link-share enhancement.
 
@@ -1175,7 +1193,7 @@ Add new reports here before creating implementation tasks.
 | CT-08 | 2026-08-11 | Android tester / SM-A566B, API 36 | Trip lasted about 26 minutes but remained at 0 km; all 36 raw points had 81-200 m accuracy and failed the 25 m processor threshold | Raw bundle and source threshold | Zero-distance cause confirmed; poor accuracy/batching cause still under investigation | P1 |
 | CT-09 | 2026-08-11 | Android tester / Novi Sad | Completed 342 m walking route contains implausible straight jumps; 518 raw entries collapse to 239 timestamps, only 68 pass 25 m accuracy, and overlapping 139/140/141-point batches repeat data | Raw bundle and shared-trip screenshot | Contributing causes confirmed; processor/rendering policy investigation pending | P1 |
 | CT-10 | 2026-08-11 | Reviewer / Android and iOS comparison | `Andr setnja` initially ended at 21:06 although valid raw locations continued to 21:17; Stop raced a 150-location callback, while manual Reprocess restored the complete route | Both production bundles, segment boundaries, callback events, source flow and successful Reprocess | Root cause confirmed | P1 |
-| CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Source flow: `loadShared` uses the pre-signed S3 URL as `localUri`; 1 h URL expiry; formerly serial per-image `HeadObject`; no local original cache; no image error state | Server listing fixed; original-only mobile cache selected | P2 |
+| CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Removed serial S3 validation; originals now use a persistent local cache with single-flight downloads, timeout, signed-URL refresh and explicit loading/error/retry UI | Completed; device regression pending | P2 |
 
 ## Proposed order after feedback collection
 

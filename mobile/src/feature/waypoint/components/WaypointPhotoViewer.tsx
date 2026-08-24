@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Platform,
   Pressable,
@@ -99,12 +100,19 @@ function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps)
   const [pinchScale, setPinchScale] = useState(1);
   const [baseTranslate, setBaseTranslate] = useState({ x: 0, y: 0 });
   const [panTranslate, setPanTranslate] = useState({ x: 0, y: 0 });
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+  const [retryKey, setRetryKey] = useState(0);
   const currentScale = clamp(baseScale * pinchScale, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
   const currentTranslate = {
     x: baseTranslate.x + panTranslate.x,
     y: baseTranslate.y + panTranslate.y,
   };
   const zoomed = currentScale > 1.01;
+
+  useEffect(() => {
+    setLoadState('loading');
+    setRetryKey(0);
+  }, [uri]);
 
   const clampTranslate = useCallback(
     (x: number, y: number, scale: number) => {
@@ -193,7 +201,34 @@ function ZoomablePhoto({ height, onZoomChange, uri, width }: ZoomablePhotoProps)
             },
           ]}
         >
-          <Image resizeMode="cover" source={{ uri }} style={[styles.image, { width, height }]} />
+          <Image
+            key={retryKey}
+            onError={() => setLoadState('failed')}
+            onLoad={() => setLoadState('loaded')}
+            onLoadStart={() => setLoadState('loading')}
+            resizeMode="cover"
+            source={{ uri }}
+            style={[styles.image, { width, height }]}
+          />
+          {loadState !== 'loaded' ? (
+            <View style={styles.imageStatusOverlay}>
+              {loadState === 'loading' ? (
+                <ActivityIndicator color="#fffdf8" size="large" />
+              ) : (
+                <Pressable
+                  accessibilityLabel="Retry photo"
+                  onPress={() => {
+                    setLoadState('loading');
+                    setRetryKey((current) => current + 1);
+                  }}
+                  style={styles.imageRetry}
+                >
+                  <MaterialIcons color="#fffdf8" name="refresh" size={28} />
+                  <Text style={styles.imageRetryText}>Photo unavailable · Retry</Text>
+                </Pressable>
+              )}
+            </View>
+          ) : null}
         </View>
       </View>
     </GestureDetector>
@@ -392,6 +427,14 @@ const styles = StyleSheet.create({
   pager: { flex: 1 },
   slide: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#0c100c' },
   image: { backgroundColor: '#0c100c' },
+  imageStatusOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0c100c',
+  },
+  imageRetry: { alignItems: 'center', gap: 10, padding: 24 },
+  imageRetryText: { color: '#fffdf8', fontSize: 14, fontWeight: '600' },
   zoomGestureSurface: { overflow: 'hidden' },
   zoomImageWrap: { alignItems: 'center', justifyContent: 'center' },
   topOverlay: { position: 'absolute', left: 18, right: 18, top: 36, alignItems: 'center' },

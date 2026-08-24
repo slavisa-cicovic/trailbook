@@ -13,6 +13,8 @@ import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { buildDisplayRoutePoints } from '@/core/domain/processing/displayRouteBuilder';
 import { remoteTripDataSource } from '@/core/data/remote/FetchRemoteTripDataSource';
 import { tripBundleDtoToDomain } from '@/core/data/remote/dto/tripBundleDto';
+import { cacheSharedPhoto } from '@/core/data/local/photoStorage';
+import type { SharedTripDetailDto } from '@/core/data/remote/FetchRemoteTripDataSource';
 
 interface TripDetailState {
   trip: Trip | null;
@@ -99,20 +101,7 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
         bundle.locations,
         bundle.segments,
       );
-      const imagesByWaypoint: Record<string, WaypointImage[]> = {};
-
-      for (const waypoint of bundle.waypoints) {
-        imagesByWaypoint[waypoint.id] = (sharedDetail.imagesByWaypointId[waypoint.id] ?? [])
-          .map((image) => ({
-            id: image.imageId,
-            waypointId: waypoint.id,
-            source: 'GALLERY',
-            localUri: image.getUrl,
-            capturedAt: null,
-            objectKey: image.objectKey,
-            uploadState: 'UPLOADED',
-          }));
-      }
+      const imagesByWaypoint = await cacheSharedImages(clientTripId, bundle.waypoints, sharedDetail);
 
       set({
         trip: bundle.trip,
@@ -142,6 +131,82 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
     });
   },
 }));
+
+async function cacheSharedImages(
+  clientTripId: string,
+  waypoints: Waypoint[],
+  initialDetail: SharedTripDetailDto,
+): Promise<Record<string, WaypointImage[]>> {
+  const firstAttempt = await cacheImagesFromDetail(waypoints, initialDetail);
+  if (firstAttempt.failedImageIds.size === 0) return firstAttempt.imagesByWaypoint;
+
+  // The signed URL may have expired while the app was backgrounded. Refresh
+  // once and retry only failures, preserving successful cached downloads.
+  const refreshed = await remoteTripDataSource.fetchSharedWithMeDetail(clientTripId);
+  if (!refreshed.ok) return firstAttempt.imagesByWaypoint;
+  const retry = await cacheImagesFromDetail(
+    waypoints,
+    refreshed.value,
+    firstAttempt.failedImageIds,
+  );
+
+  for (const waypoint of waypoints) {
+    const retriedById = new Map(
+      (retry.imagesByWaypoint[waypoint.id] ?? []).map((image) => [image.id, image]),
+    );
+    firstAttempt.imagesByWaypoint[waypoint.id] =
+      (firstAttempt.imagesByWaypoint[waypoint.id] ?? [])
+        .map((image) => retriedById.get(image.id) ?? image);
+  }
+  return firstAttempt.imagesByWaypoint;
+}
+
+async function cacheImagesFromDetail(
+  waypoints: Waypoint[],
+  detail: SharedTripDetailDto,
+  onlyImageIds?: Set<string>,
+): Promise<{
+  failedImageIds: Set<string>;
+  imagesByWaypoint: Record<string, WaypointImage[]>;
+}> {
+  const failedImageIds = new Set<string>();
+  const imagesByWaypoint: Record<string, WaypointImage[]> = {};
+
+  await Promise.all(waypoints.map(async (waypoint) => {
+    const remoteImages = detail.imagesByWaypointId[waypoint.id] ?? [];
+    const selectedImages = onlyImageIds
+      ? remoteImages.filter((image) => onlyImageIds.has(image.imageId))
+      : remoteImages;
+    imagesByWaypoint[waypoint.id] = await Promise.all(
+      selectedImages.map(async (image): Promise<WaypointImage> => {
+        try {
+          return {
+            id: image.imageId,
+            waypointId: waypoint.id,
+            source: 'GALLERY',
+            localUri: await cacheSharedPhoto(image.imageId, image.getUrl),
+            capturedAt: null,
+            objectKey: image.objectKey,
+            uploadState: 'UPLOADED',
+          };
+        } catch {
+          failedImageIds.add(image.imageId);
+          return {
+            id: image.imageId,
+            waypointId: waypoint.id,
+            source: 'GALLERY',
+            localUri: image.getUrl,
+            capturedAt: null,
+            objectKey: image.objectKey,
+            uploadState: 'FAILED',
+          };
+        }
+      }),
+    );
+  }));
+
+  return { failedImageIds, imagesByWaypoint };
+}
 
 async function loadDisplayRouteForTrip(
   tripId: string,

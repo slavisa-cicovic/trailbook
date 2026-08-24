@@ -1,4 +1,6 @@
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 export const WAYPOINT_PREVIEW_WIDTH = 148;
 export const WAYPOINT_PREVIEW_HEIGHT = 108;
@@ -30,6 +32,14 @@ export function WaypointPhotoPreview({
   placement,
   title,
 }: WaypointPhotoPreviewProps) {
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+  const [retryKey, setRetryKey] = useState(0);
+
+  useEffect(() => {
+    setLoadState('loading');
+    setRetryKey(0);
+  }, [imageUri]);
+
   return (
     <View pointerEvents="box-none" style={styles.root}>
       <Pressable
@@ -46,7 +56,35 @@ export function WaypointPhotoPreview({
           onPress={onOpen}
           style={styles.card}
         >
-          <Image resizeMode="cover" source={{ uri: imageUri }} style={styles.image} />
+          <Image
+            key={retryKey}
+            onError={() => setLoadState('failed')}
+            onLoad={() => setLoadState('loaded')}
+            onLoadStart={() => setLoadState('loading')}
+            resizeMode="cover"
+            source={{ uri: imageUri }}
+            style={styles.image}
+          />
+          {loadState !== 'loaded' ? (
+            <View style={styles.imageStatus}>
+              {loadState === 'loading' ? (
+                <ActivityIndicator color="#52624f" />
+              ) : (
+                <Pressable
+                  accessibilityLabel="Retry waypoint photo"
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    setLoadState('loading');
+                    setRetryKey((current) => current + 1);
+                  }}
+                  style={styles.retry}
+                >
+                  <MaterialIcons color="#52624f" name="refresh" size={22} />
+                  <Text style={styles.retryText}>Retry photo</Text>
+                </Pressable>
+              )}
+            </View>
+          ) : null}
           <View style={styles.titleOverlay}>
             <Text numberOfLines={1} style={styles.title}>
               {title}
@@ -91,6 +129,14 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#d7ddcf',
   },
+  imageStatus: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#d7ddcf',
+  },
+  retry: { alignItems: 'center', gap: 4, padding: 12 },
+  retryText: { color: '#52624f', fontSize: 11, fontWeight: '700' },
   titleOverlay: {
     position: 'absolute',
     left: 0,
