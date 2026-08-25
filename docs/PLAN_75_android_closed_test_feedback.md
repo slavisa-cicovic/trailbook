@@ -54,7 +54,7 @@ Do not infer a root cause from one symptom. In particular, distinguish:
 
 ## Finding 1: Premium entitlement is stale locally
 
-Status: **done; verification pending on next Android build**  
+Status: **done; verified on Android local build (August 25, 2026)**
 Priority: **P1**
 
 ### Symptom
@@ -108,6 +108,11 @@ refresh. Premium options happens to trigger the missing refresh.
   never beyond a known subscription period end.
 - Successful purchase verification and restore continue to update the cache
   immediately.
+
+### Device verification
+
+- Reviewer confirmed the entitlement and recording flow works correctly on the
+  Android local build on August 25, 2026.
 
 ## Finding 2: Generic startup failure
 
@@ -309,7 +314,7 @@ that narrower attribution.
 
 ## Finding 4: Activity-based trip segmentation needs real-bundle verification
 
-Status: **done; verified against copied original raw bundle**
+Status: **done; verified against copied original raw bundle and Android local build**
 Priority: **P2**
 
 ### Symptom
@@ -459,9 +464,14 @@ Add a read-only admin trip inspector that can show:
 
 This would replace manual PostgreSQL JSON cloning for routine triage.
 
+### Device verification
+
+- Reviewer confirmed the activity-based segmentation result on the Android
+  local build on August 25, 2026.
+
 ## Finding 5: Temporary tester Premium lifecycle
 
-Status: **done; temporary grant workflow removed**
+Status: **done; temporary grant removal verified on Android local build**
 Priority: **P2**
 
 ### Current behavior
@@ -486,9 +496,14 @@ a Google Play lifetime product.
 - No replacement beta-grant mechanism is retained. A future beta program must
   introduce an explicit, audited workflow as a separate product decision.
 
+### Device verification
+
+- Reviewer confirmed the expected non-temporary entitlement behavior on the
+  Android local build on August 25, 2026.
+
 ## Finding 6: Current-trip route is corrupted while a large location batch is processed
 
-Status: **done; live route pipeline hardened**
+Status: **done; stationary-drift regression verified, original large-batch stress verification pending**
 Priority: **P1**
 
 ### Symptom
@@ -593,6 +608,18 @@ The original screenshot bundle was not required to identify this deterministic
 pipeline mismatch. If a future occurrence survives this fix, the existing
 callback and snapshot counters should distinguish persisted input corruption
 from display derivation without exposing location data.
+
+### Verification clarification
+
+- The August 25 Android test and supplied `Long recording test` bundle verified
+  processing version 17: `STATIONARY` segments contribute zero distance and
+  their GPS samples are excluded from the displayed polyline. The replay fell
+  from 2.64 km in the original processing to 338.3 m without deleting raw data.
+- This resolves the dense stationary GPS-drift route observed in that test.
+  It is related to the visual symptom tracked here, but it is not a reproduction
+  of the original in-flight large-batch/non-atomic publication mechanism.
+- A deliberately delayed large Android batch while the current-trip screen is
+  open remains the required stress verification for that original mechanism.
 
 ## Finding 7: Recording completes with duration but zero distance
 
@@ -949,7 +976,7 @@ condition, not a Kotlin error in the change.
 
 ## Finding 10: Shared-trip photos load slowly or never in Trip Details and the fullscreen viewer
 
-Status: **completed**
+Status: **completed; verified on Android local build (August 25, 2026)**
 Priority: **P2**
 
 ### Symptom
@@ -1097,9 +1124,14 @@ opening all originals; they are not part of the current Finding 10 implementatio
 - Web fullscreen behavior is tracked as a later enhancement and does not block
   the mobile shared-image cache fix.
 
+### Device verification result
+
+- Reviewer confirmed that shared-trip waypoint images and the fullscreen viewer
+  work correctly on the Android local build on August 25, 2026.
+
 ## Finding 11: HEIC/HEIF uploads can render as broken images on the web
 
-Status: **completed**
+Status: **completed; verified on Android local build (August 25, 2026)**
 Priority: **P2**
 
 ### Symptom
@@ -1161,6 +1193,11 @@ image for such a photo, while Safari renders it.
   and Safari on the web shared page, in both preview and fullscreen.
 - No code path can persist an image that cannot be rendered by every client
   that displays it.
+
+### Device verification result
+
+- Reviewer confirmed the normalized photo upload/display flow works correctly
+  on the Android local build on August 25, 2026.
 
 ## Finding 12: Local SQLite database is stored in plaintext
 
@@ -1277,17 +1314,17 @@ Add new reports here before creating implementation tasks.
 
 | ID | Date | Tester/device | Report | Evidence | Status | Priority |
 |---|---|---|---|---|---|---|
-| CT-01 | 2026-08-11 | Svetozar / unknown | Active test Premium not recognized before visiting Premium options | Screenshot and DB entitlement | Partially reproduced | P1 |
+| CT-01 | 2026-08-11 | Svetozar / unknown | Active test Premium not recognized before visiting Premium options | Screenshot, DB entitlement and Android local-build regression | Fixed and verified August 25 | P1 |
 | CT-02 | 2026-08 | At least one tester / unknown | Generic startup failure; retry ineffective | Exact UI message only | Evidence needed | P1 |
 | CT-03 | 2026-08-09 | ovthemija / Android | Long active recording with missing callbacks | Raw bundle | Device inspection pending | P1 |
 | CT-04 | 2026-08 | Reviewer Android test | Long recording survived and resumed | Raw bundle | Control case; not reproduction | P2 |
 | CT-05 | 2026-08 | Multiple | Closed-test link `Not Found` | Wrong email/country cases | Operational | P3 |
-| CT-06 | 2026-08-12 | `Razvoz robe` / Android tester | Entirely DRIVE journey contains a BIKE segment because initial `ON_BICYCLE:60` was locked despite a longer `IN_VEHICLE:70` run | Raw bundle, segment speeds/accuracy and tester confirmation of real journey | Failure mechanism confirmed; classifier redesign planned | P2 |
+| CT-06 | 2026-08-12 | `Razvoz robe` / Android tester | Entirely DRIVE journey contains a BIKE segment because initial `ON_BICYCLE:60` was locked despite a longer `IN_VEHICLE:70` run | Raw bundle, segment speeds/accuracy, copied-bundle replay and Android local-build regression | Fixed and verified August 25 | P2 |
 | CT-07 | 2026-08-11 | Android tester / device unknown | Current route becomes a dense self-crossing path while a large batch is processed; route corrects after Stop | Screenshot and post-stop observation | Reopen-without-stop and raw bundle needed | P1 |
 | CT-08 | 2026-08-11 | Android tester / SM-A566B, API 36 | Trip lasted about 26 minutes but remained at 0 km; all 36 raw points had 81-200 m accuracy and failed the 25 m processor threshold | Raw bundle and source threshold | Zero-distance cause confirmed; poor accuracy/batching cause still under investigation | P1 |
 | CT-09 | 2026-08-11 | Android tester / Novi Sad | Completed 342 m walking route contains implausible straight jumps; 518 raw entries collapse to 239 timestamps, only 68 pass 25 m accuracy, and overlapping 139/140/141-point batches repeat data | Raw bundle and shared-trip screenshot | Contributing causes confirmed; processor/rendering policy investigation pending | P1 |
 | CT-10 | 2026-08-11 | Reviewer / Android and iOS comparison | `Andr setnja` initially ended at 21:06 although valid raw locations continued to 21:17; Stop raced a 150-location callback, while manual Reprocess restored the complete route | Both production bundles, segment boundaries, callback events, source flow and successful Reprocess | Root cause confirmed | P1 |
-| CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Removed serial S3 validation; originals now use a persistent local cache with single-flight downloads, timeout, signed-URL refresh and explicit loading/error/retry UI | Completed; device regression pending | P2 |
+| CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Removed serial S3 validation; originals now use a persistent local cache with single-flight downloads, timeout, signed-URL refresh and explicit loading/error/retry UI | Completed; Android device regression passed August 25 | P2 |
 | CT-12 | 2026-08-25 | Internal security review / rooted device | Local SQLite database can be opened and modified directly with root access | Plaintext database inspection | Threat model and encryption design required | P1 |
 
 ## Proposed order after feedback collection
