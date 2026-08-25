@@ -1162,6 +1162,69 @@ image for such a photo, while Safari renders it.
 - No code path can persist an image that cannot be rendered by every client
   that displays it.
 
+## Finding 12: Local SQLite database is stored in plaintext
+
+Status: **reported; threat model and encryption design required**
+Priority: **P1**
+
+### Symptom
+
+Trailbook's SQLite database can be copied, opened and modified as an ordinary
+SQLite file by a user or process with root access to the device. It contains
+sensitive trip history, precise raw locations, waypoints and locally retained
+application state.
+
+### Security boundary
+
+Android's application sandbox protects the database on an ordinary,
+non-compromised device. Database encryption would materially improve protection
+for extracted files, filesystem backups and offline inspection, but it cannot
+guarantee confidentiality or integrity against an attacker with persistent root
+access while Trailbook is running. Such an attacker may inspect application
+memory, instrument the process, invoke app code or obtain a key after the user
+unlocks the device.
+
+The goal must therefore be stated as encryption at rest and resistance to
+casual/offline database extraction, not absolute protection from a fully
+compromised operating system.
+
+### Investigation and design
+
+- Inventory sensitive data stored in SQLite, preferences, files, image caches,
+  diagnostics and Android backups; encrypting only the main database must not
+  create an incorrect security claim.
+- Verify a maintained SQLCipher-compatible solution for Expo/React Native,
+  Drizzle migrations, Android and iOS before selecting an implementation.
+- Generate a random per-installation database key and protect it with Android
+  Keystore and iOS Keychain. Do not derive it from a hard-coded application
+  secret, user email or password, and do not sync or log it.
+- Define behavior for device lock, biometric/key invalidation, reinstall,
+  logout, account switching and restore onto a different device.
+- Build an atomic, recoverable plaintext-to-encrypted migration with free-space
+  checks and interruption testing. Never delete the plaintext database until
+  the encrypted copy has been opened and verified.
+- Exclude databases, keys and sensitive capture files from cloud/device backup
+  unless an explicitly encrypted restore design is implemented and tested.
+- Treat server authorization and sync validation as authoritative. Local
+  encryption must not be relied on to prevent a rooted user from editing local
+  Premium, ownership or sync state.
+- Document the residual risk on rooted/jailbroken devices and avoid presenting
+  root detection as a security boundary; it may only be a diagnostic or warning.
+
+### Acceptance criteria
+
+- Copying the database file from application storage does not reveal schema or
+  user data through ordinary SQLite tooling without the per-installation key.
+- The encryption key is not present in source, environment files, SQLite,
+  ordinary preferences, logs, exports or backups.
+- Existing installations migrate without losing trips, raw samples, waypoints,
+  photos or reprocessing snapshots, including recovery from interruption.
+- Fresh install, upgrade, logout/login, account switching and application
+  restart work on both Android and iOS.
+- Backup configuration and adjacent local files match the documented threat
+  model, and the product makes no promise of protection against active,
+  persistent root-level compromise.
+
 ## Closed-test operational findings
 
 These are not currently application defects, but they affect the validity of the
@@ -1204,6 +1267,7 @@ Add new reports here before creating implementation tasks.
 | CT-09 | 2026-08-11 | Android tester / Novi Sad | Completed 342 m walking route contains implausible straight jumps; 518 raw entries collapse to 239 timestamps, only 68 pass 25 m accuracy, and overlapping 139/140/141-point batches repeat data | Raw bundle and shared-trip screenshot | Contributing causes confirmed; processor/rendering policy investigation pending | P1 |
 | CT-10 | 2026-08-11 | Reviewer / Android and iOS comparison | `Andr setnja` initially ended at 21:06 although valid raw locations continued to 21:17; Stop raced a 150-location callback, while manual Reprocess restored the complete route | Both production bundles, segment boundaries, callback events, source flow and successful Reprocess | Root cause confirmed | P1 |
 | CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Removed serial S3 validation; originals now use a persistent local cache with single-flight downloads, timeout, signed-URL refresh and explicit loading/error/retry UI | Completed; device regression pending | P2 |
+| CT-12 | 2026-08-25 | Internal security review / rooted device | Local SQLite database can be opened and modified directly with root access | Plaintext database inspection | Threat model and encryption design required | P1 |
 
 ## Proposed order after feedback collection
 
