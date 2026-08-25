@@ -146,7 +146,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-source_user_count="$({ PGDATABASE="$source_database_url" psql \
+source_user_count="$({ psql \
+  --dbname="$source_database_url" \
   --no-psqlrc \
   --tuples-only \
   --no-align \
@@ -160,7 +161,8 @@ fi
 
 echo "Destination: $local_database_host:$local_database_port/$local_database_name"
 echo "Backing up the current local database to: $local_backup"
-PGDATABASE="$local_database_url" pg_dump \
+pg_dump \
+  --dbname="$local_database_url" \
   --format=custom \
   --no-owner \
   --no-privileges \
@@ -168,7 +170,8 @@ PGDATABASE="$local_database_url" pg_dump \
 chmod 600 "$local_backup"
 
 echo "Downloading the source database dump..."
-PGDATABASE="$source_database_url" pg_dump \
+pg_dump \
+  --dbname="$source_database_url" \
   --format=custom \
   --no-owner \
   --no-privileges \
@@ -186,7 +189,8 @@ pg_restore \
   "$source_dump"
 local_database_replaced=true
 
-retained_user_count="$({ PGDATABASE="$local_database_url" psql \
+retained_user_count="$({ psql \
+  --dbname="$local_database_url" \
   --no-psqlrc \
   --tuples-only \
   --no-align \
@@ -201,7 +205,8 @@ if [[ "$retained_user_count" != "1" ]]; then
 fi
 
 echo "Sanitizing the local copy and retaining only: $keep_user_email"
-PGDATABASE="$local_database_url" psql \
+psql \
+  --dbname="$local_database_url" \
   --no-psqlrc \
   --set=ON_ERROR_STOP=1 \
   --set=keep_user_email="$keep_user_email" <<'SQL'
@@ -243,7 +248,8 @@ COMMIT;
 SQL
 local_database_replaced=false
 
-summary="$({ PGDATABASE="$local_database_url" psql \
+summary="$({ psql \
+  --dbname="$local_database_url" \
   --no-psqlrc \
   --tuples-only \
   --no-align \
