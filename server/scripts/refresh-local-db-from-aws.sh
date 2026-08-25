@@ -16,6 +16,9 @@ Optional environment variables:
   TRAILBOOK_LOCAL_BACKUP_DIR        Existing-local-database backup directory.
   TRAILBOOK_POSTGRES_IMAGE          PostgreSQL client image. Defaults to
                                     postgres:18-alpine.
+  TRAILBOOK_RETAIN_ALL_TEST_DATA    Set to true when production contains only
+                                    controlled test data. Keeps users, trips,
+                                    shares, and waypoint-image metadata.
   TRAILBOOK_REFRESH_ENV_FILE        Config file path. Defaults to
                                     scripts/.env.local-db-refresh.
 
@@ -28,7 +31,8 @@ Run later:
 
 The destination is replaced. The script refuses non-local destination hosts,
 backs up the current local database first, and sanitizes the restored copy.
-It never copies S3 objects; production waypoint-image metadata is removed.
+It never copies S3 objects. By default image metadata is removed; test-data
+mode retains it so the configured storage backend can serve the test images.
 EOF
 }
 
@@ -65,6 +69,7 @@ source_database_url="${TRAILBOOK_SOURCE_DATABASE_URL:-}"
 local_database_url="${TRAILBOOK_LOCAL_DATABASE_URL:-postgresql://trailbook:trailbook@localhost:55432/trailbook}"
 keep_user_email="${TRAILBOOK_KEEP_USER_EMAIL:-}"
 postgres_image="${TRAILBOOK_POSTGRES_IMAGE:-postgres:18-alpine}"
+retain_all_test_data="${TRAILBOOK_RETAIN_ALL_TEST_DATA:-false}"
 
 if [[ -z "$source_database_url" ]]; then
   echo "TRAILBOOK_SOURCE_DATABASE_URL is required." >&2
@@ -77,6 +82,10 @@ fi
 if [[ "${TRAILBOOK_ALLOW_LOCAL_DB_REPLACE:-}" != "YES" ]]; then
   echo "Refusing to replace the local database." >&2
   echo "Set TRAILBOOK_ALLOW_LOCAL_DB_REPLACE=YES after checking the destination." >&2
+  exit 1
+fi
+if [[ "$retain_all_test_data" != "true" && "$retain_all_test_data" != "false" ]]; then
+  echo "TRAILBOOK_RETAIN_ALL_TEST_DATA must be true or false." >&2
   exit 1
 fi
 
@@ -220,12 +229,44 @@ if [[ "$retained_user_count" != "1" ]]; then
   exit 1
 fi
 
-echo "Sanitizing the local copy and retaining only: $keep_user_email"
-"${database_client[@]}" psql \
-  --dbname="$local_database_url" \
-  --no-psqlrc \
-  --set=ON_ERROR_STOP=1 \
-  --set=keep_user_email="$keep_user_email" <<'SQL'
+if [[ "$retain_all_test_data" == "true" ]]; then
+  echo "Sanitizing credentials while retaining all controlled test data."
+  "${database_client[@]}" psql \
+    --dbname="$local_database_url" \
+    --no-psqlrc \
+    --set=ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+
+TRUNCATE TABLE
+  refresh_tokens,
+  purchase_events,
+  apple_purchase_notifications,
+  google_purchase_notifications;
+
+UPDATE users
+SET
+  apple_app_account_token = gen_random_uuid(),
+  local_test_trip_client_id = NULL,
+  local_test_trip_used_at = NULL;
+
+UPDATE purchase_access
+SET
+  provider = 'fake',
+  environment = 'local',
+  provider_product_id = NULL,
+  original_transaction_id = NULL,
+  auto_renew_enabled = NULL,
+  verified_at = now();
+
+COMMIT;
+SQL
+else
+  echo "Sanitizing the local copy and retaining only: $keep_user_email"
+  "${database_client[@]}" psql \
+    --dbname="$local_database_url" \
+    --no-psqlrc \
+    --set=ON_ERROR_STOP=1 \
+    --set=keep_user_email="$keep_user_email" <<'SQL'
 BEGIN;
 
 DELETE FROM users WHERE lower(email) <> lower(:'keep_user_email');
@@ -262,6 +303,7 @@ SET
 
 COMMIT;
 SQL
+fi
 local_database_replaced=false
 
 summary="$({ "${database_client[@]}" psql \
@@ -271,7 +313,11 @@ summary="$({ "${database_client[@]}" psql \
   --no-align \
   --field-separator='|' \
   --set=ON_ERROR_STOP=1 \
-  --command="SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM trips), (SELECT count(*) FROM purchase_access);"; } | tr -d '[:space:]')"
+  --command="SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM trips), (SELECT count(*) FROM trip_user_shares), (SELECT count(*) FROM waypoint_images), (SELECT count(*) FROM purchase_access);"; } | tr -d '[:space:]')"
 
-echo "Local refresh complete (users|trips|purchase_access): $summary"
-echo "Production S3 objects were not copied; waypoint image metadata was removed."
+echo "Local refresh complete (users|trips|trip_user_shares|waypoint_images|purchase_access): $summary"
+if [[ "$retain_all_test_data" == "true" ]]; then
+  echo "Production S3 objects were not copied; test waypoint-image metadata was retained."
+else
+  echo "Production S3 objects were not copied; waypoint-image metadata was removed."
+fi
