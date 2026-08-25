@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import {
   Modal, View, Text, TextInput, Pressable, StyleSheet,
@@ -17,6 +17,8 @@ interface Props {
 }
 
 export function StartTripSheet({ visible, onDismiss }: Props) {
+  const titleInputRef = useRef<TextInput>(null);
+  const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,6 +26,29 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
   const startRecording = useRecordingStore((s) => s.startRecording);
   const { theme } = useAppTheme();
   const router = useRouter();
+
+  function clearPendingFocus() {
+    if (!focusTimeoutRef.current) return;
+    clearTimeout(focusTimeoutRef.current);
+    focusTimeoutRef.current = null;
+  }
+
+  function focusTitleInput() {
+    clearPendingFocus();
+    if (Platform.OS === 'android') {
+      focusTimeoutRef.current = setTimeout(() => {
+        focusTimeoutRef.current = null;
+        titleInputRef.current?.focus();
+      }, 150);
+      return;
+    }
+    titleInputRef.current?.focus();
+  }
+
+  useEffect(() => {
+    if (!visible) clearPendingFocus();
+    return clearPendingFocus;
+  }, [visible]);
 
   async function onStart() {
     if (!title.trim()) { setError('Title is required'); return; }
@@ -41,6 +66,7 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
   }
 
   function onCancel() {
+    clearPendingFocus();
     setTitle('');
     setDescription('');
     setError(null);
@@ -53,7 +79,13 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onCancel}
+      onShow={focusTitleInput}
+    >
       <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable style={styles.backdrop} onPress={onCancel} />
         <View style={[styles.sheet, { backgroundColor: theme.background }]}>
@@ -62,12 +94,13 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
 
           <Text style={[styles.label, { color: theme.mutedText }]}>TITLE</Text>
           <TextInput
+            ref={titleInputRef}
             style={[styles.input, { backgroundColor: theme.card, color: theme.primaryText, borderColor: theme.border }]}
             value={title}
             onChangeText={setTitle}
             placeholder="Where are you going?"
             placeholderTextColor={theme.mutedText}
-            autoFocus
+            autoFocus={Platform.OS === 'ios'}
             returnKeyType="next"
           />
 
