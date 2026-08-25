@@ -34,7 +34,7 @@ interface TripDetailActions {
   reset(): void;
 }
 
-export const useTripDetailStore = create<TripDetailState & TripDetailActions>((set) => ({
+export const useTripDetailStore = create<TripDetailState & TripDetailActions>((set, get) => ({
   trip: null,
   segments: [],
   waypoints: [],
@@ -101,7 +101,7 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
         bundle.locations,
         bundle.segments,
       );
-      const imagesByWaypoint = await cacheSharedImages(clientTripId, bundle.waypoints, sharedDetail);
+      const imagesByWaypoint = sharedImagesFromDetail(bundle.waypoints, sharedDetail);
 
       set({
         trip: bundle.trip,
@@ -113,6 +113,15 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
         sharedBy: sharedDetail.owner.displayName || sharedDetail.owner.email,
         loading: false,
       });
+
+      // Full-size originals can take seconds each. Keep the signed URLs on
+      // screen immediately and replace them with durable local files once the
+      // background cache finishes.
+      void cacheSharedImages(clientTripId, bundle.waypoints, sharedDetail).then((cachedImages) => {
+        if (get().trip?.clientTripId === clientTripId && get().sharedBy !== null) {
+          set({ imagesByWaypoint: cachedImages });
+        }
+      }).catch(() => undefined);
     } catch (e) {
       set({ loading: false, error: e instanceof Error ? e.message : String(e) });
     }
@@ -131,6 +140,26 @@ export const useTripDetailStore = create<TripDetailState & TripDetailActions>((s
     });
   },
 }));
+
+function sharedImagesFromDetail(
+  waypoints: Waypoint[],
+  detail: SharedTripDetailDto,
+): Record<string, WaypointImage[]> {
+  return Object.fromEntries(
+    waypoints.map((waypoint) => [
+      waypoint.id,
+      (detail.imagesByWaypointId[waypoint.id] ?? []).map((image) => ({
+        id: image.imageId,
+        waypointId: waypoint.id,
+        source: 'GALLERY' as const,
+        localUri: image.getUrl,
+        capturedAt: null,
+        objectKey: image.objectKey,
+        uploadState: 'UPLOADED' as const,
+      })),
+    ]),
+  );
+}
 
 async function cacheSharedImages(
   clientTripId: string,

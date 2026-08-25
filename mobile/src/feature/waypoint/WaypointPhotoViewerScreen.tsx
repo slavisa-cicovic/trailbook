@@ -117,20 +117,24 @@ export default function WaypointPhotoViewerScreen() {
     <WaypointPhotoViewer
       images={images}
       onBack={() => router.back()}
-      onRemoveCurrent={(selectedImageId) => {
-        showAlert({
-          title: 'Remove photo?',
-          message: 'This removes the photo from this waypoint.',
-          buttons: [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Remove',
-              style: 'destructive',
-              onPress: () => void removeCurrentImage(selectedImageId),
-            },
-          ],
-        });
-      }}
+      onRemoveCurrent={
+        images.find((image) => image.id === imageId)?.readOnly
+          ? undefined
+          : (selectedImageId) => {
+              showAlert({
+                title: 'Remove photo?',
+                message: 'This removes the photo from this waypoint.',
+                buttons: [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Remove',
+                    style: 'destructive',
+                    onPress: () => void removeCurrentImage(selectedImageId),
+                  },
+                ],
+              });
+            }
+      }
       selectedImageId={imageId ?? null}
     />
   );

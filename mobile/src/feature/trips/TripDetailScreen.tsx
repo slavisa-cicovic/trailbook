@@ -514,6 +514,10 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
   function navigateToWaypoint(waypointId: string) {
     setWaypointPreview(null);
     setTripPointPreview(null);
+    if (readOnly && clientTripId) {
+      router.push(`/trips/shared/${clientTripId}/waypoint/${waypointId}`);
+      return;
+    }
     const tripContextId = saveTripNavigationContext(
       activeGroup && navigationTrips.length > 0
         ? navigationTrips.map((item) => item.trip.clientTripId)
