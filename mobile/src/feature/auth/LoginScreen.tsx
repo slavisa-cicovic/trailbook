@@ -17,7 +17,7 @@ import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import { API_BASE_URL } from '@/core/data/remote/apiConfig';
-import { OAUTH_SCHEME } from '@/core/config/appEnvironment';
+import { APP_ENVIRONMENT, OAUTH_SCHEME } from '@/core/config/appEnvironment';
 
 const DEFAULT_LOGIN_EMAIL = process.env.EXPO_PUBLIC_DEV_LOGIN_EMAIL?.trim() || 'scaichat@gmail.com';
 const OAUTH_RETURN_TO = `${OAUTH_SCHEME}:///auth/callback`;
@@ -28,7 +28,10 @@ const PROVIDERS = [
 
 const isExpoGo = Constants.appOwnership === 'expo';
 const isDebugLoginEnabled =
-  isExpoGo || process.env.EXPO_PUBLIC_DEV_LOGIN_ENABLED === 'true';
+  APP_ENVIRONMENT === 'local' ||
+  isExpoGo ||
+  process.env.EXPO_PUBLIC_DEV_LOGIN_ENABLED === 'true';
+const isSocialLoginEnabled = APP_ENVIRONMENT !== 'local';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
@@ -115,7 +118,7 @@ export default function LoginScreen() {
           </Text>
 
           <View style={styles.buttons}>
-            {PROVIDERS.map((provider) => (
+            {isSocialLoginEnabled ? PROVIDERS.map((provider) => (
               <Pressable
                 key={provider.provider}
                 style={[styles.button, { backgroundColor: theme.accent }, loading && styles.disabled]}
@@ -130,7 +133,7 @@ export default function LoginScreen() {
                   </Text>
                 )}
               </Pressable>
-            ))}
+            )) : null}
 
             {isDebugLoginEnabled ? (
               <Pressable
@@ -138,7 +141,7 @@ export default function LoginScreen() {
                 onPress={() => void onLoginPress()}
                 disabled={loading}
               >
-                <Text style={[styles.secondaryButtonText, { color: theme.primaryText }]}>Debug sign in</Text>
+                <Text style={[styles.secondaryButtonText, { color: theme.primaryText }]}>Local sign in</Text>
               </Pressable>
             ) : null}
 
@@ -152,7 +155,9 @@ export default function LoginScreen() {
           </View>
 
           <Text style={[styles.hint, { color: theme.mutedText }]}>
-            {isExpoGo
+            {APP_ENVIRONMENT === 'local'
+              ? 'Local sign in uses the configured development account.'
+              : isExpoGo
               ? 'Expo Go uses debug sign in because OAuth deep links return to the native app.'
               : 'Sign in securely without leaving Trailbook.'}
           </Text>

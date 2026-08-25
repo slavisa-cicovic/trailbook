@@ -193,6 +193,12 @@ export class AuthService {
 
   private async verifySocialCredential(provider: AuthProvider, credential: string): Promise<SocialProfile> {
     if (provider === "debug") {
+      if (
+        process.env.NODE_ENV === "production" ||
+        process.env.ENABLE_DEBUG_LOGIN !== "true"
+      ) {
+        throw new UnauthorizedException("Debug login is disabled");
+      }
       const email = credential.startsWith(DEBUG_PREFIX) ? credential.slice(DEBUG_PREFIX.length).trim() : "";
       if (!email) throw new UnauthorizedException("Invalid token");
       return { email: email.toLowerCase(), displayName: this.displayNameFromEmail(email) };
