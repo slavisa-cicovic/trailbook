@@ -14,6 +14,8 @@ Optional environment variables:
   TRAILBOOK_LOCAL_DATABASE_URL      Destination URL. Defaults to the local
                                     Docker database on localhost:55432.
   TRAILBOOK_LOCAL_BACKUP_DIR        Existing-local-database backup directory.
+  TRAILBOOK_POSTGRES_IMAGE          PostgreSQL client image. Defaults to
+                                    postgres:18-alpine.
   TRAILBOOK_REFRESH_ENV_FILE        Config file path. Defaults to
                                     scripts/.env.local-db-refresh.
 
@@ -52,7 +54,7 @@ if [[ -f "$refresh_env_file" ]]; then
   set +a
 fi
 
-for command_name in node pg_dump pg_restore psql; do
+for command_name in docker node; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "Required command is not installed: $command_name" >&2
     exit 1
@@ -62,6 +64,7 @@ done
 source_database_url="${TRAILBOOK_SOURCE_DATABASE_URL:-}"
 local_database_url="${TRAILBOOK_LOCAL_DATABASE_URL:-postgresql://trailbook:trailbook@localhost:55432/trailbook}"
 keep_user_email="${TRAILBOOK_KEEP_USER_EMAIL:-}"
+postgres_image="${TRAILBOOK_POSTGRES_IMAGE:-postgres:18-alpine}"
 
 if [[ -z "$source_database_url" ]]; then
   echo "TRAILBOOK_SOURCE_DATABASE_URL is required." >&2
@@ -122,13 +125,20 @@ timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 local_backup="$backup_dir/trailbook-local-before-refresh-$timestamp.dump"
 work_dir="$(mktemp -d)"
 source_dump="$work_dir/trailbook-source.dump"
+database_client=(
+  docker run --rm --network host --interactive
+  --user "$(id -u):$(id -g)"
+  --volume "$backup_dir:$backup_dir"
+  --volume "$work_dir:$work_dir"
+  "$postgres_image"
+)
 local_database_replaced=false
 cleanup() {
   exit_status=$?
   set +e
   if [[ $exit_status -ne 0 && "$local_database_replaced" == "true" && -s "$local_backup" ]]; then
     echo "Refresh failed after replacement; restoring the previous local backup..." >&2
-    pg_restore \
+    "${database_client[@]}" pg_restore \
       --clean \
       --if-exists \
       --exit-on-error \
@@ -147,7 +157,7 @@ cleanup() {
 trap cleanup EXIT
 
 source_user_count="$(
-  psql \
+  "${database_client[@]}" psql \
     --dbname="$source_database_url" \
     --no-psqlrc \
     --tuples-only \
@@ -164,7 +174,7 @@ fi
 
 echo "Destination: $local_database_host:$local_database_port/$local_database_name"
 echo "Backing up the current local database to: $local_backup"
-pg_dump \
+"${database_client[@]}" pg_dump \
   --dbname="$local_database_url" \
   --format=custom \
   --no-owner \
@@ -173,7 +183,7 @@ pg_dump \
 chmod 600 "$local_backup"
 
 echo "Downloading the source database dump..."
-pg_dump \
+"${database_client[@]}" pg_dump \
   --dbname="$source_database_url" \
   --format=custom \
   --no-owner \
@@ -181,7 +191,7 @@ pg_dump \
   --file="$source_dump"
 
 echo "Replacing the local database in one transaction..."
-pg_restore \
+"${database_client[@]}" pg_restore \
   --clean \
   --if-exists \
   --exit-on-error \
@@ -193,7 +203,7 @@ pg_restore \
 local_database_replaced=true
 
 retained_user_count="$(
-  psql \
+  "${database_client[@]}" psql \
     --dbname="$local_database_url" \
     --no-psqlrc \
     --tuples-only \
@@ -211,7 +221,7 @@ if [[ "$retained_user_count" != "1" ]]; then
 fi
 
 echo "Sanitizing the local copy and retaining only: $keep_user_email"
-psql \
+"${database_client[@]}" psql \
   --dbname="$local_database_url" \
   --no-psqlrc \
   --set=ON_ERROR_STOP=1 \
@@ -254,7 +264,7 @@ COMMIT;
 SQL
 local_database_replaced=false
 
-summary="$({ psql \
+summary="$({ "${database_client[@]}" psql \
   --dbname="$local_database_url" \
   --no-psqlrc \
   --tuples-only \
