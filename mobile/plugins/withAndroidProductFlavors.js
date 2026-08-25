@@ -36,6 +36,10 @@ function withAndroidProductFlavors(config) {
     if (!source.includes('flavorDimensions "environment"')) {
       source = source.replace('android {', `android {\n${PRODUCT_FLAVORS}`);
     }
+    // Expo CLI currently resolves the native app ID using the Groovy
+    // `applicationId '…'` form and does not recognize the equivalent
+    // assignment form emitted by the current prebuild template.
+    source = source.replace(/applicationId\s*=\s*(['"][^'"]+['"])/, 'applicationId $1');
     gradleConfig.modResults.contents = source;
     return gradleConfig;
   });
