@@ -14,11 +14,14 @@ Optional environment variables:
   TRAILBOOK_LOCAL_DATABASE_URL      Destination URL. Defaults to the local
                                     Docker database on localhost:55432.
   TRAILBOOK_LOCAL_BACKUP_DIR        Existing-local-database backup directory.
+  TRAILBOOK_REFRESH_ENV_FILE        Config file path. Defaults to
+                                    scripts/.env.local-db-refresh.
 
-Example:
-  TRAILBOOK_SOURCE_DATABASE_URL='postgresql://...' \
-  TRAILBOOK_KEEP_USER_EMAIL='reviewer@example.com' \
-  TRAILBOOK_ALLOW_LOCAL_DB_REPLACE=YES \
+Setup once:
+  cp scripts/.env.local-db-refresh.example scripts/.env.local-db-refresh
+  # Edit scripts/.env.local-db-refresh and add the real values.
+
+Run later:
   ./scripts/refresh-local-db-from-aws.sh
 
 The destination is replaced. The script refuses non-local destination hosts,
@@ -34,6 +37,19 @@ fi
 if [[ $# -ne 0 ]]; then
   usage >&2
   exit 2
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+server_dir="$(cd "$script_dir/.." && pwd)"
+refresh_env_file="${TRAILBOOK_REFRESH_ENV_FILE:-$script_dir/.env.local-db-refresh}"
+
+if [[ -f "$refresh_env_file" ]]; then
+  set -a
+  # This is a private, user-controlled shell environment file. It is ignored
+  # by Git and must not contain untrusted shell input.
+  # shellcheck disable=SC1090
+  source "$refresh_env_file"
+  set +a
 fi
 
 for command_name in node pg_dump pg_restore psql; do
@@ -98,8 +114,6 @@ if [[ "$source_database_url" == "$local_database_url" ]]; then
   exit 1
 fi
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-server_dir="$(cd "$script_dir/.." && pwd)"
 backup_dir="${TRAILBOOK_LOCAL_BACKUP_DIR:-$server_dir/.local-db-backups}"
 mkdir -p "$backup_dir"
 chmod 700 "$backup_dir"
