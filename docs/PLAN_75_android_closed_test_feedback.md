@@ -1188,6 +1188,24 @@ The goal must therefore be stated as encryption at rest and resistance to
 casual/offline database extraction, not absolute protection from a fully
 compromised operating system.
 
+### Build-environment policy
+
+- `local` uses plaintext SQLite by default so developers can inspect and edit
+  test data with ordinary SQLite tooling while debugging capture, migrations
+  and processing.
+- `qa` and `prod` require an encrypted database. They must fail with a
+  controlled startup error if encrypted storage cannot be opened; they must
+  never silently create or fall back to a plaintext database.
+- Provide a dedicated `localEncrypted` build variant, or an equivalently
+  compile-time-guarded local-only option, for exercising key creation,
+  encryption and plaintext-to-encrypted migration on a development device.
+- Encryption selection must be fixed by the native build configuration. A
+  runtime preference, remotely supplied value or production environment
+  variable must not be able to disable it.
+- Local and encrypted variants must use distinct application identifiers and
+  storage directories so installing or testing one cannot reinterpret or
+  overwrite the other's database.
+
 ### Investigation and design
 
 - Inventory sensitive data stored in SQLite, preferences, files, image caches,
@@ -1221,6 +1239,9 @@ compromised operating system.
   photos or reprocessing snapshots, including recovery from interruption.
 - Fresh install, upgrade, logout/login, account switching and application
   restart work on both Android and iOS.
+- Automated/build checks prove that `qa` and `prod` require encryption and that
+  their database files cannot be opened with ordinary `sqlite3`. The encrypted
+  local variant covers migration from a representative plaintext database.
 - Backup configuration and adjacent local files match the documented threat
   model, and the product makes no promise of protection against active,
   persistent root-level compromise.
