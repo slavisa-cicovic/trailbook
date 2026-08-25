@@ -146,14 +146,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
-source_user_count="$({ psql \
-  --dbname="$source_database_url" \
-  --no-psqlrc \
-  --tuples-only \
-  --no-align \
-  --set=ON_ERROR_STOP=1 \
-  --set=keep_user_email="$keep_user_email" \
-  --command="SELECT count(*) FROM users WHERE lower(email) = lower(:'keep_user_email');"; } | tr -d '[:space:]')"
+source_user_count="$(
+  psql \
+    --dbname="$source_database_url" \
+    --no-psqlrc \
+    --tuples-only \
+    --no-align \
+    --set=ON_ERROR_STOP=1 \
+    --set=keep_user_email="$keep_user_email" <<'SQL' | tr -d '[:space:]'
+SELECT count(*) FROM users WHERE lower(email) = lower(:'keep_user_email');
+SQL
+)"
 if [[ "$source_user_count" != "1" ]]; then
   echo "Expected exactly one source user matching TRAILBOOK_KEEP_USER_EMAIL; found $source_user_count." >&2
   exit 1
@@ -189,14 +192,17 @@ pg_restore \
   "$source_dump"
 local_database_replaced=true
 
-retained_user_count="$({ psql \
-  --dbname="$local_database_url" \
-  --no-psqlrc \
-  --tuples-only \
-  --no-align \
-  --set=ON_ERROR_STOP=1 \
-  --set=keep_user_email="$keep_user_email" \
-  --command="SELECT count(*) FROM users WHERE lower(email) = lower(:'keep_user_email');"; } | tr -d '[:space:]')"
+retained_user_count="$(
+  psql \
+    --dbname="$local_database_url" \
+    --no-psqlrc \
+    --tuples-only \
+    --no-align \
+    --set=ON_ERROR_STOP=1 \
+    --set=keep_user_email="$keep_user_email" <<'SQL' | tr -d '[:space:]'
+SELECT count(*) FROM users WHERE lower(email) = lower(:'keep_user_email');
+SQL
+)"
 
 if [[ "$retained_user_count" != "1" ]]; then
   echo "Expected exactly one user matching TRAILBOOK_KEEP_USER_EMAIL; found $retained_user_count." >&2
