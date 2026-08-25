@@ -5,6 +5,9 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
+    "android:local": "expo run:android --variant localDebug",
+    "android:test": "expo run:android --variant qaDebug",
+    "android:prod": "expo run:android --variant prodRelease",
     "ios": "expo run:ios",
     "test:processing": "node --import tsx --test test/processing/*.test.ts",
     "lint": "eslint src app --ext .ts,.tsx",

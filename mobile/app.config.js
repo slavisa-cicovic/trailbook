@@ -11,6 +11,7 @@ module.exports = {
     userInterfaceStyle: "light",
     icon: "./assets/app-icon-release.png",
     plugins: [
+      "./plugins/withAndroidProductFlavors",
       "./plugins/withLocationTaskPatch",
       "expo-router",
       [

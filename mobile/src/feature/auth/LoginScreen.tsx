@@ -17,9 +17,10 @@ import { useAuthStore } from '@/feature/auth/authStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import { API_BASE_URL } from '@/core/data/remote/apiConfig';
+import { OAUTH_SCHEME } from '@/core/config/appEnvironment';
 
 const DEFAULT_LOGIN_EMAIL = process.env.EXPO_PUBLIC_DEV_LOGIN_EMAIL?.trim() || 'scaichat@gmail.com';
-const OAUTH_RETURN_TO = 'trailbook:///auth/callback';
+const OAUTH_RETURN_TO = `${OAUTH_SCHEME}:///auth/callback`;
 const PROVIDERS = [
   { label: 'Continue with Google', provider: 'google' },
   { label: 'Continue with Apple', provider: 'apple' },
@@ -46,7 +47,7 @@ export default function LoginScreen() {
       if (result.type !== 'success') return;
 
       const callbackUrl = new URL(result.url);
-      if (callbackUrl.protocol !== 'trailbook:' || callbackUrl.pathname !== '/auth/callback') {
+      if (callbackUrl.protocol !== `${OAUTH_SCHEME}:` || callbackUrl.pathname !== '/auth/callback') {
         throw new Error('OAuth returned an unexpected callback URL.');
       }
 

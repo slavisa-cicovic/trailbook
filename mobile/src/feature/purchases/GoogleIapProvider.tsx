@@ -18,6 +18,7 @@ import type {
 import { hasPremiumAccess } from '@/core/domain/model/purchase';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { usePurchaseStore } from './purchaseStore';
+import { APP_ENVIRONMENT } from '@/core/config/appEnvironment';
 
 export const GOOGLE_PREMIUM_PRODUCT_ID = 'trailbook_premium';
 export const GOOGLE_MONTHLY_BASE_PLAN_ID = 'monthly';
@@ -59,6 +60,7 @@ const GoogleIapContext = createContext(unavailableGoogleIap);
 export function GoogleIapProvider({ children }: PropsWithChildren) {
   const available =
     Platform.OS === 'android' &&
+    APP_ENVIRONMENT === 'prod' &&
     Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
   return available ? (
     <NativeGoogleIapProvider>{children}</NativeGoogleIapProvider>

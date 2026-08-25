@@ -395,7 +395,11 @@ export class AuthService {
 
   private normalizeReturnTo(returnTo?: string) {
     if (!returnTo) return null;
-    if (returnTo.startsWith("trailbook://auth/callback") || returnTo.startsWith("trailbook:///auth/callback")) {
+    if (
+      /^(?:trailbook|trailbook-local|trailbook-test):\/{2,3}auth\/callback$/.test(
+        returnTo,
+      )
+    ) {
       return returnTo;
     }
     throw new BadRequestException("Invalid returnTo URL.");
