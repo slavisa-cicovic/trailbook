@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { RawLocationSample } from '../../src/core/domain/model/rawSamples';
+import type { Segment } from '../../src/core/domain/model/segment';
 import {
   buildDisplayRoutePoints,
   buildDisplayRouteSnapshot,
@@ -55,4 +56,52 @@ test('delayed out-of-order batches produce the same immutable live route snapsho
     accepted: 5,
     displayed: 5,
   });
+});
+
+test('completed route omits samples that belong to stationary segments', () => {
+  const samples = [
+    point(0, 45),
+    point(30, 45.0001),
+    point(60, 45.0002),
+    point(90, 45.0001),
+    point(120, 45.0003),
+    point(150, 45.0001),
+    point(180, 45.0002),
+    point(210, 45.0003),
+  ];
+  const segments: Segment[] = [
+    {
+      tripId: 'live-trip',
+      index: 0,
+      segmentType: 'WALK',
+      startedAt: samples[0].timestamp,
+      endedAt: samples[1].timestamp,
+      distanceM: 10,
+    },
+    {
+      tripId: 'live-trip',
+      index: 1,
+      segmentType: 'STATIONARY',
+      startedAt: samples[2].timestamp,
+      endedAt: samples[5].timestamp,
+      distanceM: 0,
+    },
+    {
+      tripId: 'live-trip',
+      index: 2,
+      segmentType: 'WALK',
+      startedAt: samples[6].timestamp,
+      endedAt: samples[7].timestamp,
+      distanceM: 10,
+    },
+  ];
+
+  const snapshot = buildDisplayRouteSnapshot('live-trip', samples, segments);
+
+  assert.deepEqual(
+    snapshot.points.map((item) => item.timestamp),
+    [samples[0], samples[1], samples[6], samples[7]].map((item) => item.timestamp),
+  );
+  assert.equal(snapshot.diagnostics.accepted, 8);
+  assert.equal(snapshot.diagnostics.displayed, 4);
 });

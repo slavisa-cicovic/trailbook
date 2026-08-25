@@ -191,6 +191,14 @@ function removeSegmentSpikeLocations(locations: GeoPoint[], segments: Segment[])
   return cleaned;
 }
 
+function removeStationarySegmentLocations(locations: GeoPoint[], segments: Segment[]) {
+  if (segments.length === 0) return locations;
+
+  return locations.filter(
+    (location) => segmentForTimestamp(segments, location.timestamp)?.segmentType !== 'STATIONARY',
+  );
+}
+
 export function buildDisplayRoutePoints(
   tripId: string,
   samples: RawLocationSample[],
@@ -230,7 +238,10 @@ export function buildDisplayRouteSnapshot(
   segments: Segment[] = [],
 ): DisplayRouteSnapshot {
   const cleanedLocations = removeSegmentSpikeLocations(cleanLocations(samples), segments);
-  const points = thinLocationsForDisplay(cleanedLocations).map((location, index) => ({
+  // Stationary GPS drift is useful for classifying a stop, but connecting it
+  // produces a dense false route around the dwell location.
+  const routeLocations = removeStationarySegmentLocations(cleanedLocations, segments);
+  const points = thinLocationsForDisplay(routeLocations).map((location, index) => ({
     tripId,
     index,
     timestamp: location.timestamp,

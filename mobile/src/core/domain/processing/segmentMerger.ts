@@ -100,7 +100,12 @@ export function mergeAndFinalize(
     segmentType: seg.type,
     startedAt: seg.startTime,
     endedAt: seg.endTime,
-    distanceM: distanceInRange(geoPoints, seg.startTime, seg.endTime, seg.type),
+    // A stationary segment can contain hours of small, individually plausible
+    // GPS movements. Summing that drift creates kilometres of false distance.
+    distanceM:
+      seg.type === 'STATIONARY'
+        ? 0
+        : distanceInRange(geoPoints, seg.startTime, seg.endTime, seg.type),
   }));
 }
 

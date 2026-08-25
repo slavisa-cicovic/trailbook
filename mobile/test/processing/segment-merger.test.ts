@@ -163,6 +163,19 @@ test('keeps a long delivery dwell stationary despite walking-sized accumulated m
     'STATIONARY',
     'DRIVE',
   ]);
+  assert.equal(result[1].distanceM, 0);
+});
+
+test('does not count accumulated GPS drift as stationary distance', () => {
+  const result = mergeAndFinalize(
+    'forgotten-recording',
+    [segment(0, 60, 'STATIONARY')],
+    routePoints(60, 0.2),
+  );
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].segmentType, 'STATIONARY');
+  assert.equal(result[0].distanceM, 0);
 });
 
 test('does not include distance across a long uncertain walking gap', () => {
