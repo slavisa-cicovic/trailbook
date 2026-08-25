@@ -38,6 +38,15 @@ const java17Candidates = [
 const java17Home = java17Candidates.find((candidate) => existsSync(join(candidate, 'bin', 'java')));
 if (java17Home) process.env.JAVA_HOME = java17Home;
 
+if (variant === 'localDebug' && adb) {
+  const reverseResult = spawnSync(adb, ['reverse', 'tcp:3001', 'tcp:3001'], {
+    stdio: 'inherit',
+  });
+  if (reverseResult.status !== 0) {
+    console.warn('Could not forward device port 3001; the local API may be unreachable.');
+  }
+}
+
 const result = spawnSync(
   'npx',
   ['expo', 'run:android', '--variant', variant, '--app-id', appId, ...extraArgs],
