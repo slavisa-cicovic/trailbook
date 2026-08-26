@@ -3,6 +3,7 @@ import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
 import { API_BASE_URL } from './apiConfig';
 import { fetchWithTimeout } from './apiClient';
+import { apiNetworkErrorMessage, apiResponseErrorMessage } from './apiError';
 
 interface SocialLoginResponse {
   accessToken: string;
@@ -22,12 +23,11 @@ async function post<T>(path: string, body: unknown): Promise<Result<T>> {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const text = await res.text().catch(() => res.status.toString());
-      return err(`HTTP ${res.status}: ${text}`);
+      return err(await apiResponseErrorMessage(res, 'Sign in failed. Please try again.'));
     }
     return ok((await res.json()) as T);
-  } catch (e) {
-    return err(e instanceof Error ? e.message : String(e));
+  } catch {
+    return err(apiNetworkErrorMessage());
   }
 }
 

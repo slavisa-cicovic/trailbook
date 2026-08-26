@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
 import { apiDelete, apiPost, apiGet, fetchWithTimeout } from './apiClient';
+import { apiNetworkErrorMessage, SERVER_ERROR_MESSAGE } from './apiError';
 
 interface UploadUrlResponse {
   putUrl: string;
@@ -60,11 +61,11 @@ class FetchRemoteWaypointImageDataSource implements RemoteWaypointImageDataSourc
         uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
       });
       if (result.status < 200 || result.status >= 300) {
-        return err(`S3 PUT failed: HTTP ${result.status}`);
+        return err(SERVER_ERROR_MESSAGE);
       }
       return ok(undefined);
-    } catch (e) {
-      return err(e instanceof Error ? e.message : String(e));
+    } catch {
+      return err(apiNetworkErrorMessage());
     }
   }
 
@@ -88,11 +89,11 @@ class FetchRemoteWaypointImageDataSource implements RemoteWaypointImageDataSourc
   async downloadImage(getUrl: string): Promise<Result<Uint8Array>> {
     try {
       const res = await fetchWithTimeout(getUrl);
-      if (!res.ok) return err(`HTTP ${res.status}`);
+      if (!res.ok) return err(SERVER_ERROR_MESSAGE);
       const ab = await res.arrayBuffer();
       return ok(new Uint8Array(ab));
-    } catch (e) {
-      return err(e instanceof Error ? e.message : String(e));
+    } catch {
+      return err(apiNetworkErrorMessage());
     }
   }
 

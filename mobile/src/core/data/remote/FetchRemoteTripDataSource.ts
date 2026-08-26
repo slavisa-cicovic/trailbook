@@ -4,6 +4,7 @@ import { err } from '@/core/common/result';
 import { apiPostGzip, apiGet, apiDelete, apiPost } from './apiClient';
 import { tripBundleToDto, tripBundleDtoToDomain, type TripListItemDto, type TripBundleRequestDto } from './dto/tripBundleDto';
 import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
+import { SESSION_EXPIRED_MESSAGE } from './apiError';
 
 export interface RemoteTripDataSource {
   uploadTrip(bundle: TripBundle): Promise<Result<void>>;
@@ -60,7 +61,7 @@ class FetchRemoteTripDataSource implements RemoteTripDataSource {
     const result = await apiGet<TripBundleRequestDto>(`/trips/${clientTripId}`);
     if (!result.ok) return err(result.error);
     const ownerUserId = await authRepository.getLocalUserId();
-    if (!ownerUserId) return err('No authenticated local user');
+    if (!ownerUserId) return err(SESSION_EXPIRED_MESSAGE);
     return { ok: true, value: tripBundleDtoToDomain(result.value, 0, ownerUserId) };
   }
 

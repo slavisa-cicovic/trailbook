@@ -2,6 +2,11 @@ import { gzipSync, strToU8 } from 'fflate';
 import type { Result } from '@/core/common/result';
 import { ok, err } from '@/core/common/result';
 import { API_BASE_URL } from './apiConfig';
+import {
+  apiNetworkErrorMessage,
+  apiResponseErrorMessage,
+  SESSION_EXPIRED_MESSAGE,
+} from './apiError';
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
 
@@ -55,9 +60,9 @@ async function doRequest<T>(
   const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, { ...options, headers });
 
   if (res.status === 401) {
-    if (!authTokenProvider) return err('No auth token provider');
+    if (!authTokenProvider) return err(SESSION_EXPIRED_MESSAGE);
     const refreshResult = await authTokenProvider.refreshAccessToken();
-    if (!refreshResult.ok) return err(`Unauthorized: ${refreshResult.error}`);
+    if (!refreshResult.ok) return err(SESSION_EXPIRED_MESSAGE);
 
     const retryHeaders = { ...headers, Authorization: `Bearer ${refreshResult.value}` };
     const retryRes = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
@@ -65,16 +70,14 @@ async function doRequest<T>(
       headers: retryHeaders,
     });
     if (!retryRes.ok) {
-      const text = await retryRes.text().catch(() => retryRes.status.toString());
-      return err(`HTTP ${retryRes.status}: ${text}`);
+      return err(await apiResponseErrorMessage(retryRes));
     }
     if (retryRes.status === 204) return ok(undefined as T);
     return ok((await retryRes.json()) as T);
   }
 
   if (!res.ok) {
-    const text = await res.text().catch(() => res.status.toString());
-    return err(`HTTP ${res.status}: ${text}`);
+    return err(await apiResponseErrorMessage(res));
   }
   if (res.status === 204) return ok(undefined as T);
   return ok((await res.json()) as T);
@@ -83,13 +86,13 @@ async function doRequest<T>(
 async function withToken<T>(
   fn: (token: string) => Promise<Result<T>>,
 ): Promise<Result<T>> {
-  if (!authTokenProvider) return err('No auth token provider');
+  if (!authTokenProvider) return err(SESSION_EXPIRED_MESSAGE);
   const token = await authTokenProvider.getAccessToken();
-  if (!token) return err('No access token');
+  if (!token) return err(SESSION_EXPIRED_MESSAGE);
   try {
     return await fn(token);
-  } catch (e) {
-    return err(e instanceof Error ? e.message : String(e));
+  } catch {
+    return err(apiNetworkErrorMessage());
   }
 }
 
