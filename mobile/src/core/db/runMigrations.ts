@@ -1,4 +1,5 @@
-import { openDatabaseSync, type SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { sqlite } from './index';
 
 const MIGRATION_0000 = `
   CREATE TABLE IF NOT EXISTS capture_meta (
@@ -265,8 +266,6 @@ const MIGRATIONS: Migration[] = [
 ];
 
 export async function runMigrations(): Promise<void> {
-  const sqlite = openDatabaseSync('trailbook.db');
-
   // If the trips table exists but lacks client_trip_id, the schema predates the
   // current migration (regardless of whether _migrations exists or what it contains).
   // Drop everything so MIGRATION_0000 can recreate all tables from scratch.

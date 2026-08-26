@@ -25,6 +25,12 @@ module.exports = {
       ],
       "expo-background-task",
       "expo-secure-store",
+      [
+        "expo-sqlite",
+        {
+          useSQLCipher: true,
+        },
+      ],
       "expo-web-browser",
       "expo-iap",
       [

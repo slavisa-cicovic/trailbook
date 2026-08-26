@@ -1293,7 +1293,7 @@ image for such a photo, while Safari renders it.
 
 ## Finding 12: Local SQLite database is stored in plaintext
 
-Status: **reported; threat model and encryption design required**
+Status: **implementation complete; fresh Android encryption verified, upgrade migration and iOS verification pending**
 Priority: **P1**
 
 ### Symptom
@@ -1374,6 +1374,59 @@ compromised operating system.
 - Backup configuration and adjacent local files match the documented threat
   model, and the product makes no promise of protection against active,
   persistent root-level compromise.
+
+### Implemented fix
+
+- Expo SQLite is compiled with SQLCipher for native builds. Runtime policy keeps
+  the ordinary `local` flavor on inspectable plaintext SQLite, while
+  `localEncrypted`, `qa` and `prod` require encryption.
+- A separate `localEncryptedRelease` flavor and application ID
+  (`com.slavisacicovic.trailbook.local.encrypted`) allow encryption and migration
+  testing without touching the normal local or production installation.
+- The matching `localEncryptedDebug` variant is reserved for security
+  verification: Android `run-as` can copy the encrypted database from the app
+  sandbox without requiring a rooted phone. It uses the same encryption policy
+  and isolated application ID; ordinary `localDebug` remains plaintext and
+  cannot validate Finding 12.
+- Encrypted variants generate a cryptographically random 256-bit per-install
+  key and store it in Android Keystore/iOS Keychain through SecureStore. The key
+  is never derived from source constants, user identity, password or environment
+  variables.
+- Existing plaintext `trailbook.db` data is copied to a separate encrypted
+  database with `sqlcipher_export`. The encrypted copy is reopened with its key,
+  checked using `cipher_integrity_check` and queried successfully before the
+  plaintext database and its WAL/journal sidecars are removed.
+- Interrupted conversion keeps the plaintext source and discards/recreates only
+  the temporary encrypted target on retry. An existing encrypted database with a
+  missing or malformed SecureStore key produces a controlled startup failure and
+  never creates a new empty/plaintext fallback.
+- Database opening is centralized so Drizzle, migrations, background capture
+  and export use the same already-keyed connection and environment-specific
+  database filename.
+- The ordinary database export copies encrypted bytes in protected variants; it
+  does not export or log the encryption key.
+- Policy regressions cover plaintext local, encrypted local, QA and production
+  application IDs. TypeScript checks pass and the native
+  `localEncryptedRelease` APK builds with `USE_SQLCIPHER=true` and
+  `SQLITE_HAS_CODEC=1`.
+
+### Remaining device verification
+
+- Seed a representative plaintext database in the isolated encrypted app,
+  upgrade it, and verify trip/raw/waypoint/photo counts before and after the
+  conversion, including an interrupted conversion retry.
+- Repeat the migration check on iOS before the next App Store build. Native
+  SQLCipher configuration is present in app config, but iOS compilation and
+  device behavior cannot be verified on this Linux workstation.
+
+### Android fresh-database verification
+
+On August 26, 2026, the reviewer installed the isolated
+`localEncryptedDebug` variant, extracted `trailbook-encrypted.db` through
+Android `run-as`, and opened it with DB Browser for SQLite. DB Browser could not
+read the database as ordinary SQLite and requested SQLCipher credentials. This
+confirms that a fresh Android encrypted build does not expose its schema or data
+as plaintext. The encryption key was not exported or entered into DB Browser.
 
 ## Finding 13: Restore aborts completely when one item cannot be recovered
 
@@ -1509,7 +1562,7 @@ Add new reports here before creating implementation tasks.
 | CT-09 | 2026-08-11 | Android tester / Novi Sad | Completed 342 m walking route contains implausible straight jumps; 518 raw entries collapse to 239 timestamps, only 68 pass 25 m accuracy, and overlapping 139/140/141-point batches repeat data | Raw bundle, shared-trip screenshot, route-gap regressions and reviewer-owned local replay copy | Fixed and verified August 26; unknown 500 m gap remains visibly disconnected | P1 |
 | CT-10 | 2026-08-11 | Reviewer / Android and iOS comparison | `Andr setnja` initially ended at 21:06 although valid raw locations continued to 21:17; Stop raced a 150-location callback, while manual Reprocess restored the complete route | Both production bundles, deterministic blocked 150-location regression and `Long running 3` Android Stop verification | Fixed and verified August 26 | P1 |
 | CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Removed serial S3 validation; originals now use a persistent local cache with single-flight downloads, timeout, signed-URL refresh and explicit loading/error/retry UI | Completed; Android device regression passed August 25 | P2 |
-| CT-12 | 2026-08-25 | Internal security review / rooted device | Local SQLite database can be opened and modified directly with root access | Plaintext database inspection | Threat model and encryption design required | P1 |
+| CT-12 | 2026-08-25 | Internal security review / rooted device | Local SQLite database can be opened and modified directly with root access | Plaintext inspection, SQLCipher policy tests/native build, and encrypted DB Browser device check | Fresh Android encryption verified; upgrade migration and iOS verification pending | P1 |
 | CT-13 | 2026-08-26 | Reviewer / Android local restore | One missing MinIO photo object causes restore to report total failure after several trips were already recovered | Local API replay: trip endpoints returned 200; three signed image downloads returned 404 | Partial restore implemented; Android verification pending | P1 |
 
 ## Proposed order after feedback collection
@@ -1536,6 +1589,9 @@ complete.
 11. ~~Make restore item-isolated and idempotent, with a structured
     partial-success result and an understandable completion dialog.~~ Implemented
     in Finding 13; Android verification pending.
+12. Verify the SQLCipher plaintext-to-encrypted migration on the isolated
+    `localEncrypted` Android flavor and on iOS before shipping encrypted QA/prod
+    binaries.
 
 ## Exit criteria for closed-test triage
 

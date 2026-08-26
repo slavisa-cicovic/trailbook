@@ -1,12 +1,9 @@
 import * as Application from 'expo-application';
-import { appEnvironmentForApplicationId } from './appEnvironmentId';
+import { appEnvironmentForApplicationId, oauthSchemeForApplicationId } from './appEnvironmentId';
 
 const PROD_APPLICATION_ID = 'com.slavisacicovic.trailbook';
 
-export const APP_ENVIRONMENT = appEnvironmentForApplicationId(
-  Application.applicationId ?? PROD_APPLICATION_ID,
-);
+const applicationId = Application.applicationId ?? PROD_APPLICATION_ID;
+export const APP_ENVIRONMENT = appEnvironmentForApplicationId(applicationId);
 
-export const OAUTH_SCHEME = APP_ENVIRONMENT === 'prod'
-  ? 'trailbook'
-  : `trailbook-${APP_ENVIRONMENT}`;
+export const OAUTH_SCHEME = oauthSchemeForApplicationId(applicationId);

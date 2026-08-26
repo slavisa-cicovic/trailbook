@@ -2,8 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import type { Result } from '@/core/common/result';
 import { err, ok } from '@/core/common/result';
 import { sqlite } from '@/core/db';
-
-const DATABASE_NAME = 'trailbook.db';
+import { databaseName } from '@/core/db/databaseBootstrap';
 
 function timestampForFileName(date: Date) {
   return date.toISOString().replace(/[:.]/g, '-');
@@ -17,7 +16,7 @@ export async function exportDatabase(): Promise<Result<void>> {
 
     await sqlite.execAsync('PRAGMA wal_checkpoint(FULL);');
 
-    const sourceUri = `${FileSystem.documentDirectory}SQLite/${DATABASE_NAME}`;
+    const sourceUri = `${FileSystem.documentDirectory}SQLite/${databaseName}`;
     const sourceInfo = await FileSystem.getInfoAsync(sourceUri);
     if (!sourceInfo.exists) return err('Local database file not found');
 

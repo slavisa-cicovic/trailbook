@@ -6,7 +6,7 @@ const {
   withDangerousMod,
 } = require('expo/config-plugins');
 
-const DEBUGGABLE_VARIANTS = '    debuggableVariants = ["localDebug", "qaDebug", "prodDebug"]';
+const DEBUGGABLE_VARIANTS = '    debuggableVariants = ["localDebug", "localEncryptedDebug", "qaDebug", "prodDebug"]';
 const PRODUCT_FLAVORS = `    flavorDimensions "environment"
 
     productFlavors {
@@ -17,6 +17,17 @@ const PRODUCT_FLAVORS = `    flavorDimensions "environment"
             resValue "string", "app_name", "Trailbook Local"
             manifestPlaceholders = [
                 authRedirectScheme: "trailbook-local",
+                appIcon: "@drawable/trailbook_local_icon",
+                appRoundIcon: "@drawable/trailbook_local_icon"
+            ]
+        }
+        localEncrypted {
+            dimension "environment"
+            applicationIdSuffix ".local.encrypted"
+            versionNameSuffix "-local-encrypted"
+            resValue "string", "app_name", "Trailbook Local Encrypted"
+            manifestPlaceholders = [
+                authRedirectScheme: "trailbook-local-encrypted",
                 appIcon: "@drawable/trailbook_local_icon",
                 appRoundIcon: "@drawable/trailbook_local_icon"
             ]
@@ -100,34 +111,27 @@ function withLocalAndroidIcon(config) {
   return withDangerousMod(config, [
     'android',
     (dangerousConfig) => {
-      const drawableDirectory = join(
-        dangerousConfig.modRequest.platformProjectRoot,
-        'app',
-        'src',
-        'local',
-        'res',
-        'drawable',
-      );
-      mkdirSync(drawableDirectory, { recursive: true });
-      copyFileSync(
-        join(dangerousConfig.modRequest.projectRoot, 'assets', 'app-icon-local.png'),
-        join(drawableDirectory, 'trailbook_local_icon.png'),
-      );
-
-      const localSourceDirectory = join(
-        dangerousConfig.modRequest.platformProjectRoot,
-        'app',
-        'src',
-        'local',
-      );
-      mkdirSync(localSourceDirectory, { recursive: true });
-      writeFileSync(
-        join(localSourceDirectory, 'AndroidManifest.xml'),
-        `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+      for (const flavor of ['local', 'localEncrypted']) {
+        const localSourceDirectory = join(
+          dangerousConfig.modRequest.platformProjectRoot,
+          'app',
+          'src',
+          flavor,
+        );
+        const drawableDirectory = join(localSourceDirectory, 'res', 'drawable');
+        mkdirSync(drawableDirectory, { recursive: true });
+        copyFileSync(
+          join(dangerousConfig.modRequest.projectRoot, 'assets', 'app-icon-local.png'),
+          join(drawableDirectory, 'trailbook_local_icon.png'),
+        );
+        writeFileSync(
+          join(localSourceDirectory, 'AndroidManifest.xml'),
+          `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <application android:usesCleartextTraffic="true" />
 </manifest>
 `,
-      );
+        );
+      }
       return dangerousConfig;
     },
   ]);
