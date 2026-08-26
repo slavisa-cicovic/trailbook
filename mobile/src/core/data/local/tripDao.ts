@@ -112,7 +112,10 @@ export async function listTripIds(filters: Filters): Promise<string[]> {
   const ownerUserId = await getCurrentOwnerUserId();
   if (!ownerUserId) return [];
 
-  const conditions = [eq(trips.ownerUserId, ownerUserId)];
+  const conditions = [
+    eq(trips.ownerUserId, ownerUserId),
+    eq(trips.status, 'COMPLETED'),
+  ];
   const search = filters.search.trim();
   if (search) conditions.push(like(trips.title, `%${search}%`));
 

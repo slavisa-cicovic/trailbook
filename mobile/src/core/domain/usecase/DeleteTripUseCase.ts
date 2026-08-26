@@ -3,6 +3,7 @@ import { err, ok } from '@/core/common/result';
 import { authRepository } from '@/core/auth/SecureStoreAuthRepository';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { remoteTripDataSource } from '@/core/data/remote/FetchRemoteTripDataSource';
+import { requireNoActiveRecording } from '@/core/domain/recording/recordingMutationGuard';
 
 export async function flushPendingTripDeletions(): Promise<Result<number>> {
   if (await authRepository.isDemo()) {
@@ -26,6 +27,9 @@ export async function flushPendingTripDeletions(): Promise<Result<number>> {
 }
 
 export async function deleteTrip(clientTripId: string): Promise<Result<void>> {
+  const recordingGuard = await requireNoActiveRecording();
+  if (!recordingGuard.ok) return recordingGuard;
+
   const isDemo = await authRepository.isDemo();
   const localResult = await tripRepository.deleteTripAndQueueRemoteDeletion(clientTripId);
   if (!localResult.ok) return err(localResult.error);

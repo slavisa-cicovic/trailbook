@@ -67,6 +67,8 @@ import {
 } from './groupNavigation';
 import { saveTripNavigationContext } from './tripNavigationContext';
 import { useTripFiltersStore } from './tripFiltersStore';
+import { useRecordingStore } from '@/feature/recording/recordingStore';
+import { ACTIVE_RECORDING_MUTATION_ERROR } from '@/core/domain/recording/recordingMutationPolicy';
 
 const WAYPOINT_PREVIEW_MARGIN = 12;
 const WAYPOINT_PREVIEW_GAP = 14;
@@ -233,6 +235,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
   const router = useRouter();
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
+  const isRecording = useRecordingStore((s) => s.isRecording);
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
 
@@ -410,6 +413,10 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
   async function onReprocessToggle() {
     if (readOnly) return;
     if (!clientTripId) return;
+    if (isRecording) {
+      showAlert({ title: 'Recording in progress', message: ACTIVE_RECORDING_MUTATION_ERROR });
+      return;
+    }
     setReprocessing(true);
     setExpanded(false);
     await waitForNextFrame();
@@ -432,6 +439,10 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
   async function onSync() {
     if (readOnly) return;
     if (!clientTripId) return;
+    if (isRecording) {
+      showAlert({ title: 'Recording in progress', message: ACTIVE_RECORDING_MUTATION_ERROR });
+      return;
+    }
     const error = await syncTrip(clientTripId);
     if (error) showGatedActionError('Sync failed', error);
     else load(clientTripId);

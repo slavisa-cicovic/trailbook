@@ -31,6 +31,8 @@ import {
   accessErrorMessage,
   isPremiumAccessError,
 } from '@/core/domain/access/mobileAccessPolicy';
+import { useRecordingStore } from '@/feature/recording/recordingStore';
+import { ACTIVE_RECORDING_MUTATION_ERROR } from '@/core/domain/recording/recordingMutationPolicy';
 
 type Tab = 'my_trips' | 'groups' | 'shared';
 
@@ -66,6 +68,7 @@ export default function TripsScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
+  const isRecording = useRecordingStore((s) => s.isRecording);
 
   const [tab, setTab] = useState<Tab>('my_trips');
   const [showFilters, setShowFilters] = useState(false);
@@ -114,6 +117,7 @@ export default function TripsScreen() {
   }
 
   async function handleSyncTrip(clientTripId: string) {
+    if (!allowTripMutation()) return;
     const error = await syncTrip(clientTripId);
     if (error) {
       showActionError('Sync failed', error);
@@ -161,8 +165,21 @@ export default function TripsScreen() {
   }
 
   async function handleSyncGroup(groupId: string) {
+    if (!allowTripMutation()) return;
     const error = await syncGroup(groupId);
     if (error) showActionError('Group sync failed', error);
+  }
+
+  function allowTripMutation(): boolean {
+    if (!isRecording) return true;
+    showAlert({ title: 'Recording in progress', message: ACTIVE_RECORDING_MUTATION_ERROR });
+    return false;
+  }
+
+  async function handleDeleteTrip(clientTripId: string) {
+    if (!allowTripMutation()) return;
+    const error = await deleteTrip(clientTripId);
+    if (error) showActionError('Delete failed', error);
   }
 
   function openGroup(groupId: string) {
@@ -390,7 +407,7 @@ export default function TripsScreen() {
                 item={item}
                 onPress={() => handleTripPress(item)}
                 onLongPress={() => toggleTripSelection(item)}
-                onDelete={() => void deleteTrip(item.trip.clientTripId)}
+                onDelete={() => void handleDeleteTrip(item.trip.clientTripId)}
                 onSync={() => void handleSyncTrip(item.trip.clientTripId)}
                 syncing={syncingTripIds.includes(item.trip.clientTripId)}
                 selected={selectedTripIds.includes(item.trip.clientTripId)}

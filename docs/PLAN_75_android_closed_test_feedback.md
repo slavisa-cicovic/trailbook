@@ -1520,6 +1520,148 @@ must explain the actionable cause.
 - Regression coverage verifies complete and partial result messages, reason
   deduplication and already-present photo reporting.
 
+## Finding 14: Waypoint category labels are mistaken for mandatory titles
+
+Status: **implemented; Android/iOS device verification pending**
+Priority: **P2**
+
+### Tester feedback
+
+Most testers did not understand what `Note`, `Departure`, `Fuel` and the other
+choices do when adding a waypoint. The current sheet starts with title `Note`
+and selecting a category immediately replaces the title with that category's
+English label. This makes a category look like a mandatory/pre-filled waypoint
+name rather than metadata used for its icon and meaning.
+
+Users need to be free to choose names such as:
+
+```text
+Departure
+Departure from Novi Sad
+Polazak
+```
+
+The English category vocabulary must not dictate the stored title or language.
+
+### Current behavior
+
+- `GENERIC` is displayed as `Note`, while the same sheet also contains a
+  separate `NOTE` description field, making the two concepts easy to confuse.
+- Title starts as the real value `Note`, not as a placeholder or suggestion.
+- Selecting any category calls `setTitle(CATEGORY_LABEL[category])`, overwriting
+  whatever the user may already have typed.
+- Removing the proposed title requires manually selecting and deleting text;
+  there is no explicit clear/reject action.
+
+### Required interaction
+
+- Keep category and title as independent inputs. Category selection controls
+  classification/icon only and must never overwrite a custom title.
+- Start with an empty title. Show the selected category label only as a visual
+  suggestion or placeholder, clearly distinguishable from saved input.
+- Provide a one-tap way to accept the suggestion and a one-tap clear action for
+  an entered/accepted title. Typing a custom title implicitly rejects the
+  suggestion without an additional dialog.
+- Category changes may update an unaccepted suggestion, but must preserve any
+  text the user entered or explicitly accepted and then edited.
+- Rename or explain the generic category so it is not confused with the
+  optional note/description field. Category labels should be localized with the
+  rest of the UI; stored enum values remain language-independent.
+- Continue requiring a non-empty final title, but explain this at the field
+  rather than silently saving the English category label.
+- Apply the same title/category distinction when editing an existing waypoint.
+
+### Candidate presentation
+
+One compact option is an empty title field with a contextual action below it:
+
+```text
+Title
+[ What should this waypoint be called?       × ]
+Suggested: Departure                         [Use]
+```
+
+The exact layout may change after device review, but acceptance/rejection must
+remain obvious, accessible and possible without careful text selection.
+
+### Acceptance criteria
+
+- Opening Add waypoint does not persist `Note` or another category label unless
+  the user explicitly accepts or types it.
+- Selecting `Departure`, typing `Polazak`, and then selecting another category
+  leaves `Polazak` unchanged.
+- A user can create `Departure`, `Departure from ...` and `Polazak` with the
+  same `DEPARTURE` category.
+- Clear and Use suggestion actions have accessible labels, adequate touch
+  targets and correct keyboard/focus behavior on Android and iOS.
+- Existing waypoint titles are never rewritten when their category is edited.
+- Regression tests cover untouched suggestion, accepted suggestion, custom
+  title preservation, category changes and reset/cancel behavior.
+
+### Implemented fix
+
+- Add waypoint now starts with an empty title instead of persisting `Note` by
+  default.
+- Category selection changes only the category/icon and never overwrites the
+  current title in either Add or Edit waypoint.
+- The selected category supplies a separate `Suggested: ...` value which is
+  copied into the title only through an explicit, accessible `Use` action.
+- A dedicated accessible clear action empties and refocuses the title field;
+  users can immediately type or extend any accepted suggestion.
+- The generic category is displayed as `Other`, removing the collision between
+  the former `Note` category label and the actual optional note field.
+- Both actions have at least 40-48 dp targets. Type checking and the complete
+  processing regression suite pass; keyboard, focus and layout still require
+  Android/iOS device review.
+
+## Finding 15: Trips can be mutated or synced during an active recording
+
+Status: **implemented; Android/iOS device verification pending**
+Priority: **P1**
+
+### Reproduction
+
+1. Start a recording.
+2. Open Trips and delete a trip, including the currently recorded trip.
+3. Return to Recording and stop it.
+
+The recording UI retains in-memory state while its underlying local trip may
+already have been deleted. Sync can likewise read and upload a bundle while the
+capture pipeline is still changing it. Reprocess/Undo can read raw locations
+and replace segments while capture is writing them. These operations create
+unnecessary race and partial-state paths.
+
+### Implemented fix
+
+- Trips is now an archive of completed trips: `RECORDING` and `PAUSED` rows are
+  excluded both from filtered queries and again at the Trips store boundary.
+  The active trip remains available only through Recording until Stop completes
+  processing and changes its status to `COMPLETED`.
+- All trip deletion and trip/group sync actions on Trips are rejected while any
+  recording is active, with an instruction to stop recording first.
+- Trip Details applies the same sync restriction.
+- Reprocess and Undo reprocessing are blocked from Trip Details and protected
+  again inside their use cases.
+- Delete and upload use cases independently check the persisted active-trip ID,
+  closing races and protecting callers outside these screens.
+- A deliberately blocked sync does not mark the trip `FAILED`.
+- The guard applies to every trip, not just the active trip, keeping recording
+  persistence isolated from destructive and network workflows.
+- Regression coverage verifies both allowed idle state and rejected active
+  recording state.
+
+### Acceptance criteria
+
+- Active and paused trips do not appear in My trips, search results or the
+  regular Trip Details navigation flow; they appear after a successful Stop.
+- While recording or paused, deleting any trip, syncing a trip/group, and
+  reprocessing or undoing reprocessing are blocked with a user-readable
+  explanation.
+- Stopping the recording immediately restores normal delete and sync behavior.
+- Direct use-case calls cannot bypass the restriction.
+- The active trip remains present and can be stopped and processed normally
+  after attempted blocked actions.
+
 ## Closed-test operational findings
 
 These are not currently application defects, but they affect the validity of the
@@ -1564,6 +1706,8 @@ Add new reports here before creating implementation tasks.
 | CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Removed serial S3 validation; originals now use a persistent local cache with single-flight downloads, timeout, signed-URL refresh and explicit loading/error/retry UI | Completed; Android device regression passed August 25 | P2 |
 | CT-12 | 2026-08-25 | Internal security review / rooted device | Local SQLite database can be opened and modified directly with root access | Plaintext inspection, SQLCipher policy tests/native build, and encrypted DB Browser device check | Fresh Android encryption verified; upgrade migration and iOS verification pending | P1 |
 | CT-13 | 2026-08-26 | Reviewer / Android local restore | One missing MinIO photo object causes restore to report total failure after several trips were already recovered | Local API replay: trip endpoints returned 200; three signed image downloads returned 404 | Partial restore implemented; Android verification pending | P1 |
+| CT-14 | 2026-08 | Multiple closed-test users / Android | Waypoint category labels such as Note, Departure and Fuel are misunderstood as fixed titles and category selection overwrites free text | Tester feedback, source review, typecheck and processing regression suite | Implemented; Android/iOS device verification pending | P2 |
+| CT-15 | 2026-08-26 | Reviewer / Android local build | Trips exposes an active trip and permits deletion, sync, waypoint editing and reprocessing while recording, including deletion of the active trip | Deterministic navigation reproduction, archive visibility policy and recording mutation policy regressions | Implemented; Android/iOS device verification pending | P1 |
 
 ## Proposed order after feedback collection
 
@@ -1592,6 +1736,12 @@ complete.
 12. Verify the SQLCipher plaintext-to-encrypted migration on the isolated
     `localEncrypted` Android flavor and on iOS before shipping encrypted QA/prod
     binaries.
+13. ~~Separate waypoint category from title and add explicit suggestion
+    accept/clear interactions from Finding 14.~~ Implemented; Android/iOS device
+    verification pending.
+14. ~~Block trip deletion, reprocess/undo, and all trip/group synchronization
+    while recording is active, and expose only completed trips in Trips.~~
+    Implemented in Finding 15; Android/iOS device verification pending.
 
 ## Exit criteria for closed-test triage
 

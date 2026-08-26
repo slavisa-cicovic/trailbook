@@ -5,8 +5,12 @@ import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { remoteTripDataSource } from '@/core/data/remote/FetchRemoteTripDataSource';
 import { uploadWaypointImages } from './UploadWaypointImagesUseCase';
 import { requireCloudPremium } from '@/core/domain/access/mobileAccessPolicy';
+import { requireNoActiveRecording } from '@/core/domain/recording/recordingMutationGuard';
 
 export async function uploadTrip(clientTripId: string): Promise<Result<void>> {
+  const recordingGuard = await requireNoActiveRecording();
+  if (!recordingGuard.ok) return recordingGuard;
+
   const access = await requireCloudPremium();
   if (!access.ok) {
     await tripRepository.updateSyncState(clientTripId, 'FAILED');

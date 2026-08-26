@@ -3,9 +3,13 @@ import { ok, err } from '@/core/common/result';
 import { process, CURRENT_PROCESSING_VERSION } from '@/core/domain/processing';
 import { rawCaptureRepository } from '@/core/data/repository/RawCaptureRepositoryImpl';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
+import { requireNoActiveRecording } from '@/core/domain/recording/recordingMutationGuard';
 
 export async function reprocessTrip(clientTripId: string): Promise<Result<void>> {
   try {
+    const recordingGuard = await requireNoActiveRecording();
+    if (!recordingGuard.ok) return recordingGuard;
+
     const bundleResult = await rawCaptureRepository.getTripBundle(clientTripId);
     if (!bundleResult.ok) return err(bundleResult.error);
     if (!bundleResult.value) return err('Trip bundle not found');
@@ -25,5 +29,8 @@ export async function reprocessTrip(clientTripId: string): Promise<Result<void>>
 }
 
 export async function undoReprocessing(clientTripId: string): Promise<Result<void>> {
+  const recordingGuard = await requireNoActiveRecording();
+  if (!recordingGuard.ok) return recordingGuard;
+
   return tripRepository.undoReprocessing(clientTripId);
 }

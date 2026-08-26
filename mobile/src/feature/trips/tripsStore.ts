@@ -10,6 +10,7 @@ import { uploadTrip } from '@/core/domain/usecase/UploadTripUseCase';
 import { deleteTrip as deleteTripUseCase } from '@/core/domain/usecase/DeleteTripUseCase';
 import type { Filters } from './tripFilters';
 import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
+import { isTripVisibleInArchive } from '@/core/domain/trips/tripArchivePolicy';
 
 export interface TripWithMeta {
   trip: Trip;
@@ -27,7 +28,7 @@ interface TripsState {
 
 interface TripsActions {
   load(filters?: Filters): Promise<void>;
-  deleteTrip(clientTripId: string): Promise<void>;
+  deleteTrip(clientTripId: string): Promise<string | null>;
   syncTrip(clientTripId: string): Promise<string | null>;
 }
 
@@ -79,18 +80,19 @@ export const useTripsStore = create<TripsState & TripsActions>((set) => {
 
     async load(filters) {
       set({ loading: true });
-      const listedTrips = filters
+      const listedTrips = (filters
         ? await tripDao.getTripsByClientIds(await tripDao.listTripIds(filters))
         : (await tripDao.getAllTrips()).sort(
             (a, b) => b.startedAt.getTime() - a.startedAt.getTime(),
-          );
+          )).filter(isTripVisibleInArchive);
       const withMeta = await Promise.all(listedTrips.map(buildMeta));
       set({ trips: withMeta, loading: false });
     },
 
     async deleteTrip(clientTripId) {
-      await deleteTripUseCase(clientTripId);
+      const result = await deleteTripUseCase(clientTripId);
       // trips:changed event fires → load() re-runs
+      return result.ok ? null : accessErrorMessage(result.error);
     },
 
     async syncTrip(clientTripId) {

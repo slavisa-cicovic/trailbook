@@ -3,6 +3,7 @@ import { dbEvents } from '@/core/db/events';
 import { tripGroupRepository } from '@/core/data/repository/TripGroupRepositoryImpl';
 import type { TripGroupWithMembers } from '@/core/domain/model/tripGroup';
 import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
+import { requireNoActiveRecording } from '@/core/domain/recording/recordingMutationGuard';
 
 interface TripGroupsState {
   groups: TripGroupWithMembers[];
@@ -54,6 +55,9 @@ export const useTripGroupsStore = create<TripGroupsState & TripGroupsActions>((s
     },
 
     async syncGroup(groupId) {
+      const recordingGuard = await requireNoActiveRecording();
+      if (!recordingGuard.ok) return accessErrorMessage(recordingGuard.error);
+
       const { syncingGroupIds } = useTripGroupsStore.getState();
       if (syncingGroupIds.includes(groupId)) return null;
       set({ syncingGroupIds: [...syncingGroupIds, groupId] });
