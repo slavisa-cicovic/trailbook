@@ -1430,7 +1430,7 @@ as plaintext. The encryption key was not exported or entered into DB Browser.
 
 ## Finding 13: Restore aborts completely when one item cannot be recovered
 
-Status: **implementation complete; Android device verification pending**
+Status: **done; verified on Android local build (August 26, 2026)**
 Priority: **P1**
 
 ### Symptom
@@ -1520,9 +1520,15 @@ must explain the actionable cause.
 - Regression coverage verifies complete and partial result messages, reason
   deduplication and already-present photo reporting.
 
+### Device verification result
+
+The partial restore flow was exercised on the Android local build and now keeps
+recoverable data while reporting unavailable items without presenting the whole
+restore as a failure.
+
 ## Finding 14: Waypoint category labels are mistaken for mandatory titles
 
-Status: **implemented; Android/iOS device verification pending**
+Status: **done; verified on Android local build (August 26, 2026)**
 Priority: **P2**
 
 ### Tester feedback
@@ -1611,12 +1617,12 @@ remain obvious, accessible and possible without careful text selection.
 - The generic category is displayed as `Other`, removing the collision between
   the former `Note` category label and the actual optional note field.
 - Both actions have at least 40-48 dp targets. Type checking and the complete
-  processing regression suite pass; keyboard, focus and layout still require
-  Android/iOS device review.
+  processing regression suite pass. The interaction, keyboard/focus behavior
+  and layout were accepted on the Android local build.
 
 ## Finding 15: Trips can be mutated or synced during an active recording
 
-Status: **implemented; Android/iOS device verification pending**
+Status: **done; verified on Android local build (August 26, 2026)**
 Priority: **P1**
 
 ### Reproduction
@@ -1662,6 +1668,13 @@ unnecessary race and partial-state paths.
 - The active trip remains present and can be stopped and processed normally
   after attempted blocked actions.
 
+### Device verification result
+
+Android local testing confirmed that active/paused trips stay on Recording and
+do not appear in Trips, while completed trips return to the archive after Stop.
+Delete, sync, reprocess and undo are unavailable during recording and normal
+behavior resumes afterward.
+
 ## Closed-test operational findings
 
 These are not currently application defects, but they affect the validity of the
@@ -1705,9 +1718,9 @@ Add new reports here before creating implementation tasks.
 | CT-10 | 2026-08-11 | Reviewer / Android and iOS comparison | `Andr setnja` initially ended at 21:06 although valid raw locations continued to 21:17; Stop raced a 150-location callback, while manual Reprocess restored the complete route | Both production bundles, deterministic blocked 150-location regression and `Long running 3` Android Stop verification | Fixed and verified August 26 | P1 |
 | CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Removed serial S3 validation; originals now use a persistent local cache with single-flight downloads, timeout, signed-URL refresh and explicit loading/error/retry UI | Completed; Android device regression passed August 25 | P2 |
 | CT-12 | 2026-08-25 | Internal security review / rooted device | Local SQLite database can be opened and modified directly with root access | Plaintext inspection, SQLCipher policy tests/native build, and encrypted DB Browser device check | Fresh Android encryption verified; upgrade migration and iOS verification pending | P1 |
-| CT-13 | 2026-08-26 | Reviewer / Android local restore | One missing MinIO photo object causes restore to report total failure after several trips were already recovered | Local API replay: trip endpoints returned 200; three signed image downloads returned 404 | Partial restore implemented; Android verification pending | P1 |
-| CT-14 | 2026-08 | Multiple closed-test users / Android | Waypoint category labels such as Note, Departure and Fuel are misunderstood as fixed titles and category selection overwrites free text | Tester feedback, source review, typecheck and processing regression suite | Implemented; Android/iOS device verification pending | P2 |
-| CT-15 | 2026-08-26 | Reviewer / Android local build | Trips exposes an active trip and permits deletion, sync, waypoint editing and reprocessing while recording, including deletion of the active trip | Deterministic navigation reproduction, archive visibility policy and recording mutation policy regressions | Implemented; Android/iOS device verification pending | P1 |
+| CT-13 | 2026-08-26 | Reviewer / Android local restore | One missing MinIO photo object causes restore to report total failure after several trips were already recovered | Local API replay, partial-result regressions and Android local-build verification | Fixed and verified August 26 | P1 |
+| CT-14 | 2026-08 | Multiple closed-test users / Android | Waypoint category labels such as Note, Departure and Fuel are misunderstood as fixed titles and category selection overwrites free text | Tester feedback, source review, regression suite and Android local-build verification | Fixed and verified August 26 | P2 |
+| CT-15 | 2026-08-26 | Reviewer / Android local build | Trips exposes an active trip and permits deletion, sync, waypoint editing and reprocessing while recording, including deletion of the active trip | Deterministic navigation reproduction, archive/mutation policy regressions and Android local-build verification | Fixed and verified August 26 | P1 |
 
 ## Proposed order after feedback collection
 
@@ -1729,19 +1742,20 @@ complete.
    reject HEIC/HEIF in both the uploader and server.~~ Completed in Findings 10
    and 11. Web fullscreen remains a later web-link-share enhancement.
 10. Build one consolidated next AAB and run focused regression tests before
-    submitting it.
+    submitting it. Planned for August 27 together with the next iOS production
+    build; distribute to Google Play/App Store if final checks pass.
 11. ~~Make restore item-isolated and idempotent, with a structured
     partial-success result and an understandable completion dialog.~~ Implemented
-    in Finding 13; Android verification pending.
+    and verified in Finding 13.
 12. Verify the SQLCipher plaintext-to-encrypted migration on the isolated
     `localEncrypted` Android flavor and on iOS before shipping encrypted QA/prod
     binaries.
 13. ~~Separate waypoint category from title and add explicit suggestion
-    accept/clear interactions from Finding 14.~~ Implemented; Android/iOS device
-    verification pending.
+    accept/clear interactions from Finding 14.~~ Implemented and verified on
+    Android.
 14. ~~Block trip deletion, reprocess/undo, and all trip/group synchronization
     while recording is active, and expose only completed trips in Trips.~~
-    Implemented in Finding 15; Android/iOS device verification pending.
+    Implemented and verified in Finding 15.
 
 ## Exit criteria for closed-test triage
 
