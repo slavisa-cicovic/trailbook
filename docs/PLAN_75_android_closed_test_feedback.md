@@ -116,7 +116,7 @@ refresh. Premium options happens to trigger the missing refresh.
 
 ## Finding 2: Generic startup failure
 
-Status: **done; verification pending on next Android build**  
+Status: **done; verified by the overnight Android startup-recovery regression (August 26, 2026)**
 Priority: **P1**
 
 ### Symptom
@@ -168,6 +168,13 @@ as the same failure.
 - Active-recording recovery is idempotent: existing subscriptions and sampling
   timers are cleared before retry and also cleaned up after a failed location
   task restart.
+- A SecureStore `active_trip_id` marker is no longer sufficient by itself to
+  resume capture. Startup also requires a trip without `endedAt`/`COMPLETED`
+  state and a lifecycle history whose latest recording event is not
+  `RECORDING_STOPPED`. A stale marker is cleared instead of reviving the trip.
+- `RECORDING_PAUSED` restores a paused session without starting location
+  capture, while a later `RECORDING_RESUMED` event wins over a stale paused row.
+  This covers process death between lifecycle-event and trip-row updates.
 - Recovery no longer materializes an unbounded trip route at startup. It counts
   all stored samples in SQLite but loads at most the latest 1,000 coordinates
   for the live map.
@@ -176,9 +183,26 @@ The confirmed Android persisted-location-job OOM remains Finding 3. These change
 make its startup/recovery symptom identifiable and retry-safe but do not claim to
 fix Expo's large persisted job processing path.
 
+### Device verification
+
+- Before the Findings 2/3 hardening, the reviewer could provoke the generic
+  startup failure with long-running recordings. Connected-device evidence from
+  that investigation showed the persisted-location OOM path and heavy concurrent
+  SQLite/live-route work during recovery; the earlier recollection of an
+  excessive-open-query/connection symptom is not retained as a proven independent
+  SQLite root cause.
+- The August 26 overnight Samsung regression accumulated 924 native queued
+  locations, interrupted the process and reopened the active trip. Startup
+  completed, bounded draining persisted 937 raw locations in total, the app
+  remained responsive and the recording was stopped and synced successfully.
+- Repeated attempts no longer reproduce the former generic startup screen. This
+  verifies the known long-recording reproduction path. Stable startup diagnostic
+  codes and a real retry path remain in place so a different future startup
+  failure can be identified instead of being reported as the same defect.
+
 ## Finding 3: Long-running forgotten recordings and Android task continuity
 
-Status: **done; Android stress verification pending**  
+Status: **done; verified by an overnight Android stress recording (August 26, 2026)**
 Priority: **P1**
 
 ### Symptom
@@ -301,7 +325,25 @@ that narrower attribution.
 - Live route memory remains bounded to the latest 1,000 display coordinates while
   SQLite retains and counts the complete raw capture.
 
-### Verification still required
+### Android stress verification
+
+- A real Samsung Android test recorded for `19h 20m`, including an overnight
+  stationary period followed by roughly `7.73 km` of movement.
+- After process interruption, the native disk queue contained 924 valid JSONL
+  locations. Trailbook drained it in bounded 250-row chunks without an Android
+  OOM, retained 937 raw SQLite locations in total and reduced the queue to zero.
+- Reopening recovered the complete active trip; Stop completed processing at
+  processing version 17, and the resulting trip synced successfully.
+- Repeated full-route publication between drain chunks was identified during
+  this test and fixed by emitting one coalesced `rawData:changed` event after the
+  complete native drain.
+- The same scenario was repeated with the standalone `localRelease` build, so
+  recovery no longer depended on Metro. The app remained responsive and the
+  completed trip remained available after upgrading the installed local build.
+
+The confirmed long-running failure and large persisted-job/OOM path are therefore
+considered resolved. The following items remain useful cross-device hardening,
+not blockers for closing this finding:
 
 - Run an instrumented Android stress recording with thousands of queued samples,
   forced process death and replay while observing Java/native heap.
@@ -503,7 +545,7 @@ a Google Play lifetime product.
 
 ## Finding 6: Current-trip route is corrupted while a large location batch is processed
 
-Status: **done; stationary-drift regression verified, original large-batch stress verification pending**
+Status: **done; verified by the overnight Android large-queue regression (August 26, 2026)**
 Priority: **P1**
 
 ### Symptom
@@ -609,21 +651,27 @@ pipeline mismatch. If a future occurrence survives this fix, the existing
 callback and snapshot counters should distinguish persisted input corruption
 from display derivation without exposing location data.
 
-### Verification clarification
+### Verification
 
 - The August 25 Android test and supplied `Long recording test` bundle verified
   processing version 17: `STATIONARY` segments contribute zero distance and
   their GPS samples are excluded from the displayed polyline. The replay fell
   from 2.64 km in the original processing to 338.3 m without deleting raw data.
 - This resolves the dense stationary GPS-drift route observed in that test.
-  It is related to the visual symptom tracked here, but it is not a reproduction
-  of the original in-flight large-batch/non-atomic publication mechanism.
-- A deliberately delayed large Android batch while the current-trip screen is
-  open remains the required stress verification for that original mechanism.
+- The August 26 overnight Android test then exercised the original in-flight
+  mechanism with 924 queued native locations drained into SQLite in bounded
+  250-row chunks while the active route was restored.
+- Instrumentation showed full live-route snapshots being rebuilt after
+  intermediate drain chunks. Native draining now suppresses those intermediate
+  publications and emits one coalesced `rawData:changed` event only after the
+  queue is completely drained.
+- The reviewer confirmed that the recovered current trip remained responsive
+  and no longer rendered the temporary corrupted large-batch route. The final
+  route completed at 7.73 km and synced with the same persisted raw capture.
 
 ## Finding 7: Recording completes with duration but zero distance
 
-Status: **done; rejected-fix health warning implemented**
+Status: **implementation complete; verification deferred to the next Google Play production build**
 Priority: **P1**
 
 ### Symptom
@@ -741,9 +789,14 @@ as hardened in Findings 2 and 3. Locked-screen validation on representative
 physical devices remains a release verification activity rather than a unit-test
 condition.
 
+The original weak-GPS conditions depend on real environments such as movement
+between tall buildings. The reviewer will ask the affected tester to repeat the
+route after the next production build is available through Google Play; this is
+not a blocker for the current local regression pass.
+
 ## Finding 8: Completed walking route contains long straight jumps and zigzags
 
-Status: **done; uncertain route gaps are no longer connected**
+Status: **done; verified on Android using the reviewer-owned raw-bundle copy**
 Priority: **P1**
 
 ### Symptom
@@ -847,9 +900,41 @@ The private affected raw bundle is not stored as a repository fixture. The
 regression encodes the measured temporal/distance failure mode without retaining
 tester coordinates.
 
+### Reviewer test copy
+
+A local PostgreSQL clone was prepared on August 26, 2026 using the same isolated
+replay procedure as `Razvoz robe`:
+
+```text
+Source: 877f170c-b0a0-4e85-a475-89bf69e766df (Test)
+Copy:   292042a6-30fb-4f14-856b-be9e7cc72ada
+Owner:  trailbookreviewer@gmail.com
+Title:  [TEST COPY] Finding 8 zigzag
+Raw:    518 locations, 518 activities, 111 events
+State:  0 segments, processing version 0
+```
+
+The copy has no waypoints or images and does not modify the source trip. Restoring
+it onto the reviewer device will run the current processor and allow direct map
+verification without retaining tester data in the repository.
+
+### Android replay result
+
+The reviewer restored and processed the copy on Android on August 26, 2026. The
+former zigzag/long-jump geometry is no longer drawn. The result contains two
+disconnected walking segments of approximately `101 m` and `241 m`, separated
+by an uncertain gap of approximately `500 m`.
+
+This discontinuity is expected from the available evidence: no trustworthy GPS
+samples describe the missing path, so the processor cannot reconstruct it
+without inventing geometry. Users may correctly perceive the recording as
+incomplete or unreliable, but displaying that gap is safer than drawing a false
+route through unrelated streets or buildings. The trip total excludes the
+unknown gap.
+
 ## Finding 9: Stop can process an incomplete in-flight Android location batch
 
-Status: **done; stop now drains and verifies final raw snapshot**
+Status: **done; verified by the `Long running 3` Android stop regression (August 26, 2026)**
 Priority: **P1**
 
 ### Symptom
@@ -968,11 +1053,18 @@ and permanently save segments derived from a partial snapshot.
 - A separate fallback regression verifies that TaskManager stop waits across a
   blocked callback write instead of returning with a partial batch.
 
-The native location module Kotlin source compiles successfully. The wider app
-Gradle task proceeded through `trailbook-native-location:compileDebugKotlin` and
-then stopped at the repository's absent generated
-`android/app/src/main/AndroidManifest.xml`; this is an Expo prebuild workspace
-condition, not a Kotlin error in the change.
+The native location module and complete Android application build successfully
+in the current generated native workspace.
+
+### Device verification
+
+- The reviewer used the Android `Long running 3` trip as a real long-duration
+  Stop regression after the native drain and stable-snapshot changes.
+- Stop completed normally and produced the complete processed trip immediately;
+  the former truncated-tail symptom did not occur and manual Reprocess was not
+  required to restore the end of the route.
+- Together with the deterministic blocked 150-location drain regression, this
+  verifies both the synchronization mechanism and its real-device behavior.
 
 ## Finding 10: Shared-trip photos load slowly or never in Trip Details and the fullscreen viewer
 
@@ -1283,6 +1375,74 @@ compromised operating system.
   model, and the product makes no promise of protection against active,
   persistent root-level compromise.
 
+## Finding 13: Restore aborts completely when one item cannot be recovered
+
+Status: **reported; robust partial-restore design required**
+Priority: **P1**
+
+### Symptom
+
+`Restore missing data` successfully downloaded multiple trips but ultimately
+reported `Trailbook server is temporarily unavailable`. The failure occurred
+when three image records copied from production PostgreSQL referenced objects
+that were not present in the local MinIO store. The image downloads returned
+`404`; restore then returned immediately and presented the whole operation as a
+failure, even though recoverable trips had already been written locally.
+
+The missing local objects exposed the issue, but the requirement is broader.
+Individual trips, groups, waypoints or photos may be unavailable, malformed,
+temporarily unreachable or fail local persistence. One failed item must not
+discard or hide successful work that is independent of it.
+
+### Required behavior
+
+- Treat restore as a collection of independently recoverable items instead of
+  one all-or-nothing operation.
+- Continue restoring other trips when one trip fails. Continue restoring other
+  photos when one photo fails, while preserving the waypoint and trip.
+- Preserve dependency order: do not attempt a child item when its required
+  parent could not be restored, and report it as skipped for that reason.
+- Commit each successful unit durably and refresh the local UI even when later
+  items fail.
+- Return a structured restore summary with counts and reasons for restored,
+  already-present, failed and dependency-skipped items.
+- Distinguish server/network failures, missing remote objects, invalid data,
+  authorization failures and local storage failures. Do not translate every
+  failure into a generic server-unavailable message.
+- Retrying restore must be idempotent: completed items are not duplicated and
+  failed items can be retried without deleting successful results.
+- Authentication or entitlement failure before restore begins may still stop
+  the operation globally because no item can be recovered safely.
+
+### User-facing result
+
+The completion dialog must state what happened in ordinary language. Examples:
+
+```text
+Restore completed with some problems.
+7 trips and 12 photos were restored.
+3 photos could not be restored because they are no longer available.
+```
+
+The dialog should offer retry when useful and optional details, but it must not
+expose HTTP status codes, storage keys, stack traces or internal service names.
+A fully successful restore remains a concise success message; a total failure
+must explain the actionable cause.
+
+### Diagnostics and acceptance criteria
+
+- Internal diagnostics correlate every failure with item type and stable ID,
+  while excluding tokens, signed URLs and sensitive trip content.
+- A missing photo object returns a partial-success result, restores all
+  available trips/photos and leaves the trip usable without that photo.
+- One malformed trip does not prevent later valid trips from being restored.
+- A local write failure for one item is reported separately from a remote
+  download failure.
+- The trips screen reflects successful items immediately after a partial
+  restore, without requiring an application restart.
+- A second run after the underlying problem is fixed restores only the missing
+  items and reports a complete result.
+
 ## Closed-test operational findings
 
 These are not currently application defects, but they affect the validity of the
@@ -1315,17 +1475,18 @@ Add new reports here before creating implementation tasks.
 | ID | Date | Tester/device | Report | Evidence | Status | Priority |
 |---|---|---|---|---|---|---|
 | CT-01 | 2026-08-11 | Svetozar / unknown | Active test Premium not recognized before visiting Premium options | Screenshot, DB entitlement and Android local-build regression | Fixed and verified August 25 | P1 |
-| CT-02 | 2026-08 | At least one tester / unknown | Generic startup failure; retry ineffective | Exact UI message only | Evidence needed | P1 |
-| CT-03 | 2026-08-09 | ovthemija / Android | Long active recording with missing callbacks | Raw bundle | Device inspection pending | P1 |
+| CT-02 | 2026-08 | At least one tester plus reviewer reproduction / Android | Generic startup failure; retry ineffective during long-running recording recovery | Original tester message, connected-device long-running investigation and overnight Samsung recovery regression | Fixed and verified August 26 for the known reproduction path | P1 |
+| CT-03 | 2026-08-09 | ovthemija / Android | Long active recording with missing callbacks | Raw bundle, affected-device OOM inspection and overnight Samsung stress regression | Fixed and verified August 26 | P1 |
 | CT-04 | 2026-08 | Reviewer Android test | Long recording survived and resumed | Raw bundle | Control case; not reproduction | P2 |
 | CT-05 | 2026-08 | Multiple | Closed-test link `Not Found` | Wrong email/country cases | Operational | P3 |
 | CT-06 | 2026-08-12 | `Razvoz robe` / Android tester | Entirely DRIVE journey contains a BIKE segment because initial `ON_BICYCLE:60` was locked despite a longer `IN_VEHICLE:70` run | Raw bundle, segment speeds/accuracy, copied-bundle replay and Android local-build regression | Fixed and verified August 25 | P2 |
-| CT-07 | 2026-08-11 | Android tester / device unknown | Current route becomes a dense self-crossing path while a large batch is processed; route corrects after Stop | Screenshot and post-stop observation | Reopen-without-stop and raw bundle needed | P1 |
-| CT-08 | 2026-08-11 | Android tester / SM-A566B, API 36 | Trip lasted about 26 minutes but remained at 0 km; all 36 raw points had 81-200 m accuracy and failed the 25 m processor threshold | Raw bundle and source threshold | Zero-distance cause confirmed; poor accuracy/batching cause still under investigation | P1 |
-| CT-09 | 2026-08-11 | Android tester / Novi Sad | Completed 342 m walking route contains implausible straight jumps; 518 raw entries collapse to 239 timestamps, only 68 pass 25 m accuracy, and overlapping 139/140/141-point batches repeat data | Raw bundle and shared-trip screenshot | Contributing causes confirmed; processor/rendering policy investigation pending | P1 |
-| CT-10 | 2026-08-11 | Reviewer / Android and iOS comparison | `Andr setnja` initially ended at 21:06 although valid raw locations continued to 21:17; Stop raced a 150-location callback, while manual Reprocess restored the complete route | Both production bundles, segment boundaries, callback events, source flow and successful Reprocess | Root cause confirmed | P1 |
+| CT-07 | 2026-08-11 | Android tester / device unknown | Current route becomes a dense self-crossing path while a large batch is processed; route corrects after Stop | Screenshot, live-route instrumentation and overnight 924-location queue regression | Fixed and verified August 26 | P1 |
+| CT-08 | 2026-08-11 | Android tester / SM-A566B, API 36 | Trip lasted about 26 minutes but remained at 0 km; all 36 raw points had 81-200 m accuracy and failed the 25 m processor threshold | Raw bundle, source threshold and rejected-fix health regressions | Fix implemented; weak-GPS retest deferred to next Google Play production build | P1 |
+| CT-09 | 2026-08-11 | Android tester / Novi Sad | Completed 342 m walking route contains implausible straight jumps; 518 raw entries collapse to 239 timestamps, only 68 pass 25 m accuracy, and overlapping 139/140/141-point batches repeat data | Raw bundle, shared-trip screenshot, route-gap regressions and reviewer-owned local replay copy | Fixed and verified August 26; unknown 500 m gap remains visibly disconnected | P1 |
+| CT-10 | 2026-08-11 | Reviewer / Android and iOS comparison | `Andr setnja` initially ended at 21:06 although valid raw locations continued to 21:17; Stop raced a 150-location callback, while manual Reprocess restored the complete route | Both production bundles, deterministic blocked 150-location regression and `Long running 3` Android Stop verification | Fixed and verified August 26 | P1 |
 | CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Removed serial S3 validation; originals now use a persistent local cache with single-flight downloads, timeout, signed-URL refresh and explicit loading/error/retry UI | Completed; Android device regression passed August 25 | P2 |
 | CT-12 | 2026-08-25 | Internal security review / rooted device | Local SQLite database can be opened and modified directly with root access | Plaintext database inspection | Threat model and encryption design required | P1 |
+| CT-13 | 2026-08-26 | Reviewer / Android local restore | One missing MinIO photo object causes restore to report total failure after several trips were already recovered | Local API replay: trip endpoints returned 200; three signed image downloads returned 404 | Robust partial restore required | P1 |
 
 ## Proposed order after feedback collection
 
@@ -1333,13 +1494,13 @@ Do not start these slices until the current review/test evidence is sufficiently
 complete.
 
 1. Reproduce and instrument the startup failure.
-2. Synchronize Stop with in-flight Android callback persistence and add the
-   large-final-batch regression test.
-3. Reproduce large-batch ingestion while the current-trip map is open and make
-   route publication atomic and idempotent.
+2. ~~Synchronize Stop with in-flight Android callback persistence and add the
+   large-final-batch regression test.~~ Completed and verified in Finding 9.
+3. ~~Reproduce large-batch ingestion while the current-trip map is open and make
+   route publication atomic and idempotent.~~ Completed and verified in Finding 6.
 4. Fix authoritative Premium refresh at lifecycle and enforcement boundaries.
-5. Inspect the affected long-recording phone and improve recording health
-   diagnostics.
+5. ~~Inspect the affected long-recording phone and improve recording health
+   diagnostics.~~ Completed and verified in Finding 3.
 6. Validate segmentation changes against cloned real raw bundles.
 7. Add route-gap plausibility rules and replay the Novi Sad zigzag fixture.
 8. Decide and remove the temporary tester entitlement path.
@@ -1348,6 +1509,8 @@ complete.
    and 11. Web fullscreen remains a later web-link-share enhancement.
 10. Build one consolidated next AAB and run focused regression tests before
     submitting it.
+11. Make restore item-isolated and idempotent, with a structured partial-success
+    result and an understandable completion dialog.
 
 ## Exit criteria for closed-test triage
 
