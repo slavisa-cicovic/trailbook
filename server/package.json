@@ -4,6 +4,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && mkdir -p dist/purchases/apple-root-certificates && cp src/purchases/apple-root-certificates/*.cer dist/purchases/apple-root-certificates/",
     "start": "tsx src/main.ts",
+    "start:local": "DOTENV_CONFIG_PATH=.env.local tsx watch src/main.ts",
     "start:prod": "node dist/main.js",
     "start:dev": "tsx watch src/main.ts",
     "db:up": "docker compose up -d postgres mailhog",

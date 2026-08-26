@@ -5,7 +5,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "android:local": "node scripts/run-android.js localDebug com.slavisacicovic.trailbook.local",
+    "android:local": "node scripts/run-android.js localRelease com.slavisacicovic.trailbook.local",
+    "android:local:debug": "node scripts/run-android.js localDebug com.slavisacicovic.trailbook.local",
     "android:test": "node scripts/run-android.js qaDebug com.slavisacicovic.trailbook.test",
     "android:prod": "node scripts/run-android.js prodRelease com.slavisacicovic.trailbook",
     "ios": "expo run:ios",
