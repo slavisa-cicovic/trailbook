@@ -118,7 +118,6 @@ async function persistNativeEvents(events: NativeLocationEvent[]): Promise<numbe
     ),
   );
   await rawActivityDao.insertAll(activitySamples);
-  dbEvents.emit('rawData:changed');
   return locations.length;
 }
 
@@ -134,12 +133,18 @@ export async function flushNativeLocationEvents(): Promise<number> {
     let persistedCount = 0;
     while (true) {
       const events = await native.module.peekEvents(250);
-      if (!events.length) return persistedCount;
+      if (!events.length) break;
       await persistNativeEvents(events);
       await native.module.acknowledgeEvents(events.length);
       persistedCount += events.length;
-      if (events.length < 250) return persistedCount;
+      if (events.length < 250) break;
     }
+
+    // Persist recovery queues in bounded chunks, but publish one database
+    // invalidation after the complete drain. Emitting for every chunk causes
+    // subscribers to rebuild the full cumulative live route repeatedly.
+    if (persistedCount > 0) dbEvents.emit('rawData:changed');
+    return persistedCount;
   });
 }
 
