@@ -63,6 +63,10 @@ export class RawCaptureRepositoryImpl implements RawCaptureRepository {
     return resultOfAsync(async () => {
       await sqlite.withTransactionAsync(async () => {
         const existingWaypoints = await waypointDao.getForTrip(tripId);
+        const retainedWaypointIds = new Set(bundle.waypoints.map((waypoint) => waypoint.id));
+        const retainedImages = (
+          await Promise.all(existingWaypoints.map((waypoint) => waypointImageDao.getForWaypoint(waypoint.id)))
+        ).flat().filter((image) => retainedWaypointIds.has(image.waypointId));
         const waypointIds = Array.from(
           new Set([
             ...existingWaypoints.map((waypoint) => waypoint.id),
@@ -89,6 +93,9 @@ export class RawCaptureRepositoryImpl implements RawCaptureRepository {
         await rawDeviceDao.insertAll(bundle.deviceStates);
         await rawSessionEventDao.insertAll(bundle.sessionEvents);
         await waypointDao.insertAll(bundle.waypoints);
+        for (const image of retainedImages) {
+          await waypointImageDao.insert(image);
+        }
         if (bundle.segments.length > 0) {
           await segmentDao.insertAll(bundle.segments);
         }

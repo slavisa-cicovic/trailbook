@@ -89,6 +89,7 @@ class FetchRemoteWaypointImageDataSource implements RemoteWaypointImageDataSourc
   async downloadImage(getUrl: string): Promise<Result<Uint8Array>> {
     try {
       const res = await fetchWithTimeout(getUrl);
+      if (res.status === 404) return err('The photo is no longer available.');
       if (!res.ok) return err(SERVER_ERROR_MESSAGE);
       const ab = await res.arrayBuffer();
       return ok(new Uint8Array(ab));

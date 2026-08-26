@@ -1377,7 +1377,7 @@ compromised operating system.
 
 ## Finding 13: Restore aborts completely when one item cannot be recovered
 
-Status: **reported; robust partial-restore design required**
+Status: **implementation complete; Android device verification pending**
 Priority: **P1**
 
 ### Symptom
@@ -1443,6 +1443,30 @@ must explain the actionable cause.
 - A second run after the underlying problem is fixed restores only the missing
   items and reports a complete result.
 
+### Implemented fix
+
+- Restore now isolates failures per trip, waypoint photo list, individual photo
+  and trip-group restore. An independent failure is recorded and processing
+  continues with the next recoverable item.
+- Every successfully stored trip emits a change event immediately. The trips
+  screen is also reloaded when the operation finishes, including partial
+  success.
+- The result contains restored, already-present and failed counts. Settings
+  displays a partial-success summary with deduplicated user-safe reasons rather
+  than presenting all completed work as a total failure.
+- Missing image objects are identified as photos that are no longer available;
+  internal restore diagnostics retain only item kind, stable ID and safe reason,
+  never signed URLs or trip content.
+- Replacing a remotely restored trip now preserves local image records for
+  waypoints that still exist. A retry therefore does not delete and download
+  successful photos again, while photos belonging to removed waypoints are
+  still cleaned up transactionally.
+- Authentication, entitlement, pending-deletion synchronization and failure to
+  obtain the remote trip list remain global preconditions because item-level
+  recovery cannot safely begin without them.
+- Regression coverage verifies complete and partial result messages, reason
+  deduplication and already-present photo reporting.
+
 ## Closed-test operational findings
 
 These are not currently application defects, but they affect the validity of the
@@ -1486,7 +1510,7 @@ Add new reports here before creating implementation tasks.
 | CT-10 | 2026-08-11 | Reviewer / Android and iOS comparison | `Andr setnja` initially ended at 21:06 although valid raw locations continued to 21:17; Stop raced a 150-location callback, while manual Reprocess restored the complete route | Both production bundles, deterministic blocked 150-location regression and `Long running 3` Android Stop verification | Fixed and verified August 26 | P1 |
 | CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Removed serial S3 validation; originals now use a persistent local cache with single-flight downloads, timeout, signed-URL refresh and explicit loading/error/retry UI | Completed; Android device regression passed August 25 | P2 |
 | CT-12 | 2026-08-25 | Internal security review / rooted device | Local SQLite database can be opened and modified directly with root access | Plaintext database inspection | Threat model and encryption design required | P1 |
-| CT-13 | 2026-08-26 | Reviewer / Android local restore | One missing MinIO photo object causes restore to report total failure after several trips were already recovered | Local API replay: trip endpoints returned 200; three signed image downloads returned 404 | Robust partial restore required | P1 |
+| CT-13 | 2026-08-26 | Reviewer / Android local restore | One missing MinIO photo object causes restore to report total failure after several trips were already recovered | Local API replay: trip endpoints returned 200; three signed image downloads returned 404 | Partial restore implemented; Android verification pending | P1 |
 
 ## Proposed order after feedback collection
 
@@ -1509,8 +1533,9 @@ complete.
    and 11. Web fullscreen remains a later web-link-share enhancement.
 10. Build one consolidated next AAB and run focused regression tests before
     submitting it.
-11. Make restore item-isolated and idempotent, with a structured partial-success
-    result and an understandable completion dialog.
+11. ~~Make restore item-isolated and idempotent, with a structured
+    partial-success result and an understandable completion dialog.~~ Implemented
+    in Finding 13; Android verification pending.
 
 ## Exit criteria for closed-test triage
 

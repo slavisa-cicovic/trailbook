@@ -7,6 +7,7 @@ import { useAuthStore } from '@/feature/auth/authStore';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
 import { useTripsStore } from '@/feature/trips/tripsStore';
 import { accessErrorMessage } from '@/core/domain/access/mobileAccessPolicy';
+import { restoreSummaryMessage } from '@/core/domain/restore/restoreSummary';
 
 interface SettingsUiState {
   isWorking: boolean;
@@ -100,7 +101,7 @@ export const useSettingsStore = create<SettingsUiState & SettingsActions>((set) 
     const result = await restoreTrips();
     if (result.ok) {
       useTripsStore.getState().load();
-      set({ isWorking: false, statusMessage: 'Restore complete' });
+      set({ isWorking: false, statusMessage: restoreSummaryMessage(result.value) });
     } else {
       set({
         isWorking: false,
