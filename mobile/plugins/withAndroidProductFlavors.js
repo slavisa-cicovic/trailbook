@@ -1,4 +1,4 @@
-const { copyFileSync, mkdirSync } = require('node:fs');
+const { copyFileSync, mkdirSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const {
   withAndroidManifest,
@@ -112,6 +112,21 @@ function withLocalAndroidIcon(config) {
       copyFileSync(
         join(dangerousConfig.modRequest.projectRoot, 'assets', 'app-icon-local.png'),
         join(drawableDirectory, 'trailbook_local_icon.png'),
+      );
+
+      const localSourceDirectory = join(
+        dangerousConfig.modRequest.platformProjectRoot,
+        'app',
+        'src',
+        'local',
+      );
+      mkdirSync(localSourceDirectory, { recursive: true });
+      writeFileSync(
+        join(localSourceDirectory, 'AndroidManifest.xml'),
+        `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application android:usesCleartextTraffic="true" />
+</manifest>
+`,
       );
       return dangerousConfig;
     },
