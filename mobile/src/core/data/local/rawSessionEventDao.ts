@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/core/db';
 import { rawSessionEvents } from '@/core/db/schema';
 import type { RawSessionEvent, SessionEventType } from '@/core/domain/model/rawSamples';
@@ -39,6 +39,30 @@ export async function getAllForTrip(tripId: string): Promise<RawSessionEvent[]> 
     .from(rawSessionEvents)
     .where(eq(rawSessionEvents.tripId, tripId));
   return rows.map(toDomain);
+}
+
+const RECORDING_LIFECYCLE_TYPES: SessionEventType[] = [
+  'RECORDING_STARTED',
+  'RECORDING_STOPPED',
+  'RECORDING_PAUSED',
+  'RECORDING_RESUMED',
+];
+
+export async function getLatestRecordingLifecycleEvent(
+  tripId: string,
+): Promise<RawSessionEvent | null> {
+  const rows = await db
+    .select()
+    .from(rawSessionEvents)
+    .where(
+      and(
+        eq(rawSessionEvents.tripId, tripId),
+        inArray(rawSessionEvents.type, RECORDING_LIFECYCLE_TYPES),
+      ),
+    )
+    .orderBy(desc(rawSessionEvents.timestamp), desc(rawSessionEvents.id))
+    .limit(1);
+  return rows[0] ? toDomain(rows[0]) : null;
 }
 
 export async function deleteForTrip(tripId: string): Promise<void> {

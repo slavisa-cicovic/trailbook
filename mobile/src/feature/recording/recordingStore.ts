@@ -26,6 +26,7 @@ import {
   clearActiveRecordingTripId,
   getActiveRecordingTripId,
 } from '@/core/data/location/activeTripStore';
+import { recordingRecoveryState } from '@/core/domain/recording/recordingRecovery';
 import {
   startLocationTask,
   stopLocationTask,
@@ -319,6 +320,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
     if (!tripId) {
       set({
         isRecording: false,
+        isPaused: false,
         activeTrip: null,
         captureHealth: 'inactive',
         firstLocationAt: null,
@@ -330,12 +332,30 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
 
     const trip = await tripDao.getTripByClientId(tripId);
     if (!trip) {
-      // Process death
-      await rawSessionEventDao.insert({ tripId, timestamp: new Date(), type: 'PROCESS_DEATH_RECOVERED' });
-      await tripDao.updateEndedAt(tripId, new Date());
       await clearActiveRecordingTripId();
       set({
         isRecording: false,
+        isPaused: false,
+        activeTrip: null,
+        captureHealth: 'inactive',
+        firstLocationAt: null,
+        lastLocationAt: null,
+        lastAcceptedLocationAt: null,
+      });
+      dbEvents.emit('trips:changed');
+      return;
+    }
+
+    const latestLifecycleEvent = await rawSessionEventDao.getLatestRecordingLifecycleEvent(tripId);
+    const recoveryState = recordingRecoveryState(trip, latestLifecycleEvent);
+    if (recoveryState === 'inactive') {
+      if (trip.status !== 'COMPLETED' && !trip.endedAt && latestLifecycleEvent?.type === 'RECORDING_STOPPED') {
+        await tripDao.updateEndedAt(tripId, latestLifecycleEvent.timestamp);
+      }
+      await clearActiveRecordingTripId();
+      set({
+        isRecording: false,
+        isPaused: false,
         activeTrip: null,
         captureHealth: 'inactive',
         firstLocationAt: null,
@@ -361,16 +381,19 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
     const lastAcceptedLocationAt = liveRouteSnapshot.points.at(-1)?.timestamp ?? null;
     set({
       isRecording: true,
+      isPaused: recoveryState === 'paused',
       activeTrip: trip,
       locationCount: locationSummary.count,
       firstLocationAt: locationSummary.firstTimestamp,
       lastLocationAt: locationSummary.lastTimestamp,
       lastAcceptedLocationAt,
-      captureHealth: captureHealthFromLocations({
-        firstLocationAt: locationSummary.firstTimestamp,
-        lastAcceptedLocationAt,
-        lastLocationAt: locationSummary.lastTimestamp,
-      }),
+      captureHealth: recoveryState === 'paused'
+        ? 'paused'
+        : captureHealthFromLocations({
+            firstLocationAt: locationSummary.firstTimestamp,
+            lastAcceptedLocationAt,
+            lastLocationAt: locationSummary.lastTimestamp,
+          }),
       liveCoordinates: liveRouteSnapshot.points.map((location) => ({
         latitude: location.latitude,
         longitude: location.longitude,
@@ -378,6 +401,7 @@ export const useRecordingStore = create<RecordingState & RecordingActions>((set,
       activeWaypoints,
     });
     subscribeToLiveUpdates(tripId);
+    if (recoveryState === 'paused') return;
     try {
       await startLocationCapture();
       startDeviceSampleInterval(tripId);
