@@ -2,7 +2,21 @@ import type { WaypointCategory } from '@/core/domain/model/waypoint';
 import type { MaterialIcons } from '@expo/vector-icons';
 
 export const CATEGORY_LABEL: Record<WaypointCategory, string> = {
-  GENERIC:    'Note',
+  GENERIC:    'Other',
+  DEPARTURE:  'Departure',
+  FUEL:       'Fuel',
+  BORDER:     'Border',
+  PORT:       'Port',
+  FERRY:      'Ferry',
+  RESTAURANT: 'Restaurant',
+  CAFE:       'Cafe',
+  VIEWPOINT:  'Viewpoint',
+  MONUMENT:   'Monument',
+  BEACH:      'Beach',
+};
+
+export const CATEGORY_TITLE_SUGGESTION: Record<WaypointCategory, string> = {
+  GENERIC:    'Waypoint',
   DEPARTURE:  'Departure',
   FUEL:       'Fuel',
   BORDER:     'Border',

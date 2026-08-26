@@ -1,24 +1,8 @@
 import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { ActiveWaypoint } from '@/feature/recording/recordingStore';
-import type { WaypointCategory } from '@/core/domain/model/waypoint';
 import { useAppTheme } from '@/hooks/useAppTheme';
-
-type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
-
-const CATEGORY_LABEL: Record<WaypointCategory, string> = {
-  GENERIC: 'NOTE', DEPARTURE: 'DEPARTURE', FUEL: 'FUEL',
-  BORDER: 'BORDER', PORT: 'PORT', FERRY: 'FERRY',
-  RESTAURANT: 'RESTAURANT', CAFE: 'CAFE', VIEWPOINT: 'VIEWPOINT',
-  MONUMENT: 'MONUMENT', BEACH: 'BEACH',
-};
-
-const CATEGORY_ICON: Record<WaypointCategory, IconName> = {
-  GENERIC: 'location-on', DEPARTURE: 'home', FUEL: 'local-gas-station',
-  BORDER: 'security', PORT: 'anchor', FERRY: 'directions-boat',
-  RESTAURANT: 'restaurant', CAFE: 'local-cafe', VIEWPOINT: 'visibility',
-  MONUMENT: 'account-balance', BEACH: 'beach-access',
-};
+import { CATEGORY_ICON, CATEGORY_LABEL } from '@/constants/waypointCategories';
 
 interface Props {
   waypoint: ActiveWaypoint;
@@ -40,7 +24,7 @@ export function WaypointCard({ waypoint, onAddPhoto, onRemove }: Props) {
       <View style={styles.body}>
         <View style={styles.categoryChip}>
           <MaterialIcons name={CATEGORY_ICON[waypoint.category]} size={13} color="#fffdf8" />
-          <Text style={styles.categoryLabel}>{CATEGORY_LABEL[waypoint.category]}</Text>
+          <Text style={styles.categoryLabel}>{CATEGORY_LABEL[waypoint.category].toUpperCase()}</Text>
         </View>
 
         <Text style={[styles.title, { color: theme.primaryText }]}>{waypoint.title}</Text>
@@ -50,7 +34,7 @@ export function WaypointCard({ waypoint, onAddPhoto, onRemove }: Props) {
             <Text style={[styles.addPhotoText, { color: theme.primaryText }]}>Add photo</Text>
           </Pressable>
           <Pressable style={[styles.removeBtn, { backgroundColor: theme.dangerMuted }]} onPress={onRemove}>
-            <Text style={[styles.removeText, { color: theme.danger }]}>Remove note</Text>
+            <Text style={[styles.removeText, { color: theme.danger }]}>Remove waypoint</Text>
           </Pressable>
         </View>
 

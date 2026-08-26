@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, TextInput, Pressable, StyleSheet,
   ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -7,7 +7,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { Waypoint, WaypointCategory } from '@/core/domain/model/waypoint';
 import { tripRepository } from '@/core/data/repository/TripRepositoryImpl';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import { CATEGORY_ICON, CATEGORY_LABEL, CATEGORY_ORDER } from '@/constants/waypointCategories';
+import {
+  CATEGORY_ICON,
+  CATEGORY_LABEL,
+  CATEGORY_ORDER,
+  CATEGORY_TITLE_SUGGESTION,
+} from '@/constants/waypointCategories';
 
 interface Props {
   waypoint: Waypoint;
@@ -23,6 +28,7 @@ export function EditWaypointSheet({ waypoint, visible, onDismiss, onSaved }: Pro
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { theme } = useAppTheme();
+  const titleInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (visible) {
@@ -57,6 +63,13 @@ export function EditWaypointSheet({ waypoint, visible, onDismiss, onSaved }: Pro
     }
   }
 
+  const suggestedTitle = CATEGORY_TITLE_SUGGESTION[category];
+
+  function clearTitle() {
+    setTitle('');
+    titleInputRef.current?.focus();
+  }
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
       <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -67,14 +80,42 @@ export function EditWaypointSheet({ waypoint, visible, onDismiss, onSaved }: Pro
 
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Title */}
-            <Text style={[styles.label, { color: theme.mutedText }]}>TITLE</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.background, color: theme.primaryText }]}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Waypoint title"
-              placeholderTextColor={theme.mutedText}
-            />
+            <Text style={[styles.label, { color: theme.mutedText }]}>TITLE (REQUIRED)</Text>
+            <View style={[styles.titleInputCard, { backgroundColor: theme.background }]}>
+              <TextInput
+                ref={titleInputRef}
+                style={[styles.titleInput, { color: theme.primaryText }]}
+                value={title}
+                onChangeText={setTitle}
+                placeholder="What should this waypoint be called?"
+                placeholderTextColor={theme.mutedText}
+                accessibilityLabel="Waypoint title"
+              />
+              {title.length > 0 ? (
+                <Pressable
+                  style={styles.clearTitleButton}
+                  onPress={clearTitle}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear waypoint title"
+                  hitSlop={4}
+                >
+                  <MaterialIcons name="close" size={20} color={theme.mutedText} />
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={styles.suggestionRow}>
+              <Text style={[styles.suggestionText, { color: theme.mutedText }]} numberOfLines={1}>
+                Suggested: {suggestedTitle}
+              </Text>
+              <Pressable
+                style={[styles.useSuggestionButton, { borderColor: theme.border }]}
+                onPress={() => setTitle(suggestedTitle)}
+                accessibilityRole="button"
+                accessibilityLabel={`Use suggested title ${suggestedTitle}`}
+              >
+                <Text style={[styles.useSuggestionText, { color: theme.accent }]}>Use</Text>
+              </Pressable>
+            </View>
 
             {/* Category */}
             <Text style={[styles.label, { color: theme.mutedText }]}>CATEGORY</Text>
@@ -166,6 +207,42 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
   },
+  titleInputCard: {
+    minHeight: 52,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  titleInput: {
+    flex: 1,
+    paddingLeft: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+  },
+  clearTitleButton: {
+    width: 48,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestionRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  suggestionText: { flex: 1, fontSize: 13 },
+  useSuggestionButton: {
+    minWidth: 56,
+    minHeight: 40,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  useSuggestionText: { fontSize: 14, fontWeight: '700' },
   noteInput: { height: 100, textAlignVertical: 'top' },
   chipRow: { marginBottom: 4 },
   chip: {

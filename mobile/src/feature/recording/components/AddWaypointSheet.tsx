@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Modal, View, Text, TextInput, Pressable, StyleSheet,
   ScrollView, ActivityIndicator, Image, KeyboardAvoidingView, Platform,
@@ -14,27 +14,12 @@ import {
   accessErrorMessage,
   isPremiumAccessError,
 } from '@/core/domain/access/mobileAccessPolicy';
-
-type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
-
-const CATEGORIES: WaypointCategory[] = [
-  'GENERIC', 'DEPARTURE', 'FUEL', 'BORDER', 'PORT',
-  'FERRY', 'RESTAURANT', 'CAFE', 'VIEWPOINT', 'MONUMENT', 'BEACH',
-];
-
-const CATEGORY_LABEL: Record<WaypointCategory, string> = {
-  GENERIC: 'Note', DEPARTURE: 'Departure', FUEL: 'Fuel',
-  BORDER: 'Border', PORT: 'Port', FERRY: 'Ferry',
-  RESTAURANT: 'Restaurant', CAFE: 'Cafe', VIEWPOINT: 'Viewpoint',
-  MONUMENT: 'Monument', BEACH: 'Beach',
-};
-
-const CATEGORY_ICON: Record<WaypointCategory, IconName> = {
-  GENERIC: 'location-on', DEPARTURE: 'home', FUEL: 'local-gas-station',
-  BORDER: 'security', PORT: 'anchor', FERRY: 'directions-boat',
-  RESTAURANT: 'restaurant', CAFE: 'local-cafe', VIEWPOINT: 'visibility',
-  MONUMENT: 'account-balance', BEACH: 'beach-access',
-};
+import {
+  CATEGORY_ICON,
+  CATEGORY_LABEL,
+  CATEGORY_ORDER,
+  CATEGORY_TITLE_SUGGESTION,
+} from '@/constants/waypointCategories';
 
 interface PhotoItem {
   uri: string;
@@ -50,7 +35,7 @@ interface Props {
 
 export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
   const [category, setCategory] = useState<WaypointCategory>('GENERIC');
-  const [title, setTitle] = useState('Note');
+  const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -58,11 +43,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
   const router = useRouter();
-
-  function onSelectCategory(cat: WaypointCategory) {
-    setCategory(cat);
-    setTitle(CATEGORY_LABEL[cat]);
-  }
+  const titleInputRef = useRef<TextInput>(null);
 
   async function onCamera() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -108,7 +89,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
 
   function reset() {
     setCategory('GENERIC');
-    setTitle('Note');
+    setTitle('');
     setDescription('');
     setPhotos([]);
     setError(null);
@@ -122,6 +103,12 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
   }
 
   const canSave = title.trim().length > 0 && !loading;
+  const suggestedTitle = CATEGORY_TITLE_SUGGESTION[category];
+
+  function clearTitle() {
+    setTitle('');
+    titleInputRef.current?.focus();
+  }
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
@@ -142,19 +129,47 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
             contentContainerStyle={styles.scrollContent}
           >
             {/* Title */}
-            <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>TITLE</Text>
-            <TextInput
-              style={[styles.inputCard, { backgroundColor: theme.card, color: theme.primaryText }]}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Viewpoint"
-              placeholderTextColor={theme.mutedText}
-            />
+            <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>TITLE (REQUIRED)</Text>
+            <View style={[styles.titleInputCard, { backgroundColor: theme.card }]}>
+              <TextInput
+                ref={titleInputRef}
+                style={[styles.titleInput, { color: theme.primaryText }]}
+                value={title}
+                onChangeText={setTitle}
+                placeholder="What should this waypoint be called?"
+                placeholderTextColor={theme.mutedText}
+                accessibilityLabel="Waypoint title"
+              />
+              {title.length > 0 ? (
+                <Pressable
+                  style={styles.clearTitleButton}
+                  onPress={clearTitle}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear waypoint title"
+                  hitSlop={4}
+                >
+                  <MaterialIcons name="close" size={20} color={theme.mutedText} />
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={styles.suggestionRow}>
+              <Text style={[styles.suggestionText, { color: theme.mutedText }]} numberOfLines={1}>
+                Suggested: {suggestedTitle}
+              </Text>
+              <Pressable
+                style={[styles.useSuggestionButton, { borderColor: theme.border }]}
+                onPress={() => setTitle(suggestedTitle)}
+                accessibilityRole="button"
+                accessibilityLabel={`Use suggested title ${suggestedTitle}`}
+              >
+                <Text style={[styles.useSuggestionText, { color: theme.accent }]}>Use</Text>
+              </Pressable>
+            </View>
 
             {/* Category */}
             <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>CATEGORY</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-              {CATEGORIES.map((cat) => {
+              {CATEGORY_ORDER.map((cat) => {
                 const selected = cat === category;
                 return (
                   <Pressable
@@ -166,7 +181,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
                         borderColor: selected ? theme.accent : theme.border,
                       },
                     ]}
-                    onPress={() => onSelectCategory(cat)}
+                    onPress={() => setCategory(cat)}
                   >
                     <MaterialIcons
                       name={CATEGORY_ICON[cat]}
@@ -288,6 +303,42 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
   },
+  titleInputCard: {
+    minHeight: 52,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  titleInput: {
+    flex: 1,
+    paddingLeft: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+  },
+  clearTitleButton: {
+    width: 48,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestionRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  suggestionText: { flex: 1, fontSize: 13 },
+  useSuggestionButton: {
+    minWidth: 56,
+    minHeight: 40,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  useSuggestionText: { fontSize: 14, fontWeight: '700' },
   inputMulti: { minHeight: 100, paddingTop: 14 },
 
   chipScroll: { flexDirection: 'row' },
