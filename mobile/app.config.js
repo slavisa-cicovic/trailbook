@@ -6,7 +6,7 @@ module.exports = {
     name: "Trailbook",
     slug: "trailbook",
     scheme: "trailbook",
-    version: "1.0.0",
+    version: "1.0.1",
     orientation: "portrait",
     userInterfaceStyle: "light",
     icon: "./assets/app-icon-release.png",
