@@ -671,7 +671,7 @@ from display derivation without exposing location data.
 
 ## Finding 7: Recording completes with duration but zero distance
 
-Status: **implementation complete; verification deferred to the next Google Play production build**
+Status: **done; verified on Android production build (August 27, 2026)**
 Priority: **P1**
 
 ### Symptom
@@ -789,10 +789,13 @@ as hardened in Findings 2 and 3. Locked-screen validation on representative
 physical devices remains a release verification activity rather than a unit-test
 condition.
 
-The original weak-GPS conditions depend on real environments such as movement
-between tall buildings. The reviewer will ask the affected tester to repeat the
-route after the next production build is available through Google Play; this is
-not a blocker for the current local regression pass.
+### Production verification result
+
+The reviewer repeated the long-running recording regression on the Android
+production build distributed through Google Play on August 27, 2026. Recording
+completed with usable distance and route output, and the zero-distance failure
+did not recur. The diagnostic warning remains available for genuinely unusable
+weak-GPS conditions rather than fabricating distance from rejected fixes.
 
 ## Finding 8: Completed walking route contains long straight jumps and zigzags
 
@@ -1293,7 +1296,7 @@ image for such a photo, while Safari renders it.
 
 ## Finding 12: Local SQLite database is stored in plaintext
 
-Status: **implementation complete; fresh Android encryption verified, upgrade migration and iOS verification pending**
+Status: **done; production upgrade migration verified on Android and iOS (August 27, 2026)**
 Priority: **P1**
 
 ### Symptom
@@ -1410,14 +1413,15 @@ compromised operating system.
   `localEncryptedRelease` APK builds with `USE_SQLCIPHER=true` and
   `SQLITE_HAS_CODEC=1`.
 
-### Remaining device verification
+### Production upgrade verification
 
-- Seed a representative plaintext database in the isolated encrypted app,
-  upgrade it, and verify trip/raw/waypoint/photo counts before and after the
-  conversion, including an interrupted conversion retry.
-- Repeat the migration check on iOS before the next App Store build. Native
-  SQLCipher configuration is present in app config, but iOS compilation and
-  device behavior cannot be verified on this Linux workstation.
+- Existing Android and iOS installations were upgraded to the new production
+  builds on August 27, 2026. Both applications opened their existing data and
+  completed the recording regression successfully after the SQLCipher-enabled
+  upgrade.
+- The isolated Android encrypted-database inspection below remains the direct
+  at-rest verification; the production upgrade confirms that migration and
+  normal application access work on both supported platforms.
 
 ### Android fresh-database verification
 
@@ -1713,11 +1717,11 @@ Add new reports here before creating implementation tasks.
 | CT-05 | 2026-08 | Multiple | Closed-test link `Not Found` | Wrong email/country cases | Operational | P3 |
 | CT-06 | 2026-08-12 | `Razvoz robe` / Android tester | Entirely DRIVE journey contains a BIKE segment because initial `ON_BICYCLE:60` was locked despite a longer `IN_VEHICLE:70` run | Raw bundle, segment speeds/accuracy, copied-bundle replay and Android local-build regression | Fixed and verified August 25 | P2 |
 | CT-07 | 2026-08-11 | Android tester / device unknown | Current route becomes a dense self-crossing path while a large batch is processed; route corrects after Stop | Screenshot, live-route instrumentation and overnight 924-location queue regression | Fixed and verified August 26 | P1 |
-| CT-08 | 2026-08-11 | Android tester / SM-A566B, API 36 | Trip lasted about 26 minutes but remained at 0 km; all 36 raw points had 81-200 m accuracy and failed the 25 m processor threshold | Raw bundle, source threshold and rejected-fix health regressions | Fix implemented; weak-GPS retest deferred to next Google Play production build | P1 |
+| CT-08 | 2026-08-11 | Android tester / SM-A566B, API 36 | Trip lasted about 26 minutes but remained at 0 km; all 36 raw points had 81-200 m accuracy and failed the 25 m processor threshold | Raw bundle, source threshold, rejected-fix health regressions and Android production-build verification | Fixed and verified August 27 | P1 |
 | CT-09 | 2026-08-11 | Android tester / Novi Sad | Completed 342 m walking route contains implausible straight jumps; 518 raw entries collapse to 239 timestamps, only 68 pass 25 m accuracy, and overlapping 139/140/141-point batches repeat data | Raw bundle, shared-trip screenshot, route-gap regressions and reviewer-owned local replay copy | Fixed and verified August 26; unknown 500 m gap remains visibly disconnected | P1 |
 | CT-10 | 2026-08-11 | Reviewer / Android and iOS comparison | `Andr setnja` initially ended at 21:06 although valid raw locations continued to 21:17; Stop raced a 150-location callback, while manual Reprocess restored the complete route | Both production bundles, deterministic blocked 150-location regression and `Long running 3` Android Stop verification | Fixed and verified August 26 | P1 |
 | CT-11 | 2026-08-19 | Reviewer / Android and iOS shared trip | Shared-trip waypoint photos load slowly in Trip Details and the fullscreen viewer can load forever | Removed serial S3 validation; originals now use a persistent local cache with single-flight downloads, timeout, signed-URL refresh and explicit loading/error/retry UI | Completed; Android device regression passed August 25 | P2 |
-| CT-12 | 2026-08-25 | Internal security review / rooted device | Local SQLite database can be opened and modified directly with root access | Plaintext inspection, SQLCipher policy tests/native build, and encrypted DB Browser device check | Fresh Android encryption verified; upgrade migration and iOS verification pending | P1 |
+| CT-12 | 2026-08-25 | Internal security review / rooted device | Local SQLite database can be opened and modified directly with root access | Plaintext inspection, SQLCipher policy tests/native build, encrypted DB Browser check and Android/iOS production upgrades | Fixed and verified August 27 | P1 |
 | CT-13 | 2026-08-26 | Reviewer / Android local restore | One missing MinIO photo object causes restore to report total failure after several trips were already recovered | Local API replay, partial-result regressions and Android local-build verification | Fixed and verified August 26 | P1 |
 | CT-14 | 2026-08 | Multiple closed-test users / Android | Waypoint category labels such as Note, Departure and Fuel are misunderstood as fixed titles and category selection overwrites free text | Tester feedback, source review, regression suite and Android local-build verification | Fixed and verified August 26 | P2 |
 | CT-15 | 2026-08-26 | Reviewer / Android local build | Trips exposes an active trip and permits deletion, sync, waypoint editing and reprocessing while recording, including deletion of the active trip | Deterministic navigation reproduction, archive/mutation policy regressions and Android local-build verification | Fixed and verified August 26 | P1 |
@@ -1741,15 +1745,14 @@ complete.
 9. ~~Complete shared-photo local caching and normalize mobile photos to JPEG;
    reject HEIC/HEIF in both the uploader and server.~~ Completed in Findings 10
    and 11. Web fullscreen remains a later web-link-share enhancement.
-10. Build one consolidated next AAB and run focused regression tests before
-    submitting it. Planned for August 27 together with the next iOS production
-    build; distribute to Google Play/App Store if final checks pass.
+10. ~~Build one consolidated next AAB and iOS production build and run focused
+    regression tests before distribution.~~ Builds installed and verified on
+    August 27; store production rollout remains the release decision.
 11. ~~Make restore item-isolated and idempotent, with a structured
     partial-success result and an understandable completion dialog.~~ Implemented
     and verified in Finding 13.
-12. Verify the SQLCipher plaintext-to-encrypted migration on the isolated
-    `localEncrypted` Android flavor and on iOS before shipping encrypted QA/prod
-    binaries.
+12. ~~Verify the SQLCipher plaintext-to-encrypted migration on Android and iOS
+    production upgrades.~~ Verified August 27 in Finding 12.
 13. ~~Separate waypoint category from title and add explicit suggestion
     accept/clear interactions from Finding 14.~~ Implemented and verified on
     Android.
