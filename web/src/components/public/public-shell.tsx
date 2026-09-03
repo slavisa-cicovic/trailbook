@@ -19,7 +19,7 @@ export function StoreLinks() {
 }
 
 export function Brand() {
-  return <Link className={styles.brand} href="/"><Image className={styles.mark} src="/icon.png" alt="" width={48} height={48} priority /><span>Trailbook</span></Link>;
+  return <Link className={styles.brand} href="/"><Image className={styles.mark} src="/favicon-256.png" alt="" width={48} height={48} priority unoptimized /><span>Trailbook</span></Link>;
 }
 
 export function PublicHeader() {
