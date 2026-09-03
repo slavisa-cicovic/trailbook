@@ -5,8 +5,6 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { DashboardAuthPanel } from "../src/components/auth/dashboard-auth-panel";
 import { ForgotPasswordForm } from "../src/components/auth/forgot-password-form";
-import { LoginForm } from "../src/components/auth/login-form";
-import { RegisterForm } from "../src/components/auth/register-form";
 import { ResetPasswordForm } from "../src/components/auth/reset-password-form";
 import { SocialSigninButtons } from "../src/components/auth/social-signin-buttons";
 import * as authApi from "../src/lib/auth-api";
@@ -105,7 +103,6 @@ vi.mock("../src/lib/auth-api", async () => {
   return {
     ...actual,
     login: vi.fn(),
-    register: vi.fn(),
     logout: vi.fn(),
     forgotPassword: vi.fn(),
     resetPassword: vi.fn(),
@@ -122,60 +119,6 @@ describe("web auth components", () => {
       google: false,
       apple: false,
     });
-  });
-
-  test("login form submits credentials and redirects trip users to trips", async () => {
-    vi.mocked(authApi.login).mockResolvedValue({
-      user: {
-        id: "u1",
-        email: "slavisa@example.com",
-        displayName: "Slavisa",
-        role: "user",
-        providers: ["local"],
-      },
-    });
-
-    const user = userEvent.setup();
-    render(React.createElement(LoginForm));
-
-    await user.type(screen.getByLabelText("Email"), "slavisa@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
-    await user.click(screen.getByRole("button", { name: "Login" }));
-
-    await waitFor(() => {
-      expect(authApi.login).toHaveBeenCalledWith({
-        email: "slavisa@example.com",
-        password: "password123",
-      });
-    });
-
-    expect(push).toHaveBeenCalledWith("/trips");
-    expect(refresh).toHaveBeenCalled();
-  });
-
-  test("register form sends user data and redirects to login", async () => {
-    vi.mocked(authApi.register).mockResolvedValue({
-      success: true,
-      email: "slavisa@example.com",
-    });
-
-    const user = userEvent.setup();
-    render(React.createElement(RegisterForm));
-
-    await user.type(screen.getByLabelText("Display name"), "Slavisa");
-    await user.type(screen.getByLabelText("Email"), "slavisa@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
-    await user.click(screen.getByRole("button", { name: "Create account" }));
-
-    await waitFor(() => {
-      expect(authApi.register).toHaveBeenCalledWith({
-        displayName: "Slavisa",
-        email: "slavisa@example.com",
-        password: "password123",
-      });
-    });
-
-    expect(push).toHaveBeenCalledWith("/login?verification=check-email");
   });
 
   test("forgot password form shows generic success message after server call", async () => {

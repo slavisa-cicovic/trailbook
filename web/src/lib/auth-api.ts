@@ -1,11 +1,5 @@
 import { getApiBaseUrl } from "./api-base-url";
 
-export interface RegisterInput {
-  displayName: string;
-  email: string;
-  password: string;
-}
-
 export interface LoginInput {
   email: string;
   password: string;
@@ -146,13 +140,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (payload || {}) as T;
-}
-
-export async function register(input: RegisterInput) {
-  return request<{ success: boolean; email: string }>("/auth/register", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
 }
 
 export async function login(input: LoginInput) {
