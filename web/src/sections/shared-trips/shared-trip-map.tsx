@@ -68,6 +68,7 @@ export function SharedTripMap({
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [gallery, setGallery] = useState<{ photoIndex: number; waypointIndex: number } | null>(null);
+  const [fullscreenElement, setFullscreenElement] = useState<HTMLElement | null>(null);
   const segmentKey = useMemo(
     () => segments.map((segment) => `${segment.segmentType}:${segment.startedAt}:${segment.endedAt}`).join("|"),
     [segments],
@@ -76,6 +77,16 @@ export function SharedTripMap({
     () => waypoints.map((waypoint) => `${waypoint.id}:${waypoint.images.length}`).join("|"),
     [waypoints],
   );
+
+  useEffect(() => {
+    function syncFullscreenElement() {
+      setFullscreenElement(document.fullscreenElement as HTMLElement | null);
+    }
+
+    syncFullscreenElement();
+    document.addEventListener("fullscreenchange", syncFullscreenElement);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreenElement);
+  }, []);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -255,6 +266,7 @@ export function SharedTripMap({
       ) : null}
     </Box>
     <Dialog
+      container={fullscreenElement ?? undefined}
       fullScreen={fullScreenGallery}
       fullWidth
       maxWidth="lg"
