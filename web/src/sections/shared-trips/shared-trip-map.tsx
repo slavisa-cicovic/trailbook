@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Box, Stack, Typography, useTheme } from "@mui/material";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Box, Dialog, DialogContent, Stack, Typography, useMediaQuery, useTheme } from "@mui/material";
 
 import { loadGoogleMaps } from "../trips/view/google-maps-loader";
 
@@ -60,10 +60,14 @@ export function SharedTripMap({
 }: SharedTripMapProps) {
   const theme = useTheme();
   const darkMode = theme.palette.mode === "dark";
+  const fullScreenGallery = useMediaQuery(theme.breakpoints.down("sm"));
+  const galleryId = useId();
   const mapRef = useRef<HTMLDivElement | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
   const polylinesRef = useRef<Array<{ index: number; polyline: StyledPolyline }>>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [gallery, setGallery] = useState<{ photoIndex: number; waypointIndex: number } | null>(null);
   const segmentKey = useMemo(
     () => segments.map((segment) => `${segment.segmentType}:${segment.startedAt}:${segment.endedAt}`).join("|"),
     [segments],
@@ -142,7 +146,7 @@ export function SharedTripMap({
           });
         }
 
-        for (const waypoint of waypoints) {
+        waypoints.forEach((waypoint, waypointIndex) => {
           const position = { lat: waypoint.latitude, lng: waypoint.longitude };
           bounds.extend(position);
           const marker = new mapsApi.Marker({
@@ -153,10 +157,10 @@ export function SharedTripMap({
           });
 
           marker.addListener("click", () => {
-            infoWindow.setContent(renderWaypointInfo(waypoint, darkMode));
+            infoWindow.setContent(renderWaypointInfo(waypoint, waypointIndex, galleryId, darkMode));
             infoWindow.open({ anchor: marker, map });
           });
-        }
+        });
 
         if (!bounds.isEmpty()) map.fitBounds(bounds, 48);
         if (points.length + waypoints.length === 1) map.setZoom(15);
@@ -174,7 +178,45 @@ export function SharedTripMap({
       disposed = true;
       polylinesRef.current = [];
     };
-  }, [darkMode, onActiveSegmentIndexChange, points, segmentKey, segments, waypointKey, waypoints]);
+  }, [darkMode, galleryId, onActiveSegmentIndexChange, points, segmentKey, segments, waypointKey, waypoints]);
+
+  useEffect(() => {
+    function openGallery(event: MouseEvent) {
+      const target = event.target instanceof Element
+        ? event.target.closest<HTMLButtonElement>(`button[data-trailbook-gallery="${galleryId}"]`)
+        : null;
+      if (!target) return;
+      const waypointIndex = Number(target.dataset.waypointIndex);
+      const photoIndex = Number(target.dataset.photoIndex);
+      if (!Number.isInteger(waypointIndex) || !Number.isInteger(photoIndex)) return;
+      if (!waypoints[waypointIndex]?.images[photoIndex]) return;
+      setGallery({ photoIndex, waypointIndex });
+    }
+
+    document.addEventListener("click", openGallery);
+    return () => document.removeEventListener("click", openGallery);
+  }, [galleryId, waypoints]);
+
+  const activeWaypoint = gallery ? waypoints[gallery.waypointIndex] : null;
+  const activePhoto = activeWaypoint && gallery ? activeWaypoint.images[gallery.photoIndex] : null;
+
+  function movePhoto(direction: -1 | 1) {
+    if (!gallery || !activeWaypoint || activeWaypoint.images.length < 2) return;
+    setGallery({
+      ...gallery,
+      photoIndex: (gallery.photoIndex + direction + activeWaypoint.images.length) % activeWaypoint.images.length,
+    });
+  }
+
+  useEffect(() => {
+    if (!gallery) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "ArrowLeft") movePhoto(-1);
+      if (event.key === "ArrowRight") movePhoto(1);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  });
 
   useEffect(() => {
     for (const { index, polyline } of polylinesRef.current) {
@@ -195,6 +237,7 @@ export function SharedTripMap({
   }
 
   return (
+    <>
     <Box sx={{ bgcolor: "background.paper", borderRadius: 4, overflow: "hidden", p: 1 }}>
       <Box ref={mapRef} sx={{ borderRadius: 3, height: { xs: 440, md: 680 }, width: "100%" }} />
       <Stack direction="row" justifyContent="space-between" sx={{ px: 1, py: 1 }}>
@@ -211,7 +254,48 @@ export function SharedTripMap({
         </Typography>
       ) : null}
     </Box>
+    <Dialog
+      fullScreen={fullScreenGallery}
+      fullWidth
+      maxWidth="lg"
+      onClose={() => setGallery(null)}
+      open={Boolean(activePhoto)}
+      slotProps={{ paper: { sx: { bgcolor: "#101310", backgroundImage: "none", overflow: "hidden" } } }}
+    >
+      <DialogContent
+        onTouchEnd={(event) => {
+          const startX = touchStartXRef.current;
+          touchStartXRef.current = null;
+          if (startX === null) return;
+          const delta = event.changedTouches[0].clientX - startX;
+          if (Math.abs(delta) > 48) movePhoto(delta > 0 ? -1 : 1);
+        }}
+        onTouchStart={(event) => { touchStartXRef.current = event.touches[0].clientX; }}
+        sx={{ alignItems: "center", display: "flex", justifyContent: "center", minHeight: { sm: "70vh" }, p: { xs: 1, sm: 3 }, position: "relative" }}
+      >
+        {activePhoto && activeWaypoint && gallery ? (
+          <>
+            <Box component="img" src={activePhoto.getUrl} alt={`${activeWaypoint.title} ${gallery.photoIndex + 1}`} sx={{ maxHeight: fullScreenGallery ? "calc(100vh - 80px)" : "78vh", maxWidth: "100%", objectFit: "contain", userSelect: "none" }} />
+            <GalleryButton aria-label="Close photo viewer" onClick={() => setGallery(null)} position={{ right: 16, top: 16 }}>×</GalleryButton>
+            {activeWaypoint.images.length > 1 ? (
+              <>
+                <GalleryButton aria-label="Previous photo" onClick={() => movePhoto(-1)} position={{ left: 16, top: "50%" }}>‹</GalleryButton>
+                <GalleryButton aria-label="Next photo" onClick={() => movePhoto(1)} position={{ right: 16, top: "50%" }}>›</GalleryButton>
+              </>
+            ) : null}
+            <Box sx={{ bgcolor: "rgba(0,0,0,0.66)", borderRadius: 999, bottom: 16, color: "white", fontSize: 14, left: "50%", px: 2, py: 0.75, position: "absolute", transform: "translateX(-50%)" }}>
+              {activeWaypoint.title} · {gallery.photoIndex + 1} / {activeWaypoint.images.length}
+            </Box>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+    </>
   );
+}
+
+function GalleryButton({ children, onClick, position, ...props }: { children: ReactNode; onClick: () => void; position: Record<string, string | number>; "aria-label": string }) {
+  return <Box component="button" onClick={onClick} sx={{ alignItems: "center", bgcolor: "rgba(0,0,0,0.66)", border: 0, borderRadius: "50%", color: "white", cursor: "pointer", display: "flex", fontSize: 34, height: 48, justifyContent: "center", lineHeight: 1, position: "absolute", transform: position.top === "50%" ? "translateY(-50%)" : undefined, width: 48, zIndex: 1, ...position }} {...props}>{children}</Box>;
 }
 
 const WAYPOINT_SYMBOL: Record<string, string> = {
@@ -238,7 +322,7 @@ function waypointMarkerIcon(category: string) {
   };
 }
 
-function renderWaypointInfo(waypoint: SharedWaypoint, darkMode: boolean) {
+function renderWaypointInfo(waypoint: SharedWaypoint, waypointIndex: number, galleryId: string, darkMode: boolean) {
   const photos = waypoint.images.slice(0, 4);
   const secondaryColor = darkMode ? "#cbd8c7" : "#5f574d";
   return `
@@ -252,7 +336,7 @@ function renderWaypointInfo(waypoint: SharedWaypoint, darkMode: boolean) {
       ${
         photos.length > 0
           ? `<div style="display:grid; grid-template-columns: repeat(${Math.min(photos.length, 2)}, 1fr); gap:6px;">
-              ${photos.map((photo) => `<img src="${escapeHtml(photo.getUrl)}" alt="${escapeHtml(waypoint.title)}" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px;" />`).join("")}
+              ${photos.map((photo, photoIndex) => `<button type="button" data-trailbook-gallery="${escapeHtml(galleryId)}" data-waypoint-index="${waypointIndex}" data-photo-index="${photoIndex}" aria-label="Open ${escapeHtml(waypoint.title)} photo ${photoIndex + 1}" style="background:none;border:0;cursor:zoom-in;margin:0;padding:0;"><img src="${escapeHtml(photo.getUrl)}" alt="${escapeHtml(waypoint.title)}" style="display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;" /></button>`).join("")}
             </div>`
           : `<div style="color:${secondaryColor}; font-size:12px;">No photos</div>`
       }
