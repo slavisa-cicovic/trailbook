@@ -117,6 +117,133 @@ export class TripsService {
     }));
   }
 
+  async getWebOverview(userId: string, from?: string, to?: string) {
+    const fromDate = from ? new Date(from) : null;
+    const toDate = to ? new Date(to) : null;
+    if ((fromDate && Number.isNaN(fromDate.getTime())) || (toDate && Number.isNaN(toDate.getTime()))) {
+      throw new BadRequestException("Invalid trip date range.");
+    }
+
+    const trips = await this.database.trip.findMany({
+      orderBy: { startedAt: "desc" },
+      where: {
+        deletedAt: null,
+        userId,
+        ...(fromDate && toDate ? { startedAt: { gte: fromDate, lt: toDate } } : {}),
+      },
+    });
+    const bundles = trips.map((trip) => trip.rawBundle as unknown as TripBundleDto);
+    const waypointIds = bundles.flatMap((bundle) => bundle.waypoints.map((waypoint) => waypoint.id));
+    const images = waypointIds.length
+      ? await this.database.waypointImage.findMany({ select: { waypointId: true }, where: { waypointId: { in: waypointIds } } })
+      : [];
+    const photoCounts = new Map<string, number>();
+    images.forEach((image) => photoCounts.set(image.waypointId, (photoCounts.get(image.waypointId) ?? 0) + 1));
+
+    const rows = trips.map((trip, index) => {
+      const bundle = bundles[index];
+      return {
+        endedAt: trip.endedAt?.toISOString() ?? null,
+        id: trip.clientTripId,
+        photoCount: bundle.waypoints.reduce((sum, waypoint) => sum + (photoCounts.get(waypoint.id) ?? 0), 0),
+        recordingProfile: this.webProfile(bundle.segments[0]?.segmentType),
+        startedAt: trip.startedAt.toISOString(),
+        title: trip.title,
+        updatedAt: trip.updatedAt.toISOString(),
+        waypointCount: bundle.waypoints.length,
+      };
+    });
+    return {
+      range: { from: fromDate?.toISOString() ?? null, to: toDate?.toISOString() ?? null },
+      summary: {
+        photos: rows.reduce((sum, trip) => sum + trip.photoCount, 0),
+        trips: rows.length,
+        waypoints: rows.reduce((sum, trip) => sum + trip.waypointCount, 0),
+      },
+      trips: rows,
+    };
+  }
+
+  async getWebDetail(clientTripId: string, userId: string) {
+    const trip = await this.database.trip.findUnique({ where: { clientTripId } });
+    if (!trip || trip.deletedAt) throw new NotFoundException(`Trip not found: ${clientTripId}`);
+    if (trip.userId !== userId) throw new ForbiddenException("Access denied");
+    const bundle = trip.rawBundle as unknown as TripBundleDto;
+    const imagesByWaypointId = await this.getImagesByWaypointId(bundle);
+    const segments = bundle.segments.map((segment, index) => ({
+      distanceMeters: segment.distanceM ?? 0,
+      endedAt: segment.endedAt,
+      localId: `${clientTripId}-segment-${index}`,
+      recordingProfile: this.webProfile(segment.segmentType),
+      startedAt: segment.startedAt,
+    }));
+    const points = bundle.raw.locations.map((point, index) => ({
+      accuracy: point.accuracyM ?? null,
+      altitude: point.altitudeM ?? null,
+      latitude: point.latitude,
+      localId: `${clientTripId}-point-${index}`,
+      longitude: point.longitude,
+      recordedAt: point.timestamp,
+      segmentLocalId: this.segmentIdForTimestamp(clientTripId, segments, point.timestamp),
+      speed: point.speedMps ?? null,
+    }));
+    const pauses = this.webPauses(bundle.raw.events);
+    return {
+      pauses,
+      points,
+      segments,
+      summary: {
+        distanceMeters: segments.reduce((sum, segment) => sum + segment.distanceMeters, 0),
+        photoCount: Object.values(imagesByWaypointId).reduce((sum, images) => sum + images.length, 0),
+        segmentCount: segments.length,
+        waypointCount: bundle.waypoints.length,
+      },
+      trip: {
+        description: trip.description,
+        endedAt: trip.endedAt?.toISOString() ?? null,
+        id: trip.clientTripId,
+        recordingProfile: this.webProfile(bundle.segments[0]?.segmentType),
+        startedAt: trip.startedAt.toISOString(),
+        syncStatus: "synced" as const,
+        title: trip.title,
+        updatedAt: trip.updatedAt.toISOString(),
+      },
+      waypoints: bundle.waypoints.map((waypoint) => ({
+        category: waypoint.category,
+        images: imagesByWaypointId[waypoint.id] ?? [],
+        latitude: waypoint.latitude,
+        localId: waypoint.id,
+        longitude: waypoint.longitude,
+        note: waypoint.description ?? null,
+        photoCount: imagesByWaypointId[waypoint.id]?.length ?? 0,
+        recordedAt: waypoint.createdAt,
+        segmentLocalId: this.segmentIdForTimestamp(clientTripId, segments, waypoint.createdAt),
+        title: waypoint.title,
+      })),
+    };
+  }
+
+  private webProfile(value?: string): "walk" | "bike" | "drive" | "boat" | "plane" | "stationary" {
+    const normalized = value?.toLowerCase();
+    return normalized === "walk" || normalized === "bike" || normalized === "drive" || normalized === "boat" || normalized === "plane"
+      ? normalized
+      : "stationary";
+  }
+
+  private segmentIdForTimestamp(clientTripId: string, segments: Array<{ localId: string; startedAt: string; endedAt: string | null }>, timestamp: string) {
+    const time = new Date(timestamp).getTime();
+    return segments.find((segment) => time >= new Date(segment.startedAt).getTime() && (!segment.endedAt || time <= new Date(segment.endedAt).getTime()))?.localId ?? null;
+  }
+
+  private webPauses(events: TripBundleDto["raw"]["events"]) {
+    const pauses: Array<{ startedAt: string; endedAt: string | null }> = [];
+    for (const event of events) {
+      if (event.type === "RECORDING_PAUSED") pauses.push({ startedAt: event.timestamp, endedAt: null });
+      if (event.type === "RECORDING_RESUMED" && pauses.at(-1)?.endedAt === null) pauses[pauses.length - 1].endedAt = event.timestamp;
+    }
+    return pauses;
+  }
+
   async get(clientTripId: string, userId: string): Promise<TripBundleDto> {
     const trip = await this.database.trip.findUnique({
       where: { clientTripId },

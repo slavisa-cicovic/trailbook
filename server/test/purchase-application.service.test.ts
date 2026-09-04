@@ -232,6 +232,44 @@ describe("PurchaseApplicationService premium enforcement", () => {
       if (previous !== undefined) process.env.ENABLE_PURCHASE_TEST_ROLE_BYPASS = previous;
     }
   });
+
+  test("allows the local Premium bypass for any role only outside production", async () => {
+    const previousBypass = process.env.ENABLE_LOCAL_PREMIUM_BYPASS;
+    const previousEnvironment = process.env.PURCHASE_ENVIRONMENT;
+    const previousNodeEnvironment = process.env.NODE_ENV;
+    process.env.ENABLE_LOCAL_PREMIUM_BYPASS = "true";
+    process.env.PURCHASE_ENVIRONMENT = "local";
+    process.env.NODE_ENV = "development";
+    try {
+      await createPremiumService(null).requirePremium(user);
+    } finally {
+      if (previousBypass === undefined) delete process.env.ENABLE_LOCAL_PREMIUM_BYPASS;
+      else process.env.ENABLE_LOCAL_PREMIUM_BYPASS = previousBypass;
+      if (previousEnvironment === undefined) delete process.env.PURCHASE_ENVIRONMENT;
+      else process.env.PURCHASE_ENVIRONMENT = previousEnvironment;
+      if (previousNodeEnvironment === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousNodeEnvironment;
+    }
+  });
+
+  test("never allows the local Premium bypass in production", async () => {
+    const previousBypass = process.env.ENABLE_LOCAL_PREMIUM_BYPASS;
+    const previousEnvironment = process.env.PURCHASE_ENVIRONMENT;
+    const previousNodeEnvironment = process.env.NODE_ENV;
+    process.env.ENABLE_LOCAL_PREMIUM_BYPASS = "true";
+    process.env.PURCHASE_ENVIRONMENT = "local";
+    process.env.NODE_ENV = "production";
+    try {
+      await assert.rejects(createPremiumService(null).requirePremium(user), premiumRequiredError);
+    } finally {
+      if (previousBypass === undefined) delete process.env.ENABLE_LOCAL_PREMIUM_BYPASS;
+      else process.env.ENABLE_LOCAL_PREMIUM_BYPASS = previousBypass;
+      if (previousEnvironment === undefined) delete process.env.PURCHASE_ENVIRONMENT;
+      else process.env.PURCHASE_ENVIRONMENT = previousEnvironment;
+      if (previousNodeEnvironment === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousNodeEnvironment;
+    }
+  });
 });
 
 function createService(input: {

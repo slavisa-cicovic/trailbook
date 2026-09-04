@@ -1,329 +1,117 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Alert,
-  Button,
-  Card,
-  CardContent,
-  CircularProgress,
-  Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-  Typography,
-} from "@mui/material";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Alert, Button, Card, CardContent, Chip, CircularProgress, Grid, Paper, Stack, Typography } from "@mui/material";
 
-import { TableHeadCustom, TableNoData } from "../../../components/table";
-import {
-  getCurrentUser,
-  getTripDetail,
-  isTripUserRole,
-  type AuthUser,
-  type UserTripDetail,
-} from "../../../lib/auth-api";
-import { TripRoutePreview } from "./trip-route-preview";
+import { getCurrentUser, getTripDetail, isTripUserRole, type AuthUser, type UserTripDetail } from "../../../lib/auth-api";
+import { SharedTripMap } from "../../shared-trips/shared-trip-map";
 
-const TIMELINE_HEAD = [
-  { id: "recordingProfile", label: "Profile", minWidth: 120 },
-  { id: "startedAt", label: "Start", minWidth: 130 },
-  { id: "endedAt", label: "End", minWidth: 130 },
-  { id: "distanceMeters", label: "Distance", minWidth: 120, align: "right" as const },
-];
+export function TripDetailView({ tripId }: { tripId: string }) {
+  const router = useRouter();
+  const [user, setUser] = useState<AuthUser | null>();
+  const [detail, setDetail] = useState<UserTripDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
+  const setActiveSegment = useCallback((index: number | null) => setActiveSegmentIndex(index), []);
 
-function formatDateOnly(value: string | null) {
-  if (!value) {
-    return "—";
-  }
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getCurrentUser()
+      .then(async ({ user: currentUser }) => {
+        if (cancelled) return;
+        if (!currentUser) {
+          router.replace("/login");
+          return;
+        }
+        setUser(currentUser);
+        if (isTripUserRole(currentUser.role)) setDetail(await getTripDetail(tripId));
+      })
+      .catch((loadError) => {
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Unable to load trip.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [router, tripId]);
 
-  const date = new Date(value);
+  const points = useMemo(() => detail?.points.map((point) => ({ latitude: point.latitude, longitude: point.longitude, timestamp: point.recordedAt })) ?? [], [detail]);
+  const segments = useMemo(() => detail?.segments.map((segment, index) => ({ endedAt: segment.endedAt ?? segment.startedAt, index, segmentType: segment.recordingProfile.toUpperCase(), startedAt: segment.startedAt })) ?? [], [detail]);
+  const waypoints = useMemo(() => detail?.waypoints.map((waypoint) => ({ category: waypoint.category, description: waypoint.note, id: waypoint.localId, images: waypoint.images, latitude: waypoint.latitude, longitude: waypoint.longitude, title: waypoint.title })) ?? [], [detail]);
 
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
+  if (loading) return <StatusPanel><CircularProgress size={28} /><Typography color="text.secondary">Loading trip...</Typography></StatusPanel>;
+  if (!user || !isTripUserRole(user.role)) return <StatusPanel><Typography variant="h5">Redirecting...</Typography></StatusPanel>;
+  if (!detail) return <StatusPanel>{error ? <Alert severity="error">{error}</Alert> : null}<Typography variant="h5">Trip not found.</Typography></StatusPanel>;
 
-  return date.toLocaleDateString();
+  return (
+    <Stack spacing={4}>
+      <Button component={Link} href="/trips" sx={{ alignSelf: "flex-start", px: 0 }} variant="text">Back to trips</Button>
+      <Paper elevation={0} sx={{ background: (theme) => theme.palette.mode === "dark" ? "radial-gradient(circle at top left, rgba(128, 174, 119, 0.24), transparent 34rem), linear-gradient(135deg, #1b251b, #101610)" : "radial-gradient(circle at top left, rgba(70, 112, 68, 0.28), transparent 34rem), linear-gradient(135deg, #fff9ee, #e9dfce)", border: "1px solid", borderColor: "divider", borderRadius: 5, overflow: "hidden", p: { xs: 3, md: 5 } }}>
+        <Stack spacing={3}>
+          <Stack spacing={1}>
+            <Typography color="primary.main" fontSize={12} fontWeight={900} letterSpacing="0.16em" textTransform="uppercase">My Trailbook trip</Typography>
+            <Typography component="h1" sx={{ fontSize: { xs: 40, md: 72 }, fontWeight: 900, letterSpacing: "-0.06em", lineHeight: 0.92 }}>{detail.trip.title}</Typography>
+            {detail.trip.description ? <Typography color="text.secondary" sx={{ maxWidth: 780 }} variant="h6">{detail.trip.description}</Typography> : null}
+          </Stack>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 6, md: 3 }}><SummaryCard label="Distance" value={formatDistance(detail.summary.distanceMeters)} /></Grid>
+            <Grid size={{ xs: 6, md: 3 }}><SummaryCard label="Waypoints" value={`${detail.summary.waypointCount}`} /></Grid>
+            <Grid size={{ xs: 6, md: 3 }}><SummaryCard label="Photos" value={`${detail.summary.photoCount}`} /></Grid>
+            <Grid size={{ xs: 6, md: 3 }}><SummaryCard label="Started" value={formatDate(detail.trip.startedAt)} /></Grid>
+          </Grid>
+        </Stack>
+      </Paper>
+      {error ? <Alert severity="error">{error}</Alert> : null}
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <SharedTripMap activeSegmentIndex={activeSegmentIndex} onActiveSegmentIndexChange={setActiveSegment} points={points} segments={segments} waypoints={waypoints} />
+        </Grid>
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <Paper elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 4, maxHeight: { lg: 760 }, overflow: "auto", p: 3, position: { lg: "sticky" }, top: { lg: 24 } }}>
+            <Stack spacing={2}>
+              <Typography variant="h5">Timeline</Typography>
+              {detail.segments.length === 0 ? <Typography color="text.secondary">This trip has no segments.</Typography> : detail.segments.map((segment, index) => (
+                <Stack alignItems="center" component="button" direction="row" justifyContent="space-between" key={segment.localId} onBlur={() => setActiveSegmentIndex(null)} onFocus={() => setActiveSegmentIndex(index)} onMouseEnter={() => setActiveSegmentIndex(index)} onMouseLeave={() => setActiveSegmentIndex(null)} spacing={2} sx={{ bgcolor: activeSegmentIndex === index ? "action.selected" : "background.paper", border: "1px solid", borderColor: activeSegmentIndex === index ? "secondary.main" : "divider", borderRadius: 3, color: "inherit", cursor: "default", font: "inherit", p: 2, textAlign: "left", width: "100%" }}>
+                  <Stack spacing={0.5}>
+                    <Chip label={formatProfile(segment.recordingProfile)} size="small" sx={{ alignSelf: "flex-start", fontWeight: 800 }} />
+                    <Typography color="text.secondary" variant="body2">{formatDateTime(segment.startedAt)} – {formatDateTime(segment.endedAt)}</Typography>
+                  </Stack>
+                  <Typography fontWeight={900}>{formatDistance(segment.distanceMeters)}</Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </Paper>
+        </Grid>
+      </Grid>
+    </Stack>
+  );
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "—";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString([], {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatDistanceKm(distanceMeters: number) {
-  return `${(distanceMeters / 1000).toFixed(2)} km`;
-}
-
-function formatProfile(value: UserTripDetail["trip"]["recordingProfile"]) {
-  if (value === "stationary") {
-    return "Pause";
-  }
-
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function StatusPanel({ children }: { children: ReactNode }) {
+  return <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 4 }}><Stack alignItems="center" spacing={2}>{children}</Stack></Paper>;
 }
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card elevation={0} sx={{ border: "1px solid #e6ddcb", flex: 1 }}>
-      <CardContent>
-        <Stack spacing={1}>
-          <Typography color="text.secondary" variant="body2">
-            {label}
-          </Typography>
-          <Typography variant="h4">{value}</Typography>
-        </Stack>
-      </CardContent>
-    </Card>
-  );
+  return <Card elevation={0} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", height: "100%" }}><CardContent><Typography color="text.secondary" fontSize={12} fontWeight={900} letterSpacing="0.12em" textTransform="uppercase">{label}</Typography><Typography fontWeight={900} sx={{ mt: 0.5 }} variant="h5">{value}</Typography></CardContent></Card>;
 }
 
-interface TripDetailViewProps {
-  tripId: string;
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en", { day: "2-digit", month: "short" }).format(new Date(value));
 }
 
-export function TripDetailView({ tripId }: TripDetailViewProps) {
-  const router = useRouter();
-  const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
-  const [detail, setDetail] = useState<UserTripDetail | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+function formatDateTime(value: string | null) {
+  if (!value) return "In progress";
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
 
-  useEffect(() => {
-    let cancelled = false;
+function formatDistance(distanceMeters: number) {
+  return distanceMeters < 1000 ? `${Math.round(distanceMeters)} m` : `${(distanceMeters / 1000).toFixed(1)} km`;
+}
 
-    getCurrentUser()
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-
-        if (!result.user) {
-          router.replace("/login");
-          setUser(null);
-          return;
-        }
-
-        if (result.user.role === "admin") {
-          router.replace("/dashboard");
-          setUser(result.user);
-          return;
-        }
-
-        setUser(result.user);
-      })
-      .catch((loadError) => {
-        if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Unable to load current user.");
-          setUser(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setAuthLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
-
-  useEffect(() => {
-    if (!user || !isTripUserRole(user.role)) {
-      return;
-    }
-
-    let cancelled = false;
-    setDetailLoading(true);
-    setError(null);
-
-    getTripDetail(tripId)
-      .then((result) => {
-        if (!cancelled) {
-          setDetail(result);
-        }
-      })
-      .catch((loadError) => {
-        if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Unable to load trip.");
-          setDetail(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setDetailLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [tripId, user]);
-
-  const timelineRows = useMemo(() => detail?.segments ?? [], [detail]);
-
-  if (authLoading || detailLoading) {
-    return (
-      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 4 }}>
-        <Stack alignItems="center" spacing={2}>
-          <CircularProgress size={28} />
-          <Typography color="text.secondary">Loading trip...</Typography>
-        </Stack>
-      </Paper>
-    );
-  }
-
-  if (!user || !isTripUserRole(user.role)) {
-    return (
-      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 4 }}>
-        <Stack spacing={2}>
-          {error ? <Alert severity="error">{error}</Alert> : null}
-          <Typography variant="h5">Redirecting...</Typography>
-        </Stack>
-      </Paper>
-    );
-  }
-
-  if (!detail) {
-    return (
-      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 4 }}>
-        <Stack spacing={2}>
-          {error ? <Alert severity="error">{error}</Alert> : null}
-          <Typography variant="h5">Trip not found.</Typography>
-        </Stack>
-      </Paper>
-    );
-  }
-
-  return (
-    <Stack spacing={3}>
-      <Stack alignItems={{ md: "center" }} direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2}>
-        <Stack spacing={1}>
-          <Button component={Link} href="/trips" sx={{ alignSelf: "flex-start", px: 0 }} variant="text">
-            Back to trips
-          </Button>
-          <Typography variant="h4">{detail.trip.title}</Typography>
-          <Typography color="text.secondary">
-            {formatProfile(detail.trip.recordingProfile)} trip • {formatDateTime(detail.trip.startedAt)}
-          </Typography>
-        </Stack>
-        <Button component={Link} href={`/trips/${detail.trip.id}/edit`} variant="contained">
-          Edit trip
-        </Button>
-      </Stack>
-
-      {error ? <Alert severity="error">{error}</Alert> : null}
-
-      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", p: 2 }}>
-        <TripRoutePreview
-          points={detail.points.map((point) => ({ latitude: point.latitude, longitude: point.longitude }))}
-          waypoints={detail.waypoints.map((waypoint) => ({ latitude: waypoint.latitude, longitude: waypoint.longitude }))}
-        />
-      </Paper>
-
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-        <SummaryCard label="Distance" value={formatDistanceKm(detail.summary.distanceMeters)} />
-        <SummaryCard label="Waypoints" value={`${detail.summary.waypointCount}`} />
-        <SummaryCard label="Photos" value={`${detail.summary.photoCount}`} />
-        <SummaryCard label="Segments" value={`${detail.summary.segmentCount}`} />
-      </Stack>
-
-      <Stack direction={{ xs: "column", xl: "row" }} spacing={2}>
-        <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", flex: 1, p: 3 }}>
-          <Stack spacing={2}>
-            <Typography variant="h6">Trip details</Typography>
-            <Table size="small">
-              <TableBody>
-                <TableRow>
-                  <TableCell>Profile</TableCell>
-                  <TableCell>{formatProfile(detail.trip.recordingProfile)}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Started</TableCell>
-                  <TableCell>{formatDateTime(detail.trip.startedAt)}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Ended</TableCell>
-                  <TableCell>{formatDateTime(detail.trip.endedAt)}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Updated</TableCell>
-                  <TableCell>{formatDateTime(detail.trip.updatedAt)}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Sync status</TableCell>
-                  <TableCell>{detail.trip.syncStatus}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Description</TableCell>
-                  <TableCell>{detail.trip.description || "—"}</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </Stack>
-        </Paper>
-
-        <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", flex: 1, p: 3 }}>
-          <Stack spacing={2}>
-            <Typography variant="h6">Waypoints</Typography>
-            {detail.waypoints.length > 0 ? (
-              <Table size="small">
-                <TableBody>
-                  {detail.waypoints.slice(0, 8).map((waypoint) => (
-                    <TableRow key={waypoint.localId}>
-                      <TableCell>{waypoint.title}</TableCell>
-                      <TableCell>{formatDateOnly(waypoint.recordedAt)}</TableCell>
-                      <TableCell align="right">{waypoint.photoCount}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <Typography color="text.secondary">This trip has no waypoints.</Typography>
-            )}
-          </Stack>
-        </Paper>
-      </Stack>
-
-      <Paper elevation={0} sx={{ border: "1px solid #e6ddcb", overflowX: "auto" }}>
-        <Stack spacing={2} sx={{ p: 3, pb: 0 }}>
-          <Typography variant="h6">Timeline</Typography>
-        </Stack>
-        <Table>
-          <TableHeadCustom headLabel={TIMELINE_HEAD} />
-          <TableBody>
-            {timelineRows.map((segment) => (
-              <TableRow hover key={segment.localId}>
-                <TableCell>{formatProfile(segment.recordingProfile)}</TableCell>
-                <TableCell>{formatDateTime(segment.startedAt)}</TableCell>
-                <TableCell>{formatDateTime(segment.endedAt)}</TableCell>
-                <TableCell align="right">{formatDistanceKm(segment.distanceMeters)}</TableCell>
-              </TableRow>
-            ))}
-            <TableNoData notFound={timelineRows.length === 0} title="This trip has no segments." />
-          </TableBody>
-        </Table>
-      </Paper>
-    </Stack>
-  );
+function formatProfile(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }

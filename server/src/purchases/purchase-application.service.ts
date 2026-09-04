@@ -95,6 +95,15 @@ export class PurchaseApplicationService {
 
   async requirePremium(user: AuthenticatedUser): Promise<void> {
     if (
+      process.env.ENABLE_LOCAL_PREMIUM_BYPASS === "true" &&
+      process.env.PURCHASE_ENVIRONMENT === "local" &&
+      process.env.NODE_ENV !== "production"
+    ) {
+      this.logger.warn(`Local Premium entitlement bypass used by user ${user.id}.`);
+      return;
+    }
+
+    if (
       process.env.ENABLE_PURCHASE_TEST_ROLE_BYPASS === "true" &&
       (user.role === "admin" || user.role === "test_user")
     ) {

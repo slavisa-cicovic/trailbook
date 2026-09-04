@@ -4,15 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { DashboardAuthPanel } from "../src/components/auth/dashboard-auth-panel";
-import { ForgotPasswordForm } from "../src/components/auth/forgot-password-form";
-import { ResetPasswordForm } from "../src/components/auth/reset-password-form";
+import { LoginForm } from "../src/components/auth/login-form";
 import { SocialSigninButtons } from "../src/components/auth/social-signin-buttons";
 import * as authApi from "../src/lib/auth-api";
 import { render } from "./render";
 
 const push = vi.fn();
 const refresh = vi.fn();
-const searchParams = new URLSearchParams("token=reset-token-from-url");
 
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) =>
@@ -24,7 +22,6 @@ vi.mock("next/navigation", () => ({
     push,
     refresh,
   }),
-  useSearchParams: () => searchParams,
 }));
 
 vi.mock("@mui/material", () => {
@@ -104,9 +101,8 @@ vi.mock("../src/lib/auth-api", async () => {
     ...actual,
     login: vi.fn(),
     logout: vi.fn(),
-    forgotPassword: vi.fn(),
-    resetPassword: vi.fn(),
     getCurrentUser: vi.fn(),
+    loginWithLocalAccount: vi.fn(),
     getSocialAuthProviders: vi.fn(),
     getSocialAuthStartUrl: vi.fn((provider: string) => `http://localhost:3001/api/auth/${provider}`),
   };
@@ -119,46 +115,6 @@ describe("web auth components", () => {
       google: false,
       apple: false,
     });
-  });
-
-  test("forgot password form shows generic success message after server call", async () => {
-    vi.mocked(authApi.forgotPassword).mockResolvedValue({ success: true });
-
-    const user = userEvent.setup();
-    render(React.createElement(ForgotPasswordForm));
-
-    await user.type(screen.getByLabelText("Email"), "slavisa@example.com");
-    await user.click(screen.getByRole("button", { name: "Send reset link" }));
-
-    await waitFor(() => {
-      expect(authApi.forgotPassword).toHaveBeenCalledWith({
-        email: "slavisa@example.com",
-      });
-    });
-
-    expect(screen.getByText("If that email exists, Trailbook has sent a reset link.")).toBeInTheDocument();
-  });
-
-  test("reset password form reads token from URL and redirects to login", async () => {
-    vi.mocked(authApi.resetPassword).mockResolvedValue({ success: true });
-
-    const user = userEvent.setup();
-    render(React.createElement(ResetPasswordForm));
-
-    expect(screen.getByLabelText("Reset token")).toHaveValue("reset-token-from-url");
-
-    await user.type(screen.getByLabelText("New password"), "newpassword123");
-    await user.type(screen.getByLabelText("Confirm new password"), "newpassword123");
-    await user.click(screen.getByRole("button", { name: "Update password" }));
-
-    await waitFor(() => {
-      expect(authApi.resetPassword).toHaveBeenCalledWith({
-        token: "reset-token-from-url",
-        password: "newpassword123",
-      });
-    });
-
-    expect(push).toHaveBeenCalledWith("/login?reset=1");
   });
 
   test("dashboard auth panel loads current user and can logout", async () => {
@@ -204,5 +160,31 @@ describe("web auth components", () => {
     expect(screen.getByText("Continue with Apple").closest("a")).toHaveAttribute("disabled");
     expect(screen.getByText("Continue with Apple").closest("a")).not.toHaveAttribute("href");
     expect(screen.queryByText("Continue with Facebook")).not.toBeInTheDocument();
+  });
+
+  test("local login offers only the configured development accounts", async () => {
+    vi.mocked(authApi.getSocialAuthProviders).mockResolvedValue({
+      google: false,
+      apple: false,
+      localAccounts: ["scaichat", "slavisacicovic"],
+    });
+    vi.mocked(authApi.loginWithLocalAccount).mockResolvedValue({
+      user: {
+        id: "admin-1",
+        email: "scaichat@gmail.com",
+        displayName: "sc aiChat",
+        role: "admin",
+        providers: [],
+      },
+    });
+
+    const user = userEvent.setup();
+    render(React.createElement(LoginForm, {}));
+
+    await user.click(await screen.findByRole("button", { name: "Continue as scaichat (admin)" }));
+
+    expect(authApi.loginWithLocalAccount).toHaveBeenCalledWith("scaichat");
+    expect(push).toHaveBeenCalledWith("/dashboard");
+    expect(screen.queryByText("Continue with Google")).not.toBeInTheDocument();
   });
 });

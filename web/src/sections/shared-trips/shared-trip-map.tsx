@@ -15,6 +15,7 @@ interface RoutePoint extends Coordinate {
 }
 
 interface SharedWaypoint extends Coordinate {
+  category: string;
   id: string;
   title: string;
   description?: string | null;
@@ -145,6 +146,7 @@ export function SharedTripMap({
           const position = { lat: waypoint.latitude, lng: waypoint.longitude };
           bounds.extend(position);
           const marker = new mapsApi.Marker({
+            icon: waypointMarkerIcon(waypoint.category),
             map,
             position,
             title: waypoint.title,
@@ -210,6 +212,30 @@ export function SharedTripMap({
       ) : null}
     </Box>
   );
+}
+
+const WAYPOINT_SYMBOL: Record<string, string> = {
+  GENERIC: "●",
+  DEPARTURE: "⚑",
+  FUEL: "⛽",
+  BORDER: "◇",
+  PORT: "⚓",
+  FERRY: "⛴",
+  RESTAURANT: "◆",
+  CAFE: "☕",
+  VIEWPOINT: "▲",
+  MONUMENT: "▥",
+  BEACH: "≈",
+};
+
+function waypointMarkerIcon(category: string) {
+  const symbol = WAYPOINT_SYMBOL[category.toUpperCase()] ?? WAYPOINT_SYMBOL.GENERIC;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="52" viewBox="0 0 44 52"><path fill="#633b1e" stroke="#fff" stroke-width="2" d="M22 1C10.4 1 1 10.4 1 22c0 15.4 21 29 21 29s21-13.6 21-29C43 10.4 33.6 1 22 1z"/><circle cx="22" cy="21" r="14" fill="#fff"/><text x="22" y="27" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#633b1e">${symbol}</text></svg>`;
+  return {
+    anchor: { x: 22, y: 51 },
+    scaledSize: { width: 44, height: 52 },
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+  };
 }
 
 function renderWaypointInfo(waypoint: SharedWaypoint, darkMode: boolean) {

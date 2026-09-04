@@ -22,6 +22,11 @@ interface OAuthState {
   returnTo: string | null;
 }
 
+const LOCAL_ACCOUNTS = {
+  scaichat: { email: "scaichat@gmail.com", role: "admin" },
+  slavisacicovic: { email: "slavisacicovic@gmail.com", role: "user" },
+} as const;
+
 export interface AuthenticatedUser {
   id: string;
   email: string;
@@ -45,7 +50,27 @@ export class AuthService {
           process.env.APPLE_KEY_ID &&
           process.env.APPLE_PRIVATE_KEY,
       ),
+      localAccounts: this.isLocalLoginEnabled() ? Object.keys(LOCAL_ACCOUNTS) : [],
     };
+  }
+
+  async loginWithLocalAccount(accountInput: string) {
+    if (!this.isLocalLoginEnabled()) {
+      throw new UnauthorizedException("Local login is disabled");
+    }
+
+    const account = accountInput.trim().toLowerCase() as keyof typeof LOCAL_ACCOUNTS;
+    const expected = LOCAL_ACCOUNTS[account];
+    if (!expected) {
+      throw new UnauthorizedException("Unknown local account");
+    }
+
+    const user = await this.database.user.findUnique({ where: { email: expected.email } });
+    if (!user || user.role !== expected.role) {
+      throw new UnauthorizedException("Local account is not configured correctly");
+    }
+
+    return this.createSession(user, "debug");
   }
 
   async buildOAuthAuthorizationUrl(providerInput: string, returnTo?: string) {
@@ -267,6 +292,13 @@ export class AuthService {
       where: { email },
     });
 
+    return this.createSession(user, provider);
+  }
+
+  private async createSession(
+    user: { id: string; email: string; displayName: string; role: string },
+    provider: AuthProvider,
+  ) {
     const accessToken = await this.issueAccessToken(user);
     const refreshToken = await this.database.refreshToken.create({
       data: {
@@ -283,6 +315,10 @@ export class AuthService {
         provider,
       },
     };
+  }
+
+  private isLocalLoginEnabled() {
+    return process.env.NODE_ENV !== "production" && process.env.ENABLE_DEBUG_LOGIN === "true";
   }
 
   private profileFromJwt(payload: JWTPayload): SocialProfile {

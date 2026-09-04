@@ -4,7 +4,7 @@ import { Box, Button, Stack, Typography } from "@mui/material";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { isTripUserRole, type AuthUser } from "../../lib/auth-api";
+import type { AuthUser } from "../../lib/auth-api";
 
 interface TrailbookSidebarProps {
   onNavigate?: () => void;
@@ -15,12 +15,11 @@ interface NavItem {
   adminOnly?: boolean;
   href: string;
   label: string;
-  userOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
   { adminOnly: true, href: "/dashboard", label: "Dashboard" },
-  { href: "/trips", label: "Trips", userOnly: true },
+  { href: "/trips", label: "My trips" },
 ];
 
 export function TrailbookSidebar({ onNavigate, user }: TrailbookSidebarProps) {
@@ -28,10 +27,6 @@ export function TrailbookSidebar({ onNavigate, user }: TrailbookSidebarProps) {
 
   const visibleItems = navItems.filter((item) => {
     if (item.adminOnly && user.role !== "admin") {
-      return false;
-    }
-
-    if (item.userOnly && !isTripUserRole(user.role)) {
       return false;
     }
 

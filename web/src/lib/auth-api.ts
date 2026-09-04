@@ -5,15 +5,6 @@ export interface LoginInput {
   password: string;
 }
 
-export interface ForgotPasswordInput {
-  email: string;
-}
-
-export interface ResetPasswordInput {
-  token: string;
-  password: string;
-}
-
 export interface AuthUser {
   id: string;
   email: string;
@@ -23,7 +14,7 @@ export interface AuthUser {
 }
 
 export function isTripUserRole(role: AuthUser["role"]) {
-  return role === "user" || role === "test_user";
+  return role === "user" || role === "test_user" || role === "admin";
 }
 
 export interface AdminDashboardMetrics {
@@ -107,6 +98,7 @@ export interface UserTripDetail {
     longitude: number;
     recordedAt: string;
     photoCount: number;
+    images: Array<{ getUrl: string; imageId: string; objectKey: string }>;
     segmentLocalId: string | null;
   }>;
   pauses: Array<{
@@ -116,7 +108,13 @@ export interface UserTripDetail {
 }
 
 export type SocialAuthProvider = "google" | "apple";
-export type SocialAuthAvailability = Record<SocialAuthProvider, boolean>;
+export interface SocialAuthAvailability {
+  google: boolean;
+  apple: boolean;
+  localAccounts?: string[];
+}
+
+export type LocalAccount = "scaichat" | "slavisacicovic";
 
 export function getSocialAuthStartUrl(provider: SocialAuthProvider) {
   return `${getApiBaseUrl()}/auth/${provider}`;
@@ -156,20 +154,6 @@ export async function logout() {
   });
 }
 
-export async function forgotPassword(input: ForgotPasswordInput) {
-  return request<{ success: boolean }>("/auth/forgot-password", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-export async function resetPassword(input: ResetPasswordInput) {
-  return request<{ success: boolean }>("/auth/reset-password", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
 export async function getCurrentUser() {
   return request<{ user: AuthUser | null }>("/auth/me", {
     method: "GET",
@@ -179,6 +163,13 @@ export async function getCurrentUser() {
 export async function getSocialAuthProviders() {
   return request<SocialAuthAvailability>("/auth/providers", {
     method: "GET",
+  });
+}
+
+export async function loginWithLocalAccount(account: LocalAccount) {
+  return request<{ user: AuthUser }>("/auth/local-login", {
+    method: "POST",
+    body: JSON.stringify({ account }),
   });
 }
 
@@ -209,27 +200,7 @@ export async function getTripOverview(input?: { from?: string; to?: string }) {
 }
 
 export async function getTripDetail(tripId: string) {
-  return request<UserTripDetail>(`/trips/${tripId}`, {
+  return request<UserTripDetail>(`/trips/web/${tripId}`, {
     method: "GET",
-  });
-}
-
-export async function updateTrip(tripId: string, input: { title?: string; description?: string }) {
-  return request<{ trip: UserTripDetail["trip"] }>(`/trips/${tripId}`, {
-    method: "PATCH",
-    body: JSON.stringify(input),
-  });
-}
-
-export async function saveTripEdit(tripId: string, input: {
-  trip: { title: string; description: string | null };
-  segments: UserTripDetail["segments"];
-  points: UserTripDetail["points"];
-  waypoints: UserTripDetail["waypoints"];
-  pauses: UserTripDetail["pauses"];
-}) {
-  return request<UserTripDetail>(`/trips/${tripId}/edit`, {
-    method: "PUT",
-    body: JSON.stringify(input),
   });
 }

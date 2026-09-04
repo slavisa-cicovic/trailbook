@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Post, Query, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 
 import { AuthService } from "../auth/auth.service";
@@ -51,6 +51,24 @@ export class TripsController {
     const user = await this.authService.requireAuthenticatedUser(request);
     await this.purchaseApplication.requirePremium(user);
     return this.tripsService.getSharedWithUser(clientTripId, user.id);
+  }
+
+  @Get("overview")
+  async overview(
+    @Query("from") from: string | undefined,
+    @Query("to") to: string | undefined,
+    @Req() request: Request,
+  ) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    await this.purchaseApplication.requirePremium(user);
+    return this.tripsService.getWebOverview(user.id, from, to);
+  }
+
+  @Get("web/:clientTripId")
+  async webDetail(@Param("clientTripId") clientTripId: string, @Req() request: Request) {
+    const user = await this.authService.requireAuthenticatedUser(request);
+    await this.purchaseApplication.requirePremium(user);
+    return this.tripsService.getWebDetail(clientTripId, user.id);
   }
 
   @Get(":clientTripId")

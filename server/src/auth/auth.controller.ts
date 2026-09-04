@@ -27,6 +27,10 @@ export interface RefreshRequest {
   refreshToken?: string;
 }
 
+export interface LocalLoginRequest {
+  account?: string;
+}
+
 export interface DeleteAccountRequest {
   confirmation?: string;
 }
@@ -122,6 +126,20 @@ export class AuthController {
   @Post("social")
   loginWithSocial(@Body() input: SocialLoginRequest) {
     return this.authService.loginWithSocial(input);
+  }
+
+  @Post("local-login")
+  async localLogin(
+    @Body() input: LocalLoginRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.loginWithLocalAccount(input.account ?? "");
+    response.cookie(
+      this.authService.getSessionCookieName(),
+      result.refreshToken,
+      this.authService.getSessionCookieOptions(),
+    );
+    return result;
   }
 
   @Post("refresh")

@@ -18,6 +18,7 @@ const providers: Array<{ label: string; provider: SocialAuthProvider }> = [
 const defaultAvailability: SocialAuthAvailability = {
   google: false,
   apple: false,
+  localAccounts: [],
 };
 
 export function SocialSigninButtons() {

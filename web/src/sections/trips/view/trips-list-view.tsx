@@ -236,12 +236,6 @@ export function TripsListView() {
           return;
         }
 
-        if (result.user.role === "admin") {
-          router.replace("/dashboard");
-          setUser(result.user);
-          return;
-        }
-
         setUser(result.user);
       })
       .catch((loadError) => {

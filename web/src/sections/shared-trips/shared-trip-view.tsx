@@ -133,6 +133,7 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
     () =>
       bundle.waypoints.map((waypoint) => ({
         description: waypoint.description,
+        category: waypoint.category,
         id: waypoint.id,
         images: imagesByWaypointId[waypoint.id] ?? [],
         latitude: waypoint.latitude,
