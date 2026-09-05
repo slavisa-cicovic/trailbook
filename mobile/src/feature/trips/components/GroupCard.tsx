@@ -4,6 +4,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import type { TripGroupWithMembers } from '@/core/domain/model/tripGroup';
 import type { TripWithMeta } from '@/feature/trips/tripsStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
 
 function formatDistance(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
@@ -20,13 +21,14 @@ interface Props {
 
 export function GroupCard({ item, tripsById, syncing = false, onDelete, onOpen, onSync }: Props) {
   const { theme } = useAppTheme();
+  const { t } = useI18n();
   const swipeRef = useRef<Swipeable>(null);
   const trips = item.members
     .map((member) => tripsById.get(member.tripClientId))
     .filter((trip): trip is TripWithMeta => Boolean(trip));
   const totalDistanceM = trips.reduce((acc, trip) => acc + trip.totalDistanceM, 0);
   const pending = item.group.syncState !== 'SYNCED' || item.members.some((member) => member.syncState !== 'SYNCED');
-  const badgeLabel = syncing ? 'SYNCING' : pending ? 'PENDING' : 'SYNCED';
+  const badgeLabel = t(syncing ? 'trips.sync.syncing' : pending ? 'trips.sync.pending' : 'trips.sync.synced').toUpperCase();
 
   function renderRightActions() {
     return (
@@ -38,7 +40,7 @@ export function GroupCard({ item, tripsById, syncing = false, onDelete, onOpen, 
             onOpen();
           }}
         >
-          <Text style={[styles.swipeOpenText, { color: theme.mutedText }]}>Open</Text>
+          <Text style={[styles.swipeOpenText, { color: theme.mutedText }]}>{t('common.open')}</Text>
         </Pressable>
         <Pressable
           style={[styles.swipeDelete, { backgroundColor: theme.dangerMuted }]}
@@ -47,7 +49,7 @@ export function GroupCard({ item, tripsById, syncing = false, onDelete, onOpen, 
             onDelete();
           }}
         >
-          <Text style={[styles.swipeDeleteText, { color: theme.danger }]}>Delete</Text>
+          <Text style={[styles.swipeDeleteText, { color: theme.danger }]}>{t('common.delete')}</Text>
         </Pressable>
       </View>
     );
@@ -79,8 +81,8 @@ export function GroupCard({ item, tripsById, syncing = false, onDelete, onOpen, 
           </Pressable>
         </View>
         <View style={styles.metaRow}>
-          <Meta label="TRIPS" value={String(item.members.length)} color={theme.mutedText} textColor={theme.primaryText} />
-          <Meta label="DISTANCE" value={formatDistance(totalDistanceM)} color={theme.mutedText} textColor={theme.primaryText} />
+          <Meta label={t('trips.title')} value={String(item.members.length)} color={theme.mutedText} textColor={theme.primaryText} />
+          <Meta label={t('trips.distance')} value={formatDistance(totalDistanceM)} color={theme.mutedText} textColor={theme.primaryText} />
         </View>
       </Pressable>
     </Swipeable>

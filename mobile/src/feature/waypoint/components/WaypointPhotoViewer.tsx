@@ -18,6 +18,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PhotoViewerItem } from '../photoNavigationContext';
+import { useI18n } from '@/i18n/i18nStore';
 
 interface MapCoordinate {
   latitude: number;
@@ -241,6 +242,7 @@ export function WaypointPhotoViewer({
   onRemoveCurrent,
   selectedImageId,
 }: WaypointPhotoViewerProps) {
+  const { locale, t } = useI18n();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView | null>(null);
@@ -403,9 +405,24 @@ export function WaypointPhotoViewer({
         <Pressable accessibilityLabel="Back to waypoint" hitSlop={14} onPress={onBack} style={styles.iconButton}>
           <MaterialIcons color="#fffdf8" name="arrow-back" size={24} />
         </Pressable>
-        <Text numberOfLines={1} style={styles.bottomInfo}>
-          {images.length === 0 ? '0 / 0' : `${currentIndex + 1} / ${images.length}`} · {currentImage?.waypointTitle ?? ''}
-        </Text>
+        <View style={styles.bottomInfo}>
+          <Text numberOfLines={1} style={styles.bottomTitle}>
+            {images.length === 0 ? '0 / 0' : `${currentIndex + 1} / ${images.length}`} · {currentImage?.waypointTitle ?? ''}
+          </Text>
+          {currentImage ? (
+            <Text numberOfLines={1} style={styles.bottomMeta}>
+              {t('waypoint.photoTakenAt')} {currentImage.capturedAt
+                ? currentImage.capturedAt.toLocaleString(locale)
+                : t('waypoint.photoTimeUnknown')}
+            </Text>
+          ) : null}
+          {currentImage && !currentImage.locationMatchesWaypoint ? (
+            <View style={styles.locationMismatchBadge}>
+              <MaterialIcons color="#fffdf8" name="location-off" size={13} />
+              <Text style={styles.locationMismatchText}>{t('waypoint.photoLocationUnverified')}</Text>
+            </View>
+          ) : null}
+        </View>
         {currentImage && onRemoveCurrent ? (
           <Pressable
             accessibilityLabel="Remove current photo"
@@ -462,15 +479,22 @@ const styles = StyleSheet.create({
   },
   bottomInfo: {
     flex: 1,
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(12, 16, 12, 0.58)',
+  },
+  bottomTitle: {
     fontSize: 13,
     fontWeight: '600',
     color: '#fffdf8',
     textAlign: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(12, 16, 12, 0.44)',
   },
+  bottomMeta: { color: 'rgba(255,253,248,0.76)', fontSize: 11, textAlign: 'center' },
+  locationMismatchBadge: { alignItems: 'center', backgroundColor: 'rgba(170,45,35,0.92)', borderRadius: 8, flexDirection: 'row', gap: 4, paddingHorizontal: 7, paddingVertical: 3 },
+  locationMismatchText: { color: '#fffdf8', fontSize: 10, fontWeight: '800' },
   iconButton: {
     alignItems: 'center',
     justifyContent: 'center',

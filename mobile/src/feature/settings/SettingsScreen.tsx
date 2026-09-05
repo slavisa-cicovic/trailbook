@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import {
-  View, Text, StyleSheet, Pressable,
+  View, Text, StyleSheet, Pressable, Linking,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -18,6 +18,8 @@ import ModalActions from '@/components/ui/modal-actions';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { isPremiumAccessError } from '@/core/domain/access/mobileAccessPolicy';
 import type { PurchaseAccess } from '@/core/domain/model/purchase';
+import { SUPPORTED_LANGUAGES, useI18n, useI18nStore, type LanguagePreference } from '@/i18n/i18nStore';
+import { TRAILBOOK_WEBSITE_URL } from '@/constants/legal';
 
 const THEME_OPTIONS: { label: string; value: ThemePreference }[] = [
   { label: 'Auto', value: 'auto' },
@@ -25,10 +27,17 @@ const THEME_OPTIONS: { label: string; value: ThemePreference }[] = [
   { label: 'Night', value: 'night' },
 ];
 
+const LANGUAGE_LABEL: Record<LanguagePreference, string> = {
+  system: 'System', en: 'English', sr: 'Srpski', it: 'Italiano', es: 'Español', de: 'Deutsch', fr: 'Français',
+};
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
+  const { t } = useI18n();
+  const languagePreference = useI18nStore((s) => s.preference);
+  const setLanguagePreference = useI18nStore((s) => s.setPreference);
 
   const status = useAuthStore((s) => s.status);
   const displayName = useAuthStore((s) => s.displayName);
@@ -72,18 +81,18 @@ export default function SettingsScreen() {
       message: statusMessage,
       buttons: isPremiumAccessError(statusMessage)
         ? [
-            { text: 'Not now', style: 'cancel', onPress: onStatusMessageShown },
+            { text: t('settings.notNow'), style: 'cancel', onPress: onStatusMessageShown },
             {
-              text: 'View Premium',
+              text: t('settings.viewPremium'),
               onPress: () => {
                 onStatusMessageShown();
                 router.push('/premium');
               },
             },
           ]
-        : [{ text: 'OK', onPress: onStatusMessageShown }],
+        : [{ text: t('common.ok'), onPress: onStatusMessageShown }],
     });
-  }, [onStatusMessageShown, router, showAlert, statusMessage]);
+  }, [onStatusMessageShown, router, showAlert, statusMessage, t]);
 
   useEffect(() => {
     if (status === 'authenticated') void refreshPurchaseAccess();
@@ -94,7 +103,7 @@ export default function SettingsScreen() {
       contentStyle={styles.screenContent}
       rightActions={
         <Pressable
-          accessibilityLabel={isDemo ? 'Exit demo' : 'Log out'}
+          accessibilityLabel={isDemo ? t('settings.exitDemo') : t('settings.logout')}
           disabled={isWorking}
           hitSlop={10}
           onPress={onLogout}
@@ -107,54 +116,54 @@ export default function SettingsScreen() {
           <MaterialIcons color={theme.danger} name="logout" size={20} />
         </Pressable>
       }
-      title="Settings"
+      title={t('settings.title')}
       showBottomNavigation
       contentVariant="plain"
       scrollEnabled
     >
       <View style={styles.settingsRoot}>
-        <SettingsSection title="Account">
+        <SettingsSection title={t('settings.account')}>
           <SettingsRow
             description={
               isDemo
-                ? 'Max 3 trips · no sync'
+                ? t('settings.demoLimits')
                 : status === 'authenticated'
-                  ? 'Full account'
+                  ? t('settings.fullAccount')
                   : undefined
             }
             iconName="person"
-            title={isDemo ? 'Demo user' : displayName ?? 'Signed in'}
+            title={isDemo ? t('settings.demoUser') : displayName ?? t('settings.signedIn')}
           />
           <SettingsDivider />
           <SettingsRow
-            description={isDemo ? 'Not available in demo mode' : email ?? 'Sign in again to load email'}
+            description={isDemo ? t('settings.demoUnavailable') : email ?? t('settings.emailReload')}
             iconName="mail-outline"
-            title="Email"
+            title={t('settings.email')}
           />
           <SettingsDivider />
           <SettingsRow
             description={
               isDemo
-                ? 'Local access only'
+                ? t('settings.localOnly')
                 : purchaseAccess
                   ? purchaseDescription(purchaseAccess)
-                  : 'Loading purchase access'
+                  : t('settings.loadingAccess')
             }
             iconName="workspace-premium"
             loading={!isDemo && purchaseBusyAction === 'access'}
             onPress={!isDemo ? () => router.push('/premium') : undefined}
-            title="Purchase"
-            value={isDemo ? 'Demo' : purchaseAccess?.subscriptionStatus}
+            title={t('settings.purchase')}
+            value={isDemo ? t('settings.demo') : purchaseAccess?.subscriptionStatus}
           />
           {!isDemo && status === 'authenticated' ? (
             <>
               <SettingsDivider />
               <SettingsRow
-                description="Permanently remove your account and cloud data"
+                description={t('settings.deleteAccountDescription')}
                 disabled={isWorking}
                 iconName="delete-forever"
                 onPress={onDeleteAccountClick}
-                title="Delete account"
+                title={t('settings.deleteAccount')}
                 tone="danger"
                 value="Delete"
               />
@@ -162,13 +171,13 @@ export default function SettingsScreen() {
           ) : null}
         </SettingsSection>
 
-        <SettingsSection title="Theme">
+        <SettingsSection title={t('settings.themeSection')}>
           <View style={styles.themePreference}>
             <View style={[styles.preferenceIcon, { backgroundColor: theme.accentMuted }]}>
               <MaterialIcons color={theme.accent} name="palette" size={20} />
             </View>
             <View style={styles.preferenceBody}>
-              <Text style={[styles.preferenceTitle, { color: theme.primaryText }]}>Theme</Text>
+              <Text style={[styles.preferenceTitle, { color: theme.primaryText }]}>{t('settings.theme')}</Text>
               <View style={styles.themeRow}>
                 {THEME_OPTIONS.map((option) => {
                   const selected = preference === option.value;
@@ -187,7 +196,7 @@ export default function SettingsScreen() {
                           { color: selected ? theme.background : theme.accent },
                         ]}
                       >
-                        {option.label}
+                        {option.value === 'auto' ? t('settings.themeAuto') : option.value === 'day' ? t('settings.themeDay') : t('settings.themeNight')}
                       </Text>
                     </Pressable>
                   );
@@ -197,37 +206,62 @@ export default function SettingsScreen() {
           </View>
         </SettingsSection>
 
+        <SettingsSection title={t('settings.languageSection')}>
+          <View style={styles.themePreference}>
+            <View style={[styles.preferenceIcon, { backgroundColor: theme.accentMuted }]}>
+              <MaterialIcons color={theme.accent} name="language" size={20} />
+            </View>
+            <View style={styles.preferenceBody}>
+              <Text style={[styles.preferenceTitle, { color: theme.primaryText }]}>{t('settings.language')}</Text>
+              <View style={styles.languageRow}>
+                {(['system', ...SUPPORTED_LANGUAGES] as LanguagePreference[]).map((option) => {
+                  const selected = languagePreference === option;
+                  return <Pressable key={option} onPress={() => void setLanguagePreference(option)} style={[styles.languageButton, { backgroundColor: selected ? theme.accent : theme.accentMuted }]}><Text style={[styles.themeButtonText, { color: selected ? theme.background : theme.accent }]}>{option === 'system' ? t('settings.systemDefault') : LANGUAGE_LABEL[option]}</Text></Pressable>;
+                })}
+              </View>
+            </View>
+          </View>
+        </SettingsSection>
+
         {!isDemo ? (
-          <SettingsSection title="Cloud data">
+          <SettingsSection title={t('settings.cloudData')}>
             <SettingsRow
-              description="Download trips and photos that are missing on this device"
+              description={t('settings.restoreDescription')}
               disabled={isWorking}
               iconName="cloud-download"
               loading={isWorking}
               onPress={() => void onRestoreFromBackend()}
-              title="Restore missing data"
-              value="Restore"
+              title={t('settings.restoreMissing')}
+              value={t('common.restore')}
             />
           </SettingsSection>
         ) : null}
 
-        <SettingsSection title="App">
+        <SettingsSection title={t('settings.app')}>
+          <SettingsRow
+            description="trailbook.rs"
+            iconName="language"
+            onPress={() => void Linking.openURL(TRAILBOOK_WEBSITE_URL)}
+            title={t('settings.website')}
+            value={t('common.open')}
+          />
+          <SettingsDivider />
           <SettingsRow
             iconName="info-outline"
             onPress={() => router.push('/about')}
-            title="About Trailbook"
-            value="Open"
+            title={t('settings.about')}
+            value={t('common.open')}
           />
         </SettingsSection>
 
         {purchaseSimulationEnabled || developerDataToolsEnabled ? (
-          <SettingsSection title="Developer">
+          <SettingsSection title={t('settings.developer')}>
             {purchaseSimulationEnabled ? (
               <SettingsRow
                 iconName="payments"
                 onPress={() => router.push('/purchases')}
-                title="Purchases simulation"
-                value="Open"
+                title={t('settings.purchaseSimulation')}
+                value={t('common.open')}
               />
             ) : null}
             {purchaseSimulationEnabled && developerDataToolsEnabled ? <SettingsDivider /> : null}
@@ -237,9 +271,9 @@ export default function SettingsScreen() {
                   disabled={isWorking}
                   iconName="delete-sweep"
                   onPress={onDeleteLocalClick}
-                  title="Delete local trips"
+                  title={t('settings.deleteLocal')}
                   tone="danger"
-                  value="Delete"
+                  value={t('common.delete')}
                 />
                 <SettingsDivider />
                 <SettingsRow
@@ -247,8 +281,8 @@ export default function SettingsScreen() {
                   iconName="storage"
                   loading={isWorking}
                   onPress={() => void onExportDatabase()}
-                  title="Export database"
-                  value="Share"
+                  title={t('settings.exportDatabase')}
+                  value={t('common.share')}
                 />
               </>
             ) : null}
@@ -261,12 +295,12 @@ export default function SettingsScreen() {
       <BottomSheetModal
         visible={showDeleteConfirm}
         onClose={onDismissDeleteConfirm}
-        title="Delete your local trips?"
-        subtitle="This permanently removes your trips, groups, waypoints and photos from this device."
+        title={t('settings.deleteLocalTitle')}
+        subtitle={t('settings.deleteLocalDescription')}
       >
         <ModalActions
-          primaryLabel="Delete"
-          secondaryLabel="Cancel"
+          primaryLabel={t('common.delete')}
+          secondaryLabel={t('common.cancel')}
           onPrimaryPress={() => void onConfirmDeleteLocal()}
           onSecondaryPress={onDismissDeleteConfirm}
         />
@@ -275,16 +309,16 @@ export default function SettingsScreen() {
       <BottomSheetModal
         visible={showDeleteAccountConfirm}
         onClose={onDismissDeleteAccountConfirm}
-        title="Permanently delete your account?"
-        subtitle="This removes your Trailbook account, cloud trips, waypoint photos, shares and purchase link. It cannot be undone. Deleting Trailbook does not cancel a Google Play or App Store subscription; cancel it separately in the store's subscription settings."
+        title={t('settings.deleteAccountTitle')}
+        subtitle={t('settings.deleteAccountWarning')}
       >
         <ModalActions
           primaryDisabled={isWorking}
-          primaryLabel="Delete account"
+          primaryLabel={t('settings.deleteAccount')}
           primaryLoading={isWorking}
-          primaryLoadingLabel="Deleting…"
+          primaryLoadingLabel={t('settings.deleting')}
           secondaryDisabled={isWorking}
-          secondaryLabel="Cancel"
+          secondaryLabel={t('common.cancel')}
           onPrimaryPress={() => void onConfirmDeleteAccount()}
           onSecondaryPress={onDismissDeleteAccountConfirm}
         />
@@ -360,4 +394,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
+  languageRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 9 },
+  languageButton: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
 });

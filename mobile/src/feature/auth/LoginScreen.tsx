@@ -18,12 +18,13 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 import { useCustomAlert } from '@/components/ui/custom-alert-dialog';
 import { API_BASE_URL } from '@/core/data/remote/apiConfig';
 import { APP_ENVIRONMENT, OAUTH_SCHEME } from '@/core/config/appEnvironment';
+import { useI18n } from '@/i18n/i18nStore';
 
 const DEFAULT_LOGIN_EMAIL = process.env.EXPO_PUBLIC_DEV_LOGIN_EMAIL?.trim() || 'scaichat@gmail.com';
 const OAUTH_RETURN_TO = `${OAUTH_SCHEME}:///auth/callback`;
 const PROVIDERS = [
-  { label: 'Continue with Google', provider: 'google' },
-  { label: 'Continue with Apple', provider: 'apple' },
+  { labelKey: 'login.google', provider: 'google' },
+  { labelKey: 'login.apple', provider: 'apple' },
 ] as const;
 
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -41,6 +42,7 @@ export default function LoginScreen() {
   const loginAsDemo = useAuthStore((s) => s.loginAsDemo);
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
+  const { t } = useI18n();
 
   async function onOAuthPress(provider: (typeof PROVIDERS)[number]['provider']) {
     setLoading(true);
@@ -51,7 +53,7 @@ export default function LoginScreen() {
 
       const callbackUrl = new URL(result.url);
       if (callbackUrl.protocol !== `${OAUTH_SCHEME}:` || callbackUrl.pathname !== '/auth/callback') {
-        throw new Error('OAuth returned an unexpected callback URL.');
+        throw new Error(t('login.unexpectedCallback'));
       }
 
       router.replace({
@@ -60,7 +62,7 @@ export default function LoginScreen() {
       });
     } catch (e) {
       showAlert({
-        title: 'Sign in failed',
+        title: t('login.failed'),
         message: e instanceof Error ? e.message : String(e),
       });
     } finally {
@@ -71,17 +73,17 @@ export default function LoginScreen() {
   async function onLoginPress() {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
-      showAlert({ title: 'Sign in failed', message: 'Email is required.' });
+      showAlert({ title: t('login.failed'), message: t('login.emailRequired') });
       return;
     }
 
     setLoading(true);
     try {
       const result = await loginWithSocial('DEBUG', `debug-login:${normalizedEmail}`);
-      if (!result.ok) showAlert({ title: 'Sign in failed', message: result.error });
+      if (!result.ok) showAlert({ title: t('login.failed'), message: result.error });
     } catch (e) {
       showAlert({
-        title: 'Sign in failed',
+        title: t('login.failed'),
         message: e instanceof Error ? e.message : String(e),
       });
     } finally {
@@ -94,7 +96,7 @@ export default function LoginScreen() {
     try {
       await loginAsDemo();
     } catch (e) {
-      showAlert({ title: 'Error', message: e instanceof Error ? e.message : String(e) });
+      showAlert({ title: t('login.error'), message: e instanceof Error ? e.message : String(e) });
     } finally {
       setLoading(false);
     }
@@ -114,7 +116,7 @@ export default function LoginScreen() {
             style={styles.logo}
           />
           <Text style={[styles.tagline, { color: theme.mutedText }]}>
-            Sign in to sync your recorded trips.
+            {t('login.tagline')}
           </Text>
 
           <View style={styles.buttons}>
@@ -129,7 +131,7 @@ export default function LoginScreen() {
                   <ActivityIndicator color={theme.background} size="small" />
                 ) : (
                   <Text style={[styles.primaryButtonText, { color: theme.background }]}>
-                    {provider.label}
+                    {t(provider.labelKey)}
                   </Text>
                 )}
               </Pressable>
@@ -141,7 +143,7 @@ export default function LoginScreen() {
                 onPress={() => void onLoginPress()}
                 disabled={loading}
               >
-                <Text style={[styles.secondaryButtonText, { color: theme.primaryText }]}>Local sign in</Text>
+                <Text style={[styles.secondaryButtonText, { color: theme.primaryText }]}>{t('login.local')}</Text>
               </Pressable>
             ) : null}
 
@@ -150,16 +152,16 @@ export default function LoginScreen() {
               onPress={() => void onDemoPress()}
               disabled={loading}
             >
-              <Text style={[styles.secondaryButtonText, { color: theme.primaryText }]}>Try demo</Text>
+              <Text style={[styles.secondaryButtonText, { color: theme.primaryText }]}>{t('login.demo')}</Text>
             </Pressable>
           </View>
 
           <Text style={[styles.hint, { color: theme.mutedText }]}>
             {APP_ENVIRONMENT === 'local'
-              ? 'Local sign in uses the configured development account.'
+              ? t('login.localHint')
               : isExpoGo
-              ? 'Expo Go uses debug sign in because OAuth deep links return to the native app.'
-              : 'Sign in securely without leaving Trailbook.'}
+              ? t('login.expoHint')
+              : t('login.secureHint')}
           </Text>
         </View>
       </KeyboardAvoidingView>

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
 
 interface TopAppBarProps {
   onBack?: () => void;
@@ -11,13 +12,14 @@ interface TopAppBarProps {
 
 export function TopAppBar({ onBack, rightActions, title }: TopAppBarProps) {
   const { theme } = useAppTheme();
+  const { t } = useI18n();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.leading}>
         {onBack && (
           <Pressable
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('nav.back')}
             hitSlop={10}
             onPress={onBack}
             style={[styles.backButton, { backgroundColor: theme.accentMuted }]}

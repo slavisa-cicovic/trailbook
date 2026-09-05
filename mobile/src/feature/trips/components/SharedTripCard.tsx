@@ -2,13 +2,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { SharedTripListItemDto } from '@/core/data/remote/FetchRemoteTripDataSource';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import type { AppThemePalette } from '@/constants/app-theme';
+import { useI18n } from '@/i18n/i18nStore';
 
 function formatDistance(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
 }
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString('en-US', {
+function formatDate(value: string, locale: string): string {
+  return new Date(value).toLocaleDateString(locale, {
     month: 'numeric',
     day: 'numeric',
     year: 'numeric',
@@ -22,6 +23,7 @@ interface Props {
 
 export function SharedTripCard({ item, onPress }: Props) {
   const { theme } = useAppTheme();
+  const { locale, t } = useI18n();
 
   return (
     <Pressable style={[styles.card, { backgroundColor: theme.card }]} onPress={onPress}>
@@ -31,19 +33,19 @@ export function SharedTripCard({ item, onPress }: Props) {
             {item.title}
           </Text>
           <Text numberOfLines={1} style={[styles.owner, { color: theme.mutedText }]}>
-            Shared by {item.owner.displayName || item.owner.email}
+            {t('trips.sharedBy')} {item.owner.displayName || item.owner.email}
           </Text>
         </View>
         <View style={[styles.badge, { backgroundColor: theme.accentMuted }]}>
-          <Text style={[styles.badgeText, { color: theme.accent }]}>READ ONLY</Text>
+          <Text style={[styles.badgeText, { color: theme.accent }]}>{t('trips.readOnly').toUpperCase()}</Text>
         </View>
       </View>
 
       <View style={styles.grid}>
-        <StatCell label="DISTANCE" value={formatDistance(item.distanceM)} theme={theme} />
-        <StatCell label="WAYPOINTS" value={String(item.waypointCount)} theme={theme} />
-        <StatCell label="PHOTOS" value={String(item.photoCount)} theme={theme} />
-        <StatCell label="STARTED" value={formatDate(item.startedAt)} theme={theme} />
+        <StatCell label={t('trips.distance')} value={formatDistance(item.distanceM)} theme={theme} />
+        <StatCell label={t('trips.waypoints')} value={String(item.waypointCount)} theme={theme} />
+        <StatCell label={t('trips.photos')} value={String(item.photoCount)} theme={theme} />
+        <StatCell label={t('trips.started')} value={formatDate(item.startedAt, locale)} theme={theme} />
       </View>
     </Pressable>
   );

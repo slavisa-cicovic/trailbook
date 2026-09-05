@@ -4,10 +4,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { TripWithMeta } from '@/feature/trips/tripsStore';
 import type { SegmentType } from '@/core/domain/model/segment';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
+import type { TranslationKey } from '@/i18n/translations';
 
-const SEGMENT_LABEL: Record<SegmentType, string> = {
-  WALK: 'Walk', BIKE: 'Bike', DRIVE: 'Drive',
-  BOAT: 'Boat', PLANE: 'Plane', STATIONARY: 'Stationary', UNKNOWN: 'Unknown',
+const SEGMENT_LABEL: Record<SegmentType, TranslationKey> = {
+  WALK: 'activity.walk', BIKE: 'activity.bike', DRIVE: 'activity.drive',
+  BOAT: 'activity.boat', PLANE: 'activity.plane', STATIONARY: 'activity.stationary', UNKNOWN: 'activity.unknown',
 };
 
 function formatKm(m: number): string {
@@ -34,6 +36,7 @@ interface Props {
 export function TotalCard({ trips }: Props) {
   const [expanded, setExpanded] = useState(false);
   const { theme } = useAppTheme();
+  const { t } = useI18n();
 
   const totalDistanceM = trips.reduce((acc, t) => acc + t.totalDistanceM, 0);
   const totalDurationMs = trips.reduce((acc, t) => {
@@ -66,7 +69,7 @@ export function TotalCard({ trips }: Props) {
   return (
     <Pressable style={[styles.card, { backgroundColor: theme.card }]} onPress={() => setExpanded((v) => !v)}>
       <View style={styles.summary}>
-        <Text style={[styles.totalLabel, { color: theme.primaryText }]}>Total</Text>
+        <Text style={[styles.totalLabel, { color: theme.primaryText }]}>{t('trips.total')}</Text>
         <View style={styles.summaryRight}>
           <Text style={[styles.totalValue, { color: theme.primaryText }]}>{formatKm(totalDistanceM)}</Text>
           <Text style={[styles.totalValue, { color: theme.primaryText }]}>{formatDuration(totalDurationMs)}</Text>
@@ -77,14 +80,14 @@ export function TotalCard({ trips }: Props) {
       {expanded && modeRows.length > 0 && (
         <View style={styles.breakdown}>
           <View style={[styles.tableHeader, { borderBottomColor: theme.border }]}>
-            <Text style={[styles.col1, styles.colLabel, { color: theme.mutedText }]}>MODE</Text>
+            <Text style={[styles.col1, styles.colLabel, { color: theme.mutedText }]}>{t('trips.mode').toUpperCase()}</Text>
             <Text style={[styles.col2, styles.colLabel, { color: theme.mutedText }]}>KM</Text>
-            <Text style={[styles.col3, styles.colLabel, { color: theme.mutedText }]}>TIME</Text>
-            <Text style={[styles.col4, styles.colLabel, { color: theme.mutedText }]}>TRIPS</Text>
+            <Text style={[styles.col3, styles.colLabel, { color: theme.mutedText }]}>{t('trips.time').toUpperCase()}</Text>
+            <Text style={[styles.col4, styles.colLabel, { color: theme.mutedText }]}>{t('trips.title').toUpperCase()}</Text>
           </View>
           {modeRows.map((row) => (
             <View key={row.type} style={[styles.tableRow, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.col1, styles.rowValue, { color: theme.primaryText }]}>{SEGMENT_LABEL[row.type]}</Text>
+              <Text style={[styles.col1, styles.rowValue, { color: theme.primaryText }]}>{t(SEGMENT_LABEL[row.type])}</Text>
               <Text style={[styles.col2, styles.rowValue, { color: theme.primaryText }]}>{formatKm(row.distanceM)}</Text>
               <Text style={[styles.col3, styles.rowValue, { color: theme.primaryText }]}>{formatDuration(row.durationMs)}</Text>
               <Text style={[styles.col4, styles.rowValue, { color: theme.primaryText }]}>{row.count}</Text>

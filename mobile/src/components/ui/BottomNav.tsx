@@ -2,11 +2,12 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
 
 const NAV_ITEMS = [
-  { href: '/recording', label: 'Record' },
-  { href: '/trips', label: 'Trips' },
-  { href: '/settings', label: 'Settings' },
+  { href: '/recording', labelKey: 'nav.record' },
+  { href: '/trips', labelKey: 'nav.trips' },
+  { href: '/settings', labelKey: 'nav.settings' },
 ] as const;
 
 export function BottomNav() {
@@ -14,6 +15,7 @@ export function BottomNav() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { theme, resolvedMode } = useAppTheme();
+  const { t } = useI18n();
 
   return (
     <View style={[styles.wrapper, { backgroundColor: theme.background, paddingBottom: insets.bottom }]}>
@@ -35,7 +37,7 @@ export function BottomNav() {
                   { color: active ? (resolvedMode === 'night' ? theme.background : '#f7f4ed') : theme.navText },
                 ]}
               >
-                {item.label}
+                {t(item.labelKey)}
               </Text>
             </Pressable>
           );

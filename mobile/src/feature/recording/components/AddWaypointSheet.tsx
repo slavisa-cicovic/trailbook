@@ -16,15 +16,34 @@ import {
 } from '@/core/domain/access/mobileAccessPolicy';
 import {
   CATEGORY_ICON,
-  CATEGORY_LABEL,
   CATEGORY_ORDER,
-  CATEGORY_TITLE_SUGGESTION,
 } from '@/constants/waypointCategories';
+import { useI18n } from '@/i18n/i18nStore';
+import type { TranslationKey } from '@/i18n/translations';
+import {
+  coordinatesFromImageAsset,
+  capturedAtFromImageAsset,
+  currentPhotoCoordinates,
+  mismatchedPhotoDistanceM,
+  photoLocationMatchesWaypoint,
+  type PhotoCoordinates,
+} from '@/core/domain/photo/photoLocation';
+
+const CATEGORY_KEY: Record<WaypointCategory, TranslationKey> = {
+  GENERIC:'category.generic', DEPARTURE:'category.departure', FUEL:'category.fuel', BORDER:'category.border', PORT:'category.port', FERRY:'category.ferry', RESTAURANT:'category.restaurant', CAFE:'category.cafe', VIEWPOINT:'category.viewpoint', MONUMENT:'category.monument', BEACH:'category.beach',
+};
+
+function formatPhotoDistance(distanceM: number): string {
+  return distanceM >= 1000 ? `${(distanceM / 1000).toFixed(1)} km` : `${Math.round(distanceM)} m`;
+}
 
 interface PhotoItem {
   uri: string;
   source: ImageSource;
   capturedAt: Date | null;
+  coordinates: PhotoCoordinates | null;
+  locationMatchesWaypoint: boolean;
+  mismatchDistanceM: number | null;
 }
 
 interface Props {
@@ -40,32 +59,54 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [premiumError, setPremiumError] = useState(false);
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
   const router = useRouter();
   const titleInputRef = useRef<TextInput>(null);
+  const { localizeError, t } = useI18n();
 
   async function onCamera() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      showAlert({ title: 'Camera permission required' });
+      showAlert({ title: t('waypoint.cameraPermission') });
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: false });
+    const result = await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: false, exif: true });
     if (!result.canceled && result.assets[0]) {
-      setPhotos((p) => [...p, { uri: result.assets[0]!.uri, source: 'CAMERA', capturedAt: new Date() }]);
+      const waypointCoordinates = await currentPhotoCoordinates();
+      const photoCoordinates = coordinatesFromImageAsset(result.assets[0]);
+      setPhotos((p) => [...p, {
+        uri: result.assets[0]!.uri,
+        source: 'CAMERA',
+        capturedAt: capturedAtFromImageAsset(result.assets[0]) ?? new Date(),
+        coordinates: photoCoordinates,
+        locationMatchesWaypoint: waypointCoordinates !== null
+          && photoLocationMatchesWaypoint(photoCoordinates, waypointCoordinates),
+        mismatchDistanceM: mismatchedPhotoDistanceM(photoCoordinates, waypointCoordinates),
+      }]);
     }
   }
 
   async function onGallery() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      showAlert({ title: 'Photo library permission required' });
+      showAlert({ title: t('waypoint.libraryPermission') });
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, exif: true });
     if (!result.canceled && result.assets[0]) {
-      setPhotos((p) => [...p, { uri: result.assets[0]!.uri, source: 'GALLERY', capturedAt: null }]);
+      const waypointCoordinates = await currentPhotoCoordinates();
+      const photoCoordinates = coordinatesFromImageAsset(result.assets[0]!);
+      setPhotos((p) => [...p, {
+        uri: result.assets[0]!.uri,
+        source: 'GALLERY',
+        capturedAt: capturedAtFromImageAsset(result.assets[0]!),
+        coordinates: photoCoordinates,
+        locationMatchesWaypoint: waypointCoordinates !== null
+          && photoLocationMatchesWaypoint(photoCoordinates, waypointCoordinates),
+        mismatchDistanceM: mismatchedPhotoDistanceM(photoCoordinates, waypointCoordinates),
+      }]);
     }
   }
 
@@ -74,13 +115,14 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
   }
 
   async function onSave() {
-    if (!title.trim()) { setError('Title is required'); return; }
+    if (!title.trim()) { setPremiumError(false); setError(t('error.titleRequired')); return; }
     setLoading(true);
     setError(null);
     const result = await addWaypoint({ tripId, title: title.trim(), description: description.trim() || null, category, photos });
     setLoading(false);
     if (!result.ok) {
-      setError(accessErrorMessage(result.error));
+      setPremiumError(isPremiumAccessError(result.error));
+      setError(localizeError(accessErrorMessage(result.error)));
     } else {
       reset();
       onDismiss();
@@ -93,6 +135,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
     setDescription('');
     setPhotos([]);
     setError(null);
+    setPremiumError(false);
   }
 
   function onCancel() { reset(); onDismiss(); }
@@ -103,7 +146,9 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
   }
 
   const canSave = title.trim().length > 0 && !loading;
-  const suggestedTitle = CATEGORY_TITLE_SUGGESTION[category];
+  const suggestedTitle = category === 'GENERIC'
+    ? t('waypoint.defaultTitle')
+    : t(CATEGORY_KEY[category]);
 
   function clearTitle() {
     setTitle('');
@@ -117,9 +162,9 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
         <View style={[styles.sheet, { backgroundColor: theme.background }]}>
           <View style={[styles.handle, { backgroundColor: theme.border }]} />
 
-          <Text style={[styles.sheetTitle, { color: theme.primaryText }]}>Add waypoint</Text>
+          <Text style={[styles.sheetTitle, { color: theme.primaryText }]}>{t('waypoint.add')}</Text>
           <Text style={[styles.sheetSubtitle, { color: theme.mutedText }]}>
-            Save a quick waypoint for this route using your current location.
+            {t('waypoint.subtitle')}
           </Text>
 
           <ScrollView
@@ -129,23 +174,23 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
             contentContainerStyle={styles.scrollContent}
           >
             {/* Title */}
-            <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>TITLE (REQUIRED)</Text>
+            <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>{t('waypoint.titleRequiredLabel').toUpperCase()}</Text>
             <View style={[styles.titleInputCard, { backgroundColor: theme.card }]}>
               <TextInput
                 ref={titleInputRef}
                 style={[styles.titleInput, { color: theme.primaryText }]}
                 value={title}
                 onChangeText={setTitle}
-                placeholder="What should this waypoint be called?"
+                placeholder={t('waypoint.titlePlaceholder')}
                 placeholderTextColor={theme.mutedText}
-                accessibilityLabel="Waypoint title"
+                accessibilityLabel={t('waypoint.titleAccessibility')}
               />
               {title.length > 0 ? (
                 <Pressable
                   style={styles.clearTitleButton}
                   onPress={clearTitle}
                   accessibilityRole="button"
-                  accessibilityLabel="Clear waypoint title"
+                  accessibilityLabel={t('waypoint.clearTitle')}
                   hitSlop={4}
                 >
                   <MaterialIcons name="close" size={20} color={theme.mutedText} />
@@ -154,20 +199,20 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
             </View>
             <View style={styles.suggestionRow}>
               <Text style={[styles.suggestionText, { color: theme.mutedText }]} numberOfLines={1}>
-                Suggested: {suggestedTitle}
+                {t('waypoint.suggested')} {suggestedTitle}
               </Text>
               <Pressable
                 style={[styles.useSuggestionButton, { borderColor: theme.border }]}
                 onPress={() => setTitle(suggestedTitle)}
                 accessibilityRole="button"
-                accessibilityLabel={`Use suggested title ${suggestedTitle}`}
+                accessibilityLabel={`${t('waypoint.useSuggestion')} ${suggestedTitle}`}
               >
-                <Text style={[styles.useSuggestionText, { color: theme.accent }]}>Use</Text>
+                <Text style={[styles.useSuggestionText, { color: theme.accent }]}>{t('common.use')}</Text>
               </Pressable>
             </View>
 
             {/* Category */}
-            <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>CATEGORY</Text>
+            <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>{t('waypoint.category').toUpperCase()}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
               {CATEGORY_ORDER.map((cat) => {
                 const selected = cat === category;
@@ -189,7 +234,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
                       color={selected ? theme.background : theme.primaryText}
                     />
                     <Text style={[styles.chipText, { color: selected ? theme.background : theme.primaryText }]}>
-                      {CATEGORY_LABEL[cat]}
+                      {t(CATEGORY_KEY[cat])}
                     </Text>
                   </Pressable>
                 );
@@ -197,28 +242,28 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
             </ScrollView>
 
             {/* Note */}
-            <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>NOTE</Text>
+            <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>{t('waypoint.note').toUpperCase()}</Text>
             <TextInput
               style={[styles.inputCard, styles.inputMulti, { backgroundColor: theme.card, color: theme.primaryText }]}
               value={description}
               onChangeText={setDescription}
-              placeholder="What do you want to remember here?"
+              placeholder={t('waypoint.notePlaceholder')}
               placeholderTextColor={theme.mutedText}
               multiline
               textAlignVertical="top"
             />
 
             {/* Photos */}
-            <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>PHOTOS</Text>
+            <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>{t('waypoint.photos').toUpperCase()}</Text>
             <Text style={[styles.photosHint, { color: theme.mutedText }]}>
-              Add one or more photos from the camera or your library.
+              {t('waypoint.photosHint')}
             </Text>
             <View style={styles.photoButtons}>
               <Pressable style={[styles.photoActionBtn, { backgroundColor: theme.accent }]} onPress={() => void onCamera()}>
-                <Text style={[styles.photoActionText, { color: theme.background }]}>Take photo</Text>
+                <Text style={[styles.photoActionText, { color: theme.background }]}>{t('waypoint.takePhoto')}</Text>
               </Pressable>
               <Pressable style={[styles.photoActionBtn, { backgroundColor: theme.accent }]} onPress={() => void onGallery()}>
-                <Text style={[styles.photoActionText, { color: theme.background }]}>Add photos</Text>
+                <Text style={[styles.photoActionText, { color: theme.background }]}>{t('waypoint.addPhotos')}</Text>
               </Pressable>
             </View>
 
@@ -227,8 +272,18 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
                 {photos.map((p, i) => (
                   <View key={i} style={styles.thumbWrapper}>
                     <Image source={{ uri: p.uri }} style={styles.thumb} />
+                    {!p.locationMatchesWaypoint ? (
+                      <View style={[styles.locationWarning, { backgroundColor: theme.dangerMuted }]}>
+                        <MaterialIcons name="location-off" size={15} color={theme.danger} />
+                        <Text style={[styles.locationWarningText, { color: theme.danger }]}>
+                          {p.mismatchDistanceM === null
+                            ? t('waypoint.photoGpsMissing')
+                            : `${t('waypoint.photoLocationMismatch')} · ${formatPhotoDistance(p.mismatchDistanceM)}`}
+                        </Text>
+                      </View>
+                    ) : null}
                     <Pressable style={[styles.removeBadge, { backgroundColor: theme.dangerMuted }]} onPress={() => removePhoto(i)}>
-                      <Text style={[styles.removeBadgeText, { color: theme.danger }]}>Remove</Text>
+                      <Text style={[styles.removeBadgeText, { color: theme.danger }]}>{t('common.remove')}</Text>
                     </Pressable>
                   </View>
                 ))}
@@ -238,9 +293,9 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
             {error ? (
               <View style={styles.errorBlock}>
                 <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>
-                {isPremiumAccessError(error) ? (
+                {premiumError ? (
                   <Pressable onPress={onViewPremium}>
-                    <Text style={[styles.premiumLink, { color: theme.accent }]}>View Premium options</Text>
+                    <Text style={[styles.premiumLink, { color: theme.accent }]}>{t('premium.viewOptions')}</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -250,7 +305,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
           {/* Bottom actions */}
           <View style={[styles.actions, { borderTopColor: theme.border }]}>
             <Pressable style={[styles.cancelBtn, { backgroundColor: theme.accentMuted }]} onPress={onCancel} disabled={loading}>
-              <Text style={[styles.cancelBtnText, { color: theme.primaryText }]}>Cancel</Text>
+              <Text style={[styles.cancelBtnText, { color: theme.primaryText }]}>{t('common.cancel')}</Text>
             </Pressable>
             <Pressable
               style={[styles.saveBtn, { backgroundColor: canSave ? theme.accent : theme.mutedText }]}
@@ -259,7 +314,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
             >
               {loading
                 ? <ActivityIndicator color={theme.background} size="small" />
-                : <Text style={[styles.saveBtnText, { color: theme.background }]}>Save waypoint</Text>
+                : <Text style={[styles.saveBtnText, { color: theme.background }]}>{t('waypoint.save')}</Text>
               }
             </Pressable>
           </View>
@@ -355,6 +410,8 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 14, fontWeight: '600' },
 
   photosHint: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
+  locationWarning: { alignItems: 'center', borderRadius: 10, flexDirection: 'row', gap: 5, marginTop: 6, paddingHorizontal: 8, paddingVertical: 6 },
+  locationWarningText: { flex: 1, fontSize: 11, fontWeight: '700' },
   photoButtons: { flexDirection: 'row', gap: 10 },
   photoActionBtn: {
     flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',

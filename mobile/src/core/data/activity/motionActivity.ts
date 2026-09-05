@@ -1,6 +1,7 @@
 import { PermissionsAndroid, Platform } from 'react-native';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import type { RawActivitySample } from '@/core/domain/model/rawSamples';
+import { translate, useI18nStore } from '@/i18n/i18nStore';
 
 type MotionType = 'walk' | 'bike' | 'drive' | 'stationary' | 'unknown';
 type MotionConfidence = 'low' | 'medium' | 'high';
@@ -51,11 +52,12 @@ async function ensurePermission(): Promise<boolean> {
   if (Platform.OS !== 'android' || Number(Platform.Version) < 29) return true;
   const permission = PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION;
   if (await PermissionsAndroid.check(permission)) return true;
+  const language = useI18nStore.getState().language;
   const result = await PermissionsAndroid.request(permission, {
-    title: 'Activity recognition',
-    message: 'Trailbook uses motion activity while recording to distinguish walking, cycling, and driving.',
-    buttonPositive: 'Allow',
-    buttonNegative: 'Not now',
+    title: translate(language, 'permission.activityTitle'),
+    message: translate(language, 'permission.activityMessage'),
+    buttonPositive: translate(language, 'permission.allow'),
+    buttonNegative: translate(language, 'settings.notNow'),
   });
   return result === PermissionsAndroid.RESULTS.GRANTED;
 }

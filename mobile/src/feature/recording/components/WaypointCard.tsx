@@ -2,7 +2,9 @@ import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { ActiveWaypoint } from '@/feature/recording/recordingStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import { CATEGORY_ICON, CATEGORY_LABEL } from '@/constants/waypointCategories';
+import { useI18n } from '@/i18n/i18nStore';
+import { CATEGORY_ICON } from '@/constants/waypointCategories';
+import type { TranslationKey } from '@/i18n/translations';
 
 interface Props {
   waypoint: ActiveWaypoint;
@@ -12,8 +14,9 @@ interface Props {
 
 export function WaypointCard({ waypoint, onAddPhoto, onRemove }: Props) {
   const { theme } = useAppTheme();
+  const { locale, t } = useI18n();
   const coords = `${waypoint.latitude.toFixed(5)}, ${waypoint.longitude.toFixed(5)}`;
-  const time = waypoint.createdAt.toLocaleString();
+  const time = waypoint.createdAt.toLocaleString(locale);
 
   return (
     <View style={[styles.card, { backgroundColor: theme.accentMuted }]}>
@@ -24,21 +27,21 @@ export function WaypointCard({ waypoint, onAddPhoto, onRemove }: Props) {
       <View style={styles.body}>
         <View style={styles.categoryChip}>
           <MaterialIcons name={CATEGORY_ICON[waypoint.category]} size={13} color="#fffdf8" />
-          <Text style={styles.categoryLabel}>{CATEGORY_LABEL[waypoint.category].toUpperCase()}</Text>
+          <Text style={styles.categoryLabel}>{t(`category.${waypoint.category.toLowerCase()}` as TranslationKey).toUpperCase()}</Text>
         </View>
 
         <Text style={[styles.title, { color: theme.primaryText }]}>{waypoint.title}</Text>
 
         <View style={styles.actions}>
           <Pressable style={[styles.addPhotoBtn, { backgroundColor: theme.border }]} onPress={onAddPhoto}>
-            <Text style={[styles.addPhotoText, { color: theme.primaryText }]}>Add photo</Text>
+            <Text style={[styles.addPhotoText, { color: theme.primaryText }]}>{t('waypoint.addPhoto')}</Text>
           </Pressable>
           <Pressable style={[styles.removeBtn, { backgroundColor: theme.dangerMuted }]} onPress={onRemove}>
-            <Text style={[styles.removeText, { color: theme.danger }]}>Remove waypoint</Text>
+            <Text style={[styles.removeText, { color: theme.danger }]}>{t('waypoint.removeWaypoint')}</Text>
           </Pressable>
         </View>
 
-        <Text style={[styles.meta, { color: theme.mutedText }]}>Location: {coords}</Text>
+        <Text style={[styles.meta, { color: theme.mutedText }]}>{t('waypoint.location')} {coords}</Text>
         <Text style={[styles.meta, { color: theme.mutedText }]}>{time}</Text>
       </View>
     </View>

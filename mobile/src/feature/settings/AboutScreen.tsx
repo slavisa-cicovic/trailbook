@@ -18,9 +18,9 @@ import {
   TRAILBOOK_PRIVACY_POLICY_URL,
   TRAILBOOK_SUPPORT_EMAIL,
   TRAILBOOK_TERMS_OF_USE_URL,
+  TRAILBOOK_WEBSITE_URL,
 } from '@/constants/legal';
-
-const LICENSES_STATUS = 'To be added before public release';
+import { useI18n } from '@/i18n/i18nStore';
 
 function getAppName() {
   return Constants.expoConfig?.name ?? 'Trailbook';
@@ -34,14 +34,14 @@ function getAppVersion() {
   );
 }
 
-function getBuildVersion() {
-  return Application.nativeBuildVersion ?? 'Development';
+function getBuildVersion(fallback = 'Development') {
+  return Application.nativeBuildVersion ?? fallback;
 }
 
-function getRuntimeLabel() {
+function getRuntimeLabel(nativeLabel = 'Native build') {
   return Constants.executionEnvironment === ExecutionEnvironment.StoreClient
     ? 'Expo Go'
-    : 'Native build';
+    : nativeLabel;
 }
 
 function formatPlatformVersion() {
@@ -73,14 +73,15 @@ function buildSupportEmailUrl(account: string) {
 export default function AboutScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
+  const { t } = useI18n();
   const status = useAuthStore((state) => state.status);
   const displayName = useAuthStore((state) => state.displayName);
   const account =
     status === 'demo'
-      ? 'Demo user'
+      ? t('settings.demoUser')
       : status === 'authenticated'
-        ? displayName ?? 'Signed in'
-        : 'Not signed in';
+        ? displayName ?? t('settings.signedIn')
+        : t('about.notSignedIn');
 
   function handleContactSupport() {
     void Linking.openURL(buildSupportEmailUrl(account));
@@ -90,7 +91,7 @@ export default function AboutScreen() {
     <ScreenLayout
       contentVariant="plain"
       onBack={() => router.back()}
-      title="About"
+      title={t('about.title')}
     >
       <View style={styles.root}>
         <View style={[styles.heroCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -101,37 +102,44 @@ export default function AboutScreen() {
           />
           <Text style={[styles.appName, { color: theme.primaryText }]}>{getAppName()}</Text>
           <Text style={[styles.appVersion, { color: theme.mutedText }]}>
-            Version {getAppVersion()}
+            {t('about.version')} {getAppVersion()}
           </Text>
         </View>
 
-        <InfoCard label="App info">
-          <InfoRow label="Build" value={getBuildVersion()} />
-          <InfoRow label="Runtime" value={getRuntimeLabel()} />
-          <InfoRow label="Platform" value={formatPlatformVersion()} />
+        <InfoCard label={t('about.appInfo')}>
+          <InfoRow label={t('about.build')} value={getBuildVersion(t('about.development'))} />
+          <InfoRow label={t('about.runtime')} value={getRuntimeLabel(t('about.nativeBuild'))} />
+          <InfoRow label={t('about.platform')} value={formatPlatformVersion()} />
         </InfoCard>
 
-        <InfoCard label="Support">
-          <InfoRow label="Author" value={TRAILBOOK_SUPPORT_EMAIL} />
+        <InfoCard label={t('about.support')}>
+          <InfoRow label={t('about.author')} value={TRAILBOOK_SUPPORT_EMAIL} />
           <Pressable
             onPress={handleContactSupport}
             style={({ pressed }) => [styles.emailButton, pressed && styles.emailButtonPressed]}
           >
-            <Text style={[styles.emailText, { color: theme.accent }]}>Contact support</Text>
+            <Text style={[styles.emailText, { color: theme.accent }]}>{t('about.contactSupport')}</Text>
           </Pressable>
         </InfoCard>
 
-        <InfoCard label="Permissions">
+        <InfoCard label={t('about.permissions')}>
           <Text style={[styles.bodyText, { color: theme.primaryText }]}>
-            Trailbook uses location, motion activity and camera access for trip recording,
-            automatic segment detection and waypoint photos.
+            {t('about.permissionsDescription')}
           </Text>
         </InfoCard>
 
-        <InfoCard label="Legal">
-          <LegalRow label="Privacy policy" url={TRAILBOOK_PRIVACY_POLICY_URL} />
-          <LegalRow label="Terms of Use" url={TRAILBOOK_TERMS_OF_USE_URL} />
-          <InfoRow label="Open-source licenses" value={LICENSES_STATUS} />
+        <InfoCard label={t('about.links')}>
+          <LegalRow label={t('settings.website')} url={TRAILBOOK_WEBSITE_URL} />
+          <LegalRow label={t('about.privacy')} url={TRAILBOOK_PRIVACY_POLICY_URL} />
+          <LegalRow label={t('about.terms')} url={TRAILBOOK_TERMS_OF_USE_URL} />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/licenses')}
+            style={styles.legalRow}
+          >
+            <Text style={[styles.infoRowLabel, { color: theme.mutedText }]}>{t('about.licenses')}</Text>
+            <Text style={[styles.emailText, { color: theme.accent }]}>{t('common.open')}</Text>
+          </Pressable>
         </InfoCard>
       </View>
     </ScreenLayout>
@@ -140,10 +148,11 @@ export default function AboutScreen() {
 
 function LegalRow({ label, url }: { label: string; url: string }) {
   const { theme } = useAppTheme();
+  const { t } = useI18n();
   return (
     <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(url)} style={styles.legalRow}>
       <Text style={[styles.infoRowLabel, { color: theme.mutedText }]}>{label}</Text>
-      <Text style={[styles.emailText, { color: theme.accent }]}>Open</Text>
+      <Text style={[styles.emailText, { color: theme.accent }]}>{t('common.open')}</Text>
     </Pressable>
   );
 }

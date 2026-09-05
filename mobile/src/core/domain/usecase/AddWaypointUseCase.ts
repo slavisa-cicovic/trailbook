@@ -11,6 +11,7 @@ import {
   authorizeTripPhotos,
 } from '@/core/domain/access/mobileAccessPolicy';
 import { saveNormalizedJpeg } from '@/core/data/local/normalizedPhotoStorage';
+import { photoLocationMatchesWaypoint, type PhotoCoordinates } from '@/core/domain/photo/photoLocation';
 
 export interface AddWaypointParams {
   tripId: string;
@@ -21,6 +22,7 @@ export interface AddWaypointParams {
     uri: string;
     source: ImageSource;
     capturedAt: Date | null;
+    coordinates: PhotoCoordinates | null;
   }>;
 }
 
@@ -74,6 +76,12 @@ export async function addWaypoint(params: AddWaypointParams): Promise<Result<str
         source: photo.source,
         localUri,
         capturedAt: photo.capturedAt,
+        photoLatitude: photo.coordinates?.latitude ?? null,
+        photoLongitude: photo.coordinates?.longitude ?? null,
+        locationMatchesWaypoint: photoLocationMatchesWaypoint(photo.coordinates, {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }),
         objectKey: null,
         uploadState: 'PENDING',
       });

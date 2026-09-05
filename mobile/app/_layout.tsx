@@ -21,6 +21,7 @@ import { runMigrations } from '@/core/db/runMigrations';
 import { useAuthStore } from '@/feature/auth/authStore';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
 import { useThemeStore } from '@/feature/settings/themeStore';
+import { useI18nStore } from '@/i18n/i18nStore';
 import { resolveAppThemeMode } from '@/constants/app-theme';
 import { CustomAlertProvider } from '@/components/ui/custom-alert-dialog';
 // Side-effect imports: register TaskManager tasks before any component mounts
@@ -116,6 +117,7 @@ export default function RootLayout() {
   const initAuth = useAuthStore((s) => s.init);
   const initRecording = useRecordingStore((s) => s.init);
   const initTheme = useThemeStore((s) => s.init);
+  const initI18n = useI18nStore((s) => s.init);
 
   const themeMode = useThemeStore((s) => s.preference);
   const systemColorScheme = useColorScheme();
@@ -136,7 +138,7 @@ export default function RootLayout() {
       try {
         await runStartupPhase('database', runMigrations);
         await runStartupPhase('authentication', initAuth);
-        await runStartupPhase('preferences', initTheme);
+        await runStartupPhase('preferences', async () => Promise.all([initTheme(), initI18n()]));
         await runStartupPhase('background_tasks', unregisterSyncTask);
         await runStartupPhase('recording_recovery', initRecording);
         await clearStartupFailure();
@@ -157,7 +159,7 @@ export default function RootLayout() {
     return () => {
       canceled = true;
     };
-  }, [initAuth, initRecording, initTheme, startupAttempt]);
+  }, [initAuth, initI18n, initRecording, initTheme, startupAttempt]);
 
   if (startupFailure) {
     return (

@@ -5,10 +5,12 @@ import type { TripWithMeta } from '@/feature/trips/tripsStore';
 import type { SegmentType } from '@/core/domain/model/segment';
 import type { AppThemePalette } from '@/constants/app-theme';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
+import type { TranslationKey } from '@/i18n/translations';
 
-const SEGMENT_LABEL: Record<SegmentType, string> = {
-  WALK: 'Walk', BIKE: 'Bike', DRIVE: 'Drive',
-  BOAT: 'Boat', PLANE: 'Plane', STATIONARY: 'Stationary', UNKNOWN: '—',
+const SEGMENT_LABEL: Record<SegmentType, TranslationKey | null> = {
+  WALK: 'activity.walk', BIKE: 'activity.bike', DRIVE: 'activity.drive',
+  BOAT: 'activity.boat', PLANE: 'activity.plane', STATIONARY: 'activity.stationary', UNKNOWN: null,
 };
 
 const HIDDEN_TYPES: SegmentType[] = ['STATIONARY', 'UNKNOWN'];
@@ -23,15 +25,11 @@ function formatDuration(ms: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-function formatDate(d: Date): string {
-  return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
-}
-
-function modeLabel(segments: TripWithMeta['segments']): string {
+function modeLabel(segments: TripWithMeta['segments'], t: (key: TranslationKey) => string): string {
   const types = [...new Set(
     segments.map((s) => s.segmentType).filter((t) => !HIDDEN_TYPES.includes(t)),
   )];
-  return types.length === 0 ? '—' : types.map((t) => SEGMENT_LABEL[t]).join(' + ');
+  return types.length === 0 ? '—' : types.map((type) => SEGMENT_LABEL[type] ? t(SEGMENT_LABEL[type]!) : '—').join(' + ');
 }
 
 interface Props {
@@ -58,6 +56,7 @@ export function TripCard({
   const { trip, segments, totalDistanceM, waypointCount, photoCount } = item;
   const swipeRef = useRef<Swipeable>(null);
   const { theme, resolvedMode } = useAppTheme();
+  const { locale, t } = useI18n();
 
   const night = resolvedMode === 'night';
   const swipeOpenBg = night ? '#1a3d32' : '#d4e8e0';
@@ -67,10 +66,10 @@ export function TripCard({
     ? trip.endedAt.getTime() - trip.startedAt.getTime()
     : 0;
 
-  const syncLabel = syncing ? 'SYNCING'
-    : trip.syncState === 'SYNCED' ? 'SYNCED'
-    : trip.syncState === 'PENDING' ? 'PENDING'
-    : 'FAILED';
+  const syncLabel = t(syncing ? 'trips.sync.syncing'
+    : trip.syncState === 'SYNCED' ? 'trips.sync.synced'
+    : trip.syncState === 'PENDING' ? 'trips.sync.pending'
+    : 'trips.sync.failed').toUpperCase();
 
   const badgeBg = syncing
     ? theme.accentMuted
@@ -99,10 +98,10 @@ export function TripCard({
           style={[styles.swipeOpen, { backgroundColor: swipeOpenBg }]}
           onPress={() => { swipeRef.current?.close(); onPress(); }}
         >
-          <Text style={[styles.swipeOpenText, { color: swipeOpenColor }]}>Open</Text>
+          <Text style={[styles.swipeOpenText, { color: swipeOpenColor }]}>{t('common.open')}</Text>
         </Pressable>
         <Pressable style={[styles.swipeDelete, { backgroundColor: theme.dangerMuted }]} onPress={onDelete}>
-          <Text style={[styles.swipeDeleteText, { color: theme.danger }]}>Delete</Text>
+          <Text style={[styles.swipeDeleteText, { color: theme.danger }]}>{t('common.delete')}</Text>
         </Pressable>
       </View>
     );
@@ -142,14 +141,14 @@ export function TripCard({
         </View>
 
         <Pressable style={styles.grid} onPress={onPress} onLongPress={onLongPress}>
-          <StatCell label="MODE" value={modeLabel(segments)} theme={theme} />
-          <StatCell label="DISTANCE" value={formatDistance(totalDistanceM)} theme={theme} />
-          <StatCell label="WAYPOINTS" value={String(waypointCount)} theme={theme} />
-          <StatCell label="PHOTOS" value={String(photoCount)} theme={theme} />
-          <StatCell label="SEGMENTS" value={String(segments.length)} theme={theme} />
-          <StatCell label="DURATION" value={durationMs > 0 ? formatDuration(durationMs) : '—'} theme={theme} />
-          <StatCell label="STARTED" value={formatDate(trip.startedAt)} theme={theme} />
-          <StatCell label="ENDED" value={trip.endedAt ? formatDate(trip.endedAt) : '—'} theme={theme} />
+          <StatCell label={t('trips.mode')} value={modeLabel(segments, t)} theme={theme} />
+          <StatCell label={t('trips.distance')} value={formatDistance(totalDistanceM)} theme={theme} />
+          <StatCell label={t('trips.waypoints')} value={String(waypointCount)} theme={theme} />
+          <StatCell label={t('trips.photos')} value={String(photoCount)} theme={theme} />
+          <StatCell label={t('trips.segments')} value={String(segments.length)} theme={theme} />
+          <StatCell label={t('trips.duration')} value={durationMs > 0 ? formatDuration(durationMs) : '—'} theme={theme} />
+          <StatCell label={t('trips.started')} value={trip.startedAt.toLocaleDateString(locale)} theme={theme} />
+          <StatCell label={t('trips.ended')} value={trip.endedAt ? trip.endedAt.toLocaleDateString(locale) : '—'} theme={theme} />
         </Pressable>
       </View>
     </Swipeable>

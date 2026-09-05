@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { useRecordingStore } from '../recordingStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
 import {
   accessErrorMessage,
   isPremiumAccessError,
@@ -23,9 +24,11 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [premiumError, setPremiumError] = useState(false);
   const startRecording = useRecordingStore((s) => s.startRecording);
   const { theme } = useAppTheme();
   const router = useRouter();
+  const { localizeError, t } = useI18n();
 
   function clearPendingFocus() {
     if (!focusTimeoutRef.current) return;
@@ -51,14 +54,16 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
   }, [visible]);
 
   async function onStart() {
-    if (!title.trim()) { setError('Title is required'); return; }
+    if (!title.trim()) { setPremiumError(false); setError(t('error.titleRequired')); return; }
     setLoading(true);
     setError(null);
     const result = await startRecording(title.trim(), description.trim() || null);
     setLoading(false);
     if (!result.ok) {
-      setError(accessErrorMessage(result.error));
+      setPremiumError(isPremiumAccessError(result.error));
+      setError(localizeError(accessErrorMessage(result.error)));
     } else {
+      setPremiumError(false);
       setTitle('');
       setDescription('');
       onDismiss();
@@ -70,6 +75,7 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
     setTitle('');
     setDescription('');
     setError(null);
+    setPremiumError(false);
     onDismiss();
   }
 
@@ -90,26 +96,26 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
         <Pressable style={styles.backdrop} onPress={onCancel} />
         <View style={[styles.sheet, { backgroundColor: theme.background }]}>
           <View style={[styles.handle, { backgroundColor: theme.border }]} />
-          <Text style={[styles.sheetTitle, { color: theme.primaryText }]}>New Trip</Text>
+          <Text style={[styles.sheetTitle, { color: theme.primaryText }]}>{t('trip.new')}</Text>
 
-          <Text style={[styles.label, { color: theme.mutedText }]}>TITLE</Text>
+          <Text style={[styles.label, { color: theme.mutedText }]}>{t('trip.title').toUpperCase()}</Text>
           <TextInput
             ref={titleInputRef}
             style={[styles.input, { backgroundColor: theme.card, color: theme.primaryText, borderColor: theme.border }]}
             value={title}
             onChangeText={setTitle}
-            placeholder="Where are you going?"
+            placeholder={t('trip.titlePlaceholder')}
             placeholderTextColor={theme.mutedText}
             autoFocus={Platform.OS === 'ios'}
             returnKeyType="next"
           />
 
-          <Text style={[styles.label, { color: theme.mutedText }]}>DESCRIPTION</Text>
+          <Text style={[styles.label, { color: theme.mutedText }]}>{t('trip.description').toUpperCase()}</Text>
           <TextInput
             style={[styles.input, styles.inputMulti, { backgroundColor: theme.card, color: theme.primaryText, borderColor: theme.border }]}
             value={description}
             onChangeText={setDescription}
-            placeholder="Optional notes"
+            placeholder={t('trip.descriptionPlaceholder')}
             placeholderTextColor={theme.mutedText}
             multiline
             numberOfLines={3}
@@ -118,9 +124,9 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
           {error ? (
             <View style={styles.errorBlock}>
               <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>
-              {isPremiumAccessError(error) ? (
+              {premiumError ? (
                 <Pressable onPress={onViewPremium}>
-                  <Text style={[styles.premiumLink, { color: theme.accent }]}>View Premium options</Text>
+                  <Text style={[styles.premiumLink, { color: theme.accent }]}>{t('premium.viewOptions')}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -128,7 +134,7 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
 
           <View style={styles.buttons}>
             <Pressable style={[styles.button, { backgroundColor: theme.accentMuted }]} onPress={onCancel} disabled={loading}>
-              <Text style={[styles.cancelText, { color: theme.primaryText }]}>Cancel</Text>
+              <Text style={[styles.cancelText, { color: theme.primaryText }]}>{t('common.cancel')}</Text>
             </Pressable>
             <Pressable
               style={[styles.button, { backgroundColor: theme.accent }, loading && styles.disabled]}
@@ -137,7 +143,7 @@ export function StartTripSheet({ visible, onDismiss }: Props) {
             >
               {loading
                 ? <ActivityIndicator color={theme.background} />
-                : <Text style={[styles.startText, { color: theme.background }]}>Start</Text>
+                : <Text style={[styles.startText, { color: theme.background }]}>{t('common.start')}</Text>
               }
             </Pressable>
           </View>

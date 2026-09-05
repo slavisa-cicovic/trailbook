@@ -2,6 +2,7 @@ import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-nati
 import { MaterialIcons } from '@expo/vector-icons';
 import type { Trip } from '@/core/domain/model/trip';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
 
 interface Props {
   isRecording: boolean;
@@ -19,6 +20,7 @@ export function SessionCard({
   onStartPress, onStopPress, onResumePress, onDetailsPress,
 }: Props) {
   const { theme, resolvedMode } = useAppTheme();
+  const { t } = useI18n();
 
   const cardBg = resolvedMode === 'night'
     ? 'rgba(22, 32, 24, 0.96)'
@@ -36,7 +38,7 @@ export function SessionCard({
           </Pressable>
           <Pressable style={styles.textArea} onPress={onDetailsPress}>
             <Text style={[styles.title, { color: theme.primaryText }]} numberOfLines={1}>{trip.title}</Text>
-            <Text style={[styles.sub, { color: theme.mutedText }]}>paused · tap for details</Text>
+            <Text style={[styles.sub, { color: theme.mutedText }]}>{t('recording.pausedDetails')}</Text>
           </Pressable>
         </View>
       );
@@ -52,7 +54,7 @@ export function SessionCard({
         </Pressable>
         <Pressable style={styles.textArea} onPress={onDetailsPress}>
           <Text style={[styles.title, { color: theme.primaryText }]} numberOfLines={1}>{trip.title}</Text>
-          <Text style={[styles.sub, { color: theme.mutedText }]}>recording · tap for details</Text>
+          <Text style={[styles.sub, { color: theme.mutedText }]}>{t('recording.recordingDetails')}</Text>
         </Pressable>
       </View>
     );
@@ -67,8 +69,8 @@ export function SessionCard({
         <MaterialIcons name="play-arrow" size={28} color={theme.accent} />
       </Pressable>
       <Pressable style={styles.textArea} onPress={onStartPress}>
-        <Text style={[styles.title, { color: theme.primaryText }]}>No active route</Text>
-        <Text style={[styles.sub, { color: theme.mutedText }]}>Tap to start recording</Text>
+        <Text style={[styles.title, { color: theme.primaryText }]}>{t('recording.noActiveRoute')}</Text>
+        <Text style={[styles.sub, { color: theme.mutedText }]}>{t('recording.tapToStart')}</Text>
       </Pressable>
     </View>
   );

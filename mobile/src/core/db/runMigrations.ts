@@ -86,6 +86,9 @@ const MIGRATION_0000 = `
     source text NOT NULL,
     local_uri text NOT NULL,
     captured_at text,
+    photo_latitude real,
+    photo_longitude real,
+    location_matches_waypoint integer NOT NULL DEFAULT 0,
     object_key text,
     upload_state text NOT NULL DEFAULT 'PENDING'
   );
@@ -248,6 +251,24 @@ const MIGRATION_0011 = `
     ON raw_activity_samples (trip_id, timestamp);
 `;
 
+async function migration_0012(sqlite: SQLiteDatabase): Promise<void> {
+  const columns = await sqlite.getAllAsync<{ name: string }>(
+    `SELECT name FROM pragma_table_info('waypoint_images')`,
+  );
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has('photo_latitude')) {
+    await sqlite.execAsync(`ALTER TABLE waypoint_images ADD COLUMN photo_latitude real;`);
+  }
+  if (!names.has('photo_longitude')) {
+    await sqlite.execAsync(`ALTER TABLE waypoint_images ADD COLUMN photo_longitude real;`);
+  }
+  if (!names.has('location_matches_waypoint')) {
+    await sqlite.execAsync(
+      `ALTER TABLE waypoint_images ADD COLUMN location_matches_waypoint integer NOT NULL DEFAULT 0;`,
+    );
+  }
+}
+
 type Migration = [number, string | ((db: SQLiteDatabase) => Promise<void>)];
 
 const MIGRATIONS: Migration[] = [
@@ -263,6 +284,7 @@ const MIGRATIONS: Migration[] = [
   [9, migration_0009],
   [10, MIGRATION_0010],
   [11, MIGRATION_0011],
+  [12, migration_0012],
 ];
 
 export async function runMigrations(): Promise<void> {

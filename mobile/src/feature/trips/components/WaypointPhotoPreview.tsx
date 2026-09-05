@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useI18n } from '@/i18n/i18nStore';
 
 export const WAYPOINT_PREVIEW_WIDTH = 148;
 export const WAYPOINT_PREVIEW_HEIGHT = 108;
@@ -32,6 +33,7 @@ export function WaypointPhotoPreview({
   placement,
   title,
 }: WaypointPhotoPreviewProps) {
+  const { t } = useI18n();
   const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const [retryKey, setRetryKey] = useState(0);
 
@@ -43,7 +45,7 @@ export function WaypointPhotoPreview({
   return (
     <View pointerEvents="box-none" style={styles.root}>
       <Pressable
-        accessibilityLabel="Close waypoint preview"
+        accessibilityLabel={t('tripDetails.closeWaypointPreview')}
         onPress={onClose}
         style={styles.backdrop}
       />
@@ -52,7 +54,7 @@ export function WaypointPhotoPreview({
           <View style={[styles.stem, styles.stemTop, placement.stem]} />
         )}
         <Pressable
-          accessibilityLabel={`Open waypoint ${title}`}
+          accessibilityLabel={`${t('tripDetails.openWaypoint')} ${title}`}
           onPress={onOpen}
           style={styles.card}
         >
@@ -71,7 +73,7 @@ export function WaypointPhotoPreview({
                 <ActivityIndicator color="#52624f" />
               ) : (
                 <Pressable
-                  accessibilityLabel="Retry waypoint photo"
+                  accessibilityLabel={t('tripDetails.retryWaypointPhoto')}
                   onPress={(event) => {
                     event.stopPropagation();
                     setLoadState('loading');
@@ -80,7 +82,7 @@ export function WaypointPhotoPreview({
                   style={styles.retry}
                 >
                   <MaterialIcons color="#52624f" name="refresh" size={22} />
-                  <Text style={styles.retryText}>Retry photo</Text>
+                  <Text style={styles.retryText}>{t('tripDetails.retryPhoto')}</Text>
                 </Pressable>
               )}
             </View>

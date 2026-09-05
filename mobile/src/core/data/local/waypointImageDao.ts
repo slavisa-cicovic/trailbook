@@ -12,6 +12,9 @@ function toRow(img: WaypointImage) {
     source: img.source,
     localUri: img.localUri,
     capturedAt: img.capturedAt?.toISOString() ?? null,
+    photoLatitude: img.photoLatitude,
+    photoLongitude: img.photoLongitude,
+    locationMatchesWaypoint: img.locationMatchesWaypoint,
     objectKey: img.objectKey,
     uploadState: img.uploadState,
   };
@@ -24,6 +27,9 @@ function toDomain(row: typeof waypointImages.$inferSelect): WaypointImage {
     source: row.source as ImageSource,
     localUri: row.localUri,
     capturedAt: row.capturedAt ? new Date(row.capturedAt) : null,
+    photoLatitude: row.photoLatitude,
+    photoLongitude: row.photoLongitude,
+    locationMatchesWaypoint: row.locationMatchesWaypoint,
     objectKey: row.objectKey,
     uploadState: row.uploadState as ImageUploadState,
   };

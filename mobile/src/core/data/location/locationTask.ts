@@ -4,6 +4,7 @@ import type { LocationObject } from 'expo-location';
 import { Platform } from 'react-native';
 import { getActiveRecordingTripId } from './activeTripStore';
 import * as rawLocationDao from '@/core/data/local/rawLocationDao';
+import { translate, useI18nStore } from '@/i18n/i18nStore';
 import * as rawActivityDao from '@/core/data/local/rawActivityDao';
 import * as rawSessionEventDao from '@/core/data/local/rawSessionEventDao';
 import { buildActivitySampleFromSpeed } from '@/core/data/activity/activitySampler';
@@ -68,6 +69,7 @@ function compactTaskOptions(options: Location.LocationTaskOptions): LocationTask
 }
 
 function buildLocationTaskOptions(): Location.LocationTaskOptions {
+  const language = useI18nStore.getState().language;
   const common: Location.LocationTaskOptions = {
     timeInterval: 3000,
     distanceInterval: 5,
@@ -93,7 +95,7 @@ function buildLocationTaskOptions(): Location.LocationTaskOptions {
     accuracy: Location.Accuracy.High,
     foregroundService: {
       notificationTitle: 'Trailbook',
-      notificationBody: 'Recording trip in progress...',
+      notificationBody: translate(language, 'recording.notification'),
       notificationColor: '#1a1a1a',
     },
   };

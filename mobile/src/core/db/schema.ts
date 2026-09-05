@@ -39,6 +39,9 @@ export const waypointImages = sqliteTable(
     source: text('source').notNull(), // CAMERA | GALLERY
     localUri: text('local_uri').notNull(),
     capturedAt: text('captured_at'),
+    photoLatitude: real('photo_latitude'),
+    photoLongitude: real('photo_longitude'),
+    locationMatchesWaypoint: integer('location_matches_waypoint', { mode: 'boolean' }).notNull().default(false),
     objectKey: text('object_key'),
     uploadState: text('upload_state').notNull().default('PENDING'), // PENDING | UPLOADED | FAILED
   },

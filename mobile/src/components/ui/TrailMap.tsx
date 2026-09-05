@@ -3,6 +3,8 @@ import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import type { MapViewProps, MapType } from 'react-native-maps';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
+import type { TranslationKey } from '@/i18n/translations';
 
 const NIGHT_MAP_STYLE = [
   { elementType: 'geometry', stylers: [{ color: '#212121' }] },
@@ -21,10 +23,10 @@ const NIGHT_MAP_STYLE = [
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#3d3d3d' }] },
 ];
 
-const MAP_TYPES: { label: string; value: MapType }[] = [
-  { label: 'Map', value: 'standard' },
-  { label: 'Satellite', value: 'satellite' },
-  { label: 'Hybrid', value: 'hybrid' },
+const MAP_TYPES: { label: TranslationKey; value: MapType }[] = [
+  { label: 'map.standard', value: 'standard' },
+  { label: 'map.satellite', value: 'satellite' },
+  { label: 'map.hybrid', value: 'hybrid' },
 ];
 
 type Props = Omit<MapViewProps, 'mapType' | 'provider' | 'customMapStyle' | 'userInterfaceStyle'> & {
@@ -40,6 +42,7 @@ export const TrailMap = forwardRef<MapView, Props>(function TrailMap(
   ref,
 ) {
   const { theme, resolvedMode } = useAppTheme();
+  const { t } = useI18n();
   const [internalType, setInternalType] = useState<MapType>('standard');
   const activeType = controlledType ?? internalType;
 
@@ -70,22 +73,22 @@ export const TrailMap = forwardRef<MapView, Props>(function TrailMap(
           ]}
           pointerEvents="box-none"
         >
-          {MAP_TYPES.map((t) => (
+          {MAP_TYPES.map((option) => (
             <Pressable
-              key={t.value}
+              key={option.value}
               style={[
                 styles.chip,
-                { backgroundColor: activeType === t.value ? theme.accent : theme.card },
+                { backgroundColor: activeType === option.value ? theme.accent : theme.card },
               ]}
-              onPress={() => handleTypeChange(t.value)}
+              onPress={() => handleTypeChange(option.value)}
             >
               <Text
                 style={[
                   styles.chipText,
-                  { color: activeType === t.value ? theme.background : theme.primaryText },
+                  { color: activeType === option.value ? theme.background : theme.primaryText },
                 ]}
               >
-                {t.label}
+                {t(option.label)}
               </Text>
             </Pressable>
           ))}

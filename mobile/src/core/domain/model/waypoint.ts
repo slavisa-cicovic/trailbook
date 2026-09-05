@@ -32,6 +32,9 @@ export interface WaypointImage {
   source: ImageSource;
   localUri: string;
   capturedAt: Date | null;
+  photoLatitude: number | null;
+  photoLongitude: number | null;
+  locationMatchesWaypoint: boolean;
   objectKey: string | null;
   uploadState: ImageUploadState;
 }

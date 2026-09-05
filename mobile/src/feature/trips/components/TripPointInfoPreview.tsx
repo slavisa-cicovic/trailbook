@@ -1,6 +1,13 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SEGMENT_COLOR, SEGMENT_LABEL } from '@/constants/segmentColors';
+import { SEGMENT_COLOR } from '@/constants/segmentColors';
 import type { SegmentType } from '@/core/domain/model/segment';
+import { useI18n } from '@/i18n/i18nStore';
+import type { TranslationKey } from '@/i18n/translations';
+
+const SEGMENT_TRANSLATION: Record<SegmentType, TranslationKey> = {
+  WALK: 'activity.walk', BIKE: 'activity.bike', DRIVE: 'activity.drive', BOAT: 'activity.boat',
+  PLANE: 'activity.plane', STATIONARY: 'activity.stationary', UNKNOWN: 'activity.unknown',
+};
 
 export const TRIP_POINT_PREVIEW_WIDTH = 158;
 export const TRIP_POINT_PREVIEW_HEIGHT = 86;
@@ -33,8 +40,8 @@ interface TripPointInfoPreviewProps {
   point: TripPointInfo;
 }
 
-function formatRecordedAt(recordedAt: Date) {
-  return recordedAt.toLocaleString([], {
+function formatRecordedAt(recordedAt: Date, locale: string) {
+  return recordedAt.toLocaleString(locale, {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
@@ -55,13 +62,14 @@ export function TripPointInfoPreview({
   placement,
   point,
 }: TripPointInfoPreviewProps) {
+  const { locale, t } = useI18n();
   const speed = formatSpeed(point.speedMps);
   const accuracy = formatAccuracy(point.accuracyM);
 
   return (
     <View pointerEvents="box-none" style={styles.root}>
       <Pressable
-        accessibilityLabel="Close trip point information"
+        accessibilityLabel={t('tripDetails.closePointInfo')}
         onPress={onClose}
         style={styles.backdrop}
       />
@@ -77,9 +85,9 @@ export function TripPointInfoPreview({
                 { backgroundColor: SEGMENT_COLOR[point.segmentType] },
               ]}
             />
-            <Text style={styles.mode}>{SEGMENT_LABEL[point.segmentType]}</Text>
+            <Text style={styles.mode}>{t(SEGMENT_TRANSLATION[point.segmentType])}</Text>
           </View>
-          <Text style={styles.recordedAt}>{formatRecordedAt(point.recordedAt)}</Text>
+          <Text style={styles.recordedAt}>{formatRecordedAt(point.recordedAt, locale)}</Text>
           <View style={styles.metaRow}>
             {speed && <Text style={styles.metaPill}>{speed}</Text>}
             {accuracy && <Text style={styles.metaPill}>{accuracy}</Text>}

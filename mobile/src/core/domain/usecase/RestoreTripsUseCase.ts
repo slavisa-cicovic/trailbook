@@ -50,7 +50,10 @@ async function restoreImage(
       waypointId,
       source: 'CAMERA',
       localUri,
-      capturedAt: null,
+          capturedAt: null,
+          photoLatitude: null,
+          photoLongitude: null,
+          locationMatchesWaypoint: false,
       objectKey: image.objectKey,
       uploadState: 'UPLOADED',
     });

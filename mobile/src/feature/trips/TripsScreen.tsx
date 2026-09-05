@@ -32,14 +32,15 @@ import {
   isPremiumAccessError,
 } from '@/core/domain/access/mobileAccessPolicy';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
-import { ACTIVE_RECORDING_MUTATION_ERROR } from '@/core/domain/recording/recordingMutationPolicy';
+import { useI18n } from '@/i18n/i18nStore';
+import type { TranslationKey } from '@/i18n/translations';
 
 type Tab = 'my_trips' | 'groups' | 'shared';
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'my_trips', label: 'My trips' },
-  { key: 'groups', label: 'Groups' },
-  { key: 'shared', label: 'Shared with me' },
+const TABS: { key: Tab; label: TranslationKey }[] = [
+  { key: 'my_trips', label: 'trips.myTrips' },
+  { key: 'groups', label: 'trips.groups' },
+  { key: 'shared', label: 'trips.sharedWithMe' },
 ];
 
 
@@ -69,6 +70,7 @@ export default function TripsScreen() {
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
   const isRecording = useRecordingStore((s) => s.isRecording);
+  const { localizeError, t } = useI18n();
 
   const [tab, setTab] = useState<Tab>('my_trips');
   const [showFilters, setShowFilters] = useState(false);
@@ -106,11 +108,11 @@ export default function TripsScreen() {
   function showActionError(title: string, error: string) {
     showAlert({
       title,
-      message: accessErrorMessage(error),
+      message: localizeError(accessErrorMessage(error)),
       buttons: isPremiumAccessError(error)
         ? [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'View Premium', onPress: () => router.push('/premium') },
+            { text: t('settings.notNow'), style: 'cancel' },
+            { text: t('settings.viewPremium'), onPress: () => router.push('/premium') },
           ]
         : undefined,
     });
@@ -120,13 +122,13 @@ export default function TripsScreen() {
     if (!allowTripMutation()) return;
     const error = await syncTrip(clientTripId);
     if (error) {
-      showActionError('Sync failed', error);
+      showActionError(t('trips.syncFailed'), error);
     }
   }
 
   function toggleTripSelection(item: TripWithMeta) {
     if (item.trip.syncState !== 'SYNCED') {
-      showAlert({ title: 'Sync required', message: 'Sync trip before adding it to a group.' });
+      showAlert({ title: t('trips.syncRequired'), message: t('trips.syncBeforeGroup') });
       return;
     }
     setSelectedTripIds((current) =>
@@ -147,7 +149,7 @@ export default function TripsScreen() {
   async function handleCreateGroup(title: string, description: string | null) {
     const error = await createGroup(title, description, selectedTripIds);
     if (error) {
-      showActionError('Could not create group', error);
+      showActionError(t('trips.createGroupFailed'), error);
       return;
     }
     setAddToGroupVisible(false);
@@ -157,7 +159,7 @@ export default function TripsScreen() {
   async function handleAddToExisting(groupId: string) {
     const error = await addTripsToGroup(groupId, selectedTripIds);
     if (error) {
-      showActionError('Could not update group', error);
+      showActionError(t('trips.updateGroupFailed'), error);
       return;
     }
     setAddToGroupVisible(false);
@@ -167,26 +169,26 @@ export default function TripsScreen() {
   async function handleSyncGroup(groupId: string) {
     if (!allowTripMutation()) return;
     const error = await syncGroup(groupId);
-    if (error) showActionError('Group sync failed', error);
+    if (error) showActionError(t('trips.groupSyncFailed'), error);
   }
 
   function allowTripMutation(): boolean {
     if (!isRecording) return true;
-    showAlert({ title: 'Recording in progress', message: ACTIVE_RECORDING_MUTATION_ERROR });
+    showAlert({ title: t('trips.recordingInProgress'), message: t('trips.recordingMutationBlocked') });
     return false;
   }
 
   async function handleDeleteTrip(clientTripId: string) {
     if (!allowTripMutation()) return;
     const error = await deleteTrip(clientTripId);
-    if (error) showActionError('Delete failed', error);
+    if (error) showActionError(t('trips.deleteFailed'), error);
   }
 
   function openGroup(groupId: string) {
     const group = groups.find((item) => item.group.id === groupId);
     const firstTrip = sortGroupTrips(group, tripsById, groupSort)[0];
     if (!firstTrip) {
-      showAlert({ title: 'Empty group', message: 'This group has no locally available trips.' });
+      showAlert({ title: t('trips.emptyGroup'), message: t('trips.emptyGroupMessage') });
       return;
     }
     router.push(groupTripHref(firstTrip.trip.clientTripId, groupId, groupSort));
@@ -194,16 +196,16 @@ export default function TripsScreen() {
 
   function confirmDeleteGroup(groupId: string) {
     showAlert({
-      title: 'Delete group?',
-      message: 'Trips will not be deleted.',
+      title: t('trips.deleteGroupQuestion'),
+      message: t('trips.tripsWillRemain'),
       buttons: [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             const error = await deleteGroup(groupId);
-            if (error) showAlert({ title: 'Delete failed', message: error });
+            if (error) showAlert({ title: t('trips.deleteFailed'), message: error });
           },
         },
       ],
@@ -214,24 +216,24 @@ export default function TripsScreen() {
     return (
       <View style={{ backgroundColor: theme.background }}>
         <Text style={[styles.subtitle, { color: theme.mutedText }]}>
-          Your local recorded routes and saved trip content.
+          {t('trips.subtitle')}
         </Text>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
-          {visibleTabs.map((t) => (
+          {visibleTabs.map((item) => (
             <Pressable
-              key={t.key}
+              key={item.key}
               style={[
                 styles.tab,
-                { backgroundColor: t.key === tab ? theme.accent : theme.accentMuted },
+                { backgroundColor: item.key === tab ? theme.accent : theme.accentMuted },
               ]}
-              onPress={() => setTab(t.key)}
+              onPress={() => setTab(item.key)}
             >
               <Text style={[
                 styles.tabText,
-                { color: t.key === tab ? theme.background : theme.mutedText },
+                { color: item.key === tab ? theme.background : theme.mutedText },
               ]}>
-                {t.label}
+                {t(item.label)}
               </Text>
             </Pressable>
           ))}
@@ -242,19 +244,19 @@ export default function TripsScreen() {
             {selectionMode && (
               <View style={[styles.selectionBar, { backgroundColor: theme.card }]}>
                 <Text style={[styles.selectionText, { color: theme.primaryText }]}>
-                  {selectedTripIds.length} selected
+                  {selectedTripIds.length} {t(selectedTripIds.length === 1 ? 'trips.selectedOne' : 'trips.selectedMany')}
                 </Text>
                 <Pressable
                   style={[styles.selectionAction, { backgroundColor: theme.accentMuted }]}
                   onPress={() => setSelectedTripIds([])}
                 >
-                  <Text style={[styles.selectionActionText, { color: theme.mutedText }]}>Cancel</Text>
+                  <Text style={[styles.selectionActionText, { color: theme.mutedText }]}>{t('common.cancel')}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.selectionAction, { backgroundColor: theme.accent }]}
                   onPress={() => setAddToGroupVisible(true)}
                 >
-                  <Text style={[styles.selectionActionText, { color: theme.background }]}>Add to group</Text>
+                  <Text style={[styles.selectionActionText, { color: theme.background }]}>{t('trips.addToGroup')}</Text>
                 </Pressable>
               </View>
             )}
@@ -284,14 +286,14 @@ export default function TripsScreen() {
             {sharedTripsError ? (
               <View style={[styles.placeholder, { backgroundColor: theme.card }]}>
                 <Text style={[styles.placeholderText, { color: theme.mutedText }]}>
-                  {accessErrorMessage(sharedTripsError)}
+                  {localizeError(accessErrorMessage(sharedTripsError))}
                 </Text>
                 {isPremiumAccessError(sharedTripsError) ? (
                   <Pressable
                     onPress={() => router.push('/premium')}
                     style={[styles.placeholderAction, { backgroundColor: theme.accent }]}
                   >
-                    <Text style={[styles.placeholderActionText, { color: theme.background }]}>View Premium</Text>
+                    <Text style={[styles.placeholderActionText, { color: theme.background }]}>{t('settings.viewPremium')}</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -320,7 +322,7 @@ export default function TripsScreen() {
                     { color: option.key === groupSort ? theme.background : theme.mutedText },
                   ]}
                 >
-                  {option.label}
+                  {t(`trips.sort.${option.key}` as TranslationKey)}
                 </Text>
               </Pressable>
             ))}
@@ -333,7 +335,7 @@ export default function TripsScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
-        <TopAppBar title="Trips" />
+        <TopAppBar title={t('trips.title')} />
         {loading && trips.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator color={theme.accent} style={{ marginTop: 40 }} />
@@ -359,9 +361,9 @@ export default function TripsScreen() {
                   <ActivityIndicator color={theme.accent} />
                 ) : (
                   <>
-                    <Text style={[styles.emptyTitle, { color: theme.primaryText }]}>No groups yet</Text>
+                    <Text style={[styles.emptyTitle, { color: theme.primaryText }]}>{t('trips.noGroups')}</Text>
                     <Text style={[styles.emptySub, { color: theme.mutedText }]}>
-                      Long press synced trips to create a group.
+                      {t('trips.noGroupsHint')}
                     </Text>
                   </>
                 )}
@@ -387,10 +389,10 @@ export default function TripsScreen() {
                 ) : (
                   <>
                     <Text style={[styles.emptyTitle, { color: theme.primaryText }]}>
-                      No shared trips
+                      {t('trips.noSharedTrips')}
                     </Text>
                     <Text style={[styles.emptySub, { color: theme.mutedText }]}>
-                      Trips shared by other Trailbook users will appear here.
+                      {t('trips.noSharedTripsHint')}
                     </Text>
                   </>
                 )}
@@ -417,9 +419,9 @@ export default function TripsScreen() {
             ListHeaderComponent={ListHeader}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Text style={[styles.emptyTitle, { color: theme.primaryText }]}>No trips yet</Text>
+                <Text style={[styles.emptyTitle, { color: theme.primaryText }]}>{t('trips.noTrips')}</Text>
                 <Text style={[styles.emptySub, { color: theme.mutedText }]}>
-                  Start recording to create your first trip
+                  {t('trips.noTripsHint')}
                 </Text>
               </View>
             }

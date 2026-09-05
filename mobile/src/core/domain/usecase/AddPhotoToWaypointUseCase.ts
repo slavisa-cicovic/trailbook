@@ -9,12 +9,14 @@ import { dbEvents } from '@/core/db/events';
 import { randomUuid } from '@/core/common/uuid';
 import { authorizeTripPhotos } from '@/core/domain/access/mobileAccessPolicy';
 import { saveNormalizedJpeg } from '@/core/data/local/normalizedPhotoStorage';
+import { photoLocationMatchesWaypoint, type PhotoCoordinates } from '@/core/domain/photo/photoLocation';
 
 export async function addPhotoToWaypoint(
   waypointId: string,
   uri: string,
   source: ImageSource,
   capturedAt: Date | null,
+  coordinates: PhotoCoordinates | null,
 ): Promise<Result<void>> {
   try {
     const waypoint = await waypointDao.getById(waypointId);
@@ -34,6 +36,9 @@ export async function addPhotoToWaypoint(
       source,
       localUri,
       capturedAt,
+      photoLatitude: coordinates?.latitude ?? null,
+      photoLongitude: coordinates?.longitude ?? null,
+      locationMatchesWaypoint: photoLocationMatchesWaypoint(coordinates, waypoint),
       objectKey: null,
       uploadState: 'PENDING',
     });

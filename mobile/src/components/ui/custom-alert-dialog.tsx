@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
 
 export interface CustomAlertButton {
   onPress?: () => void;
@@ -35,6 +36,7 @@ const CustomAlertContext = createContext<CustomAlertContextValue | null>(null);
 
 export function CustomAlertProvider({ children }: PropsWithChildren) {
   const { theme } = useAppTheme();
+  const { t } = useI18n();
   const [alert, setAlert] = useState<CustomAlertOptions | null>(null);
 
   const showAlert = useCallback((options: CustomAlertOptions) => {
@@ -49,7 +51,7 @@ export function CustomAlertProvider({ children }: PropsWithChildren) {
   const contextValue = useMemo(() => ({ showAlert }), [showAlert]);
   const buttons = alert?.buttons?.length
     ? alert.buttons
-    : [{ text: 'OK' } satisfies CustomAlertButton];
+    : [{ text: t('common.ok') } satisfies CustomAlertButton];
   const cancelButton = buttons.find((button) => button.style === 'cancel');
   const dismissButton = cancelButton ?? buttons[buttons.length - 1];
 

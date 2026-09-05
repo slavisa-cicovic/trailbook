@@ -2,6 +2,8 @@ import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-
 import { MaterialIcons } from '@expo/vector-icons';
 import type { SegmentType } from '@/core/domain/model/segment';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
+import type { TranslationKey } from '@/i18n/translations';
 import {
   DEFAULT_FILTERS,
   isDefaultTripFilters,
@@ -10,26 +12,20 @@ import {
   type SortKey,
 } from '../tripFilters';
 
-const PERIODS: { key: Period; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'today', label: 'Today' },
-  { key: 'yesterday', label: 'Yesterday' },
-  { key: 'last_week', label: 'Last week' },
+const PERIODS: { key: Period; label: TranslationKey }[] = [
+  { key: 'all', label: 'trips.period.all' }, { key: 'today', label: 'trips.period.today' },
+  { key: 'yesterday', label: 'trips.period.yesterday' }, { key: 'last_week', label: 'trips.period.lastWeek' },
 ];
 
-const ACTIVITIES: { key: SegmentType; label: string }[] = [
-  { key: 'WALK', label: 'Walk' },
-  { key: 'BIKE', label: 'Bike' },
-  { key: 'DRIVE', label: 'Drive' },
-  { key: 'BOAT', label: 'Boat' },
-  { key: 'PLANE', label: 'Plane' },
+const ACTIVITIES: { key: SegmentType; label: TranslationKey }[] = [
+  { key: 'WALK', label: 'activity.walk' }, { key: 'BIKE', label: 'activity.bike' },
+  { key: 'DRIVE', label: 'activity.drive' }, { key: 'BOAT', label: 'activity.boat' },
+  { key: 'PLANE', label: 'activity.plane' },
 ];
 
-const SORTS: { key: SortKey; label: string }[] = [
-  { key: 'newest', label: 'Newest' },
-  { key: 'oldest', label: 'Oldest' },
-  { key: 'distance', label: 'Distance' },
-  { key: 'duration', label: 'Duration' },
+const SORTS: { key: SortKey; label: TranslationKey }[] = [
+  { key: 'newest', label: 'trips.sort.newest' }, { key: 'oldest', label: 'trips.sort.oldest' },
+  { key: 'distance', label: 'trips.sort.distance' }, { key: 'duration', label: 'trips.sort.duration' },
 ];
 
 interface Props {
@@ -51,15 +47,16 @@ export function FiltersToggle({
   open: boolean;
 }) {
   const { theme } = useAppTheme();
+  const { t } = useI18n();
   const active = !isDefaultTripFilters(filters);
   const color = active ? theme.danger : theme.primaryText;
   return (
     <Pressable style={[styles.toggleBtn, { backgroundColor: theme.card }]} onPress={onToggle}>
       <MaterialIcons name="tune" size={18} color={color} />
-      <Text style={[styles.toggleText, { color }]}>Filters</Text>
+      <Text style={[styles.toggleText, { color }]}>{t('trips.filters')}</Text>
       {active ? (
         <Pressable
-          accessibilityLabel="Reset filters"
+          accessibilityLabel={t('trips.resetFilters')}
           hitSlop={10}
           onPress={(event) => {
             event.stopPropagation();
@@ -77,6 +74,7 @@ export function FiltersToggle({
 
 export function FiltersPanel({ filters, onChange }: Props) {
   const { theme } = useAppTheme();
+  const { t } = useI18n();
 
   function toggleActivity(key: SegmentType) {
     const next = filters.activities.includes(key)
@@ -87,19 +85,19 @@ export function FiltersPanel({ filters, onChange }: Props) {
 
   return (
     <View style={[styles.panel, { backgroundColor: theme.surface }]}>
-      <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>SEARCH</Text>
+      <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>{t('trips.search').toUpperCase()}</Text>
       <View style={[styles.searchRow, { backgroundColor: theme.card }]}>
         <MaterialIcons name="search" size={18} color={theme.mutedText} />
         <TextInput
           style={[styles.searchInput, { color: theme.primaryText }]}
           value={filters.search}
           onChangeText={(v) => onChange({ ...filters, search: v })}
-          placeholder="Search trips..."
+          placeholder={t('trips.searchPlaceholder')}
           placeholderTextColor={theme.mutedText}
         />
       </View>
 
-      <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>PERIOD</Text>
+      <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>{t('trips.period').toUpperCase()}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.chipRow}>
           {PERIODS.map((p) => {
@@ -111,7 +109,7 @@ export function FiltersPanel({ filters, onChange }: Props) {
                 onPress={() => onChange({ ...filters, period: p.key })}
               >
                 <Text style={[styles.chipText, { color: active ? theme.background : theme.primaryText }]}>
-                  {p.label}
+                  {t(p.label)}
                 </Text>
               </Pressable>
             );
@@ -119,7 +117,7 @@ export function FiltersPanel({ filters, onChange }: Props) {
         </View>
       </ScrollView>
 
-      <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>ACTIVITY</Text>
+      <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>{t('trips.activity').toUpperCase()}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.chipRow}>
           {ACTIVITIES.map((a) => {
@@ -131,7 +129,7 @@ export function FiltersPanel({ filters, onChange }: Props) {
                 onPress={() => toggleActivity(a.key)}
               >
                 <Text style={[styles.chipText, { color: active ? theme.background : theme.primaryText }]}>
-                  {a.label}
+                  {t(a.label)}
                 </Text>
               </Pressable>
             );
@@ -139,7 +137,7 @@ export function FiltersPanel({ filters, onChange }: Props) {
         </View>
       </ScrollView>
 
-      <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>SORT</Text>
+      <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>{t('trips.sort').toUpperCase()}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.chipRow}>
           {SORTS.map((s) => {
@@ -151,7 +149,7 @@ export function FiltersPanel({ filters, onChange }: Props) {
                 onPress={() => onChange({ ...filters, sort: s.key })}
               >
                 <Text style={[styles.chipText, { color: active ? theme.background : theme.primaryText }]}>
-                  {s.label}
+                  {t(s.label)}
                 </Text>
               </Pressable>
             );

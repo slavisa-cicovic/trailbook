@@ -36,6 +36,8 @@ import {
 } from '@/core/domain/access/mobileAccessPolicy';
 import { buildDisplayRouteCoordinateGroups } from '@/core/domain/processing/displayRouteBuilder';
 import { useTripDetailStore } from '@/feature/trips/tripDetailStore';
+import { useI18n } from '@/i18n/i18nStore';
+import { capturedAtFromImageAsset, coordinatesFromImageAsset } from '@/core/domain/photo/photoLocation';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PHOTO_HEIGHT = Math.round(SCREEN_WIDTH * 0.65);
@@ -53,6 +55,7 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
   const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
+  const { locale, t } = useI18n();
   const mapRef = useRef<MapView>(null);
   const fittedRouteTripIdRef = useRef<string | null>(null);
 
@@ -295,6 +298,7 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       quality: 1,
+      exif: true,
     });
     if (result.canceled) return;
     const access = await authorizeTripPhotos(waypoint.tripId, result.assets.length);
@@ -307,7 +311,8 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
         waypoint.id,
         asset.uri,
         'GALLERY',
-        null,
+        capturedAtFromImageAsset(asset),
+        coordinatesFromImageAsset(asset),
       );
       if (!saved.ok) {
         showAccessAlert(saved.error);
@@ -357,9 +362,14 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
     >
       <TopAppBar onBack={() => router.back()} title="Waypoint" />
       {tripTitle ? (
-        <Text style={[styles.tripTitle, { color: theme.primaryText }]} numberOfLines={1}>
-          {tripTitle}
-        </Text>
+        <View style={styles.tripHeading}>
+          <Text style={[styles.tripTitle, { color: theme.primaryText }]} numberOfLines={1}>
+            {tripTitle}
+          </Text>
+          <Text style={[styles.createdAt, { color: theme.mutedText }]}>
+            {t('waypoint.createdAt')} {waypoint?.createdAt.toLocaleString(locale)}
+          </Text>
+        </View>
       ) : null}
 
       {/* Scrollable content */}
@@ -398,6 +408,7 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
               <Pressable
                 key={img.id}
                 onPress={() => void openPhoto(img.id)}
+                style={styles.photoCard}
               >
                 <Image
                   source={{ uri: img.localUri }}
@@ -407,6 +418,19 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
                   ]}
                   resizeMode="cover"
                 />
+                <View style={styles.photoMetadata}>
+                  <Text style={styles.photoCapturedAt} numberOfLines={1}>
+                    {t('waypoint.photoTakenAt')} {img.capturedAt
+                      ? img.capturedAt.toLocaleString(locale)
+                      : t('waypoint.photoTimeUnknown')}
+                  </Text>
+                  {!img.locationMatchesWaypoint ? (
+                    <View style={styles.photoLocationBadge}>
+                      <MaterialIcons name="location-off" size={14} color="#fffdf8" />
+                      <Text style={styles.photoLocationBadgeText}>{t('waypoint.photoLocationUnverified')}</Text>
+                    </View>
+                  ) : null}
+                </View>
               </Pressable>
             ))}
           </ScrollView>
@@ -521,8 +545,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
     paddingHorizontal: 20,
-    paddingBottom: 14,
   },
+  tripHeading: { paddingBottom: 14 },
+  createdAt: { fontSize: 12, marginTop: 4, textAlign: 'center' },
   sectionTitle: { fontSize: 18, fontWeight: '800' },
   addPhotoBtn: {
     paddingHorizontal: 14,
@@ -539,6 +564,11 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH - 72,
     borderRadius: 24,
   },
+  photoCard: { position: 'relative' },
+  photoMetadata: { bottom: 12, left: 12, position: 'absolute', right: 12, gap: 6 },
+  photoCapturedAt: { alignSelf: 'flex-start', backgroundColor: 'rgba(20,32,20,0.76)', borderRadius: 10, color: '#fffdf8', fontSize: 11, fontWeight: '700', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 5 },
+  photoLocationBadge: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(170,45,35,0.9)', borderRadius: 10, flexDirection: 'row', gap: 4, paddingHorizontal: 8, paddingVertical: 5 },
+  photoLocationBadgeText: { color: '#fffdf8', fontSize: 11, fontWeight: '800' },
 
   emptyPhotos: {
     height: 140,

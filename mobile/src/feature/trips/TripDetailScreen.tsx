@@ -25,7 +25,7 @@ import { format } from 'date-fns';
 import { useTripDetailStore } from '@/feature/trips/tripDetailStore';
 import { useTripsStore } from '@/feature/trips/tripsStore';
 import { useTripGroupsStore } from '@/feature/trips/tripGroupsStore';
-import { SEGMENT_COLOR, SEGMENT_LABEL } from '@/constants/segmentColors';
+import { SEGMENT_COLOR } from '@/constants/segmentColors';
 import {
   reprocessTrip,
   undoReprocessing,
@@ -68,7 +68,13 @@ import {
 import { saveTripNavigationContext } from './tripNavigationContext';
 import { useTripFiltersStore } from './tripFiltersStore';
 import { useRecordingStore } from '@/feature/recording/recordingStore';
-import { ACTIVE_RECORDING_MUTATION_ERROR } from '@/core/domain/recording/recordingMutationPolicy';
+import { useI18n } from '@/i18n/i18nStore';
+import type { TranslationKey } from '@/i18n/translations';
+
+const SEGMENT_TRANSLATION: Record<Segment['segmentType'], TranslationKey> = {
+  WALK: 'activity.walk', BIKE: 'activity.bike', DRIVE: 'activity.drive', BOAT: 'activity.boat',
+  PLANE: 'activity.plane', STATIONARY: 'activity.stationary', UNKNOWN: 'activity.unknown',
+};
 
 const WAYPOINT_PREVIEW_MARGIN = 12;
 const WAYPOINT_PREVIEW_GAP = 14;
@@ -235,6 +241,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
   const router = useRouter();
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
+  const { localizeError, t } = useI18n();
   const isRecording = useRecordingStore((s) => s.isRecording);
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
@@ -389,7 +396,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     const title = editTitle.trim();
     const description = editDescription.trim();
     if (!title) {
-      showAlert({ title: 'Title is required' });
+      showAlert({ title: t('error.titleRequired') });
       return;
     }
 
@@ -402,7 +409,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     setSavingEdit(false);
 
     if (!result.ok) {
-      showAlert({ title: 'Save failed', message: result.error });
+      showAlert({ title: t('tripDetails.saveFailed'), message: localizeError(result.error) });
       return;
     }
 
@@ -414,7 +421,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     if (readOnly) return;
     if (!clientTripId) return;
     if (isRecording) {
-      showAlert({ title: 'Recording in progress', message: ACTIVE_RECORDING_MUTATION_ERROR });
+      showAlert({ title: t('trips.recordingInProgress'), message: t('trips.recordingMutationBlocked') });
       return;
     }
     setReprocessing(true);
@@ -427,8 +434,8 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     setReprocessing(false);
     if (!result.ok) {
       showAlert({
-        title: hasReprocessingSnapshot ? 'Undo failed' : 'Reprocess failed',
-        message: result.error,
+        title: t(hasReprocessingSnapshot ? 'tripDetails.undoFailed' : 'tripDetails.reprocessFailed'),
+        message: localizeError(result.error),
       });
       return;
     }
@@ -440,22 +447,22 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     if (readOnly) return;
     if (!clientTripId) return;
     if (isRecording) {
-      showAlert({ title: 'Recording in progress', message: ACTIVE_RECORDING_MUTATION_ERROR });
+      showAlert({ title: t('trips.recordingInProgress'), message: t('trips.recordingMutationBlocked') });
       return;
     }
     const error = await syncTrip(clientTripId);
-    if (error) showGatedActionError('Sync failed', error);
+    if (error) showGatedActionError(t('trips.syncFailed'), error);
     else load(clientTripId);
   }
 
   function showGatedActionError(title: string, error: string) {
     showAlert({
       title,
-      message: accessErrorMessage(error),
+      message: localizeError(accessErrorMessage(error)),
       buttons: isPremiumAccessError(error)
         ? [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'View Premium', onPress: () => router.push('/premium') },
+            { text: t('settings.notNow'), style: 'cancel' },
+            { text: t('settings.viewPremium'), onPress: () => router.push('/premium') },
           ]
         : undefined,
     });
@@ -470,18 +477,18 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     setSharing(false);
 
     if (!result.ok) {
-      showGatedActionError('Share failed', result.error);
+      showGatedActionError(t('tripDetails.shareFailed'), result.error);
       return;
     }
 
     try {
       await Share.share({
         message: `${result.value.shareUrl}\nPIN: ${result.value.pin}`,
-        title: trip?.title ?? 'Trailbook trip',
+        title: trip?.title ?? t('tripDetails.defaultShareTitle'),
       });
     } catch (error) {
       showAlert({
-        title: 'Share failed',
+        title: t('tripDetails.shareFailed'),
         message: error instanceof Error ? error.message : String(error),
       });
     }
@@ -503,14 +510,14 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     setSharingWithUser(false);
 
     if (!result.ok) {
-      showGatedActionError('Share failed', result.error);
+      showGatedActionError(t('tripDetails.shareFailed'), result.error);
       return;
     }
 
     setShareUserVisible(false);
     showAlert({
-      title: 'Trip shared',
-      message: `Shared with ${result.value.recipientEmail}.`,
+      title: t('tripDetails.tripShared'),
+      message: `${t('tripDetails.sharedWith')} ${result.value.recipientEmail}.`,
     });
   }
 
@@ -721,7 +728,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
       edges={['top', 'left', 'right']}
       style={[styles.container, { backgroundColor: theme.background }]}
     >
-      <TopAppBar onBack={() => router.back()} title="Trip details" />
+      <TopAppBar onBack={() => router.back()} title={t('tripDetails.title')} />
 
       <View style={styles.mapArea} onLayout={handleMapLayout}>
         <TrailMap
@@ -826,10 +833,10 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
           <View style={[styles.processingCard, { backgroundColor: theme.card }]}>
             <ActivityIndicator color={theme.accent} size="large" />
             <Text style={[styles.processingTitle, { color: theme.primaryText }]}>
-              Processing route...
+              {t('tripDetails.processingRoute')}
             </Text>
             <Text style={[styles.processingText, { color: theme.mutedText }]}>
-              Please wait while Trailbook rebuilds segments.
+              {t('tripDetails.processingHint')}
             </Text>
           </View>
         </View>
@@ -844,7 +851,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
       >
         <View style={styles.sheetOverlay}>
           <Pressable
-            accessibilityLabel="Close trip details"
+            accessibilityLabel={t('tripDetails.close')}
             onPress={() => setExpanded(false)}
             style={styles.sheetBackdrop}
           />
@@ -855,7 +862,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
             </Text>
             {readOnly && sharedBy ? (
               <Text style={[styles.sharedByText, { color: theme.accent }]}>
-                Shared by {sharedBy}
+                {t('trips.sharedBy')} {sharedBy}
               </Text>
             ) : null}
             {trip?.description ? (
@@ -871,7 +878,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
               {!readOnly ? (
                 <View style={styles.actionRow}>
                   <ActionBtn
-                    accessibilityLabel="Edit trip"
+                    accessibilityLabel={t('tripDetails.editTrip')}
                     icon="edit"
                     color={theme.mutedText}
                     bg={theme.accentMuted}
@@ -879,7 +886,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
                   />
                   <ActionBtn
                     accessibilityLabel={
-                      hasReprocessingSnapshot ? 'Undo reprocessing' : 'Reprocess trip'
+                      t(hasReprocessingSnapshot ? 'tripDetails.undoReprocessing' : 'tripDetails.reprocessTrip')
                     }
                     icon={hasReprocessingSnapshot ? 'undo' : 'redo'}
                     color={hasReprocessingSnapshot ? theme.danger : theme.accent}
@@ -889,7 +896,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
                     spinWhenLoading
                   />
                   <ActionBtn
-                    accessibilityLabel={isSynced ? 'Trip synced' : 'Sync trip'}
+                    accessibilityLabel={t(isSynced ? 'tripDetails.tripSynced' : 'tripDetails.syncTrip')}
                     icon="sync"
                     color={isSynced ? theme.mutedText : theme.danger}
                     bg={isSynced ? theme.accentMuted : theme.dangerMuted}
@@ -899,7 +906,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
                     disabled={isSynced}
                   />
                   <ActionBtn
-                    accessibilityLabel="Share trip link"
+                    accessibilityLabel={t('tripDetails.shareLink')}
                     icon="share"
                     color={isSynced ? theme.accent : theme.mutedText}
                     bg={theme.accentMuted}
@@ -908,7 +915,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
                     disabled={!isSynced || sharing}
                   />
                   <ActionBtn
-                    accessibilityLabel="Share with Trailbook user"
+                    accessibilityLabel={t('tripDetails.shareWithUser')}
                     icon="person-add"
                     color={isSynced ? theme.accent : theme.mutedText}
                     bg={theme.accentMuted}
@@ -920,16 +927,16 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
               ) : null}
 
               <View style={[styles.statsRow, { borderColor: theme.border }]}>
-                <StatCell label="WAYPOINTS" value={String(waypoints.length)} theme={theme} />
+                <StatCell label={t('trips.waypoints')} value={String(waypoints.length)} theme={theme} />
                 <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-                <StatCell label="PHOTOS" value={String(totalPhotos)} theme={theme} />
+                <StatCell label={t('trips.photos')} value={String(totalPhotos)} theme={theme} />
                 <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-                <StatCell label="DISTANCE" value={formatDistance(totalDistanceM)} theme={theme} />
+                <StatCell label={t('trips.distance')} value={formatDistance(totalDistanceM)} theme={theme} />
               </View>
 
               {segments.length > 0 && (
                 <View style={[styles.segmentsList, { borderColor: theme.border }]}>
-                  <Text style={[styles.timelineHeader, { color: theme.primaryText }]}>Timeline</Text>
+                  <Text style={[styles.timelineHeader, { color: theme.primaryText }]}>{t('tripDetails.timeline')}</Text>
                   <ScrollView
                     nestedScrollEnabled
                     showsVerticalScrollIndicator={segments.length > 3}
@@ -949,13 +956,13 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
                         <View style={styles.timelineLeft}>
                           <View style={styles.timelineNameRow}>
                             <Text style={[styles.timelineName, { color: theme.primaryText }]}>
-                              {SEGMENT_LABEL[seg.segmentType]}
+                              {t(SEGMENT_TRANSLATION[seg.segmentType])}
                             </Text>
                             {!readOnly ? (
                               <Pressable
                                 hitSlop={8}
                                 onPress={() =>
-                                  showAlert({ title: 'Edit segment', message: 'Coming soon' })
+                                  showAlert({ title: t('tripDetails.editSegment'), message: t('tripDetails.comingSoon') })
                                 }
                               >
                                 <MaterialIcons name="edit" size={14} color={theme.mutedText} />
@@ -989,17 +996,17 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
       >
         <View style={styles.editOverlay}>
           <Pressable
-            accessibilityLabel="Close edit trip"
+            accessibilityLabel={t('tripDetails.closeEdit')}
             onPress={() => setEditVisible(false)}
             style={styles.editBackdrop}
           />
           <View style={[styles.editCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.editTitle, { color: theme.primaryText }]}>Edit trip</Text>
+            <Text style={[styles.editTitle, { color: theme.primaryText }]}>{t('tripDetails.editTrip')}</Text>
             <TextInput
               autoCapitalize="sentences"
               editable={!savingEdit}
               onChangeText={setEditTitle}
-              placeholder="Trip title"
+              placeholder={t('tripDetails.tripTitle')}
               placeholderTextColor={theme.mutedText}
               style={[
                 styles.editInput,
@@ -1011,7 +1018,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
               editable={!savingEdit}
               multiline
               onChangeText={setEditDescription}
-              placeholder="Description"
+              placeholder={t('trip.description')}
               placeholderTextColor={theme.mutedText}
               style={[
                 styles.editInput,
@@ -1027,7 +1034,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
                 onPress={() => setEditVisible(false)}
                 style={[styles.editButton, { backgroundColor: theme.accentMuted }]}
               >
-                <Text style={[styles.editCancelText, { color: theme.primaryText }]}>Cancel</Text>
+                <Text style={[styles.editCancelText, { color: theme.primaryText }]}>{t('common.cancel')}</Text>
               </Pressable>
               <Pressable
                 disabled={savingEdit}
@@ -1040,7 +1047,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
                 {savingEdit ? (
                   <ActivityIndicator color={theme.card} size="small" />
                 ) : (
-                  <Text style={[styles.editSaveText, { color: theme.card }]}>Save</Text>
+                  <Text style={[styles.editSaveText, { color: theme.card }]}>{t('common.save')}</Text>
                 )}
               </Pressable>
             </View>
@@ -1056,16 +1063,16 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
       >
         <View style={styles.editOverlay}>
           <Pressable
-            accessibilityLabel="Close share trip"
+            accessibilityLabel={t('tripDetails.closeShare')}
             onPress={() => setShareUserVisible(false)}
             style={styles.editBackdrop}
           />
           <View style={[styles.editCard, { backgroundColor: theme.card }]}>
             <Text style={[styles.editTitle, { color: theme.primaryText }]}>
-              Share with Trailbook user
+              {t('tripDetails.shareWithUser')}
             </Text>
             <Text style={[styles.shareUserHint, { color: theme.mutedText }]}>
-              Enter the email of an existing Trailbook user. Shared trips are read-only for them.
+              {t('tripDetails.shareUserHint')}
             </Text>
             <TextInput
               autoCapitalize="none"
@@ -1087,7 +1094,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
                 onPress={() => setShareUserVisible(false)}
                 style={[styles.editButton, { backgroundColor: theme.accentMuted }]}
               >
-                <Text style={[styles.editCancelText, { color: theme.primaryText }]}>Cancel</Text>
+                <Text style={[styles.editCancelText, { color: theme.primaryText }]}>{t('common.cancel')}</Text>
               </Pressable>
               <Pressable
                 disabled={sharingWithUser}
@@ -1100,7 +1107,7 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
                 {sharingWithUser ? (
                   <ActivityIndicator color={theme.card} size="small" />
                 ) : (
-                  <Text style={[styles.editSaveText, { color: theme.card }]}>Share</Text>
+                  <Text style={[styles.editSaveText, { color: theme.card }]}>{t('common.share')}</Text>
                 )}
               </Pressable>
             </View>

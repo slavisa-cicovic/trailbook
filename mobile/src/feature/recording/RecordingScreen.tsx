@@ -24,6 +24,9 @@ import {
   authorizeTripPhotos,
   isPremiumAccessError,
 } from '@/core/domain/access/mobileAccessPolicy';
+import { useI18n } from '@/i18n/i18nStore';
+import type { TranslationKey } from '@/i18n/translations';
+import { capturedAtFromImageAsset, coordinatesFromImageAsset } from '@/core/domain/photo/photoLocation';
 
 
 export default function RecordingScreen() {
@@ -54,16 +57,17 @@ export default function RecordingScreen() {
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
   const router = useRouter();
+  const { locale, localizeError, t } = useI18n();
 
   function showAccessAlert(error: string) {
-    const message = accessErrorMessage(error);
+    const message = localizeError(accessErrorMessage(error));
     showAlert({
       title: 'Trailbook Premium',
       message,
       buttons: isPremiumAccessError(error)
         ? [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'View Premium', onPress: () => router.push('/premium') },
+            { text: t('settings.notNow'), style: 'cancel' },
+            { text: t('settings.viewPremium'), onPress: () => router.push('/premium') },
           ]
         : undefined,
     });
@@ -167,17 +171,17 @@ export default function RecordingScreen() {
     }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, exif: true });
     if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
       const saved = await addPhotoToWaypoint(
         waypointId,
-        result.assets[0].uri,
+        asset.uri,
         'GALLERY',
-        null,
+        capturedAtFromImageAsset(asset),
+        coordinatesFromImageAsset(asset),
       );
-      if (!saved.ok) {
-        showAccessAlert(saved.error);
-      }
+      if (!saved.ok) showAccessAlert(saved.error);
     }
   }
 
@@ -235,7 +239,7 @@ export default function RecordingScreen() {
         {isRecording && !isPaused && captureHealth !== 'healthy' ? (
           <View style={[styles.healthBanner, { backgroundColor: theme.card }]}>
             <Text style={[styles.healthText, { color: theme.primaryText }]}>
-              {captureHealthMessage(captureHealth)}
+              {t(captureHealthMessageKey(captureHealth))}
             </Text>
             {(captureHealth === 'delayed' || captureHealth === 'stopped') ? (
               <Pressable
@@ -243,7 +247,7 @@ export default function RecordingScreen() {
                 onPress={() => void recoverLocationCapture()}
                 style={[styles.healthAction, { backgroundColor: theme.accent }]}
               >
-                <Text style={{ color: theme.background, fontWeight: '700' }}>Restart capture</Text>
+                <Text style={{ color: theme.background, fontWeight: '700' }}>{t('recording.restartCapture')}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -265,29 +269,29 @@ export default function RecordingScreen() {
       <BottomSheetModal
         visible={showSessionSheet}
         onClose={() => setShowSessionSheet(false)}
-        title="Current session"
+        title={t('recording.currentSession')}
       >
         <View style={[styles.infoCard, { backgroundColor: theme.card }]}>
           <Text style={[styles.infoRow, { color: theme.primaryText }]}>
-            <Text style={{ color: theme.mutedText }}>Active user: </Text>
+            <Text style={{ color: theme.mutedText }}>{t('recording.activeUser')} </Text>
             <Text style={{ fontWeight: '500' }}>{displayName ?? '—'}</Text>
           </Text>
           <Text style={[styles.infoRow, { color: theme.primaryText }]}>
-            <Text style={{ color: theme.mutedText }}>Capture health: </Text>
-            <Text style={{ fontWeight: '500' }}>{captureHealth}</Text>
+            <Text style={{ color: theme.mutedText }}>{t('recording.captureHealth')} </Text>
+            <Text style={{ fontWeight: '500' }}>{t(`recording.status.${captureHealth}` as TranslationKey)}</Text>
           </Text>
           <Text style={[styles.infoRow, { color: theme.primaryText }]}>
-            <Text style={{ color: theme.mutedText }}>Route: </Text>
+            <Text style={{ color: theme.mutedText }}>{t('recording.route')} </Text>
             <Text style={{ fontWeight: '500' }}>{activeTrip?.title ?? '—'}</Text>
           </Text>
           <Text style={[styles.infoRow, { color: theme.primaryText }]}>
-            <Text style={{ color: theme.mutedText }}>Last point: </Text>
+            <Text style={{ color: theme.mutedText }}>{t('recording.lastPoint')} </Text>
             <Text style={{ fontWeight: '500' }}>
-              {lastPointTime ? lastPointTime.toISOString() : '—'}
+              {lastPointTime ? lastPointTime.toLocaleString(locale) : '—'}
             </Text>
           </Text>
           <Text style={[styles.infoRow, { color: theme.primaryText }]}>
-            <Text style={{ color: theme.mutedText }}>GPS points: </Text>
+            <Text style={{ color: theme.mutedText }}>{t('recording.gpsPoints')} </Text>
             <Text style={{ fontWeight: '500' }}>{locationCount}</Text>
           </Text>
 
@@ -297,21 +301,21 @@ export default function RecordingScreen() {
               onPress={() => void onPauseResumePress()}
               disabled={togglingPause}
             >
-              <Text style={[styles.pauseBtnText, { color: theme.danger }]}>{isPaused ? 'Resume' : 'Pause'}</Text>
+              <Text style={[styles.pauseBtnText, { color: theme.danger }]}>{isPaused ? t('recording.resume') : t('recording.pause')}</Text>
             </Pressable>
             <Pressable
               style={[styles.addWaypointBtn, { backgroundColor: theme.accent }]}
               onPress={() => { setShowSessionSheet(false); setShowWaypointSheet(true); }}
             >
-              <Text style={[styles.addWaypointText, { color: theme.background }]}>Add waypoint</Text>
+              <Text style={[styles.addWaypointText, { color: theme.background }]}>{t('recording.addWaypoint')}</Text>
             </Pressable>
           </View>
         </View>
 
         <View style={[styles.recentCard, { backgroundColor: theme.card }]}>
-          <Text style={[styles.recentTitle, { color: theme.primaryText }]}>Recent waypoints</Text>
+          <Text style={[styles.recentTitle, { color: theme.primaryText }]}>{t('recording.recentWaypoints')}</Text>
           {activeWaypoints.length === 0 ? (
-            <Text style={[styles.emptyText, { color: theme.mutedText }]}>No waypoints on this route yet.</Text>
+            <Text style={[styles.emptyText, { color: theme.mutedText }]}>{t('recording.noWaypoints')}</Text>
           ) : (
             activeWaypoints.slice().reverse().map((w) => (
               <WaypointCard
@@ -348,10 +352,10 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14 },
 });
 
-function captureHealthMessage(health: string): string {
-  if (health === 'starting') return 'Location capture is starting. Waiting for the first GPS point.';
-  if (health === 'inaccurate') return 'Location updates are arriving, but GPS quality is too low or inconsistent to build a route. Move to open sky and check precise location settings.';
-  if (health === 'delayed') return 'No recent GPS point. The phone may be stationary or Android may be delaying capture.';
-  if (health === 'stopped') return 'Location capture appears to have stopped. Restart it before continuing.';
-  return 'Location capture status is unavailable.';
+function captureHealthMessageKey(health: string): TranslationKey {
+  if (health === 'starting') return 'recording.health.starting';
+  if (health === 'inaccurate') return 'recording.health.inaccurate';
+  if (health === 'delayed') return 'recording.health.delayed';
+  if (health === 'stopped') return 'recording.health.stopped';
+  return 'recording.health.unknown';
 }

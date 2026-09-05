@@ -2,6 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useState } from 'react';
 import type { TripGroupWithMembers } from '@/core/domain/model/tripGroup';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useI18n } from '@/i18n/i18nStore';
 
 interface Props {
   visible: boolean;
@@ -21,6 +22,7 @@ export function AddToGroupModal({
   onAddToExisting,
 }: Props) {
   const { theme } = useAppTheme();
+  const { t } = useI18n();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
 
@@ -34,22 +36,22 @@ export function AddToGroupModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={[styles.card, { backgroundColor: theme.card }]}>
-          <Text style={[styles.title, { color: theme.primaryText }]}>Add to group</Text>
+          <Text style={[styles.title, { color: theme.primaryText }]}>{t('trips.addToGroup')}</Text>
           <Text style={[styles.subtitle, { color: theme.mutedText }]}>
-            {selectedCount} synced trip{selectedCount === 1 ? '' : 's'} selected
+            {selectedCount} {t(selectedCount === 1 ? 'trips.syncedTripSelectedOne' : 'trips.syncedTripSelectedMany')}
           </Text>
 
           <TextInput
             value={title}
             onChangeText={setTitle}
-            placeholder="New group title"
+            placeholder={t('trips.newGroupTitle')}
             placeholderTextColor={theme.mutedText}
             style={[styles.input, { color: theme.primaryText, borderColor: theme.border }]}
           />
           <TextInput
             value={description}
             onChangeText={setDescription}
-            placeholder="Description (optional)"
+            placeholder={t('trips.optionalDescription')}
             placeholderTextColor={theme.mutedText}
             style={[styles.input, styles.descriptionInput, { color: theme.primaryText, borderColor: theme.border }]}
             multiline
@@ -57,16 +59,16 @@ export function AddToGroupModal({
 
           <View style={styles.actions}>
             <Pressable style={[styles.secondaryButton, { backgroundColor: theme.accentMuted }]} onPress={onClose}>
-              <Text style={[styles.secondaryText, { color: theme.mutedText }]}>Cancel</Text>
+              <Text style={[styles.secondaryText, { color: theme.mutedText }]}>{t('common.cancel')}</Text>
             </Pressable>
             <Pressable style={[styles.primaryButton, { backgroundColor: theme.accent }]} onPress={handleCreate}>
-              <Text style={[styles.primaryText, { color: theme.background }]}>Create group</Text>
+              <Text style={[styles.primaryText, { color: theme.background }]}>{t('trips.createGroup')}</Text>
             </Pressable>
           </View>
 
           {groups.length > 0 && (
             <>
-              <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>Existing groups</Text>
+              <Text style={[styles.sectionLabel, { color: theme.mutedText }]}>{t('trips.existingGroups')}</Text>
               <ScrollView style={styles.groupList} showsVerticalScrollIndicator={false}>
                 {groups.map((item) => (
                   <Pressable
@@ -76,7 +78,7 @@ export function AddToGroupModal({
                   >
                     <Text style={[styles.groupTitle, { color: theme.primaryText }]}>{item.group.title}</Text>
                     <Text style={[styles.groupMeta, { color: theme.mutedText }]}>
-                      {item.members.length} trip{item.members.length === 1 ? '' : 's'}
+                      {item.members.length} {t(item.members.length === 1 ? 'trips.tripOne' : 'trips.tripMany')}
                     </Text>
                   </Pressable>
                 ))}
