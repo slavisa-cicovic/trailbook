@@ -20,7 +20,10 @@
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "android": {
+        "gradleCommand": ":app:bundleProdRelease"
+      }
     }
   },
   "submit": {
