@@ -10,6 +10,7 @@ import * as authApi from "../src/lib/auth-api";
 import { render } from "./render";
 
 const push = vi.fn();
+const replace = vi.fn();
 const refresh = vi.fn();
 
 vi.mock("next/link", () => ({
@@ -20,6 +21,7 @@ vi.mock("next/link", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push,
+    replace,
     refresh,
   }),
 }));
@@ -115,6 +117,7 @@ describe("web auth components", () => {
       google: false,
       apple: false,
     });
+    vi.mocked(authApi.getCurrentUser).mockResolvedValue({ user: null });
   });
 
   test("dashboard auth panel loads current user and can logout", async () => {
@@ -186,5 +189,22 @@ describe("web auth components", () => {
     expect(authApi.loginWithLocalAccount).toHaveBeenCalledWith("scaichat");
     expect(push).toHaveBeenCalledWith("/dashboard");
     expect(screen.queryByText("Continue with Google")).not.toBeInTheDocument();
+  });
+
+  test("login redirects an existing user to their workspace", async () => {
+    vi.mocked(authApi.getCurrentUser).mockResolvedValue({
+      user: {
+        id: "admin-1",
+        email: "scaichat@gmail.com",
+        displayName: "sc aiChat",
+        role: "admin",
+        providers: ["google"],
+      },
+    });
+
+    render(React.createElement(LoginForm, {}));
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+    expect(authApi.getSocialAuthProviders).not.toHaveBeenCalled();
   });
 });

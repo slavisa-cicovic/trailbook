@@ -1,6 +1,7 @@
 "use client";
 
 import { Box, Button, Stack, Typography } from "@mui/material";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -48,7 +49,15 @@ export function TrailbookSidebar({ onNavigate, user }: TrailbookSidebarProps) {
       }}
     >
       <Stack spacing={0.5} sx={{ mb: 4, px: 1, py: 1 }}>
-        <Typography variant="h6">Trailbook</Typography>
+        <Box
+          component={Link}
+          href="/"
+          onClick={onNavigate}
+          sx={{ alignItems: "center", color: "text.primary", display: "flex", gap: 1, textDecoration: "none" }}
+        >
+          <Image src="/favicon-256.png" alt="" width={32} height={32} />
+          <Typography variant="h6">Trailbook</Typography>
+        </Box>
         <Typography color="text.secondary" variant="body2">
           {user.role === "admin" ? "Admin workspace" : "User workspace"}
         </Typography>

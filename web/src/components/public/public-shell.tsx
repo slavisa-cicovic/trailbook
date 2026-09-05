@@ -33,7 +33,7 @@ export function PublicHeader() {
       <Link href="/help">{t.how}</Link>
       <Link href="/support">{t.support}</Link>
     </nav>
-    <div className={styles.actions}><label className={styles.language}><span className={styles.srOnly}>Language</span><select aria-label="Language" value={language} onChange={event=>setLanguage(event.target.value as typeof language)}><option value="en">EN · English</option><option value="sr">SR · Srpski</option><option value="it">IT · Italiano</option><option value="es">ES · Español</option><option value="de">DE · Deutsch</option><option value="fr">FR · Français</option></select></label><Link href="/login">{t.login}</Link></div>
+    <div className={styles.actions}><label className={styles.language}><span className={styles.srOnly}>Language</span><select aria-label="Language" value={language} onChange={event=>setLanguage(event.target.value as typeof language)}><option value="en">🇬🇧 EN · English</option><option value="sr">🇷🇸 SR · Srpski</option><option value="it">🇮🇹 IT · Italiano</option><option value="es">🇪🇸 ES · Español</option><option value="de">🇩🇪 DE · Deutsch</option><option value="fr">🇫🇷 FR · Français</option></select></label><Link href="/login">{t.login}</Link></div>
   </header>;
 }
 

@@ -2,21 +2,44 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Alert, Button, Stack, Typography } from "@mui/material";
+import { Alert, Button, CircularProgress, Stack, Typography } from "@mui/material";
 
 import { SocialSigninButtons } from "./social-signin-buttons";
-import { getSocialAuthProviders, loginWithLocalAccount, type LocalAccount } from "../../lib/auth-api";
+import { getCurrentUser, getSocialAuthProviders, loginWithLocalAccount, type LocalAccount } from "../../lib/auth-api";
 
 export function LoginForm({ verificationStatus }: { verificationStatus?: string }) {
   const router = useRouter();
   const [localAccounts, setLocalAccounts] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    getSocialAuthProviders()
-      .then((providers) => setLocalAccounts(providers.localAccounts ?? []))
-      .catch(() => setLocalAccounts([]));
-  }, []);
+    let cancelled = false;
+
+    getCurrentUser()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.user) {
+          router.replace(result.user.role === "admin" ? "/dashboard" : "/trips");
+          return;
+        }
+        setCheckingSession(false);
+        getSocialAuthProviders()
+          .then((providers) => {
+            if (!cancelled) setLocalAccounts(providers.localAccounts ?? []);
+          })
+          .catch(() => {
+            if (!cancelled) setLocalAccounts([]);
+          });
+      })
+      .catch(() => {
+        if (!cancelled) setCheckingSession(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   async function localLogin(account: LocalAccount) {
     setError("");
@@ -31,6 +54,14 @@ export function LoginForm({ verificationStatus }: { verificationStatus?: string 
 
   return (
     <Stack spacing={2}>
+      {checkingSession ? (
+        <Stack alignItems="center" spacing={1.5}>
+          <CircularProgress size={24} />
+          <Typography color="text.secondary">Checking your session...</Typography>
+        </Stack>
+      ) : null}
+      {!checkingSession ? (
+        <>
       {verificationStatus ? <Alert severity="info">Use a social account to continue.</Alert> : null}
       {error ? <Alert severity="error">{error}</Alert> : null}
       {localAccounts.length > 0 ? (
@@ -55,6 +86,8 @@ export function LoginForm({ verificationStatus }: { verificationStatus?: string 
           <SocialSigninButtons />
         </>
       )}
+        </>
+      ) : null}
     </Stack>
   );
 }
