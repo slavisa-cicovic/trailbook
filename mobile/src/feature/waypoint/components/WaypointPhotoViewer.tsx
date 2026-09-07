@@ -373,7 +373,7 @@ export function WaypointPhotoViewer({
                 { bottom: Math.max(88, safeAreaInsets.bottom + 84) },
               ]}
             >
-              <Image source={{ uri: currentImage.localUri }} style={styles.photoPreviewImage} />
+              <Image resizeMethod="resize" source={{ uri: currentImage.localUri }} style={styles.photoPreviewImage} />
             </Pressable>
           )}
         </View>

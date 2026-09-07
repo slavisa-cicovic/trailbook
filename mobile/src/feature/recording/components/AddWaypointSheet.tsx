@@ -272,7 +272,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
               <View style={styles.thumbGrid}>
                 {photos.map((p, i) => (
                   <View key={i} style={styles.thumbWrapper}>
-                    <Image source={{ uri: p.uri }} style={styles.thumb} />
+                    <Image resizeMethod="resize" source={{ uri: p.uri }} style={styles.thumb} />
                     <PhotoVerificationIndicator
                       capturedAt={p.capturedAt}
                       photoCoordinates={p.coordinates}

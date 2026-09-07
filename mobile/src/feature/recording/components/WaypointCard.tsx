@@ -21,7 +21,7 @@ export function WaypointCard({ waypoint, onAddPhoto, onRemove }: Props) {
   return (
     <View style={[styles.card, { backgroundColor: theme.accentMuted }]}>
       {waypoint.firstImageUri && (
-        <Image source={{ uri: waypoint.firstImageUri }} style={styles.photo} />
+        <Image resizeMethod="resize" source={{ uri: waypoint.firstImageUri }} style={styles.photo} />
       )}
 
       <View style={styles.body}>

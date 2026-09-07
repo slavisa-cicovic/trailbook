@@ -63,6 +63,7 @@ export function WaypointPhotoPreview({
             onError={() => setLoadState('failed')}
             onLoad={() => setLoadState('loaded')}
             onLoadStart={() => setLoadState('loading')}
+            resizeMethod="resize"
             resizeMode="cover"
             source={{ uri: imageUri }}
             style={styles.image}

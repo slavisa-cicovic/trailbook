@@ -419,6 +419,7 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
                     styles.photo,
                     { backgroundColor: theme.accentMuted, height: PHOTO_HEIGHT },
                   ]}
+                  resizeMethod="resize"
                   resizeMode="cover"
                 />
                 <View style={styles.photoMetadata}>
