@@ -10,6 +10,7 @@ import { saveRestoredPhoto } from '@/core/data/local/photoStorage';
 import { dbEvents } from '@/core/db/events';
 import { tripGroupRepository } from '@/core/data/repository/TripGroupRepositoryImpl';
 import { requireCloudPremium } from '@/core/domain/access/mobileAccessPolicy';
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   emptyRestoreSummary,
   type RestoreIssueKind,
@@ -102,7 +103,15 @@ export async function restoreTrips(): Promise<Result<RestoreSummary>> {
         let localImageIds: Set<string>;
         try {
           const localImages = await waypointImageDao.getForWaypoint(waypoint.id);
-          localImageIds = new Set(localImages.map((image) => image.id));
+          localImageIds = new Set<string>();
+          for (const image of localImages) {
+            const info = await FileSystem.getInfoAsync(image.localUri);
+            if (info.exists && (info.size ?? 0) > 0) {
+              localImageIds.add(image.id);
+            } else {
+              await waypointImageDao.deleteById(image.id);
+            }
+          }
         } catch (error) {
           summary.failedPhotoLists += 1;
           recordIssue(summary, 'photo-list', waypoint.id, errorMessage(error));

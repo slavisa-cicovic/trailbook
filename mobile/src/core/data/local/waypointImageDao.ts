@@ -4,13 +4,15 @@ import { waypointImages, waypoints } from '@/core/db/schema';
 import { dbEvents } from '@/core/db/events';
 import type { WaypointImage, ImageSource, ImageUploadState } from '@/core/domain/model/waypoint';
 import { runInChunks } from './chunkedInsert';
+import * as FileSystem from 'expo-file-system/legacy';
+import { persistableLocalPhotoUri, resolvedLocalPhotoUri } from './localPhotoUri';
 
 function toRow(img: WaypointImage) {
   return {
     id: img.id,
     waypointId: img.waypointId,
     source: img.source,
-    localUri: img.localUri,
+    localUri: persistableLocalPhotoUri(img.localUri),
     capturedAt: img.capturedAt?.toISOString() ?? null,
     photoLatitude: img.photoLatitude,
     photoLongitude: img.photoLongitude,
@@ -25,7 +27,7 @@ function toDomain(row: typeof waypointImages.$inferSelect): WaypointImage {
     id: row.id,
     waypointId: row.waypointId,
     source: row.source as ImageSource,
-    localUri: row.localUri,
+    localUri: resolvedLocalPhotoUri(row.localUri, FileSystem.documentDirectory),
     capturedAt: row.capturedAt ? new Date(row.capturedAt) : null,
     photoLatitude: row.photoLatitude,
     photoLongitude: row.photoLongitude,
