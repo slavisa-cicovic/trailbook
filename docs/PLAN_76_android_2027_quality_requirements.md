@@ -163,6 +163,15 @@ Initial device measurements (September 7, 2026, Galaxy S21):
   with the preceding same-process plateau test, this locally validates the
   bounded viewer/downsample implementation; large-photo-set and production
   telemetry gates remain open.
+- A repeatable Maestro + ADB regression harness now drives Trip Details,
+  waypoint details, fullscreen photo swipes and backgrounding, then records PSS,
+  RSS, native heap, graphics/GL and swap into an ignored CSV report. Its first
+  three-cycle run on September 7 retained PID `31711`: graphics warmed from
+  9 MB to 47 MB in cycle 1 and then stayed at 47 MB, while PSS declined from
+  411 MB to 399 MB and then 382 MB. This confirms a plateau rather than
+  visit-count growth in the automated scenario. The harness fails on a process
+  restart or conservative graphics/RSS limits and uses a dedicated E2E build
+  hook because native map markers are absent from Android's accessibility tree.
 
 1. Measure decoded bitmap memory, not only image file size on disk.
 2. Confirm that photo screens release native image resources after navigation or

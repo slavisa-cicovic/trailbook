@@ -233,6 +233,7 @@ function getTripPointPreviewMaxDistanceMeters(
 
 export default function TripDetailScreen({ source = 'local' }: { source?: 'local' | 'shared' }) {
   const readOnly = source === 'shared';
+  const e2eEnabled = process.env.EXPO_PUBLIC_E2E_ENABLED === 'true';
   const { clientTripId, groupId, groupSort: groupSortParam } = useLocalSearchParams<{
     clientTripId: string;
     groupId?: string;
@@ -727,8 +728,9 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
     <SafeAreaView
       edges={['top', 'left', 'right']}
       style={[styles.container, { backgroundColor: theme.background }]}
+      testID="screen-trip-details"
     >
-      <TopAppBar onBack={() => router.back()} title={t('tripDetails.title')} />
+      <TopAppBar backTestID="trip-details-back" onBack={() => router.back()} title={t('tripDetails.title')} />
 
       <View style={styles.mapArea} onLayout={handleMapLayout}>
         <TrailMap
@@ -760,6 +762,18 @@ export default function TripDetailScreen({ source = 'local' }: { source?: 'local
             </Marker>
           ))}
         </TrailMap>
+
+        {e2eEnabled && waypoints[0] ? (
+          <Pressable
+            accessibilityLabel="Open first waypoint for automated test"
+            onPress={() => navigateToWaypoint(waypoints[0].id)}
+            style={[styles.e2eWaypointButton, { backgroundColor: theme.accent }]}
+            testID="trip-first-waypoint-test-hook"
+          >
+            <MaterialIcons color="#fff" name="science" size={18} />
+            <Text style={styles.e2eWaypointButtonText}>E2E</Text>
+          </Pressable>
+        ) : null}
 
         {previewWaypoint && previewImage && previewPlacement && (
           <WaypointPhotoPreview
@@ -1216,6 +1230,25 @@ const styles = StyleSheet.create({
   mapArea: {
     flex: 1,
     position: 'relative',
+  },
+  e2eWaypointButton: {
+    position: 'absolute',
+    left: 12,
+    top: 12,
+    zIndex: 20,
+    elevation: 20,
+    minHeight: 36,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  e2eWaypointButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
   },
   // Loading
   loadingOverlay: {

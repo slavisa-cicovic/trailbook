@@ -116,6 +116,7 @@ export function TripCard({
       rightThreshold={40}
     >
       <View
+        accessibilityLabel={`Open trip ${trip.title}`}
         style={[
           styles.card,
           {
@@ -123,6 +124,7 @@ export function TripCard({
             borderColor: selected ? theme.accent : 'transparent',
           },
         ]}
+        testID={`trip-card-${trip.clientTripId}`}
       >
         <View style={styles.header}>
           <Pressable style={styles.titlePressable} onPress={onPress} onLongPress={onLongPress}>

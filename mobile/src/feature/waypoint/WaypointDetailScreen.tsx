@@ -362,8 +362,9 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
     <SafeAreaView
       edges={['top', 'left', 'right']}
       style={[styles.screen, { backgroundColor: theme.background }]}
+      testID="screen-waypoint-details"
     >
-      <TopAppBar onBack={() => router.back()} title="Waypoint" />
+      <TopAppBar backTestID="waypoint-details-back" onBack={() => router.back()} title="Waypoint" />
       {tripTitle ? (
         <View style={styles.tripHeading}>
           <Text style={[styles.tripTitle, { color: theme.primaryText }]} numberOfLines={1}>
@@ -407,11 +408,12 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
             snapToInterval={SCREEN_WIDTH - 48}
             snapToAlignment="start"
           >
-            {images.map((img) => (
+            {images.map((img, imageIndex) => (
               <Pressable
                 key={img.id}
                 onPress={() => void openPhoto(img.id)}
                 style={styles.photoCard}
+                testID={imageIndex === 0 ? 'waypoint-photo-first' : `waypoint-photo-${imageIndex}`}
               >
                 <Image
                   source={{ uri: img.localUri }}

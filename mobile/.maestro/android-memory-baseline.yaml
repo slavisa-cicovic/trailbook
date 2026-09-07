@@ -1,0 +1,10 @@
+appId: com.slavisacicovic.trailbook.local.encrypted
+---
+- launchApp:
+    clearState: false
+    stopApp: false
+- tapOn:
+    id: bottom-nav-trips
+- assertVisible:
+    id: screen-trips
+- pressKey: HOME

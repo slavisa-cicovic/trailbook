@@ -5,12 +5,13 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 import { useI18n } from '@/i18n/i18nStore';
 
 interface TopAppBarProps {
+  backTestID?: string;
   onBack?: () => void;
   rightActions?: ReactNode;
   title: string;
 }
 
-export function TopAppBar({ onBack, rightActions, title }: TopAppBarProps) {
+export function TopAppBar({ backTestID, onBack, rightActions, title }: TopAppBarProps) {
   const { theme } = useAppTheme();
   const { t } = useI18n();
 
@@ -22,6 +23,7 @@ export function TopAppBar({ onBack, rightActions, title }: TopAppBarProps) {
             accessibilityLabel={t('nav.back')}
             hitSlop={10}
             onPress={onBack}
+            testID={backTestID}
             style={[styles.backButton, { backgroundColor: theme.accentMuted }]}
           >
             <MaterialIcons color={theme.accent} name="arrow-back" size={20} />

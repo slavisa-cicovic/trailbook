@@ -420,7 +420,7 @@ export function WaypointPhotoViewer({
         pointerEvents="box-none"
         style={[styles.bottomOverlay, { bottom: Math.max(22, safeAreaInsets.bottom + 18) }]}
       >
-        <Pressable accessibilityLabel="Back to waypoint" hitSlop={14} onPress={onBack} style={styles.iconButton}>
+        <Pressable accessibilityLabel="Back to waypoint" hitSlop={14} onPress={onBack} style={styles.iconButton} testID="photo-viewer-back">
           <MaterialIcons color="#fffdf8" name="arrow-back" size={24} />
         </Pressable>
         <View style={styles.bottomInfo}>

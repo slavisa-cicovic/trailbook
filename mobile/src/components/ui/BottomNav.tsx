@@ -30,6 +30,7 @@ export function BottomNav() {
                 { backgroundColor: active ? theme.navActiveBackground : theme.accentMuted },
               ]}
               onPress={() => router.replace(item.href)}
+              testID={`bottom-nav-${item.href.slice(1)}`}
             >
               <Text
                 style={[

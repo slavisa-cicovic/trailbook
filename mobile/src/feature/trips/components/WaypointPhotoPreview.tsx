@@ -57,6 +57,7 @@ export function WaypointPhotoPreview({
           accessibilityLabel={`${t('tripDetails.openWaypoint')} ${title}`}
           onPress={onOpen}
           style={styles.card}
+          testID="waypoint-preview-open"
         >
           <Image
             key={retryKey}

@@ -1,0 +1,40 @@
+appId: com.slavisacicovic.trailbook.local.encrypted
+---
+- launchApp:
+    clearState: false
+    stopApp: false
+- tapOn:
+    id: bottom-nav-trips
+- assertVisible:
+    id: screen-trips
+- tapOn:
+    text: "${TRAILBOOK_MEMORY_TRIP_TITLE}"
+- assertVisible:
+    id: screen-trip-details
+- tapOn:
+    id: trip-first-waypoint-test-hook
+- assertVisible:
+    id: screen-waypoint-details
+- repeat:
+    times: 5
+    commands:
+      - tapOn:
+          id: waypoint-photo-first
+      - assertVisible:
+          id: photo-viewer-back
+      - swipe:
+          direction: LEFT
+          duration: 350
+      - tapOn:
+          id: photo-viewer-back
+      - assertVisible:
+          id: screen-waypoint-details
+- tapOn:
+    id: waypoint-details-back
+- assertVisible:
+    id: screen-trip-details
+- tapOn:
+    id: trip-details-back
+- assertVisible:
+    id: screen-trips
+- pressKey: HOME

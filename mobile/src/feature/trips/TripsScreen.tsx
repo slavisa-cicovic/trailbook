@@ -334,7 +334,7 @@ export default function TripsScreen() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+      <SafeAreaView testID="screen-trips" style={[styles.screen, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
         <TopAppBar title={t('trips.title')} />
         {loading && trips.length === 0 ? (
           <View style={styles.loadingContainer}>
