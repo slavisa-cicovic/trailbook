@@ -32,6 +32,8 @@ this control.
 
 Reports are written to `mobile/test-results/` and intentionally ignored by Git.
 The default run performs three cycles with five fullscreen visits per cycle.
+The runner restores ADB reverse rules for the local API (`3001`) and MinIO
+(`9000`) before, between and after Maestro flows, including failed runs.
 
 Configuration can be overridden without changing the flow:
 

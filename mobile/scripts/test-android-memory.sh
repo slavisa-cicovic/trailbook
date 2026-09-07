@@ -48,6 +48,17 @@ if ! [[ "$CYCLES" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 adb get-state >/dev/null
+
+ensure_local_reverse() {
+  adb reverse tcp:3001 tcp:3001 >/dev/null
+  adb reverse tcp:9000 tcp:9000 >/dev/null
+}
+
+# Android drops reverse rules when the ADB transport reconnects. Keep the
+# local API and MinIO reachable during the flow and after manual testing resumes.
+trap ensure_local_reverse EXIT
+ensure_local_reverse
+
 if ! adb shell pm path "$APP_ID" >/dev/null 2>&1; then
   echo "App is not installed: $APP_ID" >&2
   exit 2
@@ -109,6 +120,7 @@ capture_snapshot() {
 
 adb shell am force-stop "$APP_ID"
 "$MAESTRO_BIN" test -e "TRAILBOOK_MEMORY_TRIP_TITLE=$TRIP_TITLE" "$MOBILE_DIR/.maestro/android-memory-baseline.yaml"
+ensure_local_reverse
 sleep "$SETTLE_SECONDS"
 capture_snapshot 0 ""
 baseline_pid="$SNAPSHOT_PID"
@@ -116,6 +128,7 @@ baseline_graphics_kb="$SNAPSHOT_GRAPHICS_KB"
 
 for ((cycle = 1; cycle <= CYCLES; cycle += 1)); do
   "$MAESTRO_BIN" test -e "TRAILBOOK_MEMORY_TRIP_TITLE=$TRIP_TITLE" "$MOBILE_DIR/.maestro/android-memory-photo-cycle.yaml"
+  ensure_local_reverse
   sleep "$SETTLE_SECONDS"
   capture_snapshot "$cycle" "$baseline_pid"
 done

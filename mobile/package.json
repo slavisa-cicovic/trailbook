@@ -9,6 +9,8 @@
     "android:local:debug": "node scripts/run-android.js localDebug com.slavisacicovic.trailbook.local",
     "android:local:encrypted": "node scripts/run-android.js localEncryptedRelease com.slavisacicovic.trailbook.local.encrypted",
     "android:local:encrypted:e2e": "EXPO_PUBLIC_E2E_ENABLED=true node scripts/run-android.js localEncryptedRelease com.slavisacicovic.trailbook.local.encrypted",
+    "android:local:encrypted:optimized": "node scripts/run-android.js localEncryptedOptimized com.slavisacicovic.trailbook.local.encrypted",
+    "android:local:encrypted:optimized:e2e": "EXPO_PUBLIC_E2E_ENABLED=true node scripts/run-android.js localEncryptedOptimized com.slavisacicovic.trailbook.local.encrypted",
     "android:local:encrypted:debug": "node scripts/run-android.js localEncryptedDebug com.slavisacicovic.trailbook.local.encrypted",
     "android:test": "node scripts/run-android.js qaDebug com.slavisacicovic.trailbook.test",
     "android:prod": "node scripts/run-android.js prodRelease com.slavisacicovic.trailbook",

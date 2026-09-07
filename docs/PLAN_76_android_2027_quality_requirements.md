@@ -191,7 +191,29 @@ Initial device measurements (September 7, 2026, Galaxy S21):
 
 ## Workstream 3: R8 and resource shrinking
 
-Status: Pending isolated build experiment
+Status: Isolated build experiment in progress
+
+Implementation progress:
+
+- Added a dedicated `optimized` Gradle build type which inherits release
+  behavior but always enables R8 minification and resource shrinking.
+- The first test target is `localEncryptedOptimized`; it uses the local
+  encrypted application ID and debug signing, so existing production and
+  ordinary release variants remain unchanged.
+- Gradle configuration exposes both `assembleLocalEncryptedOptimized` and
+  `bundleLocalEncryptedOptimized`.
+- The first optimized device run on September 7 retained PID `8104` throughout
+  the automated navigation test. After warm-up, graphics stayed at 46 MB across
+  all three cycles; PSS readings were 354 MB, 337 MB and 351 MB. No process
+  restart or monotonic graphics growth was observed.
+- The optimized APK is 106,047,125 bytes versus 115,206,880 bytes for the
+  comparable ordinary release APK (8.0% smaller). Uncompressed DEX decreased
+  from 35,446,760 bytes across four files to 10,671,580 bytes across two files
+  (69.9% smaller). This is strong local evidence, but Play Console's own DEX
+  optimization result remains the acceptance authority.
+- R8 produced a 33,592,919-byte `mapping.txt` for the optimized build. Manual
+  critical-path testing and durable archival of the matching mapping/artifact
+  remain pending.
 
 Do not first enable R8 in a store-bound production build. Introduce a dedicated
 release-equivalent QA profile or compile-time switch with:

@@ -7,6 +7,16 @@ const {
 } = require('expo/config-plugins');
 
 const DEBUGGABLE_VARIANTS = '    debuggableVariants = ["localDebug", "localEncryptedDebug", "qaDebug", "prodDebug"]';
+const OPTIMIZED_BUILD_TYPE = `        optimized {
+            initWith release
+            matchingFallbacks = ["release"]
+            signingConfig = signingConfigs.debug
+            versionNameSuffix "-optimized"
+            shrinkResources = true
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+`;
 const PRODUCT_FLAVORS = `    flavorDimensions "environment"
 
     productFlavors {
@@ -69,6 +79,12 @@ function withAndroidProductFlavors(config) {
       );
     } else {
       source = source.replace('android {', `android {\n${PRODUCT_FLAVORS}`);
+    }
+    if (!source.includes('        optimized {')) {
+      source = source.replace(
+        /(    buildTypes \{[\s\S]*?)(\n    \}\n    packagingOptions \{)/,
+        `$1\n${OPTIMIZED_BUILD_TYPE}$2`,
+      );
     }
     // Expo CLI currently resolves the native app ID using the Groovy
     // `applicationId '…'` form and does not recognize the equivalent
