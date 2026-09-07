@@ -19,6 +19,8 @@ import {
 } from './AppleIapProvider';
 import { usePurchaseStore } from './purchaseStore';
 import { useGoogleIap } from './GoogleIapProvider';
+import { APP_ENVIRONMENT } from '@/core/config/appEnvironment';
+import { useI18n } from '@/i18n/i18nStore';
 import {
   purchaseSupportUrl,
   TRAILBOOK_PRIVACY_POLICY_URL,
@@ -28,6 +30,7 @@ import {
 export default function PremiumScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
+  const { t } = useI18n();
   const status = useAuthStore((state) => state.status);
   const access = usePurchaseStore((state) => state.access);
   const busyAction = usePurchaseStore((state) => state.busyAction);
@@ -62,18 +65,17 @@ export default function PremiumScreen() {
       contentVariant="plain"
       onBack={goBack}
       scrollEnabled
-      title="Trailbook Premium"
+      title={t('premium.title')}
     >
       <View style={[styles.hero, { backgroundColor: theme.accent }]}>
         <Text style={[styles.eyebrow, { color: theme.background }]}>
-          FULL TRAIL ACCESS
+          {t('premium.eyebrow')}
         </Text>
         <Text style={[styles.heroTitle, { color: theme.background }]}>
-          Keep every journey.
+          {t('premium.heroTitle')}
         </Text>
         <Text style={[styles.heroBody, { color: theme.background }]}>
-          Record without limits, protect your trips with sync and restore, and
-          share routes with friends.
+          {t('premium.heroBody')}
         </Text>
       </View>
 
@@ -172,9 +174,13 @@ export default function PremiumScreen() {
       {Platform.OS === 'android' && !iap.available ? (
         <Card
           style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
-          title="Native Android build required"
+          title={APP_ENVIRONMENT === 'local'
+            ? t('premium.localUnavailableTitle')
+            : 'Native Android build required'}
           titleStyle={{ color: theme.primaryText }}
-          subtitle="Google Play subscriptions are unavailable in Expo Go. Install a Play-distributed Trailbook Android build."
+          subtitle={APP_ENVIRONMENT === 'local'
+            ? t('premium.localUnavailableBody')
+            : 'Google Play subscriptions are unavailable in Expo Go. Install a Play-distributed Trailbook Android build.'}
           subtitleStyle={{ color: theme.mutedText }}
         />
       ) : null}
@@ -237,32 +243,30 @@ export default function PremiumScreen() {
           styles.card,
           { backgroundColor: theme.card, borderColor: theme.border },
         ]}
-        title="Already subscribed?"
+        title={t('premium.alreadySubscribed')}
         titleStyle={{ color: theme.primaryText }}
-        subtitle={`Restore asks ${storeName} for your current subscriptions and verifies them with Trailbook.`}
+        subtitle={t('premium.restoreBody')}
         subtitleStyle={{ color: theme.mutedText }}
       >
         <LoadingButton
           disabled={!iap.available || !iap.connected || busyAction !== null}
           loading={busyAction === 'restore'}
-          loadingLabel="Restoring…"
+          loadingLabel={t('premium.restoring')}
           onPress={() => void iap.restore()}
           variant="secondary"
         >
-          Restore purchases
+          {t('premium.restorePurchases')}
         </LoadingButton>
       </Card>
 
       <Text style={[styles.legal, { color: theme.mutedText }]}>
-        Subscriptions renew automatically unless canceled before the end of the
-        current period. Payment is charged to your {Platform.OS === 'android' ? 'Google Play' : 'Apple ID'} account.
-        {' '}Manage or cancel the subscription in your {Platform.OS === 'android' ? 'Google Play' : 'App Store'} settings.
+        {t('premium.legal')}
       </Text>
 
       <View style={styles.linkGroup}>
-        <LegalLink label="Terms of Use" onPress={() => void openUrl(TRAILBOOK_TERMS_OF_USE_URL)} />
-        <LegalLink label="Privacy Policy" onPress={() => void openUrl(TRAILBOOK_PRIVACY_POLICY_URL)} />
-        <LegalLink label="Purchase support" onPress={() => void openUrl(purchaseSupportUrl())} />
+        <LegalLink label={t('premium.terms')} onPress={() => void openUrl(TRAILBOOK_TERMS_OF_USE_URL)} />
+        <LegalLink label={t('premium.privacy')} onPress={() => void openUrl(TRAILBOOK_PRIVACY_POLICY_URL)} />
+        <LegalLink label={t('premium.support')} onPress={() => void openUrl(purchaseSupportUrl())} />
       </View>
     </ScreenLayout>
   );
