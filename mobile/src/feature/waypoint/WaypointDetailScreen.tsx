@@ -38,6 +38,7 @@ import { buildDisplayRouteCoordinateGroups } from '@/core/domain/processing/disp
 import { useTripDetailStore } from '@/feature/trips/tripDetailStore';
 import { useI18n } from '@/i18n/i18nStore';
 import { capturedAtFromImageAsset, coordinatesFromImageAsset } from '@/core/domain/photo/photoLocation';
+import { PhotoVerificationIndicator } from './components/PhotoVerificationIndicator';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PHOTO_HEIGHT = Math.round(SCREEN_WIDTH * 0.65);
@@ -244,6 +245,7 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
             latitude: sharedWaypoint.latitude,
             longitude: sharedWaypoint.longitude,
           },
+          waypointCreatedAt: sharedWaypoint.createdAt,
           waypointTitle: sharedWaypoint.title,
         })),
       );
@@ -275,6 +277,7 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
               latitude: tripWaypoint.latitude,
               longitude: tripWaypoint.longitude,
             },
+            waypointCreatedAt: tripWaypoint.createdAt,
             waypointTitle: tripWaypoint.title,
           });
         }
@@ -424,12 +427,15 @@ export default function WaypointDetailScreen({ source = 'local' }: { source?: 'l
                       ? img.capturedAt.toLocaleString(locale)
                       : t('waypoint.photoTimeUnknown')}
                   </Text>
-                  {!img.locationMatchesWaypoint ? (
-                    <View style={styles.photoLocationBadge}>
-                      <MaterialIcons name="location-off" size={14} color="#fffdf8" />
-                      <Text style={styles.photoLocationBadgeText}>{t('waypoint.photoLocationUnverified')}</Text>
-                    </View>
-                  ) : null}
+                  <PhotoVerificationIndicator
+                    capturedAt={img.capturedAt}
+                    photoCoordinates={img.photoLatitude === null || img.photoLongitude === null ? null : {
+                      latitude: img.photoLatitude,
+                      longitude: img.photoLongitude,
+                    }}
+                    waypointCoordinates={{ latitude: waypoint.latitude, longitude: waypoint.longitude }}
+                    waypointCreatedAt={waypoint.createdAt}
+                  />
                 </View>
               </Pressable>
             ))}
@@ -565,10 +571,8 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   photoCard: { position: 'relative' },
-  photoMetadata: { bottom: 12, left: 12, position: 'absolute', right: 12, gap: 6 },
-  photoCapturedAt: { alignSelf: 'flex-start', backgroundColor: 'rgba(20,32,20,0.76)', borderRadius: 10, color: '#fffdf8', fontSize: 11, fontWeight: '700', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 5 },
-  photoLocationBadge: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(170,45,35,0.9)', borderRadius: 10, flexDirection: 'row', gap: 4, paddingHorizontal: 8, paddingVertical: 5 },
-  photoLocationBadgeText: { color: '#fffdf8', fontSize: 11, fontWeight: '800' },
+  photoMetadata: { alignItems: 'center', bottom: 12, flexDirection: 'row', gap: 8, justifyContent: 'space-between', left: 12, position: 'absolute', right: 12 },
+  photoCapturedAt: { backgroundColor: 'rgba(20,32,20,0.76)', borderRadius: 10, color: '#fffdf8', flexShrink: 1, fontSize: 11, fontWeight: '700', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 5 },
 
   emptyPhotos: {
     height: 140,

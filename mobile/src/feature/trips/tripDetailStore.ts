@@ -15,6 +15,7 @@ import { remoteTripDataSource } from '@/core/data/remote/FetchRemoteTripDataSour
 import { tripBundleDtoToDomain } from '@/core/data/remote/dto/tripBundleDto';
 import { cacheSharedPhoto } from '@/core/data/local/photoStorage';
 import type { SharedTripDetailDto } from '@/core/data/remote/FetchRemoteTripDataSource';
+import { photoLocationMatchesWaypoint } from '@/core/domain/photo/photoLocation';
 
 interface TripDetailState {
   trip: Trip | null;
@@ -153,10 +154,16 @@ function sharedImagesFromDetail(
         waypointId: waypoint.id,
         source: 'GALLERY' as const,
         localUri: image.getUrl,
-        capturedAt: null,
-        photoLatitude: null,
-        photoLongitude: null,
-        locationMatchesWaypoint: false,
+        capturedAt: image.capturedAt ? new Date(image.capturedAt) : null,
+        photoLatitude: image.photoLatitude,
+        photoLongitude: image.photoLongitude,
+        locationMatchesWaypoint: photoLocationMatchesWaypoint(
+          image.photoLatitude === null || image.photoLongitude === null ? null : {
+            latitude: image.photoLatitude,
+            longitude: image.photoLongitude,
+          },
+          waypoint,
+        ),
         objectKey: image.objectKey,
         uploadState: 'UPLOADED' as const,
       })),
@@ -217,10 +224,16 @@ async function cacheImagesFromDetail(
             waypointId: waypoint.id,
             source: 'GALLERY',
             localUri: await cacheSharedPhoto(image.imageId, image.getUrl),
-            capturedAt: null,
-            photoLatitude: null,
-            photoLongitude: null,
-            locationMatchesWaypoint: false,
+            capturedAt: image.capturedAt ? new Date(image.capturedAt) : null,
+            photoLatitude: image.photoLatitude,
+            photoLongitude: image.photoLongitude,
+            locationMatchesWaypoint: photoLocationMatchesWaypoint(
+              image.photoLatitude === null || image.photoLongitude === null ? null : {
+                latitude: image.photoLatitude,
+                longitude: image.photoLongitude,
+              },
+              waypoint,
+            ),
             objectKey: image.objectKey,
             uploadState: 'UPLOADED',
           };
@@ -231,10 +244,16 @@ async function cacheImagesFromDetail(
             waypointId: waypoint.id,
             source: 'GALLERY',
             localUri: image.getUrl,
-            capturedAt: null,
-            photoLatitude: null,
-            photoLongitude: null,
-            locationMatchesWaypoint: false,
+            capturedAt: image.capturedAt ? new Date(image.capturedAt) : null,
+            photoLatitude: image.photoLatitude,
+            photoLongitude: image.photoLongitude,
+            locationMatchesWaypoint: photoLocationMatchesWaypoint(
+              image.photoLatitude === null || image.photoLongitude === null ? null : {
+                latitude: image.photoLatitude,
+                longitude: image.photoLongitude,
+              },
+              waypoint,
+            ),
             objectKey: image.objectKey,
             uploadState: 'FAILED',
           };

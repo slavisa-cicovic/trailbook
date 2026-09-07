@@ -7,9 +7,12 @@ import type { TripBundleDto, TripListItemDto } from "./dto/sync-trip.dto";
 import { WaypointImagesService } from "./waypoint-images.service";
 
 interface SharedWaypointImageDto {
+  capturedAt: string | null;
   getUrl: string;
   imageId: string;
   objectKey: string;
+  photoLatitude: number | null;
+  photoLongitude: number | null;
 }
 
 type SharedImagesByWaypointIdDto = Record<string, SharedWaypointImageDto[]>;

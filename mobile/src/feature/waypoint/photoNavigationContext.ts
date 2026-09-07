@@ -5,6 +5,7 @@ export interface PhotoViewerItem extends WaypointImage {
   routeCoordinateGroups: Array<Array<{ latitude: number; longitude: number }>>;
   tripTitle: string;
   waypointCoordinate: { latitude: number; longitude: number };
+  waypointCreatedAt: Date;
   waypointTitle: string;
 }
 

@@ -23,6 +23,11 @@ export async function uploadWaypointImages(clientTripId: string): Promise<Result
       image.id,
       metadataResult.value.contentType,
       metadataResult.value.sizeBytes,
+      {
+        capturedAt: image.capturedAt,
+        photoLatitude: image.photoLatitude,
+        photoLongitude: image.photoLongitude,
+      },
     );
     if (!urlResult.ok) {
       await waypointImageDao.updateUploadState(image.id, 'FAILED');

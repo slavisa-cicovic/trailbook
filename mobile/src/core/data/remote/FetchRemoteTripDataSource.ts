@@ -37,9 +37,12 @@ export interface SharedTripDetailDto {
   imagesByWaypointId: Record<
     string,
     Array<{
+      capturedAt: string | null;
       getUrl: string;
       imageId: string;
       objectKey: string;
+      photoLatitude: number | null;
+      photoLongitude: number | null;
     }>
   >;
   owner: {

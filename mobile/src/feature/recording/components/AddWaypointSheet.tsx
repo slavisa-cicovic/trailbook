@@ -24,18 +24,14 @@ import {
   coordinatesFromImageAsset,
   capturedAtFromImageAsset,
   currentPhotoCoordinates,
-  mismatchedPhotoDistanceM,
   photoLocationMatchesWaypoint,
   type PhotoCoordinates,
 } from '@/core/domain/photo/photoLocation';
+import { PhotoVerificationIndicator } from '@/feature/waypoint/components/PhotoVerificationIndicator';
 
 const CATEGORY_KEY: Record<WaypointCategory, TranslationKey> = {
   GENERIC:'category.generic', DEPARTURE:'category.departure', FUEL:'category.fuel', BORDER:'category.border', PORT:'category.port', FERRY:'category.ferry', RESTAURANT:'category.restaurant', CAFE:'category.cafe', VIEWPOINT:'category.viewpoint', MONUMENT:'category.monument', BEACH:'category.beach',
 };
-
-function formatPhotoDistance(distanceM: number): string {
-  return distanceM >= 1000 ? `${(distanceM / 1000).toFixed(1)} km` : `${Math.round(distanceM)} m`;
-}
 
 interface PhotoItem {
   uri: string;
@@ -43,7 +39,8 @@ interface PhotoItem {
   capturedAt: Date | null;
   coordinates: PhotoCoordinates | null;
   locationMatchesWaypoint: boolean;
-  mismatchDistanceM: number | null;
+  waypointCoordinates: PhotoCoordinates | null;
+  waypointCreatedAt: Date;
 }
 
 interface Props {
@@ -74,8 +71,9 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: false, exif: true });
     if (!result.canceled && result.assets[0]) {
+      const waypointCreatedAt = new Date();
       const waypointCoordinates = await currentPhotoCoordinates();
-      const photoCoordinates = coordinatesFromImageAsset(result.assets[0]);
+      const photoCoordinates = coordinatesFromImageAsset(result.assets[0]) ?? waypointCoordinates;
       setPhotos((p) => [...p, {
         uri: result.assets[0]!.uri,
         source: 'CAMERA',
@@ -83,7 +81,8 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
         coordinates: photoCoordinates,
         locationMatchesWaypoint: waypointCoordinates !== null
           && photoLocationMatchesWaypoint(photoCoordinates, waypointCoordinates),
-        mismatchDistanceM: mismatchedPhotoDistanceM(photoCoordinates, waypointCoordinates),
+        waypointCoordinates,
+        waypointCreatedAt,
       }]);
     }
   }
@@ -96,6 +95,7 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, exif: true });
     if (!result.canceled && result.assets[0]) {
+      const waypointCreatedAt = new Date();
       const waypointCoordinates = await currentPhotoCoordinates();
       const photoCoordinates = coordinatesFromImageAsset(result.assets[0]!);
       setPhotos((p) => [...p, {
@@ -105,7 +105,8 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
         coordinates: photoCoordinates,
         locationMatchesWaypoint: waypointCoordinates !== null
           && photoLocationMatchesWaypoint(photoCoordinates, waypointCoordinates),
-        mismatchDistanceM: mismatchedPhotoDistanceM(photoCoordinates, waypointCoordinates),
+        waypointCoordinates,
+        waypointCreatedAt,
       }]);
     }
   }
@@ -272,16 +273,13 @@ export function AddWaypointSheet({ tripId, visible, onDismiss }: Props) {
                 {photos.map((p, i) => (
                   <View key={i} style={styles.thumbWrapper}>
                     <Image source={{ uri: p.uri }} style={styles.thumb} />
-                    {!p.locationMatchesWaypoint ? (
-                      <View style={[styles.locationWarning, { backgroundColor: theme.dangerMuted }]}>
-                        <MaterialIcons name="location-off" size={15} color={theme.danger} />
-                        <Text style={[styles.locationWarningText, { color: theme.danger }]}>
-                          {p.mismatchDistanceM === null
-                            ? t('waypoint.photoGpsMissing')
-                            : `${t('waypoint.photoLocationMismatch')} · ${formatPhotoDistance(p.mismatchDistanceM)}`}
-                        </Text>
-                      </View>
-                    ) : null}
+                    <PhotoVerificationIndicator
+                      capturedAt={p.capturedAt}
+                      photoCoordinates={p.coordinates}
+                      style={styles.verificationBadge}
+                      waypointCoordinates={p.waypointCoordinates}
+                      waypointCreatedAt={p.waypointCreatedAt}
+                    />
                     <Pressable style={[styles.removeBadge, { backgroundColor: theme.dangerMuted }]} onPress={() => removePhoto(i)}>
                       <Text style={[styles.removeBadgeText, { color: theme.danger }]}>{t('common.remove')}</Text>
                     </Pressable>
@@ -410,8 +408,7 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 14, fontWeight: '600' },
 
   photosHint: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
-  locationWarning: { alignItems: 'center', borderRadius: 10, flexDirection: 'row', gap: 5, marginTop: 6, paddingHorizontal: 8, paddingVertical: 6 },
-  locationWarningText: { flex: 1, fontSize: 11, fontWeight: '700' },
+  verificationBadge: { left: 6, position: 'absolute', top: 6 },
   photoButtons: { flexDirection: 'row', gap: 10 },
   photoActionBtn: {
     flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',

@@ -19,9 +19,9 @@ test("lists verified image metadata without a per-image S3 HEAD request", async 
     const database = {
       waypointImage: {
         findMany: async () => [
-          { id: "image-1", objectKey: "media/images/image-1" },
-          { id: "image-2", objectKey: "media/images/image-2" },
-          { id: "image-3", objectKey: "media/images/image-3" },
+          { capturedAt: new Date("2026-09-07T10:00:00Z"), id: "image-1", objectKey: "media/images/image-1", photoLatitude: 44.98, photoLongitude: 19.82 },
+          { capturedAt: null, id: "image-2", objectKey: "media/images/image-2", photoLatitude: null, photoLongitude: null },
+          { capturedAt: null, id: "image-3", objectKey: "media/images/image-3", photoLatitude: null, photoLongitude: null },
         ],
       },
     } as unknown as DatabaseService;
@@ -39,6 +39,8 @@ test("lists verified image metadata without a per-image S3 HEAD request", async 
     assert.equal(objectStoreRequests, 0);
     assert.deepEqual(images.map((image) => image.imageId), ["image-1", "image-2", "image-3"]);
     assert.ok(images.every((image) => image.getUrl.includes("media/images/")));
+    assert.equal(images[0]?.capturedAt, "2026-09-07T10:00:00.000Z");
+    assert.equal(images[0]?.photoLatitude, 44.98);
   } finally {
     restoreEnv("S3_ACCESS_KEY_ID", previousEnv.accessKey);
     restoreEnv("S3_SECRET_ACCESS_KEY", previousEnv.secretKey);
@@ -63,9 +65,12 @@ test("rejects HEIC and HEIF uploads even if configuration lists them", async () 
     for (const contentType of ["image/heic", "image/heif"]) {
       await assert.rejects(
         service.requestUpload("user-1", {
+          capturedAt: null,
           contentType,
           imageId: "550e8400-e29b-41d4-a716-446655440000",
           sizeBytes: 1024,
+          photoLatitude: null,
+          photoLongitude: null,
           waypointId: "waypoint-1",
         }),
         (error) =>

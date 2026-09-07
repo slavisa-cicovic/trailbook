@@ -16,11 +16,16 @@ import {
   type RestoreIssueKind,
   type RestoreSummary,
 } from '@/core/domain/restore/restoreSummary';
+import { photoLocationMatchesWaypoint } from '@/core/domain/photo/photoLocation';
+import type { Waypoint } from '@/core/domain/model/waypoint';
 
 interface RemoteImageInfo {
+  capturedAt: string | null;
   imageId: string;
   getUrl: string;
   objectKey: string;
+  photoLatitude: number | null;
+  photoLongitude: number | null;
 }
 
 function errorMessage(error: unknown): string {
@@ -38,23 +43,26 @@ function recordIssue(
 }
 
 async function restoreImage(
-  waypointId: string,
+  waypoint: Waypoint,
   image: RemoteImageInfo,
 ): Promise<Result<void>> {
   try {
     const bytesResult = await remoteWaypointImageDataSource.downloadImage(image.getUrl);
     if (!bytesResult.ok) return err(bytesResult.error);
 
-    const localUri = await saveRestoredPhoto(waypointId, image.imageId, bytesResult.value);
+    const localUri = await saveRestoredPhoto(waypoint.id, image.imageId, bytesResult.value);
+    const photoCoordinates = image.photoLatitude === null || image.photoLongitude === null
+      ? null
+      : { latitude: image.photoLatitude, longitude: image.photoLongitude };
     await waypointImageDao.insert({
       id: image.imageId,
-      waypointId,
+      waypointId: waypoint.id,
       source: 'CAMERA',
       localUri,
-          capturedAt: null,
-          photoLatitude: null,
-          photoLongitude: null,
-          locationMatchesWaypoint: false,
+      capturedAt: image.capturedAt ? new Date(image.capturedAt) : null,
+      photoLatitude: image.photoLatitude,
+      photoLongitude: image.photoLongitude,
+      locationMatchesWaypoint: photoLocationMatchesWaypoint(photoCoordinates, waypoint),
       objectKey: image.objectKey,
       uploadState: 'UPLOADED',
     });
@@ -130,7 +138,7 @@ export async function restoreTrips(): Promise<Result<RestoreSummary>> {
             summary.existingPhotos += 1;
             continue;
           }
-          const restoreResult = await restoreImage(waypoint.id, image);
+          const restoreResult = await restoreImage(waypoint, image);
           if (!restoreResult.ok) {
             summary.failedPhotos += 1;
             recordIssue(summary, 'photo', image.imageId, restoreResult.error);

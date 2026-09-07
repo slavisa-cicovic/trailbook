@@ -14,9 +14,12 @@ interface CompleteUploadResponse {
 }
 
 interface ImageMetaDto {
+  capturedAt: string | null;
   imageId: string;
   getUrl: string;
   objectKey: string;
+  photoLatitude: number | null;
+  photoLongitude: number | null;
 }
 
 export interface RemoteWaypointImageDataSource {
@@ -25,6 +28,7 @@ export interface RemoteWaypointImageDataSource {
     imageId: string,
     contentType: string,
     sizeBytes: number,
+    metadata: { capturedAt: Date | null; photoLatitude: number | null; photoLongitude: number | null },
   ): Promise<Result<{ putUrl: string; objectKey: string }>>;
   uploadToStorage(putUrl: string, localUri: string, contentType: string): Promise<Result<void>>;
   completeUpload(
@@ -45,11 +49,15 @@ class FetchRemoteWaypointImageDataSource implements RemoteWaypointImageDataSourc
     imageId: string,
     contentType: string,
     sizeBytes: number,
+    metadata: { capturedAt: Date | null; photoLatitude: number | null; photoLongitude: number | null },
   ): Promise<Result<{ putUrl: string; objectKey: string }>> {
     return apiPost<UploadUrlResponse>(`/waypoints/${waypointId}/images`, {
       contentType,
       imageId,
       sizeBytes,
+      capturedAt: metadata.capturedAt?.toISOString() ?? null,
+      photoLatitude: metadata.photoLatitude,
+      photoLongitude: metadata.photoLongitude,
     });
   }
 

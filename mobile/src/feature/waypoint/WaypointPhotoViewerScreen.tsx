@@ -68,6 +68,7 @@ export default function WaypointPhotoViewerScreen() {
           latitude: waypoint.latitude,
           longitude: waypoint.longitude,
         },
+        waypointCreatedAt: waypoint.createdAt,
         waypointTitle: waypoint.title,
       })),
     );

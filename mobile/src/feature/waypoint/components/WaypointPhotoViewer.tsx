@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Image,
   Platform,
   Pressable,
@@ -13,12 +14,14 @@ import {
   useWindowDimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type AppStateStatus,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PhotoViewerItem } from '../photoNavigationContext';
 import { useI18n } from '@/i18n/i18nStore';
+import { PhotoVerificationIndicator } from './PhotoVerificationIndicator';
 
 interface MapCoordinate {
   latitude: number;
@@ -253,6 +256,8 @@ export function WaypointPhotoViewer({
   const [currentIndex, setCurrentIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
   const [zoomedImageId, setZoomedImageId] = useState<string | null>(null);
   const [routeExpanded, setRouteExpanded] = useState(false);
+  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
+  const appIsActive = appState === 'active';
   const currentImage = images[currentIndex] ?? null;
   const previewRouteCoordinateGroups = useMemo(
     () => (currentImage?.routeCoordinateGroups ?? []).map(downsampleRouteCoordinates),
@@ -285,6 +290,17 @@ export function WaypointPhotoViewer({
     return () => cancelAnimationFrame(frame);
   }, [initialIndex, screenWidth]);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      setAppState(nextState);
+      if (nextState !== 'active') {
+        setZoomedImageId(null);
+        setRouteExpanded(false);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
   function handleMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const nextPageIndex = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
     setCurrentIndex(clamp(nextPageIndex, 0, images.length - 1));
@@ -302,14 +318,16 @@ export function WaypointPhotoViewer({
         showsHorizontalScrollIndicator={false}
         style={styles.pager}
       >
-        {images.map((image) => (
+        {images.map((image, index) => (
           <View key={image.id} style={[styles.slide, { width: screenWidth, height: screenHeight }]}>
-            <ZoomablePhoto
-              height={screenHeight}
-              onZoomChange={(zoomed) => setZoomedImageId(zoomed ? image.id : null)}
-              uri={image.localUri}
-              width={screenWidth}
-            />
+            {appIsActive && Math.abs(index - currentIndex) <= 1 ? (
+              <ZoomablePhoto
+                height={screenHeight}
+                onZoomChange={(zoomed) => setZoomedImageId(zoomed ? image.id : null)}
+                uri={image.localUri}
+                width={screenWidth}
+              />
+            ) : null}
           </View>
         ))}
       </ScrollView>
@@ -318,7 +336,7 @@ export function WaypointPhotoViewer({
         <Text numberOfLines={1} style={styles.topInfo}>{currentImage?.tripTitle ?? ''}</Text>
       </View>
 
-      {routeExpanded && routePreviewRegion && routePreviewSize ? (
+      {appIsActive && routeExpanded && routePreviewRegion && routePreviewSize ? (
         <View style={styles.expandedRoute}>
           <MapView
             mapType="standard"
@@ -361,7 +379,7 @@ export function WaypointPhotoViewer({
         </View>
       ) : null}
 
-      {!routeExpanded && routePreviewRegion && routePreviewSize ? (
+      {appIsActive && !routeExpanded && routePreviewRegion && routePreviewSize ? (
         <Pressable
           accessibilityLabel="Open route preview"
           onPress={() => setRouteExpanded(true)}
@@ -416,11 +434,16 @@ export function WaypointPhotoViewer({
                 : t('waypoint.photoTimeUnknown')}
             </Text>
           ) : null}
-          {currentImage && !currentImage.locationMatchesWaypoint ? (
-            <View style={styles.locationMismatchBadge}>
-              <MaterialIcons color="#fffdf8" name="location-off" size={13} />
-              <Text style={styles.locationMismatchText}>{t('waypoint.photoLocationUnverified')}</Text>
-            </View>
+          {currentImage ? (
+            <PhotoVerificationIndicator
+              capturedAt={currentImage.capturedAt}
+              photoCoordinates={currentImage.photoLatitude === null || currentImage.photoLongitude === null ? null : {
+                latitude: currentImage.photoLatitude,
+                longitude: currentImage.photoLongitude,
+              }}
+              waypointCoordinates={currentImage.waypointCoordinate}
+              waypointCreatedAt={currentImage.waypointCreatedAt}
+            />
           ) : null}
         </View>
         {currentImage && onRemoveCurrent ? (
@@ -493,8 +516,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   bottomMeta: { color: 'rgba(255,253,248,0.76)', fontSize: 11, textAlign: 'center' },
-  locationMismatchBadge: { alignItems: 'center', backgroundColor: 'rgba(170,45,35,0.92)', borderRadius: 8, flexDirection: 'row', gap: 4, paddingHorizontal: 7, paddingVertical: 3 },
-  locationMismatchText: { color: '#fffdf8', fontSize: 10, fontWeight: '800' },
   iconButton: {
     alignItems: 'center',
     justifyContent: 'center',

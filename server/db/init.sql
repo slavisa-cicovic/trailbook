@@ -140,6 +140,9 @@ CREATE TABLE IF NOT EXISTS waypoint_images (
     id          VARCHAR(36)  PRIMARY KEY,
     waypoint_id VARCHAR(36)  NOT NULL,
     object_key  TEXT         NOT NULL,
+    captured_at TIMESTAMPTZ,
+    photo_latitude DOUBLE PRECISION,
+    photo_longitude DOUBLE PRECISION,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 

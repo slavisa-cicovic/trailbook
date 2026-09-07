@@ -20,9 +20,12 @@ import { DatabaseService } from "../database/database.service";
 import type { TripBundleDto } from "./dto/sync-trip.dto";
 
 interface RequestUploadInput {
+  capturedAt: string | null;
   contentType: string;
   imageId: string;
   sizeBytes: number | null;
+  photoLatitude: number | null;
+  photoLongitude: number | null;
   waypointId: string;
 }
 
@@ -68,6 +71,8 @@ export class WaypointImagesService {
     const contentType = this.normalizeContentType(input.contentType);
     this.assertValidImageId(input.imageId);
     this.assertAllowedUpload(contentType, input.sizeBytes);
+    const capturedAt = this.normalizeCapturedAt(input.capturedAt);
+    const photoCoordinates = this.normalizePhotoCoordinates(input.photoLatitude, input.photoLongitude);
     await this.assertWaypointOwnedByUser(userId, input.waypointId);
 
     const objectKey = this.createObjectKey(input.imageId);
@@ -85,18 +90,24 @@ export class WaypointImagesService {
     await this.database.waypointImage.upsert({
       create: {
         contentType,
+        capturedAt,
         id: input.imageId,
         imageUuid: input.imageId,
         objectKey,
         sizeBytes: input.sizeBytes,
+        photoLatitude: photoCoordinates?.latitude ?? null,
+        photoLongitude: photoCoordinates?.longitude ?? null,
         uploadStatus: "pending",
         waypointId: input.waypointId,
       },
       update: {
         contentType,
+        capturedAt,
         lastUploadError: null,
         objectKey,
         sizeBytes: input.sizeBytes,
+        photoLatitude: photoCoordinates?.latitude ?? null,
+        photoLongitude: photoCoordinates?.longitude ?? null,
         uploadStatus: "pending",
         waypointId: input.waypointId,
       },
@@ -192,6 +203,9 @@ export class WaypointImagesService {
         ),
         imageId: image.id,
         objectKey: image.objectKey,
+        capturedAt: image.capturedAt?.toISOString() ?? null,
+        photoLatitude: image.photoLatitude,
+        photoLongitude: image.photoLongitude,
       })),
     );
   }
@@ -259,6 +273,26 @@ export class WaypointImagesService {
 
   private createObjectKey(imageUuid: string) {
     return `media/images/${imageUuid}`;
+  }
+
+  private normalizeCapturedAt(value: string | null): Date | null {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException("capturedAt must be a valid date.");
+    }
+    return date;
+  }
+
+  private normalizePhotoCoordinates(latitude: number | null, longitude: number | null) {
+    if (latitude === null && longitude === null) return null;
+    if (
+      typeof latitude !== "number" || !Number.isFinite(latitude) || Math.abs(latitude) > 90 ||
+      typeof longitude !== "number" || !Number.isFinite(longitude) || Math.abs(longitude) > 180
+    ) {
+      throw new BadRequestException("Photo latitude and longitude must be a valid coordinate pair.");
+    }
+    return { latitude, longitude };
   }
 
   private assertValidImageId(imageId: string) {

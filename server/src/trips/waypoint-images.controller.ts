@@ -9,6 +9,9 @@ export interface ImageUploadRequestDto {
   imageId: string;
   contentType?: string | null;
   sizeBytes?: number | null;
+  capturedAt?: string | null;
+  photoLatitude?: number | null;
+  photoLongitude?: number | null;
 }
 
 export interface CompleteImageUploadRequestDto {
@@ -36,8 +39,11 @@ export class WaypointImagesController {
     await this.purchaseApplication.requirePremium(user);
     return this.waypointImagesService.requestUpload(user.id, {
       contentType: input.contentType ?? "image/jpeg",
+      capturedAt: input.capturedAt ?? null,
       imageId: input.imageId,
       sizeBytes: input.sizeBytes ?? null,
+      photoLatitude: input.photoLatitude ?? null,
+      photoLongitude: input.photoLongitude ?? null,
       waypointId,
     });
   }

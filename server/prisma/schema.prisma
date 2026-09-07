@@ -221,6 +221,9 @@ model WaypointImage {
   lastUploadError    String?   @map("last_upload_error")
   uploadedAt         DateTime? @map("uploaded_at") @db.Timestamptz(6)
   remoteVerifiedAt   DateTime? @map("remote_verified_at") @db.Timestamptz(6)
+  capturedAt         DateTime? @map("captured_at") @db.Timestamptz(6)
+  photoLatitude      Float?    @map("photo_latitude")
+  photoLongitude     Float?    @map("photo_longitude")
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([imageUuid], map: "waypoint_images_image_uuid_idx")

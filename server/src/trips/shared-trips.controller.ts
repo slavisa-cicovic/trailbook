@@ -6,9 +6,12 @@ import { TripsService } from "./trips.service";
 import { WaypointImagesService } from "./waypoint-images.service";
 
 interface SharedWaypointImage {
+  capturedAt: string | null;
   getUrl: string;
   imageId: string;
   objectKey: string;
+  photoLatitude: number | null;
+  photoLongitude: number | null;
 }
 
 type ImagesByWaypointId = Record<string, SharedWaypointImage[]>;
