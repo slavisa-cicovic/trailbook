@@ -30,7 +30,7 @@ import {
 export default function PremiumScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const status = useAuthStore((state) => state.status);
   const access = usePurchaseStore((state) => state.access);
   const busyAction = usePurchaseStore((state) => state.busyAction);
@@ -45,7 +45,9 @@ export default function PremiumScreen() {
   const visibleMessage =
     message === 'Trailbook Premium is active.' && !hasPremiumAccess(access)
       ? null
-      : message;
+      : message
+        ? localizePurchaseMessage(message, t)
+        : null;
   const goBack = () => router.dismissTo('/settings');
 
   useFocusEffect(
@@ -85,18 +87,18 @@ export default function PremiumScreen() {
             styles.card,
             { backgroundColor: theme.card, borderColor: theme.border },
           ]}
-          title="Your subscription"
+          title={t('premium.yourSubscription')}
           titleStyle={{ color: theme.primaryText }}
-          subtitle={subscriptionSummary(access)}
+          subtitle={subscriptionSummary(access, t, locale)}
           subtitleStyle={{ color: theme.mutedText }}
         >
           <View style={styles.statusDetails}>
-            <StatusRow label="Plan" value={planLabel(access.planCode)} />
-            <StatusRow label="Status" value={statusLabel(access)} />
+            <StatusRow label={t('premium.plan')} value={planLabel(access.planCode, t)} />
+            <StatusRow label={t('premium.status')} value={statusLabel(access, t)} />
             {access.currentPeriodEndsAt ? (
               <StatusRow
-                label={periodEndLabel(access.subscriptionStatus)}
-                value={formatDate(access.currentPeriodEndsAt)}
+                label={periodEndLabel(access.subscriptionStatus, t)}
+                value={formatDate(access.currentPeriodEndsAt, locale, t)}
               />
             ) : null}
           </View>
@@ -106,21 +108,21 @@ export default function PremiumScreen() {
               <LoadingButton
                 disabled={!iap.available || !iap.connected}
                 loading={busyAction === 'manage-subscription'}
-                loadingLabel={`Opening ${storeName}…`}
+                loadingLabel={t('premium.openingStore', { store: storeName })}
                 onPress={() => void iap.manageSubscriptions()}
                 variant="secondary"
               >
-                Manage subscription
+                {t('premium.manage')}
               </LoadingButton>
               {access.provider === 'apple' && hasPremiumAccess(access) && appleProductId(access.planCode) ? (
                 <LoadingButton
                   disabled={!iap.available || !iap.connected || busyAction !== null}
                   loading={busyAction === 'refund'}
-                  loadingLabel="Opening Apple…"
+                  loadingLabel={t('premium.openingApple')}
                   onPress={() => void iap.requestRefund(appleProductId(access.planCode)!)}
                   variant="ghost"
                 >
-                  Request refund
+                  {t('premium.requestRefund')}
                 </LoadingButton>
               ) : null}
             </View>
@@ -134,13 +136,13 @@ export default function PremiumScreen() {
             styles.card,
             { backgroundColor: theme.card, borderColor: theme.border },
           ]}
-          title="Purchase update"
+          title={t('premium.purchaseUpdate')}
           titleStyle={{ color: theme.primaryText }}
           subtitle={visibleMessage}
           subtitleStyle={{ color: theme.mutedText }}
         >
           <Pressable onPress={clearMessage} style={styles.dismissMessage}>
-            <Text style={[styles.linkText, { color: theme.accent }]}>Dismiss</Text>
+            <Text style={[styles.linkText, { color: theme.accent }]}>{t('premium.dismiss')}</Text>
           </Pressable>
         </Card>
       ) : null}
@@ -151,9 +153,9 @@ export default function PremiumScreen() {
             styles.card,
             { backgroundColor: theme.card, borderColor: theme.border },
           ]}
-          title={`Completing ${storeName} purchase`}
+          title={t('premium.completing', { store: storeName })}
           titleStyle={{ color: theme.primaryText }}
-          subtitle={`Trailbook is verifying or finishing a ${storeName} transaction and will retry automatically.`}
+          subtitle={t('premium.verifying', { store: storeName })}
           subtitleStyle={{ color: theme.mutedText }}
         />
       ) : null}
@@ -164,9 +166,9 @@ export default function PremiumScreen() {
             styles.card,
             { backgroundColor: theme.card, borderColor: theme.border },
           ]}
-          title="Native iOS build required"
+          title={t('premium.nativeIosTitle')}
           titleStyle={{ color: theme.primaryText }}
-          subtitle="Apple subscriptions are unavailable in Expo Go. Use the installed Trailbook iOS build."
+          subtitle={t('premium.nativeIosBody')}
           subtitleStyle={{ color: theme.mutedText }}
         />
       ) : null}
@@ -176,18 +178,18 @@ export default function PremiumScreen() {
           style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
           title={APP_ENVIRONMENT === 'local'
             ? t('premium.localUnavailableTitle')
-            : 'Native Android build required'}
+            : t('premium.nativeAndroidTitle')}
           titleStyle={{ color: theme.primaryText }}
           subtitle={APP_ENVIRONMENT === 'local'
             ? t('premium.localUnavailableBody')
-            : 'Google Play subscriptions are unavailable in Expo Go. Install a Play-distributed Trailbook Android build.'}
+            : t('premium.nativeAndroidBody')}
           subtitleStyle={{ color: theme.mutedText }}
         />
       ) : null}
 
       {iap.available && !iap.connected ? (
         <Text style={[styles.storeStatus, { color: theme.mutedText }]}>
-          Connecting to {storeName}…
+          {t('premium.connecting', { store: storeName })}
         </Text>
       ) : null}
 
@@ -196,7 +198,7 @@ export default function PremiumScreen() {
       (iap.productLoadState === 'idle' ||
         iap.productLoadState === 'loading') ? (
         <Text style={[styles.storeStatus, { color: theme.mutedText }]}>
-          Loading {storeName} subscription options…
+          {t('premium.loadingOptions', { store: storeName })}
         </Text>
       ) : null}
 
@@ -209,12 +211,12 @@ export default function PremiumScreen() {
             styles.card,
             { backgroundColor: theme.card, borderColor: theme.border },
           ]}
-          title={`${storeName} subscriptions unavailable`}
+          title={t('premium.unavailable', { store: storeName })}
           titleStyle={{ color: theme.primaryText }}
           subtitle={
             iap.productLoadError
-              ? `${storeName} could not load the subscription catalog: ${iap.productLoadError}`
-              : `${storeName} did not return the Trailbook monthly or yearly subscription. Check the store connection and try again.`
+              ? t('premium.catalogError', { store: storeName })
+              : t('premium.catalogMissing', { store: storeName })
           }
           subtitleStyle={{ color: theme.mutedText }}
         >
@@ -222,7 +224,7 @@ export default function PremiumScreen() {
             onPress={() => void iap.reloadProducts()}
             variant="secondary"
           >
-            Retry
+            {t('premium.retry')}
           </LoadingButton>
         </Card>
       ) : null}
@@ -286,6 +288,7 @@ function ProductCard({
   product: PurchaseProduct;
 }) {
   const { theme } = useAppTheme();
+  const { t } = useI18n();
   const action = `purchase:${product.productId}:${product.basePlanId ?? ''}`;
   return (
     <Card
@@ -309,17 +312,19 @@ function ProductCard({
         ) : null}
       </View>
       <Text style={[styles.renewal, { color: theme.mutedText }]}>
-        {introductoryRenewalText(product)}
+        {introductoryRenewalText(product, t)}
       </Text>
       <LoadingButton
         disabled={!connected || busyAction !== null || pending}
         loading={
           busyAction === action || busyAction === `verify:${product.productId}`
         }
-        loadingLabel="Processing…"
+        loadingLabel={t('premium.processing')}
         onPress={onPurchase}
       >
-        {pending ? 'Completion pending…' : `Choose ${product.billingType}`}
+        {pending
+          ? t('premium.completionPending')
+          : t('premium.choose', { type: billingTypeLabel(product.billingType, t) })}
       </LoadingButton>
     </Card>
   );
@@ -344,29 +349,33 @@ function LegalLink({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
-function subscriptionSummary(access: PurchaseAccess) {
-  if (!hasPremiumAccess(access)) return 'No active Premium subscription.';
+type Translate = ReturnType<typeof useI18n>['t'];
+
+function subscriptionSummary(access: PurchaseAccess, t: Translate, locale: string) {
+  if (!hasPremiumAccess(access)) return t('premium.summary.none');
   if (access.subscriptionStatus === 'canceled') {
     return access.currentPeriodEndsAt
-      ? `Canceled. Premium remains active until ${formatDate(access.currentPeriodEndsAt)}.`
-      : 'Canceled. Premium remains active until the end of the current period.';
+      ? t('premium.summary.canceledUntil', {
+          date: formatDate(access.currentPeriodEndsAt, locale, t),
+        })
+      : t('premium.summary.canceledPeriod');
   }
-  if (access.subscriptionStatus === 'active') return 'Trailbook Premium is active.';
+  if (access.subscriptionStatus === 'active') return t('premium.summary.active');
   if (access.subscriptionStatus === 'in_grace_period') {
-    return 'Premium remains active during the billing grace period.';
+    return t('premium.summary.grace');
   }
   if (access.subscriptionStatus === 'billing_retry') {
-    return 'Premium access is paused while Apple retries the subscription payment. Update your payment method to restore access.';
+    return t('premium.summary.retry');
   }
-  if (access.subscriptionStatus === 'revoked') return 'This subscription was revoked.';
-  if (access.subscriptionStatus === 'expired') return 'This subscription has expired.';
-  return 'No active Premium subscription.';
+  if (access.subscriptionStatus === 'revoked') return t('premium.summary.revoked');
+  if (access.subscriptionStatus === 'expired') return t('premium.summary.expired');
+  return t('premium.summary.none');
 }
 
-function planLabel(planCode: string) {
-  if (planCode === 'premium_monthly') return 'Premium Monthly';
-  if (planCode === 'premium_yearly') return 'Premium Yearly';
-  return 'No active plan';
+function planLabel(planCode: string, t: Translate) {
+  if (planCode === 'premium_monthly') return t('premium.plan.monthly');
+  if (planCode === 'premium_yearly') return t('premium.plan.yearly');
+  return t('premium.plan.none');
 }
 
 function appleProductId(planCode: string) {
@@ -375,42 +384,68 @@ function appleProductId(planCode: string) {
   return null;
 }
 
-function statusLabel(access: PurchaseAccess) {
-  if (access.planCode === 'demo') return 'Not subscribed';
+function statusLabel(access: PurchaseAccess, t: Translate) {
+  if (access.planCode === 'demo') return t('premium.status.notSubscribed');
   const labels: Record<PurchaseAccess['subscriptionStatus'], string> = {
-    active: 'Active',
-    billing_retry: 'Billing retry',
-    canceled: 'Canceled',
-    expired: 'Expired',
-    in_grace_period: 'Billing grace period',
-    lifetime: 'Lifetime',
-    revoked: 'Revoked',
+    active: t('premium.status.active'),
+    billing_retry: t('premium.status.retry'),
+    canceled: t('premium.status.canceled'),
+    expired: t('premium.status.expired'),
+    in_grace_period: t('premium.status.grace'),
+    lifetime: t('premium.status.lifetime'),
+    revoked: t('premium.status.revoked'),
   };
   return labels[access.subscriptionStatus];
 }
 
-function periodEndLabel(status: PurchaseAccess['subscriptionStatus']) {
-  if (status === 'canceled') return 'Access ends';
+function periodEndLabel(status: PurchaseAccess['subscriptionStatus'], t: Translate) {
+  if (status === 'canceled') return t('premium.period.accessEnds');
   if (status === 'billing_retry' || status === 'expired' || status === 'revoked') {
-    return 'Current period ended';
+    return t('premium.period.ended');
   }
-  return 'Current period ends';
+  return t('premium.period.ends');
 }
 
-function introductoryRenewalText(product: PurchaseProduct) {
+function introductoryRenewalText(product: PurchaseProduct, t: Translate) {
   const period = product.billingPeriodLabel ?? product.billingType;
   if (/free (?:for|trial)/i.test(product.description)) {
-    return `After the free trial, the subscription renews automatically at ${product.priceLabel} per ${period} until canceled.`;
+    return t('premium.renewalTrial', { period, price: product.priceLabel });
   }
-  return `Renews automatically at ${product.priceLabel} per ${period} until canceled.`;
+  return t('premium.renewal', { period, price: product.priceLabel });
+}
+
+function billingTypeLabel(type: PurchaseProduct['billingType'], t: Translate) {
+  if (type === 'monthly') return t('premium.plan.monthly');
+  if (type === 'yearly') return t('premium.plan.yearly');
+  return t('premium.status.lifetime');
+}
+
+function localizePurchaseMessage(message: string, t: Translate) {
+  if (/pending/i.test(message)) return t('premium.message.pending');
+  if (/linked to another|another Trailbook account|ownership/i.test(message)) {
+    return t('premium.message.ownership');
+  }
+  if (/no active .*subscription|no purchases? (?:were )?found/i.test(message)) {
+    return t('premium.message.restoreNone');
+  }
+  if (/sign in/i.test(message)) return t('premium.message.signIn');
+  if (/not supported|unsupported product/i.test(message)) {
+    return t('premium.message.unsupported');
+  }
+  if (/verified.*not.*active|not currently active/i.test(message)) {
+    return t('premium.message.inactive');
+  }
+  if (/refreshed/i.test(message)) return t('premium.message.refreshed');
+  if (/Premium is active/i.test(message)) return t('premium.message.active');
+  return t('premium.message.failed');
 }
 
 async function openUrl(url: string) {
   await Linking.openURL(url);
 }
 
-function formatDate(value: string | null) {
-  return value ? new Date(value).toLocaleDateString() : 'Not available';
+function formatDate(value: string | null, locale: string, t: Translate) {
+  return value ? new Date(value).toLocaleDateString(locale) : t('premium.notAvailable');
 }
 
 const styles = StyleSheet.create({

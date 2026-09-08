@@ -41,13 +41,23 @@ export const useI18nStore = create<I18nState>((set) => ({
   },
 }));
 
-export function translate(language: AppLanguage, key: TranslationKey) {
-  return translations[language][key] ?? en[key];
+export type TranslationParams = Record<string, string | number>;
+
+export function translate(language: AppLanguage, key: TranslationKey, params?: TranslationParams) {
+  const value = translations[language][key] ?? en[key];
+  if (!params) return value;
+  return Object.entries(params).reduce(
+    (text, [name, replacement]) => text.replaceAll(`{{${name}}}`, String(replacement)),
+    value,
+  );
 }
 
 export function useI18n() {
   const language = useI18nStore((state) => state.language);
-  const t = useCallback((key: TranslationKey) => translate(language, key), [language]);
+  const t = useCallback(
+    (key: TranslationKey, params?: TranslationParams) => translate(language, key, params),
+    [language],
+  );
   const localizeError = useCallback((error: string) => {
     const known: Array<[string, TranslationKey]> = [
       ['PREMIUM_ENTITLEMENT_REQUIRED', 'error.premiumRequired'],
