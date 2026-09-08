@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --dev-client",
     "android": "expo run:android",
     "android:local": "node scripts/run-android.js localRelease com.slavisacicovic.trailbook.local",
     "android:local:debug": "node scripts/run-android.js localDebug com.slavisacicovic.trailbook.local",
@@ -40,6 +40,7 @@
     "expo-build-properties": "~1.0.9",
     "expo-constants": "~18.0.14",
     "expo-crypto": "~15.0.9",
+    "expo-dev-client": "~6.0.21",
     "expo-file-system": "~19.0.24",
     "expo-iap": "^4.4.1",
     "expo-image-manipulator": "~14.0.8",
