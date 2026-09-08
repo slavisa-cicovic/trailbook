@@ -1,0 +1,12 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Trailbook",
+    "NSCameraUsageDescription": "Trailbook usa la fotocamera per scattare foto delle tappe durante la registrazione.",
+    "NSPhotoLibraryUsageDescription": "Trailbook usa le tue foto per allegare immagini alle tappe del percorso.",
+    "NSLocationWhenInUseUsageDescription": "Trailbook usa la tua posizione per mostrarti dove ti trovi e registrare i viaggi.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Trailbook usa la tua posizione per continuare a registrare i viaggi quando l’app è in background o lo schermo è bloccato.",
+    "NSLocationAlwaysUsageDescription": "Trailbook usa la tua posizione per continuare a registrare i viaggi quando l’app è in background o lo schermo è bloccato.",
+    "NSMotionUsageDescription": "Trailbook usa i dati di movimento per distinguere meglio camminata, bicicletta e guida in modalità automatica."
+  },
+  "android": { "app_name": "Trailbook" }
+}

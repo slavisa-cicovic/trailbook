@@ -6,7 +6,7 @@ module.exports = {
     name: "Trailbook",
     slug: "trailbook",
     scheme: "trailbook",
-    version: "1.0.2",
+    version: "1.0.3",
     orientation: "portrait",
     userInterfaceStyle: "light",
     icon: "./assets/app-icon-release.png",
@@ -14,7 +14,15 @@ module.exports = {
       "./plugins/withAndroidProductFlavors",
       "./plugins/withLocationTaskPatch",
       "expo-router",
-      "expo-localization",
+      [
+        "expo-localization",
+        {
+          supportedLocales: {
+            android: ["en", "sr", "it", "es", "de", "fr"],
+            ios: ["en", "sr", "it", "es", "de", "fr"],
+          },
+        },
+      ],
       [
         "expo-splash-screen",
         {
@@ -69,6 +77,7 @@ module.exports = {
         "com.apple.developer.applesignin": ["Default"],
       },
       infoPlist: {
+        CFBundleAllowMixedLocalizations: true,
         ITSAppUsesNonExemptEncryption: false,
         NSLocationWhenInUseUsageDescription:
           "Trailbook uses your location to show where you are and support trip recording.",
@@ -118,6 +127,14 @@ module.exports = {
     },
     web: {
       favicon: "./assets/app-icon-release.png",
+    },
+    locales: {
+      en: "./locales/en.json",
+      sr: "./locales/sr.json",
+      it: "./locales/it.json",
+      es: "./locales/es.json",
+      de: "./locales/de.json",
+      fr: "./locales/fr.json",
     },
     experiments: {
       typedRoutes: false,

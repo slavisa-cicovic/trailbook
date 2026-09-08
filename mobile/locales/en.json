@@ -1,0 +1,12 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Trailbook",
+    "NSCameraUsageDescription": "Trailbook uses your camera so you can capture waypoint photos during recording.",
+    "NSPhotoLibraryUsageDescription": "Trailbook uses your photos so you can attach images to route waypoints.",
+    "NSLocationWhenInUseUsageDescription": "Trailbook uses your location to show where you are and support trip recording.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Trailbook uses your location to keep recording trips when the app is in the background or the screen is locked.",
+    "NSLocationAlwaysUsageDescription": "Trailbook uses your location to keep recording trips when the app is in the background or the screen is locked.",
+    "NSMotionUsageDescription": "Trailbook uses motion activity to distinguish walking, cycling, and driving more reliably in auto mode."
+  },
+  "android": { "app_name": "Trailbook" }
+}

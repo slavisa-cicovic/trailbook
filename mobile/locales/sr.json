@@ -1,0 +1,12 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Trailbook",
+    "NSCameraUsageDescription": "Trailbook koristi kameru da biste mogli da fotografišete waypoint-e tokom snimanja.",
+    "NSPhotoLibraryUsageDescription": "Trailbook koristi vaše fotografije da biste mogli da ih dodate waypoint-ima na ruti.",
+    "NSLocationWhenInUseUsageDescription": "Trailbook koristi vašu lokaciju da prikaže gde se nalazite i omogući snimanje putovanja.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Trailbook koristi vašu lokaciju da nastavi snimanje putovanja dok je aplikacija u pozadini ili je ekran zaključan.",
+    "NSLocationAlwaysUsageDescription": "Trailbook koristi vašu lokaciju da nastavi snimanje putovanja dok je aplikacija u pozadini ili je ekran zaključan.",
+    "NSMotionUsageDescription": "Trailbook koristi podatke o kretanju da u automatskom režimu pouzdanije razlikuje hodanje, vožnju bicikla i vožnju vozilom."
+  },
+  "android": { "app_name": "Trailbook" }
+}
