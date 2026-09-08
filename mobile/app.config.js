@@ -13,6 +13,15 @@ module.exports = {
     plugins: [
       "./plugins/withAndroidProductFlavors",
       "./plugins/withLocationTaskPatch",
+      [
+        "expo-build-properties",
+        {
+          android: {
+            enableMinifyInReleaseBuilds: true,
+            enableShrinkResourcesInReleaseBuilds: true,
+          },
+        },
+      ],
       "expo-router",
       [
         "expo-localization",

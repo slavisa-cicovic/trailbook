@@ -58,6 +58,12 @@ const en = {
     "After the free trial, the subscription renews automatically at {{price}} per {{period}} until canceled.",
   "premium.renewal":
     "Renews automatically at {{price}} per {{period}} until canceled.",
+  "premium.period.month": "month",
+  "premium.period.year": "year",
+  "premium.period.until": "until {{date}}",
+  "premium.trialWeek": "1 week free, then {{price}} per {{period}}.",
+  "premium.productDescription.monthly": "Flexible Premium access billed monthly.",
+  "premium.productDescription.yearly": "Premium access for a full year at the best value.",
   "premium.notAvailable": "Not available",
   "premium.message.pending":
     "The purchase is pending. Premium will activate after payment completes.",
@@ -139,6 +145,12 @@ const sr: Copy = {
     "Nakon probnog perioda, pretplata se automatski obnavlja po ceni {{price}} za {{period}} do otkazivanja.",
   "premium.renewal":
     "Automatski se obnavlja po ceni {{price}} za {{period}} do otkazivanja.",
+  "premium.period.month": "mesec",
+  "premium.period.year": "godinu",
+  "premium.period.until": "do {{date}}",
+  "premium.trialWeek": "1 nedelja besplatno, zatim {{price}} za {{period}}.",
+  "premium.productDescription.monthly": "Fleksibilan Premium pristup uz mesečnu naplatu.",
+  "premium.productDescription.yearly": "Premium pristup tokom cele godine po najpovoljnijoj ceni.",
   "premium.notAvailable": "Nije dostupno",
   "premium.message.pending":
     "Kupovina je na čekanju. Premium će biti aktiviran nakon završetka plaćanja.",
@@ -217,6 +229,12 @@ const it: Copy = {
     "Dopo la prova gratuita, l’abbonamento si rinnova automaticamente a {{price}} per {{period}} fino all’annullamento.",
   "premium.renewal":
     "Si rinnova automaticamente a {{price}} per {{period}} fino all’annullamento.",
+  "premium.period.month": "mese",
+  "premium.period.year": "anno",
+  "premium.period.until": "fino al {{date}}",
+  "premium.trialWeek": "1 settimana gratis, poi {{price}} per {{period}}.",
+  "premium.productDescription.monthly": "Accesso Premium flessibile con fatturazione mensile.",
+  "premium.productDescription.yearly": "Accesso Premium per un anno intero al prezzo migliore.",
   "premium.notAvailable": "Non disponibile",
   "premium.message.pending":
     "L’acquisto è in sospeso. Premium verrà attivato al completamento del pagamento.",
@@ -297,6 +315,12 @@ const es: Copy = {
     "Tras la prueba gratuita, la suscripción se renueva automáticamente por {{price}} cada {{period}} hasta que se cancele.",
   "premium.renewal":
     "Se renueva automáticamente por {{price}} cada {{period}} hasta que se cancele.",
+  "premium.period.month": "mes",
+  "premium.period.year": "año",
+  "premium.period.until": "hasta el {{date}}",
+  "premium.trialWeek": "1 semana gratis, después {{price}} al {{period}}.",
+  "premium.productDescription.monthly": "Acceso Premium flexible con facturación mensual.",
+  "premium.productDescription.yearly": "Acceso Premium durante un año completo al mejor precio.",
   "premium.notAvailable": "No disponible",
   "premium.message.pending":
     "La compra está pendiente. Premium se activará cuando finalice el pago.",
@@ -374,6 +398,12 @@ const de: Copy = {
     "Nach dem kostenlosen Test verlängert sich das Abo automatisch für {{price}} pro {{period}}, bis es gekündigt wird.",
   "premium.renewal":
     "Verlängert sich automatisch für {{price}} pro {{period}}, bis es gekündigt wird.",
+  "premium.period.month": "Monat",
+  "premium.period.year": "Jahr",
+  "premium.period.until": "bis {{date}}",
+  "premium.trialWeek": "1 Woche kostenlos, danach {{price}} pro {{period}}.",
+  "premium.productDescription.monthly": "Flexibler Premium-Zugang mit monatlicher Abrechnung.",
+  "premium.productDescription.yearly": "Premium-Zugang für ein ganzes Jahr zum besten Preis.",
   "premium.notAvailable": "Nicht verfügbar",
   "premium.message.pending":
     "Der Kauf ist ausstehend. Premium wird nach Abschluss der Zahlung aktiviert.",
@@ -453,6 +483,12 @@ const fr: Copy = {
     "Après l’essai gratuit, l’abonnement se renouvelle automatiquement à {{price}} par {{period}} jusqu’à son annulation.",
   "premium.renewal":
     "Se renouvelle automatiquement à {{price}} par {{period}} jusqu’à son annulation.",
+  "premium.period.month": "mois",
+  "premium.period.year": "an",
+  "premium.period.until": "jusqu’au {{date}}",
+  "premium.trialWeek": "1 semaine gratuite, puis {{price}} par {{period}}.",
+  "premium.productDescription.monthly": "Accès Premium flexible avec facturation mensuelle.",
+  "premium.productDescription.yearly": "Accès Premium pendant un an au meilleur tarif.",
   "premium.notAvailable": "Non disponible",
   "premium.message.pending":
     "L’achat est en attente. Premium sera activé une fois le paiement terminé.",

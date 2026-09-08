@@ -35,7 +35,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const { showAlert } = useCustomAlert();
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const languagePreference = useI18nStore((s) => s.preference);
   const setLanguagePreference = useI18nStore((s) => s.setPreference);
 
@@ -146,14 +146,18 @@ export default function SettingsScreen() {
               isDemo
                 ? t('settings.localOnly')
                 : purchaseAccess
-                  ? purchaseDescription(purchaseAccess)
+                  ? purchaseDescription(purchaseAccess, t, locale)
                   : t('settings.loadingAccess')
             }
             iconName="workspace-premium"
             loading={!isDemo && purchaseBusyAction === 'access'}
             onPress={!isDemo ? () => router.push('/premium') : undefined}
             title={t('settings.purchase')}
-            value={isDemo ? t('settings.demo') : purchaseAccess?.subscriptionStatus}
+            value={isDemo
+              ? t('settings.demo')
+              : purchaseAccess
+                ? purchaseStatusLabel(purchaseAccess, t)
+                : undefined}
           />
           {!isDemo && status === 'authenticated' ? (
             <>
@@ -165,7 +169,7 @@ export default function SettingsScreen() {
                 onPress={onDeleteAccountClick}
                 title={t('settings.deleteAccount')}
                 tone="danger"
-                value="Delete"
+                value={t('common.delete')}
               />
             </>
           ) : null}
@@ -328,16 +332,33 @@ export default function SettingsScreen() {
   );
 }
 
-function purchaseDescription(access: PurchaseAccess) {
+type Translate = ReturnType<typeof useI18n>['t'];
+
+function purchaseDescription(access: PurchaseAccess, t: Translate, locale: string) {
   const plan = access.planCode === 'premium_yearly'
-    ? 'Premium Yearly'
+    ? t('premium.plan.yearly')
     : access.planCode === 'premium_monthly'
-      ? 'Premium Monthly'
-      : 'No active plan';
+      ? t('premium.plan.monthly')
+      : t('premium.plan.none');
   const period = access.currentPeriodEndsAt
-    ? ` · until ${new Date(access.currentPeriodEndsAt).toLocaleDateString()}`
+    ? ` · ${t('premium.period.until', {
+        date: new Date(access.currentPeriodEndsAt).toLocaleDateString(locale),
+      })}`
     : '';
-  return `${plan} · ${access.subscriptionStatus.replaceAll('_', ' ')}${period}`;
+  return `${plan} · ${purchaseStatusLabel(access, t)}${period}`;
+}
+
+function purchaseStatusLabel(access: PurchaseAccess, t: Translate) {
+  const statuses: Record<PurchaseAccess['subscriptionStatus'], string> = {
+    active: t('premium.status.active'),
+    billing_retry: t('premium.status.retry'),
+    canceled: t('premium.status.canceled'),
+    expired: t('premium.status.expired'),
+    in_grace_period: t('premium.status.grace'),
+    lifetime: t('premium.status.lifetime'),
+    revoked: t('premium.status.revoked'),
+  };
+  return statuses[access.subscriptionStatus];
 }
 
 const styles = StyleSheet.create({

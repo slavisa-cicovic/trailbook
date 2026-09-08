@@ -296,9 +296,9 @@ function ProductCard({
         styles.card,
         { backgroundColor: theme.card, borderColor: theme.border },
       ]}
-      title={product.title}
+      title={planLabel(product.planCode, t)}
       titleStyle={{ color: theme.primaryText }}
-      subtitle={product.description}
+      subtitle={productDescription(product, t)}
       subtitleStyle={{ color: theme.mutedText }}
     >
       <View style={styles.priceRow}>
@@ -307,7 +307,7 @@ function ProductCard({
         </Text>
         {product.billingPeriodLabel ? (
           <Text style={[styles.period, { color: theme.mutedText }]}>
-            /{product.billingPeriodLabel}
+            /{billingPeriodLabel(product.billingType, t)}
           </Text>
         ) : null}
       </View>
@@ -407,11 +407,27 @@ function periodEndLabel(status: PurchaseAccess['subscriptionStatus'], t: Transla
 }
 
 function introductoryRenewalText(product: PurchaseProduct, t: Translate) {
-  const period = product.billingPeriodLabel ?? product.billingType;
+  const period = billingPeriodLabel(product.billingType, t);
   if (/free (?:for|trial)/i.test(product.description)) {
     return t('premium.renewalTrial', { period, price: product.priceLabel });
   }
   return t('premium.renewal', { period, price: product.priceLabel });
+}
+
+function productDescription(product: PurchaseProduct, t: Translate) {
+  const period = billingPeriodLabel(product.billingType, t);
+  if (/free (?:for|trial)|days free/i.test(product.description)) {
+    return t('premium.trialWeek', { period, price: product.priceLabel });
+  }
+  return product.billingType === 'yearly'
+    ? t('premium.productDescription.yearly')
+    : t('premium.productDescription.monthly');
+}
+
+function billingPeriodLabel(type: PurchaseProduct['billingType'], t: Translate) {
+  if (type === 'monthly') return t('premium.period.month');
+  if (type === 'yearly') return t('premium.period.year');
+  return t('premium.status.lifetime');
 }
 
 function billingTypeLabel(type: PurchaseProduct['billingType'], t: Translate) {

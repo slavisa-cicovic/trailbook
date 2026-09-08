@@ -24,6 +24,12 @@
       "android": {
         "gradleCommand": ":app:bundleProdRelease"
       }
+    },
+    "production-android": {
+      "extends": "production",
+      "buildArtifactPaths": [
+        "android/app/build/outputs/mapping/prodRelease/mapping.txt"
+      ]
     }
   },
   "submit": {
