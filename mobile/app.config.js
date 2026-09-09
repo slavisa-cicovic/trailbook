@@ -19,6 +19,13 @@ module.exports = {
           android: {
             enableMinifyInReleaseBuilds: true,
             enableShrinkResourcesInReleaseBuilds: true,
+            extraProguardRules: `
+# Expo SDK 54 converts native module options through Kotlin reflection.
+-keep class expo.modules.kotlin.records.** { *; }
+
+# Expo loads this class by its manifest name for headless background tasks.
+-keep class expo.modules.adapters.react.apploader.RNHeadlessAppLoader { *; }
+`,
           },
         },
       ],
@@ -113,6 +120,9 @@ module.exports = {
     },
     android: {
       package: "com.slavisacicovic.trailbook",
+      runtimeVersion: {
+        policy: "appVersion",
+      },
       blockedPermissions: ["android.permission.ACCESS_BACKGROUND_LOCATION"],
       permissions: [
         "android.permission.ACTIVITY_RECOGNITION",
