@@ -69,6 +69,12 @@ function withAndroidProductFlavors(config) {
   config = withAppBuildGradle(config, (gradleConfig) => {
     if (gradleConfig.modResults.language !== 'groovy') return gradleConfig;
     let source = gradleConfig.modResults.contents;
+    // Enable R8 optimization for release builds, including the store's prodRelease.
+    // Apply during prebuild so regenerated native projects keep this setting.
+    source = source.replace(
+      /getDefaultProguardFile\((["'])proguard-android\.txt\1\)/g,
+      'getDefaultProguardFile("proguard-android-optimize.txt")',
+    );
     if (!source.includes('debuggableVariants = ["localDebug"')) {
       source = source.replace('react {', `react {\n${DEBUGGABLE_VARIANTS}`);
     }
