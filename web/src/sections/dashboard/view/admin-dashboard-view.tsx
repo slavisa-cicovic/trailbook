@@ -260,7 +260,7 @@ export function AdminDashboardView() {
       <Stack spacing={1}>
         <Typography sx={{ fontSize: { xs: "1.75rem", sm: "2.125rem" } }} variant="h4">Admin dashboard</Typography>
         <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
-          Signed in as {user.email}. Metrics always use the selected tab range.
+          Signed in as {user.email}. Activity metrics use the selected range; totals show the current state.
         </Typography>
       </Stack>
 
@@ -324,9 +324,9 @@ export function AdminDashboardView() {
             <MetricCard label="Total users" value={`${metrics.overview.totalUsers}`} />
             <MetricCard label="New users" value={`${metrics.overview.newUsers}`} />
             <MetricCard
-              helper="Apple and Google production subscriptions"
-              label="New subscribers"
-              value={`${metrics.overview.newSubscribers}`}
+              helper={`${metrics.overview.activeMonthlySubscribers} monthly · ${metrics.overview.activeYearlySubscribers} yearly`}
+              label="Active subscribers"
+              value={`${metrics.overview.activeSubscribers}`}
             />
             <MetricCard label="Trips created" value={`${metrics.overview.tripsCreated}`} />
             <MetricCard label="Photos created" value={`${metrics.overview.photosCreated}`} />

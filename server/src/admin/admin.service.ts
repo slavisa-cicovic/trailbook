@@ -15,19 +15,22 @@ export class AdminService {
     this.requireAdmin(user);
 
     const range = this.parseRange(input);
-    const [totalUsers, newUsers, newSubscribers, tripsCreated, photoStats, tripPointRows] = await Promise.all([
+    const now = new Date();
+    const [totalUsers, newUsers, activeSubscriberRows, tripsCreated, photoStats, tripPointRows] = await Promise.all([
       this.database.user.count(),
       this.database.user.count({
         where: {
           createdAt: { gte: range.from, lt: range.to },
         },
       }),
-      this.database.purchaseAccess.count({
+      this.database.purchaseAccess.groupBy({
+        by: ["planCode"],
+        _count: { _all: true },
         where: {
-          createdAt: { gte: range.from, lt: range.to },
-          environment: "production",
           planCode: { in: ["premium_monthly", "premium_yearly"] },
-          provider: { in: ["apple", "google"] },
+          subscriptionStatus: "active",
+          revokedAt: null,
+          currentPeriodEndsAt: { gt: now },
         },
       }),
       this.database.trip.count({
@@ -63,6 +66,11 @@ export class AdminService {
     ]);
 
     const totalTripPoints = Number(tripPointRows[0]?.totalTripPoints ?? 0);
+    const activeMonthlySubscribers =
+      activeSubscriberRows.find((row) => row.planCode === "premium_monthly")?._count._all ?? 0;
+    const activeYearlySubscribers =
+      activeSubscriberRows.find((row) => row.planCode === "premium_yearly")?._count._all ?? 0;
+    const activeSubscribers = activeMonthlySubscribers + activeYearlySubscribers;
 
     return {
       range: {
@@ -72,7 +80,11 @@ export class AdminService {
       overview: {
         totalUsers,
         newUsers,
-        newSubscribers,
+        activeSubscribers,
+        activeMonthlySubscribers,
+        activeYearlySubscribers,
+        // Kept for compatibility while the previous web bundle is still live.
+        newSubscribers: activeSubscribers,
         tripsCreated,
         // Kept for compatibility while the previous web bundle is still live.
         totalTripPoints,
