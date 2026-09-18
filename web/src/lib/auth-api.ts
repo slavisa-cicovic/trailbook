@@ -25,9 +25,8 @@ export interface AdminDashboardMetrics {
   overview: {
     totalUsers: number;
     newUsers: number;
+    newSubscribers: number;
     tripsCreated: number;
-    totalTripPoints: number;
-    averageTripPointsPerTrip: number;
     photosCreated: number;
     totalPhotoBytes: number;
   };

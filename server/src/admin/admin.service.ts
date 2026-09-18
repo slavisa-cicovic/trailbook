@@ -15,11 +15,19 @@ export class AdminService {
     this.requireAdmin(user);
 
     const range = this.parseRange(input);
-    const [totalUsers, newUsers, tripsCreated, photoStats, tripPointRows] = await Promise.all([
+    const [totalUsers, newUsers, newSubscribers, tripsCreated, photoStats, tripPointRows] = await Promise.all([
       this.database.user.count(),
       this.database.user.count({
         where: {
           createdAt: { gte: range.from, lt: range.to },
+        },
+      }),
+      this.database.purchaseAccess.count({
+        where: {
+          createdAt: { gte: range.from, lt: range.to },
+          environment: "production",
+          planCode: { in: ["premium_monthly", "premium_yearly"] },
+          provider: { in: ["apple", "google"] },
         },
       }),
       this.database.trip.count({
@@ -64,7 +72,9 @@ export class AdminService {
       overview: {
         totalUsers,
         newUsers,
+        newSubscribers,
         tripsCreated,
+        // Kept for compatibility while the previous web bundle is still live.
         totalTripPoints,
         averageTripPointsPerTrip: tripsCreated > 0 ? totalTripPoints / tripsCreated : 0,
         photosCreated: photoStats._count._all,

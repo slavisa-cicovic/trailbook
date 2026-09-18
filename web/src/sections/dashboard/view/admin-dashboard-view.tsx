@@ -95,10 +95,6 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function formatAverage(value: number) {
-  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
-}
-
 function formatDateOnly(value: string) {
   const date = new Date(value);
 
@@ -327,12 +323,12 @@ export function AdminDashboardView() {
           <Grid container spacing={2}>
             <MetricCard label="Total users" value={`${metrics.overview.totalUsers}`} />
             <MetricCard label="New users" value={`${metrics.overview.newUsers}`} />
-            <MetricCard label="Trips created" value={`${metrics.overview.tripsCreated}`} />
             <MetricCard
-              helper={`${metrics.overview.totalTripPoints} total trip points`}
-              label="Avg trip points / trip"
-              value={formatAverage(metrics.overview.averageTripPointsPerTrip)}
+              helper="Apple and Google production subscriptions"
+              label="New subscribers"
+              value={`${metrics.overview.newSubscribers}`}
             />
+            <MetricCard label="Trips created" value={`${metrics.overview.tripsCreated}`} />
             <MetricCard label="Photos created" value={`${metrics.overview.photosCreated}`} />
             <MetricCard label="Photo storage" value={formatBytes(metrics.overview.totalPhotoBytes)} />
           </Grid>
